@@ -1,0 +1,174 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>no</title>
+</head>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    #canvasContainer {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+    }
+
+    #canvasContainer img {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        object-fit: contain;
+        scale: 0.899;
+    }
+
+    #main {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    .a {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 3px;
+        left: -18px;
+        object-fit: contain;
+        opacity: 0.8;
+        scale: 1;
+    }
+
+    .b {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        object-fit: contain;
+        opacity: 0.8;
+        scale: 0.98;
+    }
+</style>
+
+<body>
+    <!-- <img src="./image.png" alt="refimg" class="a"> -->
+    <div id="canvasContainer">
+        <img src="./Skin/outline.png" alt="">
+        <canvas id="main"></canvas>
+    </div>
+    <input type="range" id="slider" min="0" max="0.5" step="0.01" value="0"
+        style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 80%;">
+</body>
+<script type="module">
+    import { getImg, imgNotExists } from './helper.js';
+    import { simaiDecode } from './decode.js';
+
+    const example = `(240){16}1,2,3,4,5,6,7,8,`;
+    const notes = (() => {
+        try {
+            return simaiDecode(example);
+        } catch (e) {
+            console.error(e);
+            return [];
+        }
+    })();
+    
+    const
+        canvas = document.getElementById('main'),
+        canvasContainer = document.getElementById('canvasContainer');
+    const ctx = canvas.getContext('2d');
+    const scaleBase = 100, scale = 0.99, innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
+    const noteBaseSize = 11;
+    const speed = 7.0;
+    const distance = 0.25;
+
+    const baseURL = './Skin/';
+    const images = {
+        tap: await getImg(baseURL + 'tap.png')
+    };
+
+    function resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvasContainer.clientWidth * dpr;
+        const h = canvasContainer.clientHeight * dpr;
+        const p = Math.min(w, h) / scaleBase * scale;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
+        draw();
+    }
+
+    function scaleCanvasContainer() {
+
+    }
+
+    window.addEventListener('resize', resize);
+
+    const noteRefPos = Array.from({ length: 8 }, (_, i) => {
+        const a = (i - 1.5) * Math.PI / 4;
+        return {
+            x: Math.cos(a) * innerCirleBase,
+            y: Math.sin(a) * innerCirleBase,
+            rot: a
+        };
+    });
+    let time = 0;
+    const slider = document.getElementById('slider');
+    slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        time = value;
+        draw();
+    });
+    resize();
+
+    function draw() {
+        ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
+        ctx.strokeStyle = '#0000ff50';
+        ctx.lineWidth = 0.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 50, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let note of notes) {
+            if (note.type === 'tap') {
+                drawTap(note);
+            }
+        }
+    }
+
+    function drawTap(s) {
+        const img = images.tap;
+        if (imgNotExists(img)) return;
+        const rawTime = 1 - hfu((s.time - time) * speed);
+        const isBeforeDist = rawTime < distance;
+        const posInfo = noteRefPos[s.pos - 1];
+
+        const t = isBeforeDist ? distance : rawTime;
+        const nbas = isBeforeDist
+            ? noteBaseSize * Math.max(((rawTime + 0.9) / (0.9 + distance)) * distance, 0) / distance
+            : noteBaseSize;
+        const nbas2 = nbas / 2;
+
+        ctx.save();
+        const multiplier = isBeforeDist ? distance : t;
+        ctx.translate(posInfo.x * multiplier, posInfo.y * multiplier);
+        ctx.rotate(posInfo.rot);
+        ctx.drawImage(img, -nbas2, -nbas2, nbas, nbas);
+        ctx.restore();
+    }
+    function hfu(x) {
+        return 0.02160482279616 * x * x * x - 0.07553691072 * x * x + 0.43509924 * x + 0.000250029;
+    }
+</script>
+
+</html>

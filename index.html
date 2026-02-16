@@ -15,7 +15,7 @@
     #canvasContainer {
         position: absolute;
         width: 100%;
-        height: 100%;
+        height: calc(100% - 0px);
         top: 0;
         left: 0;
     }
@@ -38,65 +38,279 @@
         height: 100%;
     }
 
+    #playControls {
+        position: absolute;
+        width: 100%;
+        height: 30px;
+        bottom: 0;
+        left: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #playControls .controlButton {
+        width: 20px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 5px;
+        border-radius: 5px;
+        color: white;
+        font-size: 14px;
+        margin-right: 20px;
+        cursor: pointer;
+    }
+
     .a {
         position: absolute;
         width: 100%;
         height: 100%;
-        top: 3px;
-        left: -18px;
+        /*top: 1px;
+        left: -1px;
         object-fit: contain;
         opacity: 0.8;
-        scale: 1;
+        scale: 1;*/
+        top: 0px;
+        left: 0px;
+        object-fit: contain;
+        opacity: 1;
+        scale: 0.99;
     }
 
-    .b {
+    #popup {
         position: absolute;
-        width: 100%;
-        height: 100%;
         top: 0;
         left: 0;
-        object-fit: contain;
-        opacity: 0.8;
-        scale: 0.98;
+        padding: 5px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        font-size: 12px;
+        border-radius: 5px;
+        cursor: pointer;
     }
 </style>
 
 <body>
-    <!-- <img src="./image.png" alt="refimg" class="a"> -->
+    <!-- <img src="./image.png" alt="refimg" class="a">-->
     <div id="canvasContainer">
         <img src="./Skin/outline.png" alt="">
         <canvas id="main"></canvas>
     </div>
-    <input type="range" id="slider" min="0" max="0.5" step="0.01" value="0"
-        style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 80%;">
+    <div id="playControls">
+        <div class="controlButton" data-buttonAction="play/stop" data-playing="false"></div>
+        <input type="range" id="timeControl" min="0" max="100" value="0" step="0.01">
+    </div>
+    <div id="popup">彈出</div>
 </body>
+<script>
+    const example = `(213)
+
+{8}Ch[8:3],,,{2}D5,E6,D7,E8,D1,E2,D3,{4}E4,5h[4:1],{2}4x,E5,E3,E1,E7,E5,{4}4hx[4:1],5,
+
+{8}3,5,4,6,5,5,7h[8:1],,4,4,6h[8:1],,3,3,{4}5h[8:1],2-8[8:1],4,
+
+{2}E6/B6/B7/E8f,D1/A1/D2/A2/B2/C/B3f/A3,D8/A8/B8/B7/E7f/B6/B5/A5/D6,4w8b[8:1],2hb[4:1]/6hb[4:1],
+
+{8}35,,4,4,,6,6,,{2}7-5[8:1]/5-1[8:1],2h[4:1]/4h[4:1],{8}57,,6,6,
+
+{24}1,2,3,4,5,6,7,8,1,2,3,4,{8}5x-1[8:1],5x,,,{1}3hb[1:1]/7hb[1:1],{4},{8}46,5,{2}3-5[8:1]/7-1[8:1],
+
+
+{8}3,4,52,3,4,3,25,4,3,4,52,3,4,3,25,25,6,5,47,6,5,6,74,5,6,5,47,6,45,45,45,45,
+
+3-8[8:1],3,6,6,7-4[8:1],7,1,1,2-6[8:1],2,5<3[4:1],5,{2}4h[4:1],
+
+1^6[8:1]/7-3[8:1],{8}4,5,6,7,{4}1b-7[8:1],2b-6[8:1],3b-5[8:1],,
+
+{8}2x/6x,6,2,7,27,,28,8,2,6,62,,2-4[8:1]/8,,6,6,65,,57,7,5,8,{4}58,5-1[8:1]/7b,5/6b,{16}78,,6,5,6,,4,,
+
+{8}7x/3x,3,7,2,72,,71,1,7,3,37,,7-5[8:1]/1,,3,3,34,,42,3,4x/5x,4x/5x,
+
+{4}3b/6b-4[8:1],6x/2-6[8:1],2x/8-2[8:1],8x/4-8[8:1],4x/5x,
+
+
+{8}2x/6x,6h[8:1],2,7,2/7h[8:1],,28,8h[8:1],2,7,7h[8:1]/2,,2-4[8:1]/5h[8:1],,
+
+5,6,5/6h[8:1],,57,7h[8:1],5,8,8h[8:1]/5,,{4}5-1[8:1]/7-5[8:1],57,
+
+{16}24,,3,4,{8}2,2,1x/8x,1hb[8:1]/8hb[8:1],,36,2-6[8:1],7-3[8:1],2,7,
+
+{4}1V35[4:1],5V71[4:1],1-5[8:1],5,{16}4b/6b,,3,4,2b,,6,5,7b,,{8}1x/8x,1x/8x,1x/8x,
+
+{2}2h[8:3]/7h[8:3],{4}4-1[8:1]/8-5[8:1],4b/8b,
+
+
+{8}2-4[8:1],5,2,8-6[8:1],5,8,1-5[8:1],5,1,7,7,4,2-7[8:1]/6-3[8:1],,26,,
+
+1^4[8:1],4,1,8^5[8:1],5,8,3,3,2-4[8:1]/4-8[8:1],,24,,5x/7x,4x/5x,2x/4x,,
+
+1/8^5[8:1],1h[8:1]/8,,,4/3^8[8:1],4h[8:1]/3,,,7/6^3[8:1],7h[8:1]/6,,,2/1^6[8:1],2h[8:1]/1,,,
+
+{16}4b/5b,,3,4,2b,,6,5,7b,,{8}18,27,36,4b/5b,,
+
+{32}18,2,3,4,5,6,7,8,{4}1xw5[8:1],Cf,{1}3bpp2[2:3]/7bpp6[2:3],,
+
+
+{4}1hb[4:1]/7,5,2hb[4:1]/6,4,{24}3hb[4:1]/5,6,7,8,1,2,,4,5,6,7,8,{2}1w5b[8:1],
+
+3h[4:1]/7h[4:1],{8}5,6,6,5,4,4,5,6,{4}6^1[8:1],56,2h[4:1]/4h[4:1],,{8}4,3,3,4,5,5,4,3,{4}3^8[8:1],43,
+
+{8}5h[8:1]/7,7,8x,,6h[8:1]/5,5,1x,,3h[8:1]/4,4,8x,,4h[8:1]/2,2,1x,,
+
+7-4[8:1],8,7,3,5-8[8:1],4,5,1,{16}7h[16:3],,,5h[16:3],,,{8}4,4-8[8:1],,1,,
+
+3x,{4}3hx[2:3],4,2,5,4,6,{8}4,25,,6x,{4}6hx[2:3],5,7,4,5,3,{8}5,74,,
+
+2-5[8:1],1,2,6,4-1[8:1],5,4,8,{16}2h[16:3],,,4h[16:3],,,{8}5,5-1[8:1],,8,,
+
+{2}2^4[8:1]/6^8[8:1],1h[2:1]/5h[2:1],{8},4pp4b[8:3]*qq4b[8:3]/8,,,{2},
+
+
+{8}3hx[4:1]/5hx[4:1],,,3h[4:1]/5h[4:1],,,3h[4:1]/5h[4:1],,,4,4,,4,,4,,
+
+4h[4:1],,,3h[4:1]/5h[4:1],,,{1}2qq3[4:3]/6qq7[4:3],{8},,
+
+{8}6hx[4:1]/4hx[4:1],,,6h[4:1]/4h[4:1],,,6h[4:1]/4h[4:1],,,5,5,,5,,5,,
+
+5h[4:1],,,6h[4:1]/4h[4:1],,,{4}3^6[8:3]/7^2[8:3],,,4-1[8:1]/8-5[8:1],4x/8x,
+
+26,4,,4,6h[4:1],4h[4:1],2h[4:1],4,{8}3h[4:1]/5h[4:1],,,2h[4:1]/6h[4:1],,,{4}17,
+
+8^5[4:1],5^2[4:1],2^7[4:1],7,4hx[1:1],5,,5,7h[4:1],5h[4:1],3h[4:1],5,
+
+{8}4h[4:1]/6h[4:1],,,5h[4:1]/3h[4:1],,,{1}4V62-8[2:1]/5V37-1[2:1],{4}2b/7b,
+
+
+45,24,57,{8}12,12,38,,56,,34,34,{16}6,5,6,,{8}78,78,16,,34,,18,18,2-4[8:1]/7-5[8:1],,2/7,,
+
+18,27,36,45,36,36,1h[8:1]/8h[8:1],,2h[8:1]/4,,3h[8:1]/5,5,4h[8:1]/6,,
+
+5h[8:1]/7,,6h[8:1]/4,4,7h[8:1]/5,5,48,48,37,37,26,26,15,15,
+
+{16}2,4,2,4,3,5,3,5,4,6,4,6,5p4[8:3],7,5,7,{2},{8}D1,E8,C,E6,D5,E4,C,E2,{4}D1,A3/B3/Cf/B7/A7,
+
+
+{8}2x^5[8:1]/8x,,2,8h[8:1],6,7h[8:1],5,3,7^4[8:1]/1,,7,1h[8:1],3,2h[8:1],{16}4x,5x,6x,7x,
+
+{8}1x/8x,,3-8[8:1]/7-4[8:1],48,37,,26,26,1-4[8:1],8,1,6-1[8:1],5,6,4,3,
+
+1x/2x^5[8:1],,2,8h[8:1],6,7h[8:1],5,6,8x/7x^4[8:1],,7,1h[8:1],3,2h[8:1],4,35,
+
+6,6-4[8:1],3,6,2,2-6[8:1],4,2,8,,{16}18,27,{8}36,3bx/6bx,,1x/8x,,2-5[8:1]/7-4[8:1],18,2b/7b,,36,,
+
+18,7,64,3,{4}1/2-6[8:1],8^5[8:1]/2,{8}3,3,2h[8:1]/4h[8:1],,57,7,46,3,37,8,
+
+{4}1-5[8:1]/2-4[8:1],12,{16}78,,6,5,{8}6,4,2-6[8:1],13,2,,57,,
+
+81,2,35,6,{4}8/7-3[8:1],1^4[8:1]/7,{8}6,6,{2}8-4[8:1]/7-5[8:1],
+
+{8}1/2^5[8:1],,8,8,6h[4:1]/7h[4:1],,,2h[4:1]/3h[4:1],,,4b>5[4:5]/8b,,{1}Cf,{2},
+
+
+{16}45,,1,8,{8}2b/7b,,2h[8:1],4,3,7h[8:1],5,6,{4}1^4[8:1]/4,1b/8^5[8:1],8b/5,
+
+{16}34,,2,1,{8}2,38,7-3[8:1],68,7,,24,,18,7,64,3,{4}1/2-6[8:1],8^5[8:1]/2,{8}4,4,
+
+3,3-5[8:1],6,3,7,7-3[8:1],5,7,2,12,,7,7/8-4[8:1],,1b/8b,,
+
+2^5[8:1],1,2,7^4[8:1],8,7,1x-5[8:1],5x,{4}1x-3[8:1]*-4[8:1],1b-6[8:1]*-7[8:1],1b-5[8:1],1b,
+
+{8}7^4[8:1],8,7,2^5[8:1],1,2,8x-4[8:1],4x,{4}8b^3[8:1]*^5[8:1],8b,{8}26,26,37,37,
+
+4b-2[8:1]/8b-4[8:1],4b/8b,,,5b-7[8:1]/1b-5[8:1],5b/1b,,,{4}4/8-4[8:1],8/2-7[8:1],2/6-3[8:1],36,
+
+1-5b[8:1]/8-6b[8:1],1b/8b,8-4b[8:1]/1-3b[8:1],8b/1b,{8}56,7,8,34,2,1,3b/7b,,
+
+
+1hx[4:1]/5hx[4:1],,,46,46,{16}2,1,2,,38,,7,5,,5,6,,6,,3,4,2,,6,5,7,,
+
+{8}8hx[4:1]/4hx[4:1],,,53,53,{16}7,8,7,,61,,2,4,,4,3,,3,,6,5,7,,3,4,2,,
+
+{8}1x/5x,2,3,4x/8x,7,6,5x/4x,45,3b/6b,36,2b/7b,27,{24}1b/8b,2,3,4,5,6,7,8,1,2,3,4,
+
+{4}5x/1bx-5[8:1],15,2bx-5[8:1]/6x-1[8:1],26,3bx>5[2:1]/7x,,,4w8[8:1],{1}4b,,,,E`;
+</script>
 <script type="module">
-    import { getImg, imgNotExists } from './helper.js';
+    import { getImg, imgNotExists, PathRecorder } from './helper.js';
     import { simaiDecode } from './decode.js';
 
-    const example = `(240){16}1,2,3,4,5,6,7,8,`;
-    const notes = (() => {
-        try {
-            return simaiDecode(example);
-        } catch (e) {
-            console.error(e);
-            return [];
-        }
-    })();
-    
     const
         canvas = document.getElementById('main'),
         canvasContainer = document.getElementById('canvasContainer');
-    const ctx = canvas.getContext('2d');
+    const slider = document.getElementById('timeControl');
+    const playButton = document.querySelector('[data-buttonAction="play/stop"]');
+    let ctx = canvas.getContext('2d');
     const scaleBase = 100, scale = 0.99, innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
     const noteBaseSize = 11;
-    const speed = 7.0;
+    const speed = 6.5;
+    const touchSpeed = 6.5;
+    const effectDecayTime = 0.4;
     const distance = 0.25;
+    let globalTime = 0;
+    let lastTimestamp = null;
+    let secondCtx = null;
+
+    let { notes, endTime } = (() => {
+        try {// (120){16}1-5[4:1],
+            return simaiDecode("(120){16}1v5[4:1],");
+        } catch (e) {
+            console.error(e);
+            return { notes: [], endTime: 0 };
+        }
+    })();
+    slider.max = endTime + 1;
 
     const baseURL = './Skin/';
     const images = {
-        tap: await getImg(baseURL + 'tap.png')
+        tap: await getImg(baseURL + 'tap.png'),
+        tap_break: await getImg(baseURL + 'tap_break.png'),
+        tap_each: await getImg(baseURL + 'tap_each.png'),
+        hold: await getImg(baseURL + 'hold.png'),
+        hold_break: await getImg(baseURL + 'hold_break.png'),
+        hold_each: await getImg(baseURL + 'hold_each.png'),
+        touch: await getImg(baseURL + 'touch.png'),
+        touch_each: await getImg(baseURL + 'touch_each.png'),
+        touch_point: await getImg(baseURL + 'touch_point.png'),
+        touch_point_each: await getImg(baseURL + 'touch_point_each.png'),
+        star: await getImg(baseURL + 'star.png'),
+        star_break: await getImg(baseURL + 'star_break.png'),
+        star_each: await getImg(baseURL + 'star_each.png'),
+        star_double: await getImg(baseURL + 'star_double.png'),
+        star_break_double: await getImg(baseURL + 'star_break_double.png'),
+        star_each_double: await getImg(baseURL + 'star_each_double.png'),
     };
+
+    slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        globalTime = value;
+        if (playButton.dataset.playing === 'false') {
+            draw();
+        }
+    });
+
+    playButton.addEventListener('click', () => {
+        if (playButton.dataset.playing === 'true') {
+            playButton.dataset.playing = 'false';
+            lastTimestamp = null;
+        } else {
+            playButton.dataset.playing = 'true';
+            lastTimestamp = performance.now();
+            requestAnimationFrame(update);
+        }
+    });
+
+    function update(timestamp) {
+        if (lastTimestamp === null) lastTimestamp = timestamp;
+        const dt = (timestamp - lastTimestamp) / 1000; // 秒
+        lastTimestamp = timestamp;
+        if (playButton.dataset.playing === 'true') {
+            globalTime += dt;
+            slider.value = globalTime;
+            draw();
+            requestAnimationFrame(update);
+        }
+    }
 
     function resize() {
         const dpr = window.devicePixelRatio || 1;
@@ -113,6 +327,82 @@
 
     }
 
+    const popup = document.getElementById('popup');
+    popup.addEventListener('click', openSecondWindow);
+
+    function openSecondWindow() {
+        const newWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
+        // 注入基礎樣式與 Canvas
+        const style = newWindow.document.createElement('style');
+        style.textContent = `
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            #canvasContainer {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                top: 0;
+                left: 0;
+            }
+            #canvasContainer img {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                top: 0;
+                left: 0;
+                object-fit: contain;
+                scale: 0.899;
+            }
+            #secondary {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+        `;
+        newWindow.document.head.appendChild(style);
+        newWindow.document.body.innerHTML = `
+            <div id="canvasContainer">
+                <img src="./Skin/outline.png" alt="">
+                <canvas id="secondary"></canvas>
+            </div>
+        `;
+        const extCanvas = newWindow.document.getElementById('secondary');
+        // 這裡需要處理縮放邏輯，建議參考你原有的 resize 函式
+        extCanvas.width = 800;
+        extCanvas.height = 800;
+        secondCtx = extCanvas.getContext('2d');
+
+        newWindow.addEventListener('beforeunload', () => {
+            console.log("警告：外部視窗即將關閉");
+            // 你可以在這裡重置主視窗的某些狀態
+            secondCtx = null;
+            ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
+        });
+
+        const syncResize = () => {
+            const dpr = newWindow.devicePixelRatio || 1;
+            const size = Math.min(newWindow.innerWidth, newWindow.innerHeight);
+            extCanvas.width = newWindow.innerWidth * dpr;
+            extCanvas.height = newWindow.innerHeight * dpr;
+
+            // 重新套用你的座標系統 (這點最重要！)
+            const p = size / scaleBase * scale * dpr;
+            secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
+        };
+
+        syncResize();
+
+        newWindow.addEventListener('resize', syncResize);
+        ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2); // 清除主 Canvas
+
+        ctx = secondCtx; // 切換到第二個 Canvas 的上下文
+
+        draw(); // 重新繪製到第二個 Canvas
+    }
+
     window.addEventListener('resize', resize);
 
     const noteRefPos = Array.from({ length: 8 }, (_, i) => {
@@ -120,16 +410,45 @@
         return {
             x: Math.cos(a) * innerCirleBase,
             y: Math.sin(a) * innerCirleBase,
-            rot: a
+            rot: a + Math.PI / 2
         };
     });
-    let time = 0;
-    const slider = document.getElementById('slider');
-    slider.addEventListener('input', () => {
-        const value = parseFloat(slider.value);
-        time = value;
-        draw();
-    });
+
+    const touchRefPos = {
+        A: Array.from({ length: 8 }, (_, i) => {
+            const a = (i - 1.5) * Math.PI / 4;
+            return {
+                x: Math.cos(a) * innerCirleBase * 0.833,
+                y: Math.sin(a) * innerCirleBase * 0.833,
+                rot: a + Math.PI / 2
+            };
+        }),
+        B: Array.from({ length: 8 }, (_, i) => {
+            const a = (i - 1.5) * Math.PI / 4;
+            return {
+                x: Math.cos(a) * innerCirleBase * 0.458,
+                y: Math.sin(a) * innerCirleBase * 0.458,
+                rot: a + Math.PI / 2
+            };
+        }),
+        C: [{ x: 0, y: 0 }],
+        D: Array.from({ length: 8 }, (_, i) => {
+            const a = (i - 2) * Math.PI / 4;
+            return {
+                x: Math.cos(a) * innerCirleBase * 0.854,
+                y: Math.sin(a) * innerCirleBase * 0.854,
+                rot: a + Math.PI / 2
+            };
+        }),
+        E: Array.from({ length: 8 }, (_, i) => {
+            const a = (i - 2) * Math.PI / 4;
+            return {
+                x: Math.cos(a) * innerCirleBase * 0.645,
+                y: Math.sin(a) * innerCirleBase * 0.645,
+                rot: a + Math.PI / 2
+            };
+        })
+    };
     resize();
 
     function draw() {
@@ -139,35 +458,276 @@
         ctx.beginPath();
         ctx.arc(0, 0, 50, 0, Math.PI * 2);
         ctx.stroke();
-        for (let note of notes) {
+        for (let i = notes.length - 1; i >= 0; i--) {
+            const note = notes[i];
             if (note.type === 'tap') {
-                drawTap(note);
+                if (note.isStar) drawStar(note);
+                else drawTap(note);
             }
+            if (note.type === 'hold') {
+                drawHold(note);
+            }
+            if (note.type === 'touch') {
+                drawTouch(note);
+            }
+            if (note.type === 'slide') {
+                drawSlide(note);
+            }
+            continue;
+        }
+    }
+    function simpleEndEffect(t) {
+        const decayAlpha = 1 - Math.max(0, - t / effectDecayTime);
+        const radius = 0.8 * noteBaseSize * (1 - decayAlpha);
+
+        ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+        ctx.lineWidth = 0.5 * noteBaseSize * decayAlpha;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    function drawTap(s) {
+        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const noteT = (noteTime - globalTime);
+        const progress = noteT * speed;
+        const t = 1 - timeFunction(progress);
+
+        if (t < -0.8 || -noteT > effectDecayTime) return;
+
+        const img = images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
+        if (imgNotExists(img)) return;
+
+        const posInfo = noteRefPos[pos - 1];
+        ctx.save();
+
+        if (t >= 1) {
+            ctx.translate(posInfo.x, posInfo.y);
+            simpleEndEffect(noteT);
+        }
+        else {
+            const displayT = Math.max(distance, t);
+            const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
+            const size = noteBaseSize * currentScale;
+
+            ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+            /*ctx.font = `3px Arial`;
+            ctx.fillText(t, 10, 10);*/
+            ctx.rotate(posInfo.rot);
+            ctx.drawImage(img, -size / 2, -size / 2, size, size);
+        }
+        ctx.restore();
+    }
+    function drawStar(s) {
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
+        const noteT = (noteTime - globalTime);
+        const progress = noteT * speed;
+        const t = 1 - timeFunction(progress);
+
+        if (t < -0.8 || -noteT > effectDecayTime) return;
+
+        const img = images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+            : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
+        ];
+        if (imgNotExists(img)) return;
+
+        const posInfo = noteRefPos[pos - 1];
+        ctx.save();
+
+        if (t >= 1) {
+            ctx.translate(posInfo.x, posInfo.y);
+            simpleEndEffect(noteT);
+        }
+        else {
+            const displayT = Math.max(distance, t);
+            const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
+            const size = noteBaseSize * currentScale;
+
+            ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+            ctx.rotate(posInfo.rot);
+            ctx.drawImage(img, -size / 2, -size / 2, size, size);
+        }
+        ctx.restore();
+    }
+    function drawHold(s) {
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+        const noteT = (noteTime - globalTime);
+        const progress = noteT * speed;
+        const t = 1 - timeFunction(progress);
+
+        if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+
+        const img = images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
+        if (imgNotExists(img)) return;
+        const sizeOffset = t < distance ? 0 : Math.min((1 - distance) * 2.45, Math.min((holdDuration + noteT) * 0.9 * speed, Math.min((t - distance) * 2.45, holdDuration * 0.9 * speed)));
+
+        const posInfo = noteRefPos[pos - 1];
+        ctx.save();
+        if (-noteT >= holdDuration) {
+            ctx.translate(posInfo.x, posInfo.y);
+            simpleEndEffect(holdDuration + noteT);
+        }
+        else {
+            const displayT = Math.min(1, Math.max(distance, t));
+            const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
+            const size = noteBaseSize * currentScale;
+
+            ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+            ctx.rotate(posInfo.rot);
+            ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
+            ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset)); // body
+            ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275); // tail
+        }
+        ctx.restore();
+    }
+    function timeFunction(x) {
+        return 0.02160482279616 * x * x * x - 0.07553691072 * x * x + 0.43509924 * x + 0.000250029;
+    }
+    function drawTouch(s) {
+        const { time: noteTime, pos, touchPos, isDouble } = s;
+        const img = images[isDouble ? "touch_each" : "touch"];
+        const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
+        if (imgNotExists(img) || imgNotExists(touchPoint)) return;
+        const noteT = (noteTime - globalTime);
+        const progress = noteT * touchSpeed;
+        const t = 1 - timeFunction(progress);
+
+        if (t < -0.8 || -noteT > effectDecayTime) return;
+
+        const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
+        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+        ctx.save();
+        if (t >= 1) {
+            ctx.translate(posInfo.x, posInfo.y);
+            simpleEndEffect(noteT);
+        }
+        else {
+            const currentScale = 0.8;
+            const size = noteBaseSize * 0.7;
+
+            let a = touchTimeFunction(11 * (1 - t) / 1.5) * 1.6;
+
+            ctx.translate(posInfo.x, posInfo.y);
+            /*ctx.font = `3px Arial`;
+            ctx.fillText(1 - (1 - t) / 1.4, 10, 10);*/
+            //ctx.rotate(posInfo.rot);
+            ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.55);
+            for (let i = 0; i < 4; i++) {
+                ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                ctx.rotate(Math.PI / 2);
+            }
+            ctx.globalAlpha = 1;
+            ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+        }
+        ctx.restore();
+    }
+    function touchTimeFunction(x) {
+        return 0.000753454 * x * x * x - 0.0298793 * x * x + 0.375038 * x + 0.104685;
+    }
+    function drawSlide(s) {
+        const { time: noteTime, pos, slideEnd, isBreak, isDouble, slideDelay, slideDuration, path } = s;
+
+        // noteT 是距離「判定點」的時間差
+        // noteT > 0: 星星還沒到判定點 (飛向起點)
+        // noteT < 0: 已經過判定，開始進入等待或滑行階段
+        const noteT = noteTime - globalTime;
+        const progress = noteT * touchSpeed;
+        const t = 1 - timeFunction(progress);
+
+        // 1. 早期退出 (滑動結束後過一陣子消失)
+        if (t < distance || -noteT > slideDelay + slideDuration) return;
+
+        // --- 準備路徑 ---
+        // 建議在 decode 階段就把 path 算好存進 s，這裡直接用
+        const p = path || generatePath(pos, slideEnd);
+
+        ctx.save();
+
+        const isSliding = -noteT > slideDelay;
+        ctx.globalAlpha = isSliding ? 0.6 : 0.3;
+        let slideProgress = 0;
+        if (-noteT > slideDelay) {
+            slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
+        }
+
+        drawPathWithArrows(ctx, p, slideProgress);
+
+        if (noteT <= 0 && slideProgress < 1) {
+            const { x, y, rot } = p.getPointAt(slideProgress);
+
+            ctx.globalAlpha = 1;
+            ctx.translate(x, y);
+            ctx.rotate(rot); // 使用 PathRecorder 算出的朝向
+
+            // 畫星星 (這裡先用你的方塊代替，但換成置中繪製)
+            ctx.fillStyle = isBreak ? '#ffcc00' : '#0000ff';
+            ctx.fillRect(-2.5, -2.5, 5, 5);
+        }
+
+        ctx.restore();
+    }
+    function drawPathWithArrows(ctx, recorder, t, s = { spacing: 8 }) {
+        if (recorder.totalLength === 0) return;
+
+        // 計算總共需要多少個箭頭
+        const arrowCount = Math.floor(recorder.totalLength / s.spacing);
+        ctx.beginPath();
+        for (let i = Math.floor(t * arrowCount); i <= arrowCount; i++) {
+            // 計算當前箭頭在路徑上的比例 t (0 ~ 1)
+            const d = i * s.spacing;
+            const t = d / recorder.totalLength;
+
+            // 取得該點的座標與朝向 (rot)
+            const { x, y, rot } = recorder.getPointAt(t);
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rot);
+
+            // 繪製箭頭形狀 (三角形)
+            // 你也可以在這裡改用 ctx.drawImage 畫你準備好的箭頭貼圖
+            drawArrowShape(ctx);
+
+            ctx.restore();
         }
     }
 
-    function drawTap(s) {
-        const img = images.tap;
-        if (imgNotExists(img)) return;
-        const rawTime = 1 - hfu((s.time - time) * speed);
-        const isBeforeDist = rawTime < distance;
-        const posInfo = noteRefPos[s.pos - 1];
-
-        const t = isBeforeDist ? distance : rawTime;
-        const nbas = isBeforeDist
-            ? noteBaseSize * Math.max(((rawTime + 0.9) / (0.9 + distance)) * distance, 0) / distance
-            : noteBaseSize;
-        const nbas2 = nbas / 2;
-
-        ctx.save();
-        const multiplier = isBeforeDist ? distance : t;
-        ctx.translate(posInfo.x * multiplier, posInfo.y * multiplier);
-        ctx.rotate(posInfo.rot);
-        ctx.drawImage(img, -nbas2, -nbas2, nbas, nbas);
-        ctx.restore();
+    // 輔助函式：畫一個簡單的小箭頭
+    function drawArrowShape(ctx) {
+        const size = 2.5; // 箭頭大小
+        ctx.beginPath();
+        ctx.moveTo(-size, -size); // 左後
+        ctx.lineTo(size, 0);      // 尖端 (朝向前方)
+        ctx.lineTo(-size, size);  // 右後
+        ctx.lineTo(-size * 0.6, 0); // 往內凹一點點，看起來更像箭頭
+        ctx.closePath();
+        ctx.fill();
     }
-    function hfu(x) {
-        return 0.02160482279616 * x * x * x - 0.07553691072 * x * x + 0.43509924 * x + 0.000250029;
+    /*function drawPathOnCanvas(ctx, recorder) {
+        if (recorder.segments.length === 0) return;
+
+        const start = recorder.segments[0].type === 'line'
+            ? recorder.segments[0].start
+            : { x: recorder.segments[0].cx + recorder.segments[0].r * Math.cos(recorder.segments[0].startAngle), y: recorder.segments[0].cy + recorder.segments[0].r * Math.sin(recorder.segments[0].startAngle) };
+
+        ctx.moveTo(start.x, start.y);
+        for (const seg of recorder.segments) {
+            if (seg.type === 'line') {
+                ctx.lineTo(seg.end.x, seg.end.y);
+            } else if (seg.type === 'arc') {
+                ctx.arc(seg.cx, seg.cy, seg.r, seg.startAngle, seg.endAngle, seg.diff < 0);
+            }
+        }
+    }*/
+    function generatePath(startPos, endPos) {
+        console.warn("path missing, using straight line as fallback");
+        const recorder = new PathRecorder();
+        const startInfo = noteRefPos[startPos - 1];
+        const endInfo = noteRefPos[endPos - 1];
+
+        recorder.moveTo(startInfo.x, startInfo.y);
+        recorder.lineTo(endInfo.x, endInfo.y);
+
+        return recorder;
     }
 </script>
 

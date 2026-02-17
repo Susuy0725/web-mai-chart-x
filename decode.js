@@ -1,14 +1,15 @@
-import { parseTag, parseBeats, PathRecorder } from './helper.js';
+import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase } from './helper.js';
 
-export function simaiDecode(data) {
+export function simaiDecode(data = "") {
     const raw = data.replace(/\|\|.*$/gm, "")/* remove comments */.replace(/\s+/g, '');
-    if (!(raw.endsWith(',') || raw.endsWith('E') || raw.endsWith(')') || raw.endsWith('}'))) {
+    if (raw === '') return { notes: [], endTime: 0 };
+    /*if (!(raw.endsWith(',') || raw.endsWith('E') || raw.endsWith(')') || raw.endsWith('}'))) {
         throw new Error("Invalid data format\nmabye missing comma at the end?");
-    }
+    }*/
     const splitParts = raw.split(',');
-    if (raw.endsWith(',') || raw.endsWith('E')) {
-        splitParts.pop();
-    }
+    //if (raw.endsWith(',') || raw.endsWith('E')) {
+    splitParts.pop();
+    //}
     const notes = [];
     const tempNotes = [];
     let
@@ -39,6 +40,7 @@ export function simaiDecode(data) {
             console.log("BPM or Split not defined before notes");
             break;
         }
+        if (overrideSplitTime) nowBpm = 240 / overrideSplitTime;
         if (!e || e === '') {
             nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
             continue
@@ -127,8 +129,8 @@ export function simaiDecode(data) {
                     })();
                     if (!noteObj) return;
 
+                    const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
                     // 檢查 Flags
-                    if (noteStr.includes('b')) noteObj.isBreak = true;
                     if (noteStr.includes('h')) {
                         noteObj.isHold = true;
                         if (noteObj.type !== 'touch') noteObj.type = 'hold';
@@ -151,65 +153,105 @@ export function simaiDecode(data) {
                         }
                     }
                     if (noteStr.includes('x')) noteObj.isEx = true;
-                    const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-                    if (slideMatch) {
-                        if (noteStr.includes('*')) {
-
-                        } else {
-                            const time = (() => {
-                                const match = noteStr.match(/\[([^\[\]]*)\]/g);
-                                return match ? match.map(m => m.slice(1, -1)) : null;
-                            })();
-                            const residue = noteStr.replace(/\[([^\[\]]*)\]/g, '');
-                            if (residue.includes('[') || residue.includes(']') || !time) {
+                    if (noteStr.includes('b') && !slideMatch) noteObj.isBreak = true;
+                    if (slideMatch && !noteStr.includes('h')) {
+                        let sameTimeSlide = false;
+                        const slideParts = (() => {
+                            if (noteStr.includes('*')) {
+                                const p = noteStr.split('*').map(s => s.trim());
+                                for (let i = 1; i < p.length; i++) {
+                                    p[i] = noteObj.pos + p[i];
+                                }
+                                return p;
+                            }
+                            return [noteStr];
+                        })();
+                        if (slideParts.length > 1) { // Multi part slide, e.g. 1-2*3-4
+                            sameTimeSlide = true;
+                            noteObj.isMultiple = true;
+                        }
+                        for (let i = 0; i < slideParts.length; i++) {
+                            const slidePartMatch = slideParts[i].match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+                            if (!slidePartMatch) return console.warn("Missing slide type in slide note, skipping:", noteStr);
+                            const timeMatches = slideParts[i].match(/\[([^\[\]]*)\]/g);
+                            if (!timeMatches) return console.warn("Missing time format:", noteStr);
+                            const timeValues = timeMatches.map(m => m.slice(1, -1));
+                            const residue = slideParts[i].replace(/\[([^\[\]]*)\]/g, '');
+                            if (residue.includes('[') || residue.includes(']')) {
                                 console.warn("Invalid time format or empty in slide note, skipping:", noteStr);
                                 return;
                             }
                             noteObj.isStar = true;
-                            console.log(noteObj, slideMatch, time, residue);
-                            const p = residue.split(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g).filter((s, i) => i % 2 === 0);
-                            console.log("slide parts:", p);
-                            let d = 0;
-                            let dlay = 0;
-                            time.forEach((t, i) => {
-                                const { time: duration, delay } = parseBeats(t, nowBpm, true);
-                                console.log("parsed time:", t, "=>", { duration, delay });
-                                if (i === 0) dlay = delay;
-                                if (duration < 0 || isNaN(duration)) {
-                                    console.warn("Invalid time format in slide note, skipping:", noteStr);
-                                    return;
-                                }
-                                d += duration;
-                            });
-                            console.log("total duration:", d, "initial delay:", dlay);
 
-                            for (let i = 0; i < slideMatch.length; i++) {
-                                const slideType = slideMatch[i];
-                                const slideHead = i === 0 ? noteObj.pos : parseInt(p[i][p[i].length - 1]);
-                                const slideEnd = parseInt(p[i + 1][0]);
-                                if (isNaN(slideEnd) || slideEnd < 1 || slideEnd > 8 || isNaN(slideHead) || slideHead < 1 || slideHead > 8) {
-                                    console.warn("Invalid slide start or end position in slide note:", p[i + 1]);
-                                    return;
-                                }
-                                const path = getSlidePath(slideHead, slideEnd, slideType);
-                                const slideObj = {
-                                    type: 'slide',
-                                    pos: slideHead,
-                                    slideEnd: slideEnd,
-                                    slideType: slideType,
-                                    path: path,
-                                    time: noteObj.time,
-                                    slideDelay: dlay,
-                                    slideDuration: d
-                                }
-                                console.log(slideObj, slideType);
-                                tempNotes.push(slideObj);
+                            const p = residue.split(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g).filter((_, i) => i % 2 === 0);
+                            if (p[0].includes('b')) {
+                                noteObj.isBreak = true;
+                                p[0] = p[0].replace(/b/g, '');
                             }
-                            console.log("slide:", noteStr);
-                        }
-                        //return;
-                    }
+                            const isSlideBreak = p.some(part => part.includes('b'));
+                            if (isSlideBreak) {
+                                p.forEach((c, i) => {
+                                    if (c.startsWith('b')) console.warn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", residue);
+                                    p[i] = p[i].replace(/b/g, '');
+                                });
+                            }
 
+                            let d = 0, dlay = 0;
+                            {
+                                let error = false;
+                                timeValues.forEach((t, i) => {
+                                    const { time: duration, delay } = parseBeats(t, nowBpm, true);
+                                    if (duration < 0 || isNaN(duration)) {
+                                        console.warn("Invalid time format in slide note, skipping:", noteStr);
+                                        error = true;
+                                        return;
+                                    }
+                                    if (i === 0) dlay = delay;
+                                    d += duration;
+                                });
+                                if (error) return;
+                            }
+                            const segments = slidePartMatch.map((type, i) => {
+                                const head = i === 0 ? noteObj.pos : parseInt(p[i].slice(-1));
+                                const part = p[i + 1];
+                                const end = parseInt(part.slice(-1));
+                                const mid = part.length > 1 ? parseInt(part.slice(-2, -1)) : undefined;
+
+                                if ([head, end].some(v => isNaN(v) || v < 1 || v > 8)) return null;
+                                if ((mid !== undefined && (isNaN(mid) || mid < 1 || mid > 8))) return null;
+
+                                const path = getSlidePath(head, end, type, mid);
+                                return { head, end, mid, type, path, len: path.totalLength };
+                            });
+
+                            if (segments.includes(null)) return console.warn("Invalid slide positions:", residue);
+                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return console.warn("Invalid slide positions:", residue);
+                            const totalLen = segments.reduce((sum, s) => sum + s.len, 0);
+                            let currentDelay = dlay;
+
+                            segments.forEach(seg => {
+                                // 如果長度為 0 則平分時間，否則依長度比例分配
+                                const segmentDuration = totalLen > 0 ? d * (seg.len / totalLen) : d / segments.length;
+
+                                tempNotes.push({
+                                    type: 'slide',
+                                    pos: seg.head,
+                                    isDouble: sameTimeSlide,
+                                    isBreak: isSlideBreak,
+                                    slideEnd: seg.end,
+                                    slideMid: seg.mid,
+                                    slideType: seg.type,
+                                    path: seg.path,
+                                    time: noteObj.time,
+                                    slideDelay: currentDelay,
+                                    slideDuration: segmentDuration
+                                });
+                                if (noteObj.time + currentDelay + segmentDuration > endTime) endTime = noteObj.time + currentDelay + segmentDuration;
+                                currentDelay += segmentDuration;
+                            });
+                        }
+
+                    }
                     tempNotes.push(noteObj);
                 });
             });
@@ -225,56 +267,11 @@ export function simaiDecode(data) {
             isEx: n.isEx || false
         });
     }
-    console.log(tempNotes);
+    console.log(notes);
     return { notes, endTime };
 }
-const scaleBase = 100, innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
-const noteRefPos = Array.from({ length: 8 }, (_, i) => {
-    const a = (i - 1.5) * Math.PI / 4;
-    return {
-        x: Math.cos(a) * innerCirleBase,
-        y: Math.sin(a) * innerCirleBase,
-        rot: a + Math.PI / 2
-    };
-});
-
-const touchRefPos = {
-    A: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 1.5) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.833,
-            y: Math.sin(a) * innerCirleBase * 0.833,
-            rot: a + Math.PI / 2
-        };
-    }),
-    B: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 1.5) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.458,
-            y: Math.sin(a) * innerCirleBase * 0.458,
-            rot: a + Math.PI / 2
-        };
-    }),
-    C: [{ x: 0, y: 0 }],
-    D: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 2) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.854,
-            y: Math.sin(a) * innerCirleBase * 0.854,
-            rot: a + Math.PI / 2
-        };
-    }),
-    E: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 2) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.645,
-            y: Math.sin(a) * innerCirleBase * 0.645,
-            rot: a + Math.PI / 2
-        };
-    })
-};
-function getSlidePath(start, end, type) {
-    const recorder = new PathRecorder();
+function getSlidePath(start, end, type, mid = null) {
+    const r = new PathRecorder();
     const startInfo = noteRefPos[start - 1];
     const endInfo = noteRefPos[end - 1];
 
@@ -283,35 +280,125 @@ function getSlidePath(start, end, type) {
             if ((end - start + 8) % 8 === 1 || (end - start + 8) % 8 === 7 || start === end) {
                 console.warn(`Illegal slide: ${start}${type}${end}`);
             }
-            recorder.moveTo(startInfo.x, startInfo.y);
-            recorder.lineTo(endInfo.x, endInfo.y);
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineTo(endInfo.x, endInfo.y);
             break;
         case '^':
             if ((end - start + 8) % 8 === 4 || start === end) {
                 console.warn(`Illegal slide: ${start}${type}${end}`);
             }
-            recorder.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, (end - start + 8) % 8 > 4);
+            r.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, (end - start + 8) % 8 > 4);
             break;
         case '>':
-            recorder.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, (start >= 3 && start <= 6));
+            r.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, (start >= 3 && start <= 6));
             break;
         case '<':
-            recorder.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, !(start >= 3 && start <= 6));
+            r.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, !(start >= 3 && start <= 6));
             break;
         case 'v':
             if ((end - start + 8) % 8 === 4 || start === end) {
                 console.warn(`Illegal slide: ${start}${type}${end}`);
             }
-            recorder.moveTo(startInfo.x, startInfo.y);
-            recorder.lineTo(0, 0);
-            recorder.lineTo(endInfo.x, endInfo.y);
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineTo(0, 0);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        case 'V': {
+            if (
+                (mid - start + 8) % 8 !== 2 && (mid - start + 8) % 8 !== 6
+                || ((mid - end + 8) % 8 < 2 || (mid - end + 8) % 8 > 5)
+                || start === end
+            ) {
+                console.warn(`Illegal slide: ${start}${type}${mid}${end}`);
+            }
+            const midInfo = noteRefPos[mid - 1];
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineTo(midInfo.x, midInfo.y);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        }
+        case 'q': {
+            const rInner = innerCirleBase * 0.38;
+            const rOuter = innerCirleBase * 0.42;
+            const startAngle = startInfo.rot - Math.PI * 0.12;
+            const endAngle = endInfo.rot + Math.PI * 1.09;
+            const exitAngle = endInfo.rot + Math.PI * 1.265;
+
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineToArc(0, 0, rInner, startAngle);
+            r.arc(0, 0, rInner * 1.001, startAngle, endAngle, (start < end && (end - start + 8) % 8 >= 4));
+            r.lineToArc(0, 0, rOuter, exitAngle);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        }
+        case 'p': {
+            const rInner = innerCirleBase * 0.38;
+            const rOuter = innerCirleBase * 0.42;
+            const startAngle = startInfo.rot + Math.PI * 1.09;
+            const endAngle = endInfo.rot - Math.PI * 0.12;
+            const exitAngle = endInfo.rot - Math.PI * 0.26;
+
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineToArc(0, 0, rInner, startAngle);
+            r.arc(0, 0, rInner * 1.001, startAngle, endAngle, !(end < start && (end - start + 8) % 8 <= 4));
+            r.lineToArc(0, 0, rOuter, exitAngle);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        }
+        case 'pp': {
+            const cir = {
+                x: Math.cos((start - 1) * Math.PI / 4) * innerCirleBase * 0.46,
+                y: Math.sin((start - 1) * Math.PI / 4) * innerCirleBase * 0.46,
+            };
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineToArc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot - Math.PI);
+            r.arc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot - Math.PI, endInfo.rot +
+                Math.PI * (
+                    ((end - start + 8) % 8 == 0) * -0.3 +
+                    ((end - start + 8) % 8 == 1) * -0.35 +
+                    ((end - start + 8) % 8 == 2) * -0.2 +
+                    ((end - start + 8) % 8 == 6) * -0.15 +
+                    ((end - start + 8) % 8 == 7) * -0.2
+                ), true, (end > start) && (end - start + 8) % 8 >= 3 || start > end && (end - start + 8) % 8 == 3);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        }
+        case 'qq': {
+            const cir = {
+                x: Math.cos((start - 4) * Math.PI / 4) * innerCirleBase * 0.46,
+                y: Math.sin((start - 4) * Math.PI / 4) * innerCirleBase * 0.46,
+            };
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineToArc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot);
+            r.arc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot, endInfo.rot +
+                Math.PI * (
+                    -1 +
+                    ((start - end + 8) % 8 == 0) * 0.3 +
+                    ((start - end + 8) % 8 == 1) * 0.35 +
+                    ((start - end + 8) % 8 == 2) * 0.2 +
+                    ((start - end + 8) % 8 == 6) * 0.15 +
+                    ((start - end + 8) % 8 == 7) * 0.2
+                ), false, (start > end) && (start - end + 8) % 8 >= 3 || end > start && (start - end + 8) % 8 == 3);
+            console.log(start, end, (end - start + 8) % 8);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        }
+        case 's':
+            if ((end - start + 8) % 8 !== 4 || start === end) {
+                console.warn(`Illegal slide: ${start}${type}${end}`);
+            }
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
+            r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 2);
+            r.lineTo(endInfo.x, endInfo.y);
             break;
         default:
-            recorder.moveTo(startInfo.x, startInfo.y);
-            recorder.lineTo(endInfo.x, endInfo.y);
-            console.warn("Unsupported slide type, defaulting to straight line:", type);
+            if (start === end) console.warn("This slide will not be visible since start and end are the same!! :", `${start}${type}${end}`);
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineTo(endInfo.x, endInfo.y);
+            console.warn("Not implemented slide type, defaulting to straight line:", type);
             break;
     }
 
-    return recorder;
+    return r;
 }

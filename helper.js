@@ -1,3 +1,7 @@
+export const
+    scaleBase = 100,
+    innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
+
 export async function getImg(imageSrc) { const img = new Image(); img.src = imageSrc; await img.decode(); return img; }
 export function imgNotExists(image) {
     if (!image || !image.complete || image.naturalWidth === 0) {
@@ -133,28 +137,34 @@ export class PathRecorder {
     }
 
     // startAngle, endAngle 使用弧度 (Radian)
-    arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
+    arc(cx, cy, r, startAngle, endAngle, anticlockwise = false, laps = 0) {
         let diff = endAngle - startAngle;
 
-        // 處理逆時針與跨越 2*PI 的情況
-        if (!anticlockwise && diff < 0) diff += Math.PI * 2;
-        if (anticlockwise && diff > 0) diff -= Math.PI * 2;
+        // 1. 基礎處理：確保方向與角度差在 2*PI 以內
+        if (!anticlockwise && diff <= 0) diff += Math.PI * 2;
+        if (anticlockwise && diff >= 0) diff -= Math.PI * 2;
+
+        // 2. 加入額外的圈數
+        const extraRotation = Math.PI * 2 * laps;
+        if (anticlockwise) {
+            diff -= extraRotation; // 逆時針方向，角度差為負值
+        } else {
+            diff += extraRotation; // 順時針方向，角度差為正值
+        }
 
         const length = Math.abs(diff * r);
-        const startPos = {
-            x: cx + r * Math.cos(startAngle),
-            y: cy + r * Math.sin(startAngle)
-        };
 
         this.segments.push({
             type: 'arc',
             cx, cy, r, startAngle, endAngle,
-            diff, // 旋轉的總角度
+            diff, // 這裡的 diff 現在包含了總旋轉量
             length,
             cumLength: this.totalLength
         });
 
         this.totalLength += length;
+
+        // 更新當前點位置
         this.currentPoint = {
             x: cx + r * Math.cos(endAngle),
             y: cy + r * Math.sin(endAngle)
@@ -193,4 +203,63 @@ export class PathRecorder {
             };
         }
     }
+
+    lineToArc(cx, cy, r, startAngle) {
+        const x = cx + r * Math.cos(startAngle);
+        const y = cy + r * Math.sin(startAngle);
+        this.lineTo(x, y);
+    }
 }
+export function drawArrowShape(ctx) {
+    const size = 2.5; // 箭頭大小
+    ctx.beginPath();
+    ctx.moveTo(-size, -size); // 左後
+    ctx.lineTo(size, 0);      // 尖端 (朝向前方)
+    ctx.lineTo(-size, size);  // 右後
+    ctx.lineTo(-size * 0.6, 0); // 往內凹一點點，看起來更像箭頭
+    ctx.closePath();
+    ctx.fill();
+}
+export const touchRefPos = {
+    A: Array.from({ length: 8 }, (_, i) => {
+        const a = (i - 1.5) * Math.PI / 4;
+        return {
+            x: Math.cos(a) * innerCirleBase * 0.833,
+            y: Math.sin(a) * innerCirleBase * 0.833,
+            rot: a + Math.PI / 2
+        };
+    }),
+    B: Array.from({ length: 8 }, (_, i) => {
+        const a = (i - 1.5) * Math.PI / 4;
+        return {
+            x: Math.cos(a) * innerCirleBase * 0.458,
+            y: Math.sin(a) * innerCirleBase * 0.458,
+            rot: a + Math.PI / 2
+        };
+    }),
+    C: [{ x: 0, y: 0 }],
+    D: Array.from({ length: 8 }, (_, i) => {
+        const a = (i - 2) * Math.PI / 4;
+        return {
+            x: Math.cos(a) * innerCirleBase * 0.854,
+            y: Math.sin(a) * innerCirleBase * 0.854,
+            rot: a + Math.PI / 2
+        };
+    }),
+    E: Array.from({ length: 8 }, (_, i) => {
+        const a = (i - 2) * Math.PI / 4;
+        return {
+            x: Math.cos(a) * innerCirleBase * 0.645,
+            y: Math.sin(a) * innerCirleBase * 0.645,
+            rot: a + Math.PI / 2
+        };
+    })
+};
+export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
+    const a = (i - 1.5) * Math.PI / 4;
+    return {
+        x: Math.cos(a) * innerCirleBase,
+        y: Math.sin(a) * innerCirleBase,
+        rot: a + Math.PI / 2
+    };
+});

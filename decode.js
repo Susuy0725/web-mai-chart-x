@@ -131,16 +131,37 @@ export function simaiDecode(data = "") {
 
                     const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
                     // 檢查 Flags
+                    if (noteStr.includes('b') && !slideMatch) {
+                        if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr);
+                        noteObj.isBreak = true
+                        noteStr = noteStr.replace(/b/g, '');
+                    };
+                    if (noteStr.includes('x')) {
+                        noteObj.isEx = true
+                        noteStr = noteStr.replace(/x/g, '');
+                    };
+                    if (noteStr.includes('f')) {
+                        if (!slideMatch && touchMatch) {
+                            noteObj.isHanabi = true
+                        } else {
+                            console.warn("Hanabi flag 'f' is not allowed in other notes!, skipping:", noteStr);
+                            return;
+                        }
+                    }
                     if (noteStr.includes('h')) {
+                        if (slideMatch) {
+                            console.warn("Hold flag 'h' is not allowed in slide notes, skipping:", noteStr);
+                            return;
+                        }
                         noteObj.isHold = true;
                         if (noteObj.type !== 'touch') noteObj.type = 'hold';
                         const match = noteStr.match(/\[([^\[\]]*)\]/);
                         const residue = noteStr.replace(/\[([^\[\]]*)\]/, '').replace(/h/, '');
-                        if (residue.includes('h') || residue.includes('[') || residue.includes(']')) {
+                        if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
                             console.warn("Invalid format in hold note, skipping:", noteStr);
                             return;
                         }
-                        noteObj.holdDuration = 0; // 預設持續時間為 0，後面會根據 Flags 計算
+                        noteObj.holdDuration = 1e-4;
                         if (match) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
@@ -152,8 +173,6 @@ export function simaiDecode(data = "") {
                             if (duration > endTime) endTime = duration;
                         }
                     }
-                    if (noteStr.includes('x')) noteObj.isEx = true;
-                    if (noteStr.includes('b') && !slideMatch) noteObj.isBreak = true;
                     if (slideMatch && !noteStr.includes('h')) {
                         let sameTimeSlide = false;
                         const slideParts = (() => {
@@ -184,10 +203,10 @@ export function simaiDecode(data = "") {
                             noteObj.isStar = true;
 
                             const p = residue.split(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g).filter((_, i) => i % 2 === 0);
-                            if (p[0].includes('b')) {
+                            /*if (p[0].includes('b')) {
                                 noteObj.isBreak = true;
                                 p[0] = p[0].replace(/b/g, '');
-                            }
+                            }*/
                             const isSlideBreak = p.some(part => part.includes('b'));
                             if (isSlideBreak) {
                                 p.forEach((c, i) => {
@@ -306,7 +325,8 @@ function getSlidePath(start, end, type, mid = null) {
         case 'V': {
             if (
                 (mid - start + 8) % 8 !== 2 && (mid - start + 8) % 8 !== 6
-                || ((mid - end + 8) % 8 < 2 || (mid - end + 8) % 8 > 5)
+                || (mid > end) && ((mid - end + 8) % 8 < 2 || (mid - end + 8) % 8 > 5)
+                || (mid < end) && ((end - mid + 8) % 8 < 2 || (end - mid + 8) % 8 > 5)
                 || start === end
             ) {
                 console.warn(`Illegal slide: ${start}${type}${mid}${end}`);
@@ -347,12 +367,12 @@ function getSlidePath(start, end, type, mid = null) {
         }
         case 'pp': {
             const cir = {
-                x: Math.cos((start - 1) * Math.PI / 4) * innerCirleBase * 0.46,
-                y: Math.sin((start - 1) * Math.PI / 4) * innerCirleBase * 0.46,
+                x: Math.cos((start - 0.972) * Math.PI / 4) * innerCirleBase * 0.456,
+                y: Math.sin((start - 0.972) * Math.PI / 4) * innerCirleBase * 0.456,
             };
             r.moveTo(startInfo.x, startInfo.y);
-            r.lineToArc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot - Math.PI);
-            r.arc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot - Math.PI, endInfo.rot +
+            r.lineToArc(cir.x, cir.y, innerCirleBase * 0.472, startInfo.rot - Math.PI);
+            r.arc(cir.x, cir.y, innerCirleBase * 0.466, startInfo.rot - Math.PI, endInfo.rot +
                 Math.PI * (
                     ((end - start + 8) % 8 == 0) * -0.3 +
                     ((end - start + 8) % 8 == 1) * -0.35 +
@@ -365,12 +385,12 @@ function getSlidePath(start, end, type, mid = null) {
         }
         case 'qq': {
             const cir = {
-                x: Math.cos((start - 4) * Math.PI / 4) * innerCirleBase * 0.46,
-                y: Math.sin((start - 4) * Math.PI / 4) * innerCirleBase * 0.46,
+                x: Math.cos((start - 4.028) * Math.PI / 4) * innerCirleBase * 0.456,
+                y: Math.sin((start - 4.028) * Math.PI / 4) * innerCirleBase * 0.456,
             };
             r.moveTo(startInfo.x, startInfo.y);
-            r.lineToArc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot);
-            r.arc(cir.x, cir.y, innerCirleBase * 0.46, startInfo.rot, endInfo.rot +
+            r.lineToArc(cir.x, cir.y, innerCirleBase * 0.472, startInfo.rot);
+            r.arc(cir.x, cir.y, innerCirleBase * 0.466, startInfo.rot, endInfo.rot +
                 Math.PI * (
                     -1 +
                     ((start - end + 8) % 8 == 0) * 0.3 +
@@ -390,6 +410,15 @@ function getSlidePath(start, end, type, mid = null) {
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 2);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        case 'z':
+            if ((end - start + 8) % 8 !== 4 || start === end) {
+                console.warn(`Illegal slide: ${start}${type}${end}`);
+            }
+            r.moveTo(startInfo.x, startInfo.y);
+            r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 2);
+            r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         default:

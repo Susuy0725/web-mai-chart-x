@@ -9,6 +9,24 @@ export function imgNotExists(image) {
     }
     return false;
 }
+export function getButton(action, type = "control") {
+    return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#topUtilityBtns .utilityButton"}[data-buttonAction="${action}"]`);
+}
+/**
+* @param {Function} func - 要執行的函式
+* @param {number} delay - 延遲時間（毫秒）
+*/
+export function debounce(func, delay = 300) {
+    let timer = null;
+
+    return function (...args) {
+        if (timer) clearTimeout(timer);
+
+        timer = setTimeout(() => {
+            func.apply(this, args);
+        }, delay);
+    };
+}
 export function parseTag(str, open, close, specialCase = false) {
     const regex = new RegExp(`\\${open}([^\\${open}\\${close}]*)\\${close}`, 'g');
     const matches = [...str.matchAll(regex)];

@@ -15,7 +15,7 @@
     #canvasContainer {
         position: absolute;
         width: 50%;
-        height: calc(100% - 30px);
+        height: calc(100% - 0px);
         top: 0;
         left: 0;
     }
@@ -66,23 +66,40 @@
         position: absolute;
         width: 100%;
         height: 100%;
-        top: -4px;
-        left: -2px;
+        top: -2px;
+        left: 0px;
         object-fit: contain;
         opacity: 0.5;
         scale: 0.99;
     }
 
-    #popup {
+    #topUtilityBtns {
         position: absolute;
-        top: 0;
-        left: 0;
         padding: 5px;
+        border-radius: 10px;
         background: rgba(0, 0, 0, 0.8);
+        top: 10px;
+        right: 10px;
+        display: flex;
+        flex-direction: row;
+        gap: 10px;
+        z-index: 5;
+    }
+
+    .utilityButton {
+        padding: 5px;
+        background: transparent;
+        border: #838383 1px solid;
+        box-sizing: border-box;
         color: white;
+        width: 42px;
+        height: 30px;
+        text-align: center;
         font-size: 12px;
         border-radius: 5px;
+        word-break: keep-all;
         cursor: pointer;
+        overflow: hidden;
     }
 
     .editor-container {
@@ -113,6 +130,10 @@
         border: none;
         outline: none;
         overflow: auto;
+        scrollbar-width: thin;
+        /* auto or thin */
+        scrollbar-color: #838383 transparent;
+        /* 滾動條顏色 */
     }
 
     #editor-input {
@@ -131,6 +152,7 @@
         color: #d4d4d4;
         /* 預設文字顏色 */
         z-index: 1;
+        speak: none;
     }
 </style>
 
@@ -142,24 +164,32 @@
     </div>
     <div id="playControls">
         <div class="controlButton" data-buttonAction="play/stop" data-playing="false"></div>
-        <input type="range" id="timeControl" min="0" max="100" value="0" step="0.01">
+        <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">
     </div>
     <div class="editor-container">
         <div id="highlight-layer" class="editor-layer" inert aria-disabled="true" aria-hidden="true"
             contenteditable="false"></div>
         <textarea id="editor-input" class="editor-layer" spellcheck="false"></textarea>
     </div>
-    <div id="popup">彈出</div>
+    <div id="topUtilityBtns">
+        <div class="utilityButton" data-buttonAction="popup">彈出</div>
+        <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
+        <div class="utilityButton" data-buttonAction="hideEditor">隱藏編輯器</div>
+    </div>
 </body>
 <script type="module">
-    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos } from './helper.js';
+    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce } from './helper.js';
     import { simaiDecode } from './decode.js';
 
     const
         canvas = document.getElementById('main'),
         canvasContainer = document.getElementById('canvasContainer');
     const slider = document.getElementById('timeControl');
-    const playButton = document.querySelector('[data-buttonAction="play/stop"]');
+    const playButton = getButton("play/stop", "control");
+    const quickGenerateButton = getButton("quickGenerate", "utility");
+    const hideEditorButton = getButton("hideEditor", "utility");
+    const popup = getButton("popup", "utility");
+
     let ctx = canvas.getContext('2d');
     const scale = 0.99;
     const noteBaseSize = 11;
@@ -170,22 +200,21 @@
     let globalTime = 0;
     let lastTimestamp = null;
     let secondCtx = null;
+    let externalWindow = null;
 
+    const editorContainer = document.querySelector('.editor-container');
     const editorInput = document.getElementById('editor-input');
     const highlightLayer = document.getElementById('highlight-layer');
     let notes = [], endTime = 1;
 
-    editorInput.addEventListener('input', () => {
-        const value = editorInput.value;
-        highlightLayer.innerText = value + " ";
-        highlightLayer.scrollTop = editorInput.scrollTop;
-        highlightLayer.scrollLeft = editorInput.scrollLeft;
+    const savedContent = localStorage.getItem('simai_editor_content');
+    const getres = ((simaiDataValue) => {
         const result = (() => {
             try {
-                return simaiDecode(value);
+                return simaiDecode(simaiDataValue);
             } catch (e) {
-                console.error("解析失敗，維持現狀", e);
-                return null; // 回傳 null 代表不更新
+                console.error("解析失敗", e);
+                return null;
             }
         })();
 
@@ -195,15 +224,103 @@
             slider.max = endTime + 1;
             draw();
         }
-    });
-    editorInput.addEventListener('scroll', () => {
+    })
+
+    const inputDebounce = debounce(() => {
+        const value = editorInput.value;
+
+        // 解析 Note 邏輯
+        getres(value);
+
+        // 存入本地空間
+        localStorage.setItem('simai_editor_content', value);
+    }, 300);
+
+    const setEditorCss = (visible = null) => {
+        // 同步捲動永遠執行
+        highlightLayer.scrollTop = editorInput.scrollTop;
+        highlightLayer.scrollLeft = editorInput.scrollLeft;
+
+        if (visible === null) return;
+
+        // visible 為 true 代表顯示編輯器
+        canvasContainer.style.width = visible ? '50%' : '100%';
+        const displayMode = visible ? 'block' : 'none';
+
+        editorInput.style.display = displayMode;
+        highlightLayer.style.display = displayMode;
+        editorContainer.style.display = displayMode;
+    };
+
+    editorInput.addEventListener('input', () => {
+        const value = editorInput.value;
+
         // 同步捲動位置
+        setEditorCss();
+
+        // 立即更新顏色高亮 (視覺上達到打字立刻出現)
+        applyHighlight(value);
+
+        // 延遲處理重解析與存檔 (避免打字時解析幾萬行導致卡頓)
+        inputDebounce();
+    });
+
+    hideEditorButton.addEventListener('click', () => {
+        // 檢查目前是否為隱藏狀態
+        const currentlyHidden = editorContainer.style.display === 'none';
+
+        // 如果目前隱藏 -> 點擊後要「顯示」(true)
+        // 如果目前顯示 -> 點擊後要「隱藏」(false)
+        const nextStateVisible = currentlyHidden;
+
+        // 儲存的是 "是否隱藏" 的狀態
+        localStorage.setItem('hide_editor', !nextStateVisible);
+
+        setEditorCss(nextStateVisible);
+        resize();
+    });
+
+    quickGenerateButton.addEventListener('click', () => {
+        const sampleData = `(60){4},`;
+        editorInput.value += sampleData;
+        applyHighlight(editorInput.value);
+        inputDebounce();
+    });
+
+    editorInput.addEventListener('scroll', () => {
         highlightLayer.scrollTop = editorInput.scrollTop;
         highlightLayer.scrollLeft = editorInput.scrollLeft;
     });
 
+    function applyHighlight(text) {
+        if (!text) {
+            highlightLayer.innerHTML = "";
+            return;
+        }
 
+        // 1. HTML 轉義
+        let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+        // 2. 語法正則表達式 (已經包含註解優先匹配邏輯)
+        const combinedRegex = /(\|\|.*$)|((?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(([ABCDE])(\d+)|C|C(d+))/gm;
+
+        html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, touch) => {
+            if (comment) return `<span style="color: #468A55;">${comment}</span>`;
+            if (slide) return `<span style="color: #7EBAF0;">${slide}</span>`;
+            if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
+            if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
+            if (split) return `<span style="color: #ce9178;">${split}</span>`;
+            if (time) return `<span style="color: #b5cea8;">${time}</span>`;
+            if (bk) return `<span style="color: #F7B268;">${bk}</span>`;
+            if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
+            if (f) return `<span style="color: #FC7CC6;">${f}</span>`;
+            if (comm) return `<span style="color: #99A9AD;">${comm}</span>`;
+            return match;
+        });
+
+        // 解決最後一行換行高度不對齊問題
+        highlightLayer.innerHTML = html + (text.endsWith('\n') ? ' ' : '');
+    }
     const baseURL = './Skin/';
     const images = {
         tap: await getImg(baseURL + 'tap.png'),
@@ -225,7 +342,24 @@
         slide: await getImg(baseURL + 'slide.png'),
         slide_each: await getImg(baseURL + 'slide_each.png'),
         slide_break: await getImg(baseURL + 'slide_break.png'),
+        touchhold_0: await getImg(baseURL + 'touchhold_0.png'),
+        touchhold_1: await getImg(baseURL + 'touchhold_1.png'),
+        touchhold_2: await getImg(baseURL + 'touchhold_2.png'),
+        touchhold_3: await getImg(baseURL + 'touchhold_3.png'),
+        touchhold_border: await getImg(baseURL + 'touchhold_border.png'),
     };
+
+    if (savedContent) {
+        editorInput.value = savedContent;
+
+        const isVisible = localStorage.getItem('hide_editor') !== 'true'; // 改名為 isVisible 較直覺
+        setEditorCss(isVisible);
+
+        applyHighlight(savedContent);
+        getres(savedContent);
+
+        resize();
+    }
 
     slider.addEventListener('input', () => {
         const value = parseFloat(slider.value);
@@ -254,7 +388,13 @@
             globalTime += dt;
             slider.value = globalTime;
             draw();
-            requestAnimationFrame(update);
+            if (globalTime >= endTime) {
+                playButton.dataset.playing = 'false';
+                globalTime = endTime;
+                slider.value = globalTime;
+            } else {
+                requestAnimationFrame(update);
+            }
         }
     }
 
@@ -273,13 +413,16 @@
 
     }
 
-    const popup = document.getElementById('popup');
     popup.addEventListener('click', openSecondWindow);
 
     function openSecondWindow() {
-        const newWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
+        if (externalWindow && !externalWindow.closed) {
+            externalWindow.focus();
+            return;
+        }
+        externalWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
         // 注入基礎樣式與 Canvas
-        const style = newWindow.document.createElement('style');
+        const style = externalWindow.document.createElement('style');
         style.textContent = `
             body {
                 margin: 0;
@@ -308,20 +451,20 @@
                 left: 0;
             }
         `;
-        newWindow.document.head.appendChild(style);
-        newWindow.document.body.innerHTML = `
+        externalWindow.document.head.appendChild(style);
+        externalWindow.document.body.innerHTML = `
             <div id="canvasContainer">
                 <img src="./Skin/outline.png" alt="">
                 <canvas id="secondary"></canvas>
             </div>
         `;
-        const extCanvas = newWindow.document.getElementById('secondary');
+        const extCanvas = externalWindow.document.getElementById('secondary');
         // 這裡需要處理縮放邏輯，建議參考你原有的 resize 函式
         extCanvas.width = 800;
         extCanvas.height = 800;
         secondCtx = extCanvas.getContext('2d');
 
-        newWindow.addEventListener('beforeunload', () => {
+        externalWindow.addEventListener('beforeunload', () => {
             console.log("警告：外部視窗即將關閉");
             // 你可以在這裡重置主視窗的某些狀態
             secondCtx = null;
@@ -329,10 +472,10 @@
         });
 
         const syncResize = () => {
-            const dpr = newWindow.devicePixelRatio || 1;
-            const size = Math.min(newWindow.innerWidth, newWindow.innerHeight);
-            extCanvas.width = newWindow.innerWidth * dpr;
-            extCanvas.height = newWindow.innerHeight * dpr;
+            const dpr = externalWindow.devicePixelRatio || 1;
+            const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
+            extCanvas.width = externalWindow.innerWidth * dpr;
+            extCanvas.height = externalWindow.innerHeight * dpr;
 
             // 重新套用你的座標系統 (這點最重要！)
             const p = size / scaleBase * scale * dpr;
@@ -341,7 +484,7 @@
 
         syncResize();
 
-        newWindow.addEventListener('resize', syncResize);
+        externalWindow.addEventListener('resize', syncResize);
         ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2); // 清除主 Canvas
 
         ctx = secondCtx; // 切換到第二個 Canvas 的上下文
@@ -489,7 +632,59 @@
         return 0.02160482279616 * x * x * x - 0.07553691072 * x * x + 0.43509924 * x + 0.000250029;
     }
     function drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble } = s;
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration } = s;
+        if (holdDuration) {
+            const imgs = [];
+            for (let i = 0; i < 4; i++) {
+                const img = images["touchhold_" + i];
+                if (imgNotExists(img)) return;
+                imgs.push(img);
+            }
+            const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
+            const touchBorder = images.touchhold_border;
+            if (imgNotExists(touchPoint) || imgNotExists(touchBorder)) return;
+            const noteT = (noteTime - globalTime);
+            const progress = noteT * touchSpeed;
+            const t = 1 - timeFunction(progress);
+
+            if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+
+            const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
+            const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+            ctx.save();
+            if (-noteT >= holdDuration) {
+                ctx.translate(posInfo.x, posInfo.y);
+                simpleEndEffect(holdDuration + noteT);
+            }
+            else {
+                const currentScale = 0.8;
+                const size = noteBaseSize * 0.7;
+                const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+
+                let a = touchTimeFunction(11 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+
+                ctx.translate(posInfo.x, posInfo.y);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(touchBorder, -size * 1.3, -size * 1.3, size * 2.6, size * 2.6);
+                ctx.restore();
+                ctx.save();
+                ctx.translate(posInfo.x, posInfo.y);
+                ctx.rotate(Math.PI * -0.75);
+                ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
+                for (let i = 0; i < 4; i++) {
+                    ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                    ctx.rotate(Math.PI / 2);
+                }
+                ctx.globalAlpha = 1;
+                ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+            }
+            ctx.restore();
+            return;
+        }
         const img = images[isDouble ? "touch_each" : "touch"];
         const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
         if (imgNotExists(img) || imgNotExists(touchPoint)) return;
@@ -541,7 +736,7 @@
         if (t < distance || -noteT > slideDelay + slideDuration) return;
 
         const p = path || generatePath(pos, slideEnd);
-
+        if (p.totalLength < 1e-4) return;
         ctx.save();
 
         const isTaped = -noteT > 0;
@@ -556,6 +751,7 @@
         ctx.strokeStyle = '#0000ff';
         ctx.lineWidth = 1;
         ctx.stroke();*/
+
         drawPathWithArrows(ctx, p, slideProgress, img);
 
         if (noteT <= 0 && slideProgress < 1) {
@@ -575,7 +771,7 @@
 
         const arrowCount = Math.floor(recorder.totalLength / s.spacing);
         ctx.beginPath();
-        for (let i = arrowCount; i > Math.floor(t * arrowCount); i--) {
+        for (let i = arrowCount - 1; i > Math.floor(t * arrowCount); i--) {
             const d = i * s.spacing;
             const t = d / recorder.totalLength;
 

@@ -219,10 +219,10 @@ export function simaiDecode(data = "", baseOffset = true) {
                             noteObj.isStar = true;
 
                             const p = residue.split(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g).filter((_, i) => i % 2 === 0);
-                            /*if (p[0].includes('b')) {
+                            if (p[0].includes('b')) {
                                 noteObj.isBreak = true;
                                 p[0] = p[0].replace(/b/g, '');
-                            }*/
+                            }
                             const isSlideBreak = p.some(part => part.includes('b'));
                             if (isSlideBreak) {
                                 p.forEach((c, i) => {

@@ -6,6 +6,11 @@
     <title>no</title>
 </head>
 <style>
+    :root {
+        --utility-hidden-height: 16px;
+        --playControls-height: 50px;
+    }
+
     body {
         margin: 0;
         padding: 0;
@@ -15,7 +20,7 @@
     #canvasContainer {
         position: absolute;
         width: 50%;
-        height: calc(100% - 0px);
+        height: calc(100% - var(--playControls-height));
         top: 0;
         left: 0;
     }
@@ -41,7 +46,7 @@
     #playControls {
         position: absolute;
         width: 100%;
-        height: 30px;
+        height: var(--playControls-height);
         bottom: 0;
         left: 0;
         background: rgba(0, 0, 0, 0.8);
@@ -66,33 +71,41 @@
         position: absolute;
         width: 100%;
         height: 100%;
-        top: -2px;
-        left: 0px;
+        top: 2px;
+        left: -12px;
         object-fit: contain;
         opacity: 0.5;
-        scale: 0.99;
+        scale: 1;
     }
 
     #topUtilityBtns {
+        width: calc(50% - 10px);
+        height: 30px;
         position: absolute;
         padding: 5px;
-        border-radius: 10px;
-        background: rgba(0, 0, 0, 0.8);
-        top: 10px;
-        right: 10px;
+        background: rgb(40, 40, 40);
+        top: 0;
+        right: 0;
         display: flex;
         flex-direction: row;
-        gap: 10px;
+        overflow-x: auto;
+        gap: 5px;
         z-index: 5;
+        user-select: none;
+        scrollbar-width: none;
     }
 
     .utilityButton {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
         padding: 5px;
         background: transparent;
         border: #838383 1px solid;
         box-sizing: border-box;
         color: white;
-        width: 42px;
+        width: 60px;
         height: 30px;
         text-align: center;
         font-size: 12px;
@@ -104,12 +117,17 @@
 
     .editor-container {
         position: absolute;
+        top: 40px;
         bottom: 30px;
         left: 50%;
         width: 50%;
-        height: calc(100% - 30px);
+        height: calc(100% - var(--playControls-height) - 40px);
         background: #1e1e1e;
         /* 背景深色 */
+    }
+
+    .editor-container.expanded {
+        height: calc(100% - var(--playControls-height) - var(--utility-hidden-height));
     }
 
     .editor-layer {
@@ -152,7 +170,14 @@
         color: #d4d4d4;
         /* 預設文字顏色 */
         z-index: 1;
-        speak: none;
+    }
+
+    .utilityButton.expanded {
+        width: 100%;
+        height: 30px;
+        border: none;
+        padding: 0;
+        height: var(--utility-hidden-height);
     }
 </style>
 
@@ -172,46 +197,51 @@
         <textarea id="editor-input" class="editor-layer" spellcheck="false"></textarea>
     </div>
     <div id="topUtilityBtns">
-        <div class="utilityButton" data-buttonAction="popup">彈出</div>
+        <div class="utilityButton" data-buttonAction="hide/show" data-hidden="false">▲</div>
+        <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
         <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
         <div class="utilityButton" data-buttonAction="hideEditor">隱藏編輯器</div>
+        <div class="utilityButton" data-buttonAction="readyBeat">預備拍<input type="checkbox"></div>
     </div>
 </body>
 <script type="module">
-    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce } from './helper.js';
+    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager } from './helper.js';
     import { simaiDecode } from './decode.js';
 
-    const
-        canvas = document.getElementById('main'),
-        canvasContainer = document.getElementById('canvasContainer');
+    const canvas = document.getElementById('main');
+    const canvasContainer = document.getElementById('canvasContainer');
     const slider = document.getElementById('timeControl');
     const playButton = getButton("play/stop", "control");
     const quickGenerateButton = getButton("quickGenerate", "utility");
     const hideEditorButton = getButton("hideEditor", "utility");
+    const hideUtilityButton = getButton("hide/show", "utility");
+    const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
     const popup = getButton("popup", "utility");
 
     let ctx = canvas.getContext('2d');
     const scale = 0.99;
     const noteBaseSize = 11;
-    const speed = 7;
-    const touchSpeed = 7;
+    const speed = 6.5;
+    const touchSpeed = 6.5;
     const effectDecayTime = 0.4;
     const distance = 0.25;
     let globalTime = 0;
     let lastTimestamp = null;
     let secondCtx = null;
     let externalWindow = null;
+    let readyBeat = localStorage.getItem('ready_beat') === 'true';
+    let sliding = false; // 新增滑動狀態標記
 
     const editorContainer = document.querySelector('.editor-container');
     const editorInput = document.getElementById('editor-input');
     const highlightLayer = document.getElementById('highlight-layer');
-    let notes = [], endTime = 1;
+    let notes = [], endTime = 1, chartBaseOffset = 0;
 
     const savedContent = localStorage.getItem('simai_editor_content');
     const getres = ((simaiDataValue) => {
         const result = (() => {
             try {
-                return simaiDecode(simaiDataValue);
+                return simaiDecode(simaiDataValue, readyBeat);
             } catch (e) {
                 console.error("解析失敗", e);
                 return null;
@@ -220,11 +250,14 @@
 
         if (result) {
             notes = result.notes;
-            endTime = result.endTime;
-            slider.max = endTime + 1;
+            endTime = result.endTime + 1;
+            chartBaseOffset = result.baseOffset;
+            slider.max = endTime;
             draw();
         }
-    })
+    });
+
+    await audioManager.init();
 
     const inputDebounce = debounce(() => {
         const value = editorInput.value;
@@ -251,6 +284,14 @@
         highlightLayer.style.display = displayMode;
         editorContainer.style.display = displayMode;
     };
+
+    readyBeatCheckbox.checked = readyBeat;
+
+    readyBeatCheckbox.addEventListener('change', () => {
+        readyBeat = readyBeatCheckbox.checked;
+        localStorage.setItem('ready_beat', readyBeatCheckbox.checked);
+        inputDebounce();
+    });
 
     editorInput.addEventListener('input', () => {
         const value = editorInput.value;
@@ -280,6 +321,26 @@
         resize();
     });
 
+    hideUtilityButton.addEventListener('click', () => {
+        const utilityBtns = document.getElementById('topUtilityBtns');
+        const isHidden = hideUtilityButton.dataset.hidden === 'true';
+        if (isHidden) {
+            utilityBtns.style.overflowX = 'auto';
+            hideUtilityButton.classList.remove('expanded');
+            editorContainer.classList.remove('expanded');
+        } else {
+            utilityBtns.style.overflowX = 'hidden';
+            utilityBtns.scrollLeft = 0; // 隱藏時強制捲回最左，避免下次展開時看到中間或右邊的按鈕
+            hideUtilityButton.classList.add('expanded');
+            editorContainer.classList.add('expanded');
+        }
+        hideUtilityButton.innerText = isHidden ? '▲' : '▼';
+        hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
+        utilityBtns.style.padding = isHidden ? '5px' : '0px 5px';
+        utilityBtns.style.height = isHidden ? '30px' : 'var(--utility-hidden-height)';
+        editorContainer.style.top = isHidden ? '40px' : 'var(--utility-hidden-height)';
+    });
+
     quickGenerateButton.addEventListener('click', () => {
         const sampleData = `(60){4},`;
         editorInput.value += sampleData;
@@ -290,6 +351,79 @@
     editorInput.addEventListener('scroll', () => {
         highlightLayer.scrollTop = editorInput.scrollTop;
         highlightLayer.scrollLeft = editorInput.scrollLeft;
+    });
+
+    // 自動配對括號與智能刪除
+    editorInput.addEventListener('keydown', (e) => {
+        const pairs = { '(': ')', '{': '}', '[': ']' };
+        const open = e.key;
+        const close = pairs[open];
+        const value = editorInput.value;
+        const start = editorInput.selectionStart;
+        const end = editorInput.selectionEnd;
+
+        // 輸入開括號 → 補齊並將游標放入或包住選取文字
+        if (close) {
+            e.preventDefault();
+            const selected = value.slice(start, end);
+            const newVal = value.slice(0, start) + open + selected + close + value.slice(end);
+            editorInput.value = newVal;
+            if (start !== end) {
+                editorInput.selectionStart = start + 1;
+                editorInput.selectionEnd = end + 1;
+            } else {
+                editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+            }
+            applyHighlight(editorInput.value);
+            inputDebounce();
+            return;
+        }
+
+        // 輸入閉括號時，若下一字元已為相同閉括號，則跳過（避免重複插入）
+        const closingKeys = Object.values(pairs);
+        if (closingKeys.includes(e.key)) {
+            if (start === end && value[start] === e.key) {
+                e.preventDefault();
+                editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+            }
+            return;
+        }
+
+        // Backspace：若游標剛好在成對括號中（前一個為開、下一個為對應閉），則同時刪除兩個
+        if (e.key === 'Backspace') {
+            if (start === end && start > 0) {
+                const before = value[start - 1];
+                const after = value[start];
+                const matching = Object.entries(pairs).find(([o, c]) => o === before && c === after);
+                if (matching) {
+                    e.preventDefault();
+                    const newVal = value.slice(0, start - 1) + value.slice(start + 1);
+                    editorInput.value = newVal;
+                    editorInput.selectionStart = editorInput.selectionEnd = start - 1;
+                    applyHighlight(editorInput.value);
+                    inputDebounce();
+                }
+            }
+            return;
+        }
+
+        // Delete：若游標在開括號之前且後方為其閉括號，刪除整對（可視需求保留或移除）
+        if (e.key === 'Delete') {
+            if (start === end && start < value.length) {
+                const before = value[start - 1];
+                const after = value[start];
+                const matching = Object.entries(pairs).find(([o, c]) => o === before && c === after);
+                if (matching) {
+                    e.preventDefault();
+                    const newVal = value.slice(0, start - 1) + value.slice(start + 1);
+                    editorInput.value = newVal;
+                    editorInput.selectionStart = editorInput.selectionEnd = start - 1;
+                    applyHighlight(editorInput.value);
+                    inputDebounce();
+                }
+            }
+            return;
+        }
     });
 
     function applyHighlight(text) {
@@ -322,32 +456,60 @@
         highlightLayer.innerHTML = html + (text.endsWith('\n') ? ' ' : '');
     }
     const baseURL = './Skin/';
-    const images = {
-        tap: await getImg(baseURL + 'tap.png'),
-        tap_break: await getImg(baseURL + 'tap_break.png'),
-        tap_each: await getImg(baseURL + 'tap_each.png'),
-        hold: await getImg(baseURL + 'hold.png'),
-        hold_break: await getImg(baseURL + 'hold_break.png'),
-        hold_each: await getImg(baseURL + 'hold_each.png'),
-        touch: await getImg(baseURL + 'touch.png'),
-        touch_each: await getImg(baseURL + 'touch_each.png'),
-        touch_point: await getImg(baseURL + 'touch_point.png'),
-        touch_point_each: await getImg(baseURL + 'touch_point_each.png'),
-        star: await getImg(baseURL + 'star.png'),
-        star_break: await getImg(baseURL + 'star_break.png'),
-        star_each: await getImg(baseURL + 'star_each.png'),
-        star_double: await getImg(baseURL + 'star_double.png'),
-        star_break_double: await getImg(baseURL + 'star_break_double.png'),
-        star_each_double: await getImg(baseURL + 'star_each_double.png'),
-        slide: await getImg(baseURL + 'slide.png'),
-        slide_each: await getImg(baseURL + 'slide_each.png'),
-        slide_break: await getImg(baseURL + 'slide_break.png'),
-        touchhold_0: await getImg(baseURL + 'touchhold_0.png'),
-        touchhold_1: await getImg(baseURL + 'touchhold_1.png'),
-        touchhold_2: await getImg(baseURL + 'touchhold_2.png'),
-        touchhold_3: await getImg(baseURL + 'touchhold_3.png'),
-        touchhold_border: await getImg(baseURL + 'touchhold_border.png'),
-    };
+
+    // 1. 定義基礎圖片清單
+    const baseImageKeys = [
+        'tap', 'tap_break', 'tap_each',
+        'hold', 'hold_break', 'hold_each',
+        'touch', 'touch_each', 'touch_point', 'touch_point_each',
+        'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
+        'slide', 'slide_each', 'slide_break',
+        'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
+    ];
+
+    async function loadAllImages() {
+        const images = {};
+        const loadQueue = [];
+
+        // 處理基礎圖片
+        baseImageKeys.forEach(key => {
+            loadQueue.push(
+                getImg(`${baseURL}${key}.png`).then(img => images[key] = img)
+            );
+        });
+
+        // 處理 WiFi 扇形圖片 (0-9)
+        ['wifi_', 'wifi_break_', 'wifi_each_'].forEach(prefix => {
+            for (let i = 0; i < 11; i++) {
+                const key = prefix + i;
+                loadQueue.push(
+                    getImg(`${baseURL}${key}.png`).then(img => images[key] = img).catch(() => console.warn(`Failed to load: ${key}`))
+                );
+            }
+        });
+
+        // 等待所有圖片載入完成
+        await Promise.all(loadQueue);
+        return images;
+    }
+
+    // 使用方式
+    const images = await loadAllImages();
+    // 確保到這一步時，所有圖片 (包括 wifi) 都已經在 images 物件裡了
+
+    const wSlideRatio = [
+        111, 68, -3, 0,
+        160, 90, -3.5, -0.004,
+        204, 110, -4.6, -0.0035,
+        253, 136, -5.5, -0.004,
+        298, 154, -6.5, -0.003,
+        353, 179, -6.2, -0.003,
+        410, 205, -5.75, -0.003,
+        464, 226, -5.45, -0.003,
+        519, 251, -5.4, -0.004,
+        571, 271, -5.2, -0.003,
+        653, 313, -3.9, -0.003,
+    ];
 
     if (savedContent) {
         editorInput.value = savedContent;
@@ -361,10 +523,17 @@
         resize();
     }
 
+    const slideInputDebounce = debounce(() => {
+        sliding = false;
+    }, 100);
+
     slider.addEventListener('input', () => {
+        sliding = true;
         const value = parseFloat(slider.value);
         globalTime = value;
+        slideInputDebounce();
         if (playButton.dataset.playing === 'false') {
+            audioManager.stopAllLongSounds();
             draw();
         }
     });
@@ -373,6 +542,8 @@
         if (playButton.dataset.playing === 'true') {
             playButton.dataset.playing = 'false';
             lastTimestamp = null;
+            audioManager.stopAllLongSounds();
+            notes.forEach(n => n.riserActive = false); // 強制重置標記
         } else {
             playButton.dataset.playing = 'true';
             lastTimestamp = performance.now();
@@ -405,7 +576,7 @@
         const p = Math.min(w, h) / scaleBase * scale;
         canvas.width = w;
         canvas.height = h;
-        ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
+        if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
         draw();
     }
 
@@ -480,6 +651,7 @@
             // 重新套用你的座標系統 (這點最重要！)
             const p = size / scaleBase * scale * dpr;
             secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
+            draw();
         };
 
         syncResize();
@@ -495,31 +667,106 @@
     window.addEventListener('resize', resize);
 
     resize();
-
+    
+    let playClock = [false, false, false, false];
     function draw() {
+        // 1. 清除畫布
         ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
-        ctx.strokeStyle = '#0000ff50';
-        ctx.lineWidth = 0.2;
-        ctx.beginPath();
-        ctx.arc(0, 0, 50, 0, Math.PI * 2);
-        ctx.stroke();
+        //drawBackground(ctx);
+        
+        // 2. 準備繪製桶子 (定義視覺疊加順序：由下而上)
+        const buckets = {
+            slide: [],
+            tapnhold: [],
+            touch: []
+        };
+
+        const playing = playButton.dataset.playing === 'true';
+
+        // 3. 核心迴圈：一邊處理音效邏輯，一邊將音符分類到桶子
+        if (playing && readyBeat) {
+            for (let i = 0; i < 4; i++) {
+                const clockT = (i / 4) * chartBaseOffset - globalTime;
+                if (clockT > 0) {
+                    playClock[i] = false;
+                } else {
+                    if (!playClock[i]) {
+                        audioManager.queueSoundSingle('clock', clockT);
+                    }
+                    playClock[i] = true;
+                }
+            }
+        }
         for (let i = notes.length - 1; i >= 0; i--) {
             const note = notes[i];
-            if (note.type === 'tap') {
-                if (note.isStar) drawStar(note);
-                else drawTap(note);
+            const noteT = (note.time - globalTime);
+            const t = 1 - timeFunction(noteT * (speed * 0.8833 + 0.8167));
+            const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+
+            // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
+            const isVisible = t >= -1 && -noteT <= skipT + effectDecayTime;
+
+            if (playing && !sliding) {
+                // A. 處理 Riser (Touch Hold 長音)
+                const noteId = `riser_${note.pos}_${note.time}`;
+                const isInsideHold = note.type === "touch" && note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration;
+
+                if (isInsideHold) {
+                    if (!note.riserActive) {
+                        const soundOffset = -noteT;
+                        audioManager.startLongSound(noteId, 'touchHold_riser', soundOffset);
+                        note.riserActive = true;
+                    }
+                } else if (note.riserActive) {
+                    audioManager.stopLongSound(noteId);
+                    note.riserActive = false;
+                }
+
+                // B. 處理開始打擊音效 (Tap / Slide Start / Hold Start)
+                if (noteT <= 0 && !note.startEffectPlayed) {
+                    // 排除連鎖滑軌的非首個箭頭音效
+                    if (!(note.type === "slide" && !note.firstSlide)) {
+                        audioManager.queueSound(note, note.time + (note.slideDelay ?? 0));
+                    }
+                    note.startEffectPlayed = true;
+                }
+
+                // C. 處理結束音效 (Hold End / Slide End / Hanabi)
+                if (-noteT > skipT && !note.endEffectPlayed) {
+                    if (note.isBreak || note.isHanabi || (note.holdDuration !== undefined && note.type !== "tap")) {
+                        audioManager.queueSound(note, note.time + skipT);
+                    }
+                    note.endEffectPlayed = true;
+                }
             }
-            if (note.type === 'hold') {
-                drawHold(note);
+
+            // --- 倒帶或 Slider 拖動時的狀態重置 ---
+            if (noteT > 0) {
+                note.startEffectPlayed = false;
+                note.endEffectPlayed = false;
+                if (note.riserActive) {
+                    audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
+                    note.riserActive = false;
+                }
             }
-            if (note.type === 'touch') {
-                drawTouch(note);
+
+            // --- 將可見音符丟進對應桶子 ---
+            if (isVisible) {
+                if (note.type === 'slide') buckets.slide.push(note);
+                else if (note.type === 'hold') buckets.tapnhold.push(note);
+                else if (note.type === 'tap') buckets.tapnhold.push(note);
+                else if (note.type === 'touch') buckets.touch.push(note);
             }
-            if (note.type === 'slide') {
-                drawSlide(note);
-            }
-            continue;
         }
+
+        // 4. 依照「圖層順序」渲染
+        // 先畫底層 Slide -> Hold -> Tap -> Touch (最上層)
+        buckets.slide.forEach(n => drawSlide(n, ctx));
+        buckets.tapnhold.forEach(n => n.type === "hold" ? drawHold(n, ctx) : (n.isStar ? drawStar(n, ctx) : drawTap(n, ctx)));
+        buckets.touch.forEach(n => drawTouch(n, ctx));
+
+        // 5. 統一更新 Web Audio API 播放佇列
+        audioManager.update(globalTime);
     }
     function simpleEndEffect(t) {
         const decayAlpha = 1 - Math.max(0, - t / effectDecayTime);
@@ -534,7 +781,7 @@
     function drawTap(s) {
         const { time: noteTime, pos, isBreak, isDouble } = s;
         const noteT = (noteTime - globalTime);
-        const progress = noteT * speed;
+        const progress = noteT * (speed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
         if (t < -0.8 || -noteT > effectDecayTime) return;
@@ -565,7 +812,7 @@
     function drawStar(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
         const noteT = (noteTime - globalTime);
-        const progress = noteT * speed;
+        const progress = noteT * (speed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
         if (t < -0.8 || -noteT > effectDecayTime) return;
@@ -596,7 +843,7 @@
     function drawHold(s) {
         const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
         const noteT = (noteTime - globalTime);
-        const progress = noteT * speed;
+        const progress = noteT * (speed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
         if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
@@ -605,9 +852,9 @@
         if (imgNotExists(img)) return;
         const sizeOffset = t < distance ? 0 :
             Math.min((1 - distance) * 2.45,
-                Math.min((holdDuration + noteT) * 0.9 * speed,
+                Math.min((holdDuration + noteT) * 0.9 * (speed * 0.8833 + 0.8167),
                     Math.min((t - distance) * 2.45,
-                        holdDuration * 0.9 * speed)));
+                        holdDuration * 0.9 * (speed * 0.8833 + 0.8167))));
 
         const posInfo = noteRefPos[pos - 1];
         ctx.save();
@@ -644,7 +891,7 @@
             const touchBorder = images.touchhold_border;
             if (imgNotExists(touchPoint) || imgNotExists(touchBorder)) return;
             const noteT = (noteTime - globalTime);
-            const progress = noteT * touchSpeed;
+            const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
             const t = 1 - timeFunction(progress);
 
             if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
@@ -689,7 +936,7 @@
         const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
         if (imgNotExists(img) || imgNotExists(touchPoint)) return;
         const noteT = (noteTime - globalTime);
-        const progress = noteT * touchSpeed;
+        const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
         if (t < -0.8 || -noteT > effectDecayTime) return;
@@ -725,12 +972,31 @@
         return 0.000753454 * x * x * x - 0.0298793 * x * x + 0.375038 * x + 0.104685;
     }
     function drawSlide(s) {
-        const img = images[s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")];
-        if (imgNotExists(img)) return;
+        const imgs = (() => {
+            // 預先判斷 prefix
+            const prefix = s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_");
+            const standardKey = s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide");
+
+            if (s.slideType === "w") {
+                const tempImgs = [];
+                for (let i = 0; i < 11; i++) {
+                    const target = images[prefix + i];
+                    if (imgNotExists(target)) return []; // 只要缺一張就視為失敗
+                    tempImgs.push(target);
+                }
+                return tempImgs;
+            }
+
+            // 普通滑軌
+            const target = images[standardKey];
+            return imgNotExists(target) ? [] : [target];
+        })();
+        if (!imgs || imgs.length === 0) return;
+        const starImg = images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
         const { time: noteTime, pos, slideEnd, isBreak, isDouble, slideDelay, slideDuration, path } = s;
 
         const noteT = noteTime - globalTime;
-        const progress = noteT * touchSpeed;
+        const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
         if (t < distance || -noteT > slideDelay + slideDuration) return;
@@ -752,38 +1018,61 @@
         ctx.lineWidth = 1;
         ctx.stroke();*/
 
-        drawPathWithArrows(ctx, p, slideProgress, img);
-
+        drawPathWithArrows(ctx, p, slideProgress, imgs, s.slideType === "w");
+        const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && slideProgress < 1) {
+            if (s.hideHead && sz < 1) {
+                ctx.restore();
+                return;
+            }
             const { x, y, rot } = p.getPointAt(slideProgress);
 
-            ctx.globalAlpha = 0.5;
+            ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
             ctx.translate(x, y);
-            ctx.rotate(rot);
-            ctx.fillStyle = isBreak ? '#ffcc00' : '#0000ff';
-            ctx.fillRect(-2.5, -2.5, 5, 5);
+            ctx.rotate(rot + Math.PI * 0.5);
+            ctx.drawImage(starImg, -noteBaseSize * 0.5 * sz, -noteBaseSize * 0.5 * sz, noteBaseSize * sz, noteBaseSize * sz);
         }
 
         ctx.restore();
     }
-    function drawPathWithArrows(ctx, recorder, t, img, s = { spacing: 4.36 }) {
-        if (recorder.totalLength === 0) return;
 
-        const arrowCount = Math.floor(recorder.totalLength / s.spacing);
-        ctx.beginPath();
-        for (let i = arrowCount - 1; i > Math.floor(t * arrowCount); i--) {
-            const d = i * s.spacing;
-            const t = d / recorder.totalLength;
+    function drawPathWithArrows(ctx, recorder, starProgress, imgs, typew, s = { spacing: 4.36 }) {
+        if (recorder.totalLength === 0 || !imgs || imgs.length === 0) return;
+        // 將參數 t 改名為 starProgress 以避免與內部循環的比例變數 t 衝突
+        const arrowCount = typew ? 12 : Math.floor(recorder.totalLength / s.spacing);
 
-            const { x, y, rot } = recorder.getPointAt(t);
+        if (typew) s.spacing = 7;
+        ctx.save(); // 保護環境
+
+        // 從末端開始往前畫，直到遇到滑星目前的位置 (starProgress)
+        for (let i = arrowCount - 1; i > Math.floor(starProgress * arrowCount); i--) {
+            //if (i > 2 && typew) continue;
+            // WiFi 軌跡通常根據索引選擇對應的扇形段圖片
+            const imgIndex = Math.min(i - 1, imgs.length - 1);
+            const img = typew ? imgs[imgIndex] : imgs[0];
+
+            if (!img) continue;
+
+            const dist = i * s.spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+            const percent = dist / recorder.totalLength; // 這是路徑上的比例
+
+            // 取得該點的座標與切線旋轉角度
+            const { x, y, rot } = recorder.getPointAt(percent);
 
             ctx.save();
             ctx.translate(x, y);
-            ctx.rotate(rot + Math.PI);
-            ctx.drawImage(img, -7 * 0.9 * 0.5, - 9.4 * 0.9 * 0.5, 7 * 0.9, 9.4 * 0.9);
 
+            // 旋轉：rot 是切線方向，+Math.PI 是因為箭頭圖片通常朝向與路徑相反
+            ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+
+            // 繪製箭頭 (這裡的 0.9 是你的縮放倍率)
+            const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+            const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+            ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
             ctx.restore();
         }
+
+        ctx.restore();
     }
     function drawPathOnCanvas(ctx, recorder) {
         if (recorder.segments.length === 0) return;

@@ -1,6 +1,6 @@
 import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase } from './helper.js';
 
-export function simaiDecode(data = "") {
+export function simaiDecode(data = "", baseOffset = true) {
     const raw = data.replace(/\|\|.*$/gm, "")/* remove comments */.replace(/\s+/g, '');
     if (raw === '') return { notes: [], endTime: 0 };
     /*if (!(raw.endsWith(',') || raw.endsWith('E') || raw.endsWith(')') || raw.endsWith('}'))) {
@@ -13,6 +13,7 @@ export function simaiDecode(data = "") {
     const notes = [];
     const tempNotes = [];
     let
+        firstBpm = null,
         endTime = 0,
         nowTime = 0,
         nowBpm = null,
@@ -23,6 +24,8 @@ export function simaiDecode(data = "") {
             const result = parseTag(e, '(', ')');
             if (result.error) { console.log(result.error); break; }
             if (result.value !== null) nowBpm = result.value;
+            if (nowTime == 0 && baseOffset) nowTime = 60 / nowBpm * 4; // 如果第一行就是 BPM 定义，则以此作为初始偏移
+            if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
             e = result.residue;
         }
         if (e.includes('{')) {
@@ -89,6 +92,19 @@ export function simaiDecode(data = "") {
                     return;
                 }
                 const parts = splitr.filter(p => p !== '');
+                let doubleSlide = 0;
+                if (parts.length > 1) parts.forEach((p, i) => {
+                    if (doubleSlide === true) return;
+                    const slideMatch = p.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+                    if (slideMatch) {
+                        doubleSlide++;
+                        if (doubleSlide > 1) {
+                            doubleSlide = true;
+                            return;
+                        }
+                    }
+                });
+                doubleSlide = doubleSlide > 1 || doubleSlide === true;
                 parts.forEach(noteStr => {
                     // 這裡處理音符與 Flags (例如 "1b", "2h")
                     const posMatch = noteStr.match(/^\d+/); // 抓取開頭的數字
@@ -97,6 +113,7 @@ export function simaiDecode(data = "") {
                         console.warn("Invalid note format:", noteStr);
                         return;
                     };
+                    const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
                     const noteObj = (() => {
                         let pos, touchPos, type = 'tap';
                         if (touchMatch) {
@@ -129,7 +146,6 @@ export function simaiDecode(data = "") {
                     })();
                     if (!noteObj) return;
 
-                    const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
                     // 檢查 Flags
                     if (noteStr.includes('b') && !slideMatch) {
                         if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr);
@@ -170,7 +186,7 @@ export function simaiDecode(data = "") {
                                 return;
                             }
                             noteObj.holdDuration = duration;
-                            if (duration > endTime) endTime = duration;
+                            if (duration + noteObj.time > endTime) endTime = duration + noteObj.time;
                         }
                     }
                     if (slideMatch && !noteStr.includes('h')) {
@@ -237,7 +253,7 @@ export function simaiDecode(data = "") {
                                 const mid = part.length > 1 ? parseInt(part.slice(-2, -1)) : undefined;
 
                                 if ([head, end].some(v => isNaN(v) || v < 1 || v > 8)) return null;
-                                if ((mid !== undefined && (isNaN(mid) || mid < 1 || mid > 8))) return null;
+                                if ((type === 'V' && mid === undefined) || (mid !== undefined && (isNaN(mid) || mid < 1 || mid > 8))) return null;
 
                                 const path = getSlidePath(head, end, type, mid);
                                 return { head, end, mid, type, path, len: path.totalLength };
@@ -248,14 +264,16 @@ export function simaiDecode(data = "") {
                             const totalLen = segments.reduce((sum, s) => sum + s.len, 0);
                             let currentDelay = dlay;
 
-                            segments.forEach(seg => {
+                            segments.forEach((seg, index) => {
                                 // 如果長度為 0 則平分時間，否則依長度比例分配
                                 const segmentDuration = totalLen > 0 ? d * (seg.len / totalLen) : d / segments.length;
 
                                 tempNotes.push({
                                     type: 'slide',
                                     pos: seg.head,
-                                    isDouble: sameTimeSlide,
+                                    firstSlide: index === 0,
+                                    hideHead: index !== 0,
+                                    isDouble: sameTimeSlide || doubleSlide,
                                     isBreak: isSlideBreak,
                                     slideEnd: seg.end,
                                     slideMid: seg.mid,
@@ -286,8 +304,11 @@ export function simaiDecode(data = "") {
             isEx: n.isEx || false
         });
     }
-    console.log(notes);
-    return { notes, endTime };
+    console.group("Decoded Notes:");
+    console.log("notes: ", notes);
+    console.log("endTime: ", endTime);
+    console.groupEnd();
+    return { notes, endTime, bpm: firstBpm, baseOffset };
 }
 function getSlidePath(start, end, type, mid = null) {
     const r = new PathRecorder();
@@ -323,11 +344,10 @@ function getSlidePath(start, end, type, mid = null) {
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case 'V': {
+            console.log((start - mid + 8) % 8);
             if (
-                (mid - start + 8) % 8 !== 2 && (mid - start + 8) % 8 !== 6
-                || (mid > end) && ((mid - end + 8) % 8 < 2 || (mid - end + 8) % 8 > 5)
-                || (mid < end) && ((end - mid + 8) % 8 < 2 || (end - mid + 8) % 8 > 5)
-                || start === end
+                (start - mid + 8) % 8 !== 2 && (start - mid + 8) % 8 !== 6 ||
+                start === end || mid === end || start === mid
             ) {
                 console.warn(`Illegal slide: ${start}${type}${mid}${end}`);
             }
@@ -399,7 +419,6 @@ function getSlidePath(start, end, type, mid = null) {
                     ((start - end + 8) % 8 == 6) * 0.15 +
                     ((start - end + 8) % 8 == 7) * 0.2
                 ), false, (start > end) && (start - end + 8) % 8 >= 3 || end > start && (start - end + 8) % 8 == 3);
-            console.log(start, end, (end - start + 8) % 8);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         }
@@ -419,6 +438,13 @@ function getSlidePath(start, end, type, mid = null) {
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 2);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
+            r.lineTo(endInfo.x, endInfo.y);
+            break;
+        case 'w':
+            if ((end - start + 8) % 8 !== 4 || start === end) {
+                console.warn(`Illegal slide: ${start}${type}${end}`);
+            }
+            r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         default:

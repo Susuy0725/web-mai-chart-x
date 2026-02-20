@@ -281,3 +281,269 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
         rot: a + Math.PI / 2
     };
 });
+class AudioManager {
+    constructor() {
+        this.globalGain = 0.7; // 預設音量
+
+        // 1. 初始化 Web Audio 上下文
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // --- 新增：建立總音量控制節點 ---
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = this.globalGain;
+        this.masterGain.connect(this.ctx.destination); // 最終輸出
+        // ---------------------------
+
+        this.bufferMap = new Map();
+        this.playingSources = new Map();
+
+        this.soundQueue = [];
+        this.lastQueuedTimes = new Map();
+        this.MIN_INTERVAL = 15;
+
+        this.soundFiles = {
+            'clock': './Sounds/clock.wav',
+            'judge': './Sounds/judge.wav',
+            'judge_break': './Sounds/judge_break.wav',
+            'answer': './Sounds/answer.wav',
+            'break': './Sounds/break.wav',
+            'slide': './Sounds/slide.wav',
+            'break_slide_start': './Sounds/break_slide_start.wav',
+            'judge_break_slide': './Sounds/judge_break_slide.wav',
+            'touch': './Sounds/touch.wav',
+            'hanabi': './Sounds/hanabi.wav',
+            'touchHold_riser': './Sounds/touchHold_riser.wav'
+        };
+
+        this.activeLongSounds = new Map();
+        this.loopPoints = {
+            'touchHold_riser': { start: 10, end: 11.8 }
+        };
+    }
+
+    /**
+     * 動態調整全域音量 (0.0 到 1.0)
+     */
+    setGlobalVolume(value) {
+        this.globalGain = Math.max(0, Math.min(1, value));
+        // 使用 exponentialRamp 讓音量調整聽起來更自然，且防止爆音
+        this.masterGain.gain.setTargetAtTime(this.globalGain, this.ctx.currentTime, 0.05);
+    }
+
+    /**
+     * 初始化並預載入所有音效
+     */
+    async init() {
+        const loadTasks = Object.entries(this.soundFiles).map(async ([key, url]) => {
+            try {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+                this.bufferMap.set(key, audioBuffer);
+                console.log(`[Audio] 載入完成: ${key}`);
+            } catch (e) {
+                console.error(`[Audio] 載入失敗: ${key}`, e);
+            }
+        });
+        await Promise.all(loadTasks);
+    }
+
+    /**
+     * 將音效加入佇列，包含重複攔截邏輯
+     * @param {Object} note - 譜面音符物件
+     * @param {number} targetTime - 預計發聲的 globalTime (秒)
+     */
+    queueSoundSingle(sample, targetTime) {
+        //const now = performance.now();
+        this._checkAndPush(sample, targetTime, true);
+    }
+    queueSound(note, targetTime) {
+        const now = performance.now();
+
+        // --- 攔截 A: 防止同一個物件在短時間內重複進入 (50ms 內) ---
+        if (note._lastQueued && (now - note._lastQueued < 15)) return;
+        note._lastQueued = now;
+
+        let key = "judge";
+        let isMono = true;
+
+        // 根據 Note 類型決定音效
+        switch (note.type) {
+            case "tap":
+                if (note.isBreak) {
+                    key = "judge_break"
+                    this._checkAndPush("break", targetTime, true);
+                };
+                this._checkAndPush("answer", targetTime, false);
+                break;
+            case "hold":
+                this._checkAndPush("answer", targetTime, false);
+                if (!note.startEffectPlayed) {
+                    if (note.isBreak) {
+                        key = "judge_break";
+                        this._checkAndPush("break", targetTime, true);
+                    } else {
+                        key = "judge";
+                    }
+                    isMono = false;
+                }
+                else return;
+                break;
+            case "touch":
+                key = "touch";
+                isMono = false;
+                if (note.isHanabi) {
+                    if (note.holdDuration >= 0) {
+                        if (note.startEffectPlayed) {
+                            key = "hanabi"
+                            isMono = true;
+                        } else return;
+                    } else {
+                        key = "hanabi"
+                        isMono = true;
+                    }
+                }
+                this._checkAndPush("answer", targetTime, false);
+                if (note.startEffectPlayed && !note.isHanabi) return;
+                break;
+            case "slide":
+                if (!note.startEffectPlayed && note.isBreak) {
+                    this._checkAndPush("break_slide", targetTime, true);
+                    key = "break_slide_start";
+                    isMono = false;
+                } else {
+                    if (note.isBreak) {
+                        key = "judge_break_slide";
+                        isMono = false;
+                    } else {
+                        key = "slide";
+                        isMono = false;
+                    }
+                }
+                break;
+            default: return;
+        }
+
+        this._checkAndPush(key, targetTime, isMono);
+    }
+
+    /**
+     * 內部檢查冷卻時間並推入佇列
+     */
+    _checkAndPush(key, targetTime, isMono) {
+        const now = performance.now();
+        const lastTime = this.lastQueuedTimes.get(key) || 0;
+
+        // --- 攔截 B: 防止機槍音 (15ms 內同類音效不重複觸發) ---
+        if (now - lastTime < this.MIN_INTERVAL) return;
+
+        this.lastQueuedTimes.set(key, now);
+        this.soundQueue.push({ key, targetTime, isMono });
+
+        // 確保佇列按時間順序排列 (雖然 push 通常就是順序的)
+        this.soundQueue.sort((a, b) => a.targetTime - b.targetTime);
+        //console.log(`[Audio] 已加入佇列: ${key} 預計時間: ${targetTime.toFixed(2)}s (目前佇列長度: ${this.soundQueue.length})`, this.soundQueue);
+    }
+
+    /**
+     * 在遊戲 Loop (requestAnimationFrame) 中呼叫，處理播放
+     * @param {number} globalTime - 目前遊戲運行的時間 (秒)
+     */
+    update(globalTime) {
+        // 只要佇列首位時間到了，就播放並移出佇列
+        while (this.soundQueue.length > 0 && globalTime >= this.soundQueue[0].targetTime) {
+            const { key, isMono } = this.soundQueue.shift();
+            this.play(key, isMono);
+        }
+    }
+
+    /**
+     * 執行最終播放 (Web Audio API 核心)
+     */
+    play(key, isMono = false) {
+        const buffer = this.bufferMap.get(key);
+        if (!buffer) return;
+
+        // 解鎖 iOS/Chrome 的音訊限制 (如果 ctx 處於 suspended 狀態)
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        // 如果是 Mono 模式，中斷該類型上一個正在播放的聲音
+        if (isMono && this.playingSources.has(key)) {
+            try {
+                this.playingSources.get(key).stop();
+            } catch (e) { }
+        }
+
+        const source = this.ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(this.masterGain);
+
+        if (isMono) {
+            this.playingSources.set(key, source);
+        }
+
+        source.start(0); // 立即發聲
+    }
+    /**
+         * @param {string} id 唯一標籤 (建議用 note_pos_time)
+         * @param {string} key 音效標籤
+         * @param {number} offset 從音訊檔的第幾秒開始播放
+         */
+    startLongSound(id, key, offset = 0) {
+        const buffer = this.bufferMap.get(key);
+        const loop = this.loopPoints[key];
+        if (!buffer || this.activeLongSounds.has(id)) return;
+
+        const source = this.ctx.createBufferSource();
+        source.buffer = buffer;
+
+        let startTimeWithinBuffer = offset;
+
+        if (loop) {
+            source.loop = true;
+            source.loopStart = loop.start;
+            source.loopEnd = loop.end;
+
+            // 核心邏輯：計算循環偏移量
+            if (offset >= loop.end) {
+                const loopDuration = loop.end - loop.start;
+                // 算出在循環區間內跑了多久
+                const timeInsideLoop = (offset - loop.end) % loopDuration;
+                startTimeWithinBuffer = loop.start + timeInsideLoop;
+            }
+        } else {
+            // 如果沒設定 Loop，且 Offset 超過長度，就不播了
+            if (offset >= buffer.duration) return;
+        }
+
+        const gainNode = this.ctx.createGain();
+        source.connect(gainNode);
+        gainNode.connect(this.masterGain);
+
+        // Web Audio API 的 start(when, offset)
+        // 這裡的 startTimeWithinBuffer 必須小於 buffer.duration
+        source.start(0, Math.max(0, startTimeWithinBuffer));
+
+        this.activeLongSounds.set(id, { source, gainNode });
+    }
+
+    stopLongSound(id) {
+        if (this.activeLongSounds.has(id)) {
+            const { source, gainNode } = this.activeLongSounds.get(id);
+            // 加上極短的 fade-out 防止爆音
+            gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+            source.stop(this.ctx.currentTime + 0.05);
+            this.activeLongSounds.delete(id);
+        }
+    }
+
+    // 暫停時清空所有長音
+    stopAllLongSounds() {
+        for (const id of this.activeLongSounds.keys()) {
+            this.stopLongSound(id);
+        }
+    }
+}
+
+// 導出實例
+export const audioManager = new AudioManager();

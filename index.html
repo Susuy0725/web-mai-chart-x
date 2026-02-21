@@ -41,6 +41,9 @@
         left: 0;
         width: 100%;
         height: 100%;
+        touch-action: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
     }
 
     #playControls {
@@ -71,11 +74,11 @@
         position: absolute;
         width: 100%;
         height: 100%;
-        top: 2px;
-        left: -12px;
+        top: 0px;
+        left: 0px;
         object-fit: contain;
-        opacity: 0.5;
-        scale: 1;
+        opacity: 0.8;
+        scale: 0.875;
     }
 
     #topUtilityBtns {
@@ -202,10 +205,11 @@
         <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
         <div class="utilityButton" data-buttonAction="hideEditor">隱藏編輯器</div>
         <div class="utilityButton" data-buttonAction="readyBeat">預備拍<input type="checkbox"></div>
+        <!-- <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div> -->
     </div>
 </body>
 <script type="module">
-    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager } from './helper.js';
+    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight } from './helper.js';
     import { simaiDecode } from './decode.js';
 
     const canvas = document.getElementById('main');
@@ -216,6 +220,7 @@
     const hideEditorButton = getButton("hideEditor", "utility");
     const hideUtilityButton = getButton("hide/show", "utility");
     const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
+    const addMusicButton = getButton("addMusic", "utility");
     const popup = getButton("popup", "utility");
 
     let ctx = canvas.getContext('2d');
@@ -230,7 +235,11 @@
     let secondCtx = null;
     let externalWindow = null;
     let readyBeat = localStorage.getItem('ready_beat') === 'true';
-    let sliding = false; // 新增滑動狀態標記
+    let timeControlSliding = false; // 新增滑動狀態標記
+    let showSensor = false;
+
+    // 1. 選取狀態儲存
+    let activePointers = new Map();
 
     const editorContainer = document.querySelector('.editor-container');
     const editorInput = document.getElementById('editor-input');
@@ -319,6 +328,7 @@
 
         setEditorCss(nextStateVisible);
         resize();
+        console.log(`編輯器已${nextStateVisible ? '顯示' : '隱藏'}`);
     });
 
     hideUtilityButton.addEventListener('click', () => {
@@ -426,34 +436,22 @@
         }
     });
 
+    addMusicButton.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'audio/*';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audioManager.setBackgroundMusic(url);
+            }
+        };
+        input.click();
+    });
+
     function applyHighlight(text) {
-        if (!text) {
-            highlightLayer.innerHTML = "";
-            return;
-        }
-
-        // 1. HTML 轉義
-        let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-        // 2. 語法正則表達式 (已經包含註解優先匹配邏輯)
-        const combinedRegex = /(\|\|.*$)|((?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(([ABCDE])(\d+)|C|C(d+))/gm;
-
-        html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, touch) => {
-            if (comment) return `<span style="color: #468A55;">${comment}</span>`;
-            if (slide) return `<span style="color: #7EBAF0;">${slide}</span>`;
-            if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
-            if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
-            if (split) return `<span style="color: #ce9178;">${split}</span>`;
-            if (time) return `<span style="color: #b5cea8;">${time}</span>`;
-            if (bk) return `<span style="color: #F7B268;">${bk}</span>`;
-            if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
-            if (f) return `<span style="color: #FC7CC6;">${f}</span>`;
-            if (comm) return `<span style="color: #99A9AD;">${comm}</span>`;
-            return match;
-        });
-
-        // 解決最後一行換行高度不對齊問題
-        highlightLayer.innerHTML = html + (text.endsWith('\n') ? ' ' : '');
+        highlightLayer.innerHTML = getHighlight(text);
     }
     const baseURL = './Skin/';
 
@@ -511,11 +509,15 @@
         653, 313, -3.9, -0.003,
     ];
 
+    {
+        let isVisible = localStorage.getItem('hide_editor') !== 'true'; // 改名為 isVisible 較直覺
+        setEditorCss(isVisible);
+    }
+
     if (savedContent) {
         editorInput.value = savedContent;
 
-        const isVisible = localStorage.getItem('hide_editor') !== 'true'; // 改名為 isVisible 較直覺
-        setEditorCss(isVisible);
+
 
         applyHighlight(savedContent);
         getres(savedContent);
@@ -524,11 +526,11 @@
     }
 
     const slideInputDebounce = debounce(() => {
-        sliding = false;
+        timeControlSliding = false;
     }, 100);
 
     slider.addEventListener('input', () => {
-        sliding = true;
+        timeControlSliding = true;
         const value = parseFloat(slider.value);
         globalTime = value;
         slideInputDebounce();
@@ -550,6 +552,47 @@
             requestAnimationFrame(update);
         }
     });
+
+    /*
+    function getShapeAt(x, y) {
+        let found = null;
+        for (let i = touchPaths.length - 1; i >= 0; i--) {
+            if (ctx.isPointInPath(touchPaths[i].path, x, y)) {
+                found = touchPaths[i].id;
+                break;
+            }
+        }
+        return found;
+    }
+
+    // 4. 事件監聽
+    const handlePointer = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        // console.log(`Pointer Event: ${e.type} - ID: ${e.pointerId} at (${e.clientX - rect.left - canvas.width / 2}, ${e.clientY - rect.top - canvas.height / 2})`);
+        const id = getShapeAt(e.clientX - rect.left, e.clientY - rect.top);
+
+        if (id) {
+            activePointers.set(e.pointerId, id);
+        } else {
+            activePointers.delete(e.pointerId); // 移出有效區域時刪除
+        }
+        draw();
+    };
+
+    const removePointer = (e) => {
+        activePointers.delete(e.pointerId); // 放開或離開時刪除
+        draw();
+    };
+
+    // 支援按下與移動時高亮
+    canvas.addEventListener('pointerdown', handlePointer);
+    canvas.addEventListener('pointermove', handlePointer);
+
+    // 支援放開、移出、中斷時取消高亮
+    canvas.addEventListener('pointerup', removePointer);
+    canvas.addEventListener('pointerleave', removePointer);
+    canvas.addEventListener('pointercancel', removePointer); // 處理觸控被系統中斷的情況
+*/
 
     function update(timestamp) {
         if (lastTimestamp === null) lastTimestamp = timestamp;
@@ -667,13 +710,28 @@
     window.addEventListener('resize', resize);
 
     resize();
-    
+
     let playClock = [false, false, false, false];
     function draw() {
         // 1. 清除畫布
         ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
         //drawBackground(ctx);
-        
+
+        for (let key of activePointers.keys()) {
+            if (typeof key === 'string' && key.startsWith('sim_')) {
+                activePointers.delete(key);
+            }
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, innerCirleBase * scale, 0, Math.PI * 2);
+        ctx.lineWidth = 0.3;
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.stroke();
+        ctx.restore();
+
         // 2. 準備繪製桶子 (定義視覺疊加順序：由下而上)
         const buckets = {
             slide: [],
@@ -706,7 +764,25 @@
             // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
             const isVisible = t >= -1 && -noteT <= skipT + effectDecayTime;
 
-            if (playing && !sliding) {
+            if (playing && !timeControlSliding) {
+                if (showSensor) {
+                    const hitWindow = 0.03; // 瞬間音符亮起的持續時間 (秒)
+                    const isInsideAction = (noteT <= 0 && -noteT < hitWindow); // 剛擊中
+                    const isHolding = (note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration); // 長按中
+
+                    if (isInsideAction || isHolding) {
+                        let sensorId = "";
+                        if (note.type === "touch") {
+                            sensorId = note.touchPos === "C" ? "C1" : `${note.touchPos}${note.pos}`;
+                        } else {
+                            // Tap, Hold, Star 預設對應外圈 A 區
+                            sensorId = "A" + note.pos;
+                        }
+                        // 使用 "sim_" 前綴避免與真實 PointerID (數字) 衝突
+                        activePointers.set(`sim_${note.pos}_${note.time}`, sensorId);
+                    }
+                }
+
                 // A. 處理 Riser (Touch Hold 長音)
                 const noteId = `riser_${note.pos}_${note.time}`;
                 const isInsideHold = note.type === "touch" && note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration;
@@ -761,12 +837,27 @@
 
         // 4. 依照「圖層順序」渲染
         // 先畫底層 Slide -> Hold -> Tap -> Touch (最上層)
+        if (showSensor) drawSensors();
         buckets.slide.forEach(n => drawSlide(n, ctx));
         buckets.tapnhold.forEach(n => n.type === "hold" ? drawHold(n, ctx) : (n.isStar ? drawStar(n, ctx) : drawTap(n, ctx)));
         buckets.touch.forEach(n => drawTouch(n, ctx));
 
         // 5. 統一更新 Web Audio API 播放佇列
         audioManager.update(globalTime);
+    }
+    function drawSensors() {
+        const currentlyLitIds = new Set(activePointers.values());
+        ctx.save();
+        touchPaths.forEach(shape => {
+            const isSelected = currentlyLitIds.has(shape.id);
+            ctx.fillStyle = isSelected ? '#FFD700' : '#00008080'; // 選中改為金色 : 原本深藍
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = isSelected ? 1.2 : 0.8; // 選中時邊框加粗
+
+            ctx.fill(shape.path);
+            ctx.stroke(shape.path);
+        });
+        ctx.restore();
     }
     function simpleEndEffect(t) {
         const decayAlpha = 1 - Math.max(0, - t / effectDecayTime);

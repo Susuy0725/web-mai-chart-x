@@ -547,3 +547,92 @@ class AudioManager {
 
 // 導出實例
 export const audioManager = new AudioManager();
+
+const touchPathConfigs = {
+    A: { points: [[0.31, 1.0], [0.31, 0.65], [0.15, 0.6]] },
+    B: { points: [[0.22, 0.53], [0.46, 0.415], [0.45, 0.35], [0, 0.275]] },
+    D: { points: [[0.167, 1], [0.155, 0.66], [0, 0.732]] },
+    E: { points: [[0, 0.7], [0.29, 0.585], [0, 0.437]] }
+};
+
+export const touchPaths = [];
+
+for (let i = 1; i <= 8; i++) {
+    // 根據圖片，A/B 的 base 與 D/E 的 base 角度有位移
+    // 這裡我們把 A/B 設在中心，D/E 設在間隔處
+    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 2, E: i - 2 };
+
+    ['A', 'B', 'D', 'E'].forEach(type => {
+        const path = new Path2D();
+        const config = touchPathConfigs[type];
+        const len = config.points.length;
+        const base = baseAngles[type];
+
+        for (let j = 0; j < len * 2; j++) {
+            let [angleOffset, radiusMult] = (j < len)
+                ? config.points[j]
+                : config.points[len - 1 - (j - len)];
+
+            if (j >= len) angleOffset = -angleOffset;
+
+            const angle = (base - angleOffset) * (Math.PI / 4);
+            const radius = innerCirleBase * radiusMult;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+
+            if (j === 0) path.moveTo(x, y);
+            else path.lineTo(x, y);
+        }
+        path.closePath();
+
+        // 將路徑與資訊存入陣列
+        touchPaths.push({ id: `${type}${i}`, type, path });
+    });
+
+}
+const c1 = new Path2D();
+c1.moveTo(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 - 3, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
+c1.lineTo(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 - 3, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
+c1.closePath();
+touchPaths.push({ id: `C1`, type: 'C1', path: c1 });
+const c2 = new Path2D();
+// mirrored horizontally: negate x and adjust offset
+c2.moveTo(-(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 - 3), Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
+c2.lineTo(-Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
+c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205);
+c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205);
+c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
+c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 - 3), Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
+c2.closePath();
+touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
+
+export function getHighlight(text) {
+    if (!text) {
+        highlightLayer.innerHTML = "";
+        return;
+    }
+
+    let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const combinedRegex = /(\|\|.*$)|((?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(([ABCDE])(\d+)|C|C(d+))/gm;
+
+    html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, touch) => {
+        if (comment) return `<span style="color: #468A55;">${comment}</span>`;
+        if (slide) return `<span style="color: #7EBAF0;">${slide}</span>`;
+        if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
+        if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
+        if (split) return `<span style="color: #ce9178;">${split}</span>`;
+        if (time) return `<span style="color: #b5cea8;">${time}</span>`;
+        if (bk) return `<span style="color: #F7B268;">${bk}</span>`;
+        if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
+        if (f) return `<span style="color: #FC7CC6;">${f}</span>`;
+        if (comm) return `<span style="color: #99A9AD;">${comm}</span>`;
+        return match;
+    });
+
+    return html + (text.endsWith('\n') ? ' ' : '');
+}

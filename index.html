@@ -8,13 +8,15 @@
 <style>
     :root {
         --utility-hidden-height: 16px;
-        --playControls-height: 50px;
+        --playControls-height: 0px;
     }
 
     body {
         margin: 0;
         padding: 0;
         overflow: hidden;
+        background: #101010;
+        /* 深色背景 */
     }
 
     #canvasContainer {
@@ -32,7 +34,7 @@
         top: 0;
         left: 0;
         object-fit: contain;
-        scale: 0.899;
+        scale: 0.89;
     }
 
     #main {
@@ -78,7 +80,7 @@
         left: 0px;
         object-fit: contain;
         opacity: 0.8;
-        scale: 0.875;
+        scale: 1;
     }
 
     #topUtilityBtns {
@@ -116,6 +118,32 @@
         word-break: keep-all;
         cursor: pointer;
         overflow: hidden;
+    }
+
+    .utilityButton.noFixedsize {
+        width: auto;
+        padding: 5px 10px;
+    }
+
+    .utilityButton input[type="number"] {
+        width: 50px;
+        margin-left: 5px;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid #838383;
+        box-sizing: border-box;
+        color: white;
+        text-align: center;
+    }
+
+    .utilityButton input[type="checkbox"] {
+        margin-left: 5px;
+        width: 16px;
+        height: 16px;
+    }
+
+    .utilityButton input[type="file"] {
+        display: none;
     }
 
     .editor-container {
@@ -185,7 +213,7 @@
 </style>
 
 <body>
-    <!-- <img src="./image.png" alt="refimg" class="a"> -->
+    <img src="./image.png" alt="refimg" class="a">
     <div id="canvasContainer">
         <img src="./Skin/outline.png" alt="">
         <canvas id="main"></canvas>
@@ -200,16 +228,23 @@
         <textarea id="editor-input" class="editor-layer" spellcheck="false"></textarea>
     </div>
     <div id="topUtilityBtns">
-        <div class="utilityButton" data-buttonAction="hide/show" data-hidden="false">▲</div>
-        <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
+        <div class="utilityButton noFixedsize" data-buttonAction="hide/show" data-hidden="false">▲</div>
+        <div class="utilityButton" data-buttonAction="hideEditor">開合編輯器</div>
+        <div class="utilityButton noFixedsize" data-buttonAction="offset">偏移<input type="number" step="0.01" value="0">
+        </div>
+        <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div>
+        <div class="utilityButton" data-buttonAction="readFolder">讀取資料夾
+            <input type="file" webkitdirectory directory multiple />
+        </div>
         <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
-        <div class="utilityButton" data-buttonAction="hideEditor">隱藏編輯器</div>
-        <div class="utilityButton" data-buttonAction="readyBeat">預備拍<input type="checkbox"></div>
-        <!-- <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div> -->
+        <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
+        <div class="utilityButton noFixedsize" data-buttonAction="readyBeat">預備拍<input type="checkbox"></div>
     </div>
 </body>
+<script type="module" src="indexDB.js"></script>
 <script type="module">
-    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight } from './helper.js';
+    import { idbGet, idbSet } from './indexDB.js';
+    import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata } from './helper.js';
     import { simaiDecode } from './decode.js';
 
     const canvas = document.getElementById('main');
@@ -220,23 +255,27 @@
     const hideEditorButton = getButton("hideEditor", "utility");
     const hideUtilityButton = getButton("hide/show", "utility");
     const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
+    const offsetInput = getButton("offset", "utility").children[0];
     const addMusicButton = getButton("addMusic", "utility");
     const popup = getButton("popup", "utility");
+    const folderInput = getButton("readFolder", "utility");
 
     let ctx = canvas.getContext('2d');
-    const scale = 0.99;
+    const scale = 0.98;
     const noteBaseSize = 11;
     const speed = 6.5;
     const touchSpeed = 6.5;
     const effectDecayTime = 0.4;
     const distance = 0.25;
-    let globalTime = 0;
+    let globalTime = 0, realTime = 0;
     let lastTimestamp = null;
     let secondCtx = null;
     let externalWindow = null;
-    let readyBeat = localStorage.getItem('ready_beat') === 'true';
+    let readyBeat = await idbGet('ready_beat') === 'true';
     let timeControlSliding = false; // 新增滑動狀態標記
     let showSensor = false;
+
+    let clockBpm = 60;
 
     // 1. 選取狀態儲存
     let activePointers = new Map();
@@ -244,9 +283,51 @@
     const editorContainer = document.querySelector('.editor-container');
     const editorInput = document.getElementById('editor-input');
     const highlightLayer = document.getElementById('highlight-layer');
-    let notes = [], endTime = 1, chartBaseOffset = 0;
+    let notes = [], endTime = 1, chartBaseOffset = false, musicDelay = 1e-4;
 
-    const savedContent = localStorage.getItem('simai_editor_content');
+    function simplePopupWindow(title, content) {
+        const backdrop = document.createElement('div');
+        backdrop.style.position = 'fixed';
+        backdrop.style.top = '0';
+        backdrop.style.left = '0';
+        backdrop.style.width = '100%';
+        backdrop.style.height = '100%';
+        backdrop.style.background = 'rgba(0, 0, 0, 0.5)';
+        backdrop.style.zIndex = 49;
+        backdrop.addEventListener('click', () => {
+            document.body.removeChild(backdrop);
+        });
+        const popup = document.createElement('div');
+        popup.style.position = 'fixed';
+        popup.style.top = '50%';
+        popup.style.left = '50%';
+        popup.style.transform = 'translate(-50%, -50%)';
+        popup.style.background = '#202020';
+        popup.style.color = 'white';
+        popup.style.padding = '20px';
+        popup.style.border = '1px solid #404040';
+        popup.style.borderRadius = '5px';
+        popup.style.zIndex = 50;
+        popup.style.maxWidth = '80%';
+        popup.style.maxHeight = '80%';
+        const titleElem = document.createElement('h2');
+        titleElem.innerText = title;
+        titleElem.style.marginTop = '0';
+        const contentElem = document.createElement('pre');
+        contentElem.innerText = content;
+        contentElem.style.whiteSpace = 'pre-wrap';
+        contentElem.style.width = '100%';
+        contentElem.style.overflow = 'auto';
+        popup.appendChild(titleElem);
+        popup.appendChild(contentElem);
+        backdrop.appendChild(popup);
+        document.body.appendChild(backdrop);
+    }
+
+    //simplePopupWindow("Hello", "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n10");
+
+    const savedContent = await idbGet('simai_editor_content');
+    const savedMusicDelay = await idbGet('simai_musicDelay');
     const getres = ((simaiDataValue) => {
         const result = (() => {
             try {
@@ -261,10 +342,36 @@
             notes = result.notes;
             endTime = result.endTime + 1;
             chartBaseOffset = result.baseOffset;
-            slider.max = endTime;
+            slider.max = endTime - musicDelay;
+            clockBpm = result.bpm;
             draw();
         }
     });
+
+    const offsetInputDebounce = debounce(() => {
+        slider.max = endTime - musicDelay;
+        slider.value = realTime;
+
+        globalTime = realTime - musicDelay;
+
+        if (playButton.dataset.playing === 'true') {
+            audioManager.playBGM(realTime);
+        }
+        //localStorage.setItem('simai_musicDelay', musicDelay);
+        idbSet('simai_musicDelay', musicDelay).then(() => {
+            console.log("已儲存偏移值到 IndexedDB:", musicDelay);
+        }).catch((error) => {
+            console.error("儲存偏移值到 IndexedDB 失敗:", error);
+        });
+        draw();
+    }, 500);
+
+    if (savedMusicDelay) {
+        musicDelay = parseFloat(savedMusicDelay);
+        offsetInput.value = musicDelay;
+        console.log("載入偏移值:", musicDelay);
+        offsetInputDebounce();
+    }
 
     await audioManager.init();
 
@@ -275,7 +382,12 @@
         getres(value);
 
         // 存入本地空間
-        localStorage.setItem('simai_editor_content', value);
+        //localStorage.setItem('simai_editor_content', value);
+        idbSet('simai_editor_content', value).then(() => {
+            console.log("已儲存內容到 IndexedDB");
+        }).catch((error) => {
+            console.error("儲存內容到 IndexedDB 失敗:", error);
+        });
     }, 300);
 
     const setEditorCss = (visible = null) => {
@@ -298,7 +410,11 @@
 
     readyBeatCheckbox.addEventListener('change', () => {
         readyBeat = readyBeatCheckbox.checked;
-        localStorage.setItem('ready_beat', readyBeatCheckbox.checked);
+        idbSet('ready_beat', readyBeatCheckbox.checked).then(() => {
+            console.log("已儲存預備拍狀態到 IndexedDB:", readyBeatCheckbox.checked);
+        }).catch((error) => {
+            console.error("儲存預備拍狀態到 IndexedDB 失敗:", error);
+        });
         inputDebounce();
     });
 
@@ -315,6 +431,67 @@
         inputDebounce();
     });
 
+    offsetInput.addEventListener('input', () => {
+        musicDelay = (() => {
+            const val = parseFloat(offsetInput.value);
+            if (isNaN(val)) {
+                console.warn("偏移值無效，請輸入數字");
+                return 0;
+            }
+            return val;
+        })();
+        offsetInputDebounce();
+    });
+
+    folderInput.addEventListener('click', (e) => {
+        const input = folderInput.children[0];
+        input.click();
+        input.onchange = (event) => {
+            const files = event.target.files;
+            console.log("選擇的檔案列表：", files);
+            if (files.length === 0) {
+                console.warn("未選擇任何檔案");
+                return;
+            }
+            for (var i = 0; i < files.length; i++) {
+                let file = files.item(i);
+                if (file.name.startsWith('track.')) {
+                    // 音樂檔
+                    const url = URL.createObjectURL(file);
+                    audioManager.setBackgroundMusic(url);
+                    idbSet('simai_resource_bgm', file).then(() => {
+                        console.log("已儲存音樂檔到 IndexedDB");
+                    }).catch((error) => {
+                        console.error("儲存音樂檔到 IndexedDB 失敗:", error);
+                    });
+                }
+                if (file.name.startsWith('maidata.')) {
+                    // 譜面檔
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = parseMaidata(e.target.result);
+                        idbSet('simai_maidata', content).then(() => {
+                            console.log("已儲存譜面內容到 IndexedDB");
+                        }).catch((error) => {
+                            console.error("儲存譜面內容到 IndexedDB 失敗:", error);
+                        });
+                        if (content["inote_5"]) {
+                            console.log("成功讀取 inote_5，已載入編輯器");
+                            console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
+                        } else {
+                            console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
+                        }
+                        editorInput.value = content["inote_5"] || ""; // 預設讀取 inote_5，實際可依需求調整
+                        applyHighlight(content["inote_5"]);
+                        getres(content["inote_5"]);
+                        resize();
+                    };
+                    reader.readAsText(file);
+                }
+            }
+        };
+    });
+
     hideEditorButton.addEventListener('click', () => {
         // 檢查目前是否為隱藏狀態
         const currentlyHidden = editorContainer.style.display === 'none';
@@ -324,7 +501,11 @@
         const nextStateVisible = currentlyHidden;
 
         // 儲存的是 "是否隱藏" 的狀態
-        localStorage.setItem('hide_editor', !nextStateVisible);
+        idbSet('hide_editor', !nextStateVisible).then(() => {
+            console.log("已儲存編輯器顯示狀態到 IndexedDB:", !nextStateVisible);
+        }).catch((error) => {
+            console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
+        });
 
         setEditorCss(nextStateVisible);
         resize();
@@ -436,6 +617,20 @@
         }
     });
 
+    (async () => {
+        // 1. 從 IndexedDB 抓取暫存的音樂 Blob
+        const savedBlob = await idbGet('simai_resource_bgm');
+
+        if (savedBlob) {
+            // 2. 直接傳入 Blob 物件，不需轉換成 URL
+            await audioManager.setBackgroundMusic(savedBlob);
+            console.log("離線音樂已恢復");
+
+            // 3. 恢復譜面解析 (假設 endTime 已經在 getres 裡設定過)
+            draw();
+        }
+    })();
+
     addMusicButton.addEventListener('click', () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -445,6 +640,7 @@
             if (file) {
                 const url = URL.createObjectURL(file);
                 audioManager.setBackgroundMusic(url);
+                idbSet('simai_resource_bgm', file);
             }
         };
         input.click();
@@ -517,8 +713,6 @@
     if (savedContent) {
         editorInput.value = savedContent;
 
-
-
         applyHighlight(savedContent);
         getres(savedContent);
 
@@ -532,23 +726,42 @@
     slider.addEventListener('input', () => {
         timeControlSliding = true;
         const value = parseFloat(slider.value);
-        globalTime = value;
-        slideInputDebounce();
-        if (playButton.dataset.playing === 'false') {
-            audioManager.stopAllLongSounds();
+        globalTime = value - musicDelay;
+        realTime = value;
+
+        activePointers.clear();
+        audioManager.stopAllLongSounds();
+
+        if (playButton.dataset.playing === 'true') {
+            // 2. 播放中拖動：音樂即時同步跳轉 (Seek)
+            // 注意：Web Audio API 重建 Source Node 很快，但極速拖動可能會有噴麥音
+            audioManager.playBGM(realTime);
+        } else {
+            // 3. 暫停中拖動：只需停止 BGM 並更新畫布預覽
+            audioManager.stopBGM();
             draw();
         }
+        slideInputDebounce();
     });
 
+    let bgmUpdateTimer = null;
+
     playButton.addEventListener('click', () => {
+        bgmUpdateTimer = null; // 重置 BGM 更新計時器
         if (playButton.dataset.playing === 'true') {
             playButton.dataset.playing = 'false';
             lastTimestamp = null;
+            // --- 停止音效與 BGM ---
             audioManager.stopAllLongSounds();
+            audioManager.stopBGM();
+
             notes.forEach(n => n.riserActive = false); // 強制重置標記
         } else {
             playButton.dataset.playing = 'true';
             lastTimestamp = performance.now();
+            // --- 從當前的 realTime 同步啟動 BGM ---
+            audioManager.playBGM(realTime);
+
             requestAnimationFrame(update);
         }
     });
@@ -599,13 +812,19 @@
         const dt = (timestamp - lastTimestamp) / 1000; // 秒
         lastTimestamp = timestamp;
         if (playButton.dataset.playing === 'true') {
-            globalTime += dt;
-            slider.value = globalTime;
+            realTime += dt;
+            globalTime = realTime - musicDelay;
+            if (bgmUpdateTimer === null || bgmUpdateTimer >= 4) {
+                audioManager.playBGM(realTime);
+                bgmUpdateTimer = 0;
+            }
+            bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
+            slider.value = realTime;
             draw();
             if (globalTime >= endTime) {
                 playButton.dataset.playing = 'false';
                 globalTime = endTime;
-                slider.value = globalTime;
+                slider.value = realTime; // 保持 slider 值與 realTime 一致
             } else {
                 requestAnimationFrame(update);
             }
@@ -717,7 +936,7 @@
         ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
         //drawBackground(ctx);
 
-        for (let key of activePointers.keys()) {
+        if (showSensor) for (let key of activePointers.keys()) {
             if (typeof key === 'string' && key.startsWith('sim_')) {
                 activePointers.delete(key);
             }
@@ -725,10 +944,17 @@
 
         ctx.save();
         ctx.beginPath();
-        ctx.arc(0, 0, innerCirleBase * scale, 0, Math.PI * 2);
-        ctx.lineWidth = 0.3;
+        ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
+        ctx.lineWidth = 0.5;
         ctx.closePath();
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
+        ctx.lineWidth = 0.7;
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
         ctx.stroke();
         ctx.restore();
 
@@ -744,7 +970,7 @@
         // 3. 核心迴圈：一邊處理音效邏輯，一邊將音符分類到桶子
         if (playing && readyBeat) {
             for (let i = 0; i < 4; i++) {
-                const clockT = (i / 4) * chartBaseOffset - globalTime;
+                const clockT = (i / 4) * (240 / clockBpm) - globalTime;
                 if (clockT > 0) {
                     playClock[i] = false;
                 } else {
@@ -942,8 +1168,8 @@
         const img = images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
         if (imgNotExists(img)) return;
         const sizeOffset = t < distance ? 0 :
-            Math.min((1 - distance) * 2.45,
-                Math.min((holdDuration + noteT) * 0.9 * (speed * 0.8833 + 0.8167),
+            Math.min((holdDuration + noteT) * 0.9 * (speed * 0.8833 + 0.8167),
+                Math.min((1 - distance) * 2.45,
                     Math.min((t - distance) * 2.45,
                         holdDuration * 0.9 * (speed * 0.8833 + 0.8167))));
 

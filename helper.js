@@ -1,3 +1,5 @@
+import { idbGet, idbSet } from "./indexDB.js";
+
 export const
     scaleBase = 100,
     innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
@@ -283,7 +285,7 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
 });
 class AudioManager {
     constructor() {
-        this.globalGain = 0.7; // 預設音量
+        this.globalGain = 0.6; // 預設音量
 
         // 1. 初始化 Web Audio 上下文
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -300,6 +302,12 @@ class AudioManager {
         this.soundQueue = [];
         this.lastQueuedTimes = new Map();
         this.MIN_INTERVAL = 15;
+
+        this.bgmBuffer = null;
+        this.bgmSource = null;
+        this.bgmGainNode = this.ctx.createGain();
+        this.bgmGainNode.connect(this.masterGain);
+        this.bgmVolume = 0.8;
 
         this.soundFiles = {
             'clock': './Sounds/clock.wav',
@@ -322,6 +330,82 @@ class AudioManager {
     }
 
     /**
+    * 設定並載入背景音樂
+    */
+    /**
+ * 設定並載入背景音樂 (支援 URL 或 Blob/File)
+ * @param {string|Blob} source - 音訊來源
+ */
+    async setBackgroundMusic(source) {
+        try {
+            let arrayBuffer;
+            if (source instanceof Blob) {
+                // 直接從 IndexedDB 取出的 File/Blob 轉為 ArrayBuffer
+                arrayBuffer = await source.arrayBuffer();
+            } else {
+                // 如果是 URL 則使用 fetch
+                const response = await fetch(source);
+                arrayBuffer = await response.arrayBuffer();
+            }
+
+            // 進行解碼
+            this.bgmBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            console.log(`[Audio] BGM 載入完成，長度: ${this.bgmBuffer.duration.toFixed(2)}s`);
+        } catch (e) {
+            console.error(`[Audio] BGM 載入失敗`, e);
+        }
+    }
+
+    /**
+    * 調整 BGM 音量 (0.0 到 1.0)
+    */
+    setBGMVolume(value) {
+        this.bgmVolume = Math.max(0, Math.min(1, value));
+        this.bgmGainNode.gain.setTargetAtTime(this.bgmVolume, this.ctx.currentTime, 0.05);
+    }
+
+    /**
+ * 播放背景音樂
+ * @param {number} startTime - 從歌曲的第幾秒開始 (對應 globalTime)
+ */
+    playBGM(startTime = 0) {
+        if (!this.bgmBuffer) return;
+
+        // 1. 如果已經有在播放，先停止舊的
+        this.stopBGM();
+
+        // 2. 建立新的 Source
+        this.bgmSource = this.ctx.createBufferSource();
+        this.bgmSource.buffer = this.bgmBuffer;
+        this.bgmSource.connect(this.bgmGainNode);
+
+        // 3. 計算播放位置
+        // 如果 startTime 超過音樂長度，則不播放
+        if (startTime >= this.bgmBuffer.duration) return;
+
+        // 解鎖音訊上下文
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        // 4. 開始播放：start(何時播, 從哪裡播)
+        this.bgmSource.start(0, Math.max(0, startTime));
+        console.log(`[Audio] BGM 開始播放於: ${startTime}s`);
+    }
+
+    /**
+     * 停止背景音樂
+     */
+    stopBGM() {
+        if (this.bgmSource) {
+            try {
+                this.bgmSource.stop();
+            } catch (e) {
+                // 防止 Source 尚未 start 就呼叫 stop 導致報錯
+            }
+            this.bgmSource = null;
+        }
+    }
+
+    /**
      * 動態調整全域音量 (0.0 到 1.0)
      */
     setGlobalVolume(value) {
@@ -336,16 +420,40 @@ class AudioManager {
     async init() {
         const loadTasks = Object.entries(this.soundFiles).map(async ([key, url]) => {
             try {
-                const response = await fetch(url);
-                const arrayBuffer = await response.arrayBuffer();
-                const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+                let arrayBuffer;
+
+                // 1. 嘗試從 IndexedDB 取得快取的二進位資料
+                const cachedBuffer = await idbGet(`sfx_cache_${key}`);
+
+                if (cachedBuffer) {
+                    arrayBuffer = cachedBuffer;
+                    console.log(`[Audio] 從快取載入: ${key}`);
+                } else {
+                    // 2. 如果沒快取，則進行網路抓取
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                    arrayBuffer = await response.arrayBuffer();
+
+                    // 3. 存入 IndexedDB 供下次離線使用
+                    // 注意：存入的是 ArrayBuffer 而不是 AudioBuffer (後者不可序列化)
+                    await idbSet(`sfx_cache_${key}`, arrayBuffer);
+                    console.log(`[Audio] 網路載入並已快取: ${key}`);
+                }
+
+                // 4. 解碼為 Web Audio 可用的 AudioBuffer
+                // 注意：decodeAudioData 在解碼後會清空傳入的 ArrayBuffer，
+                // 所以我們存入 DB 的動作必須在 decode 之前完成。
+                const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer.slice(0));
                 this.bufferMap.set(key, audioBuffer);
-                console.log(`[Audio] 載入完成: ${key}`);
+
             } catch (e) {
                 console.error(`[Audio] 載入失敗: ${key}`, e);
             }
         });
+
         await Promise.all(loadTasks);
+        console.log("[Audio] 所有音效初始化完成");
     }
 
     /**
@@ -612,8 +720,7 @@ touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
 
 export function getHighlight(text) {
     if (!text) {
-        highlightLayer.innerHTML = "";
-        return;
+        return '';
     }
 
     let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -635,4 +742,15 @@ export function getHighlight(text) {
     });
 
     return html + (text.endsWith('\n') ? ' ' : '');
+}
+export function parseMaidata(raw){
+    console.log("Parsing Maidata...");
+    const maidata = {};
+    raw.split("&").forEach(part => {
+        const [key, value] = part.split("=");
+        if (key && value) {
+            maidata[key] = value;
+        }
+    });
+    return maidata;
 }

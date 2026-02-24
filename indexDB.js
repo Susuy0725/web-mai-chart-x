@@ -8,7 +8,7 @@ openDB().then(() => {
     console.error("[IndexDB] IndexedDB 初始化失敗:", error);
 });
 
-function openDB() {
+export function openDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(dbName, 1);
         request.onupgradeneeded = () => request.result.createObjectStore(storeName);

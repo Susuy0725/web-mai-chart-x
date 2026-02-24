@@ -285,7 +285,7 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
 });
 class AudioManager {
     constructor() {
-        this.globalGain = 0.6; // 預設音量
+        this.globalGain = 0.8; // 預設音量
 
         // 1. 初始化 Web Audio 上下文
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -308,6 +308,12 @@ class AudioManager {
         this.bgmGainNode = this.ctx.createGain();
         this.bgmGainNode.connect(this.masterGain);
         this.bgmVolume = 0.8;
+        this.bgmGainNode.gain.value = this.bgmVolume;
+
+        this.sfxGainNode = this.ctx.createGain();
+        this.sfxGainNode.connect(this.masterGain);
+        this.sfxVolume = 0.2;
+        this.sfxGainNode.gain.value = this.sfxVolume;
 
         this.soundFiles = {
             'clock': './Sounds/clock.wav',
@@ -388,7 +394,7 @@ class AudioManager {
 
         // 4. 開始播放：start(何時播, 從哪裡播)
         this.bgmSource.start(0, Math.max(0, startTime));
-        console.log(`[Audio] BGM 開始播放於: ${startTime}s`);
+        //console.log(`[Audio] BGM 開始播放於: ${startTime}s`);
     }
 
     /**
@@ -406,12 +412,27 @@ class AudioManager {
     }
 
     /**
+ * 取得目前 BGM 播放的精確秒數 (同步核心)
+ */
+    getBGMTime() {
+        if (!this.bgmSource || this.ctx.state === 'suspended') return null;
+        // 公式：(現在 Context 時間 - 按下播放的時間) + 起始偏移量
+        return (this.ctx.currentTime - this.bgmStartTime) + this.bgmOffset;
+    }
+
+    /**
      * 動態調整全域音量 (0.0 到 1.0)
      */
     setGlobalVolume(value) {
         this.globalGain = Math.max(0, Math.min(1, value));
         // 使用 exponentialRamp 讓音量調整聽起來更自然，且防止爆音
         this.masterGain.gain.setTargetAtTime(this.globalGain, this.ctx.currentTime, 0.05);
+    }
+
+    setSFXVolume(value) {
+        this.sfxVolume = Math.max(0, Math.min(1, value));
+        // 使用 exponentialRamp 讓音量調整聽起來更自然，且防止爆音
+        this.sfxGainNode.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
     }
 
     /**
@@ -500,6 +521,7 @@ class AudioManager {
             case "touch":
                 key = "touch";
                 isMono = false;
+                this._checkAndPush("answer", targetTime, false);
                 if (note.isHanabi) {
                     if (note.holdDuration >= 0) {
                         if (note.startEffectPlayed) {
@@ -511,7 +533,6 @@ class AudioManager {
                         isMono = true;
                     }
                 }
-                this._checkAndPush("answer", targetTime, false);
                 if (note.startEffectPlayed && !note.isHanabi) return;
                 break;
             case "slide":
@@ -584,7 +605,7 @@ class AudioManager {
 
         const source = this.ctx.createBufferSource();
         source.buffer = buffer;
-        source.connect(this.masterGain);
+        source.connect(this.sfxGainNode);
 
         if (isMono) {
             this.playingSources.set(key, source);
@@ -626,7 +647,7 @@ class AudioManager {
 
         const gainNode = this.ctx.createGain();
         source.connect(gainNode);
-        gainNode.connect(this.masterGain);
+        gainNode.connect(this.sfxGainNode);
 
         // Web Audio API 的 start(when, offset)
         // 這裡的 startTimeWithinBuffer 必須小於 buffer.duration
@@ -743,13 +764,13 @@ export function getHighlight(text) {
 
     return html + (text.endsWith('\n') ? ' ' : '');
 }
-export function parseMaidata(raw){
+export function parseMaidata(raw) {
     console.log("Parsing Maidata...");
     const maidata = {};
     raw.split("&").forEach(part => {
         const [key, value] = part.split("=");
         if (key && value) {
-            maidata[key] = value;
+            maidata[key] = value.trim();
         }
     });
     return maidata;

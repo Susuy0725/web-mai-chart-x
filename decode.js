@@ -16,8 +16,8 @@ export function simaiDecode(data = "", baseOffset = true) {
         firstBpm = null,
         endTime = 0,
         nowTime = 0,
-        nowBpm = null,
-        nowSplit = null,
+        nowBpm = 60,
+        nowSplit = 4,
         overrideSplitTime = null;
     for (let e of splitParts) {
         if (e.includes('(')) {
@@ -39,10 +39,10 @@ export function simaiDecode(data = "", baseOffset = true) {
             }
             e = result.residue;
         }
-        if (overrideSplitTime === null && (nowBpm === null || nowSplit === null)) {
-            console.log("BPM or Split not defined before notes");
+        /*if (overrideSplitTime === null && (nowBpm === null || nowSplit === null)) {
+            console.log("BPM or Split not defined before notes\n",(nowBpm === null || nowSplit === null));
             break;
-        }
+        }*/
         if (overrideSplitTime) nowBpm = 240 / overrideSplitTime;
         if (!e || e === '') {
             nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);

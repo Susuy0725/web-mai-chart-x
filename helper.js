@@ -4,7 +4,6 @@ export const
     scaleBase = 100,
     innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
 
-export async function getImg(imageSrc) { const img = new Image(); img.src = imageSrc; await img.decode(); return img; }
 export function imgNotExists(image) {
     if (!image || !image.complete || image.naturalWidth === 0) {
         return true;
@@ -436,45 +435,37 @@ class AudioManager {
     }
 
     /**
-     * 初始化並預載入所有音效
+     * 初始化並預載入所有音效，支援進度回報
+     * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)
      */
-    async init() {
+    async init(onProgress) {
+        const keys = Object.keys(this.soundFiles);
+        const total = keys.length;
+        let loaded = 0;
+
         const loadTasks = Object.entries(this.soundFiles).map(async ([key, url]) => {
             try {
-                let arrayBuffer;
+                let arrayBuffer = await idbGet(`sfx_cache_${key}`);
 
-                // 1. 嘗試從 IndexedDB 取得快取的二進位資料
-                const cachedBuffer = await idbGet(`sfx_cache_${key}`);
-
-                if (cachedBuffer) {
-                    arrayBuffer = cachedBuffer;
-                    console.log(`[Audio] 從快取載入: ${key}`);
-                } else {
-                    // 2. 如果沒快取，則進行網路抓取
+                if (!arrayBuffer) {
                     const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     arrayBuffer = await response.arrayBuffer();
-
-                    // 3. 存入 IndexedDB 供下次離線使用
-                    // 注意：存入的是 ArrayBuffer 而不是 AudioBuffer (後者不可序列化)
                     await idbSet(`sfx_cache_${key}`, arrayBuffer);
-                    console.log(`[Audio] 網路載入並已快取: ${key}`);
                 }
 
-                // 4. 解碼為 Web Audio 可用的 AudioBuffer
-                // 注意：decodeAudioData 在解碼後會清空傳入的 ArrayBuffer，
-                // 所以我們存入 DB 的動作必須在 decode 之前完成。
                 const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer.slice(0));
                 this.bufferMap.set(key, audioBuffer);
-
             } catch (e) {
-                console.error(`[Audio] 載入失敗: ${key}`, e);
+                console.error(`[Audio] ${key} 載入失敗:`, e);
+            } finally {
+                // 無論成功或失敗，都增加進度
+                loaded++;
+                if (onProgress) onProgress((loaded / total) * 100, key);
             }
         });
 
         await Promise.all(loadTasks);
-        console.log("[Audio] 所有音效初始化完成");
     }
 
     /**
@@ -774,4 +765,320 @@ export function parseMaidata(raw) {
         }
     });
     return maidata;
+}
+/**
+* 簡易彈窗函式
+* @param {string} title 彈窗標題
+* @param {string} content 彈窗內容（建議純文字，會自動換行）
+* @param {Array} buttons 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: () => {}, `hideOnClick`: true/false }
+* @param {boolean} unclosable 是否可關閉
+* @param {Function} closeWhen 關閉條件函式
+**/
+export function simplePopupWindow(title = "", content = "", buttons = [], unclosable = false, closeWhen) {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 50;
+        display: flex; /* 方便置中 */
+        align-items: center;
+        justify-content: center;
+    `;
+
+    if (!unclosable) backdrop.addEventListener('click', (e) => {
+        // 只有點擊背景才關閉，點擊彈窗內部 (popup) 不關閉
+        if (e.target === backdrop) closePopup();
+    });
+
+    const closePopup = () => {
+        backdrop.style.pointerEvents = 'none'; // 禁止重複點擊
+        backdrop.style.opacity = '0'; // 立即隱藏背景，避免動畫結束前看到閃爍
+        // 1. 背景淡出
+        backdrop.animate([
+            { opacity: 1 },
+            { opacity: 0 }
+        ], {
+            duration: 100,
+            easing: 'ease'
+        });
+        const popupAnim = popup.animate([
+            { transform: 'translate(-50%, -50%) rotateX(0deg)' },
+            { transform: 'translate(-50%, -50%) rotateX(30deg)' }
+        ], {
+            duration: 200,
+            easing: 'ease'
+        });
+
+        // 3. 當動畫全部結束時，移除 DOM
+        popupAnim.onfinish = () => {
+            backdrop.style.display = 'none'; // 先隱藏，避免動畫結束前看到閃爍
+            if (document.body.contains(backdrop)) {
+                document.body.removeChild(backdrop);
+            }
+        };
+    };
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #202020;
+        color: white;
+        padding: 0 10px 10px 10px;
+        border: 1px solid #404040;
+        border-radius: 5px;
+        max-width: 80%;
+        max-height: 80%;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        min-width: 300px;
+    `;
+
+    const titleElem = document.createElement('h3');
+    titleElem.innerText = title;
+    titleElem.style.cssText = `
+        margin: 10px 0;
+        margin-left: 5px;
+        width: calc(100% - 35px);
+        min-height: 30px;
+        user-select: none;
+        display: flex;
+        align-items: center;
+    `;
+    const progressContainer = document.createElement('div');
+    progressContainer.style.cssText = `
+    width: 100%;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+    display: none; /* 預設隱藏，有進度時才顯示 */
+`;
+
+    const progressBar = document.createElement('div');
+    progressBar.style.cssText = `
+    width: 0%;
+    height: 100%;
+    background: #00ffcc; /* 亮色進度條 */
+    transition: width 0.5s ease;
+`;
+    progressContainer.appendChild(progressBar);
+
+    // 更新進度的函式
+    const setProgress = (percent) => {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    };
+
+    if (!unclosable) {
+        const closeButton = document.createElement('div');
+        closeButton.innerText = '×';
+        closeButton.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            font-size: 20px;
+            color: #aaa;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        `;
+
+        closeButton.addEventListener('click', closePopup);
+        popup.appendChild(closeButton);
+    }
+    function genButton(btn) {
+        const btnElem = document.createElement('button');
+        btnElem.innerText = btn.text || "";
+        btnElem.style.cssText = `
+            background: rgb(32, 32, 32);
+            color: white;
+             flex: 0 0 auto;
+            height: 100%;
+            padding: 5px 10px;
+            cursor: pointer;
+            border: 1px solid rgb(64, 64, 64);
+            border-radius: 3px;
+            user-select: none;
+        `;
+        btnElem.addEventListener('click', () => {
+            if (btn.onClick) btn.onClick();
+            if (btn.hideOnClick || false) closePopup();
+        });
+        btnContainer.appendChild(btnElem);
+    }
+    const contentElem = document.createElement('div');
+    contentElem.innerHTML = content;
+    contentElem.style.cssText = `
+        font-family: monospace;
+        font-size: 12px;
+        background: #151515;
+        padding: 10px;
+        border-radius: 3px;
+        white-space: pre-wrap;
+        width: calc(100% - 20px);
+        overflow: auto;
+        max-height: 190px;
+        height: fit-content;
+    `;
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = `
+        display: flex;
+        justify-content: flex-start; /* start at left so overflow happens on right */
+        gap: 10px;
+        height: 30px;
+        width: 100%;
+        margin-top: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;   /* prevent vertical scroll */
+        flex-wrap: nowrap;     /* keep buttons in one line so overflow occurs */
+        -webkit-overflow-scrolling: touch; /* smoother swipe on mobile */
+    `;
+    if (!buttons || buttons.length === 0) {
+        btnContainer.style.display = 'none';
+    } else {
+        if (buttons instanceof Array) {
+            buttons.forEach(btn => {
+                genButton(btn);
+            });
+        }
+    }
+    if (content === "") {
+        contentElem.style.display = 'none';
+    }
+    popup.appendChild(titleElem);
+    popup.appendChild(progressContainer);
+    popup.appendChild(contentElem);
+    popup.appendChild(btnContainer);
+    backdrop.appendChild(popup);
+
+    document.body.appendChild(backdrop);
+    backdrop.style.animation = 'fadeIn 0.3s';
+    backdrop.style.perspective = '1000px';
+    backdrop.animate([
+        { opacity: 0 },
+        { opacity: 1 }
+    ], {
+        duration: 100,
+        easing: 'ease'
+    });
+    popup.animate([
+        { transform: 'translate(-50%, -50%) rotateX(30deg)' },
+        { transform: 'translate(-50%, -50%) rotateX(0deg)' }
+    ], {
+        duration: 200,
+        easing: 'ease'
+    });
+    const updateContent = (newText) => {
+        contentElem.innerHTML = newText;
+        if (newText === "") {
+            contentElem.style.display = 'none';
+        } else {
+            contentElem.style.display = 'block';
+        }
+    };
+    const updButtons = (newButtons) => {
+        btnContainer.innerHTML = '';
+        if (!newButtons || newButtons.length === 0) {
+            btnContainer.style.display = 'none';
+            return;
+        } else {
+            btnContainer.style.display = 'flex';
+        }
+        if (newButtons instanceof Array) {
+            newButtons.forEach(btn => {
+                genButton(btn);
+            });
+        }
+    };
+    if (typeof closeWhen === 'function') {
+        closeWhen(closePopup, updateContent, updButtons, setProgress);
+    }
+}
+const baseURL = './Skin/', baseImageKeys = [
+    'tap', 'tap_break', 'tap_each',
+    'hold', 'hold_break', 'hold_each',
+    'touch', 'touch_each', 'touch_point', 'touch_point_each',
+    'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
+    'slide', 'slide_each', 'slide_break',
+    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
+];
+/**
+ * 載入所有圖片素材，支援進度回報
+ * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)
+ */
+export async function loadAllImages(onProgress) {
+    const images = {};
+    const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_'];
+
+    // 計算總數：基礎圖片數 + (3種前綴 * 11張)
+    const total = baseImageKeys.length + (wifiPrefixes.length * 11);
+    let loaded = 0;
+
+    const report = (key) => {
+        loaded++;
+        if (onProgress) onProgress((loaded / total) * 100, key);
+    };
+
+    const loadQueue = [];
+
+    // 處理基礎圖片
+    baseImageKeys.forEach(key => {
+        const url = `${baseURL}${key}.png`;
+        const task = getImgWithCache(url, key).then(img => {
+            if (img) images[key] = img;
+        }).finally(() => report(key));
+        loadQueue.push(task);
+    });
+
+    // 處理 WiFi 扇形圖片
+    wifiPrefixes.forEach(prefix => {
+        for (let i = 0; i < 11; i++) {
+            const key = prefix + i;
+            const url = `${baseURL}${key}.png`;
+            const task = getImgWithCache(url, key).then(img => {
+                if (img) images[key] = img;
+            }).catch(() => {
+                // WiFi 圖片容許部分失敗
+            }).finally(() => report(key));
+            loadQueue.push(task);
+        }
+    });
+
+    await Promise.all(loadQueue);
+    return images;
+}
+
+async function getImgWithCache(url, key) {
+    // 1. 嘗試從 IndexedDB 取得 Blob
+    let blob = await idbGet(`img_cache_${key}`);
+
+    if (!blob) {
+        // 2. 沒快取則抓取網路資料
+        try {
+            const response = await fetch(url);
+            blob = await response.blob();
+            // 3. 存入 IndexedDB
+            await idbSet(`img_cache_${key}`, blob);
+        } catch (e) {
+            console.error(`圖片載入失敗: ${url}`, e);
+            return null;
+        }
+    }
+
+    // 4. 將 Blob 轉為 Image 物件
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = URL.createObjectURL(blob);
+    });
 }

@@ -1,228 +1,73 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata } from './helper.js';
+import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, simplePopupWindow, loadAllImages } from './helper.js';
 import { simaiDecode } from './decode.js';
 
-const canvas = document.getElementById('main');
-const canvasContainer = document.getElementById('canvasContainer');
-const slider = document.getElementById('timeControl');
-const playButton = getButton("play/stop", "control");
-const quickGenerateButton = getButton("quickGenerate", "utility");
-const hideEditorButton = getButton("hideEditor", "utility");
-const hideUtilityButton = getButton("hide/show", "utility");
-const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
-const offsetInput = getButton("offset", "utility").children[0];
-const addMusicButton = getButton("addMusic", "utility");
-const popup = getButton("popup", "utility");
-const folderInput = getButton("readFolder", "utility");
+let images, readyBeat;
 
-let ctx = canvas.getContext('2d');
-const scale = 0.98;
-const noteBaseSize = 11;
-const speed = 6.5;
-const touchSpeed = 6.5;
-const effectDecayTime = 0.4;
-const distance = 0.25;
-let globalTime = 0, realTime = 0;
-let lastTimestamp = null;
-let secondCtx = null;
-let externalWindow = null;
-let readyBeat = await idbGet('ready_beat') === 'true';
-let timeControlSliding = false; // 新增滑動狀態標記
-let showSensor = false;
-
-let clockBpm = 60;
-
-// 1. 選取狀態儲存
-let activePointers = new Map();
-
-const editorContainer = document.querySelector('.editor-container');
-const editorInput = document.getElementById('editor-input');
-const highlightLayer = document.getElementById('highlight-layer');
-let notes = [], endTime = 1, chartBaseOffset = false, musicDelay = 1e-4;
-
-
-/**
-* 簡易彈窗函式
-* @param {string} title 彈窗標題
-* @param {string} content 彈窗內容（建議純文字，會自動換行）
-* @param {Array} buttons 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: () => {}, `hideOnClick`: true/false }
-**/
-function simplePopupWindow(title, content, buttons = []) {
-    const backdrop = document.createElement('div');
-    backdrop.style.position = 'fixed';
-    backdrop.style.top = '0';
-    backdrop.style.left = '0';
-    backdrop.style.width = '100%';
-    backdrop.style.height = '100%';
-    backdrop.style.background = 'rgba(0, 0, 0, 0.5)';
-    backdrop.style.zIndex = 50;
-    backdrop.style.display = 'flex'; // 方便置中
-    backdrop.style.alignItems = 'center';
-    backdrop.style.justifyContent = 'center';
-
-    backdrop.addEventListener('click', (e) => {
-        // 只有點擊背景才關閉，點擊彈窗內部 (popup) 不關閉
-        if (e.target === backdrop) closePopup();
-    });
-
-    const closePopup = () => {
-        backdrop.style.pointerEvents = 'none'; // 禁止重複點擊
-        backdrop.style.opacity = '0'; // 立即隱藏背景，避免動畫結束前看到閃爍
-        // 1. 背景淡出
-        backdrop.animate([
-            { opacity: 1 },
-            { opacity: 0 }
-        ], {
-            duration: 100,
-            easing: 'ease'
-        });
-        const popupAnim = popup.animate([
-            { transform: 'translate(-50%, -50%) rotateX(0deg)' },
-            { transform: 'translate(-50%, -50%) rotateX(30deg)' }
-        ], {
-            duration: 200,
-            easing: 'ease'
+simplePopupWindow("正在準備環境...", "", [], true, async (close, update, updButtons, setProgress) => {
+    try {
+        // 1. 音效 (0% ~ 40%)
+        await audioManager.init((percent, key) => {
+            const totalPercent = percent * 0.4;
+            setProgress(totalPercent);
+            update(`正在載入音效: ${key} (${Math.round(percent)}%)`);
         });
 
-        // 3. 當動畫全部結束時，移除 DOM
-        popupAnim.onfinish = () => {
-            backdrop.style.display = 'none'; // 先隱藏，避免動畫結束前看到閃爍
-            if (document.body.contains(backdrop)) {
-                document.body.removeChild(backdrop);
-            }
-        };
-    };
-
-    const popup = document.createElement('div');
-    popup.style.position = 'fixed';
-    popup.style.top = '50%';
-    popup.style.left = '50%';
-    popup.style.transform = 'translate(-50%, -50%)';
-    popup.style.background = '#202020';
-    popup.style.color = 'white';
-    popup.style.padding = '20px';
-    popup.style.paddingBottom = '0';
-    popup.style.border = '1px solid #404040';
-    popup.style.borderRadius = '5px';
-    popup.style.maxWidth = '80%';
-    popup.style.maxHeight = '80%';
-    popup.style.boxShadow = '0 0 20px rgba(0,0,0,0.5)';
-    popup.style.minWidth = '300px';
-
-    const titleElem = document.createElement('h3');
-    titleElem.innerText = title;
-    titleElem.style.marginTop = '0';
-    titleElem.style.width = 'calc(100% - 20px)';
-    titleElem.style.userSelect = 'none';
-
-    const closeButton = document.createElement('div');
-    closeButton.innerText = '×';
-    closeButton.style.position = 'absolute';
-    closeButton.style.top = '10px';
-    closeButton.style.right = '10px';
-    closeButton.style.cursor = 'pointer';
-    closeButton.style.fontSize = '20px';
-    closeButton.style.color = '#aaa';
-    closeButton.style.width = '30px';
-    closeButton.style.height = '30px';
-    closeButton.style.display = 'flex';
-    closeButton.style.alignItems = 'center';
-    closeButton.style.justifyContent = 'center';
-    closeButton.style.userSelect = 'none';
-
-    closeButton.addEventListener('click', closePopup);
-    popup.appendChild(closeButton);
-    const contentElem = document.createElement('pre');
-    contentElem.innerText = content;
-    contentElem.style.fontFamily = 'monospace';
-    contentElem.style.fontSize = '12px';
-    contentElem.style.background = '#151515';
-    contentElem.style.padding = '10px';
-    contentElem.style.borderRadius = '3px';
-    contentElem.style.whiteSpace = 'pre-wrap';
-    contentElem.style.width = 'calc(100% - 20px)';
-    contentElem.style.overflow = 'auto';
-    contentElem.style.minHeight = '190px';
-    contentElem.style.height = '0';
-    contentElem.style.margin = '10px 0';
-    const btnContainer = document.createElement('div');
-    btnContainer.style.display = 'flex';
-    btnContainer.style.justifyContent = 'flex-end';
-    btnContainer.style.gap = '10px';
-    btnContainer.style.height = '30px';
-    btnContainer.style.marginBottom = '10px';
-    if (buttons instanceof Array) {
-        buttons.forEach(btn => {
-            const btnElem = document.createElement('button');
-            btnElem.innerText = btn.text;
-            btnElem.style.background = 'rgb(32, 32, 32)';
-            btnElem.style.color = 'white';
-            btnElem.style.height = '100%';
-            btnElem.style.padding = '5px 10px';
-            btnElem.style.cursor = 'pointer';
-            btnElem.style.border = '1px solid rgb(64, 64, 64)';
-            btnElem.style.borderRadius = '3px';
-            btnElem.style.userSelect = 'none';
-            btnElem.addEventListener('click', () => {
-                if (btn.onClick) btn.onClick();
-                if (btn.hideOnClick || false) closePopup();
-            });
-            btnContainer.appendChild(btnElem);
+        // 2. 圖片 (40% ~ 90%)
+        images = await loadAllImages((percent, key) => {
+            const totalPercent = 40 + (percent * 0.5); // 從 40 開始，佔比 50
+            setProgress(totalPercent);
+            update(`正在載入素材: ${key} (${Math.round(percent)}%)`);
         });
-    }
-    popup.appendChild(titleElem);
-    popup.appendChild(contentElem);
-    popup.appendChild(btnContainer);
-    backdrop.appendChild(popup);
-    document.body.appendChild(backdrop);
-    backdrop.style.animation = 'fadeIn 0.3s';
-    backdrop.style.perspective = '1000px';
-    backdrop.animate([
-        { opacity: 0 },
-        { opacity: 1 }
-    ], {
-        duration: 100,
-        easing: 'ease'
-    });
-    popup.animate([
-        { transform: 'translate(-50%, -50%) rotateX(30deg)' },
-        { transform: 'translate(-50%, -50%) rotateX(0deg)' }
-    ], {
-        duration: 200,
-        easing: 'ease'
-    });
-}
+        images = await loadAllImages();
+        readyBeat = await idbGet('simai_ready_beat') === 'true';
 
-getButton("manageResources", "utility").addEventListener('click', async () => {
-    const db = await openDB();
-    const transaction = db.transaction("editorState", "readonly");
-    const store = transaction.objectStore("editorState");
+        // 3. 從 IndexedDB 恢復使用者設定
+        update("正在恢復上次的編輯狀態...");
+        const [savedContent, savedMusicDelay, savedTimeControl, savedBgm] = await Promise.all([
+            idbGet('simai_editor_content'),
+            idbGet('simai_musicDelay'),
+            idbGet('simai_timeControl'),
+            idbGet('simai_resource_bgm')
+        ]);
 
-    // 取得所有 Key 並統計大小
-    const keys = await new Promise(res => {
-        const req = store.getAllKeys();
-        req.onsuccess = () => res(req.result);
-    });
+        // 4. 套用恢復的資料
+        if (savedContent) {
+            editorInput.value = savedContent;
 
-    let details = "IndexedDB 儲存狀態：\n\n";
-    let totalSize = 0;
+            applyHighlight(savedContent);
+            getres(savedContent);
+        }
+        if (savedMusicDelay) {
+            musicDelay = parseFloat(savedMusicDelay);
+            offsetInput.value = musicDelay;
+            console.log("載入偏移值:", musicDelay);
+            offsetInputDebounce();
+        }
+        if (savedTimeControl && !isNaN(savedTimeControl)) {
+            realTime = savedTimeControl;
+            slider.value = realTime;
+            globalTime = realTime - musicDelay;
 
-    for (const key of keys) {
-        const data = await idbGet(key);
-        let size = 0;
-        if (data instanceof Blob) size = data.size;
-        else if (data instanceof ArrayBuffer) size = data.byteLength;
-        else size = JSON.stringify(data).length * 2;
+            console.log("載入時間控制值:", globalTime);
+            update();
+        }
+        if (savedBgm) {
+            update("正在還原背景音樂...");
+            await audioManager.setBackgroundMusic(savedBgm);
+        }
+        setProgress(100);
 
-        totalSize += size;
-        details += `• ${key}: ${(size / 1024).toFixed(1)} KB\n`;
-    }
+        // 5. 初始化畫面
+        update("完成！正在渲染畫面...");
+        resize();
+        close(); // 立即關閉載入提示
 
-    details += `\n總計使用量: ${(totalSize / 1024 / 1024).toFixed(2)} MB`;
-
-    // 呼叫你的 simplePopupWindow
-    simplePopupWindow("資源管理", details, [
-        {
+    } catch (e) {
+        console.error("初始化失敗:", e);
+        update(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
+        // 報錯時可以考慮顯示一個「強制關閉」按鈕，或者讓視窗可以被手動關閉
+        updButtons([{
             text: "清除所有資料",
             onClick: async () => {
                 const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
@@ -238,9 +83,8 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
                     console.error("清除 IndexedDB 資料失敗:", e);
                 }
             }
-        },
-        {
-            text: "僅清除譜面暫存",
+        }, {
+            text: "清除譜面暫存",
             onClick: async () => {
                 const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
                 if (!confirmed) return;
@@ -277,15 +121,231 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
             }
         },
         {
+            text: "清除素材暫存",
+            onClick: async () => {
+                const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                if (!confirmed) return;
+
+                const db = await openDB();
+                const transaction = db.transaction("editorState", "readwrite");
+                const store = transaction.objectStore("editorState");
+
+                // 1. 取得所有 Key
+                const getKeysRequest = store.getAllKeys();
+
+                getKeysRequest.onsuccess = () => {
+                    const allKeys = getKeysRequest.result;
+                    let deleteCount = 0;
+
+                    // 2. 篩選並刪除符合條件的 Key
+                    allKeys.forEach(key => {
+                        if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
+                            store.delete(key);
+                            deleteCount++;
+                        }
+                        if (typeof key === 'string' && key.startsWith('img_cache_')) {
+                            store.delete(key);
+                            deleteCount++;
+                        }
+                    });
+
+                    transaction.oncomplete = () => {
+                        console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
+                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                        // location.reload(); 
+                    };
+                };
+
+                transaction.onerror = (e) => {
+                    console.error("清除特定資料失敗:", e);
+                };
+            }
+        },
+        {
+            text: "關閉",
+            onClick: () => {
+                simplePopupWindow("警告", "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",[{text:"I don't give a fuck", onClick: () => {close();}, hideOnClick: true}]);
+            }
+        }]);
+    }
+});
+
+const canvas = document.getElementById('main');
+const canvasContainer = document.getElementById('canvasContainer');
+const slider = document.getElementById('timeControl');
+const playButton = getButton("play/stop", "control");
+const quickGenerateButton = getButton("quickGenerate", "utility");
+const hideEditorButton = getButton("hideEditor", "utility");
+const hideUtilityButton = getButton("hide/show", "utility");
+const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
+const offsetInput = getButton("offset", "utility").children[0];
+const addMusicButton = getButton("addMusic", "utility");
+const popup = getButton("popup", "utility");
+const folderInput = getButton("readFolder", "utility");
+
+let ctx = canvas.getContext('2d');
+const scale = 0.98;
+const noteBaseSize = 11;
+const speed = 6.5;
+const touchSpeed = 6.5;
+const effectDecayTime = 0.4;
+const distance = 0.25;
+let globalTime = 0, realTime = 0;
+let lastTimestamp = null;
+let secondCtx = null;
+let externalWindow = null;
+let timeControlSliding = false; // 新增滑動狀態標記
+let showSensor = false;
+
+let clockBpm = 60;
+
+// 1. 選取狀態儲存
+let activePointers = new Map();
+
+const editorContainer = document.querySelector('.editor-container');
+const editorInput = document.getElementById('editor-input');
+const highlightLayer = document.getElementById('highlight-layer');
+let notes = [], endTime = 1, musicDelay = 1e-4, chartBaseOffset = false;
+
+getButton("manageResources", "utility").addEventListener('click', async () => {
+    const db = await openDB();
+    const transaction = db.transaction("editorState", "readonly");
+    const store = transaction.objectStore("editorState");
+
+    // 取得所有 Key 並統計大小
+    const keys = await new Promise(res => {
+        const req = store.getAllKeys();
+        req.onsuccess = () => res(req.result);
+    });
+
+    let details = "IndexedDB 儲存狀態：\n\n";
+    let totalSize = 0;
+
+    function formatSize(size) {
+        if (size < 1024) return `${size} B`;
+        for (const unit of ['KiB', 'MiB', 'GiB']) {
+            size /= 1024;
+            if (size < 1024) return `${size.toFixed(1)} ${unit}`;
+        }
+        //return (size / 1024).toFixed(1);
+    }
+
+    for (const key of keys) {
+        const data = await idbGet(key);
+        let size = 0;
+        if (data instanceof Blob) size = data.size;
+        else if (data instanceof ArrayBuffer) size = data.byteLength;
+        else size = JSON.stringify(data).length * 2;
+
+        totalSize += size;
+        details += `• ${key}: ${formatSize(size)}\n`;
+    }
+
+    details += `\n總計使用量: ${formatSize(totalSize)}`;
+
+    // 呼叫你的 simplePopupWindow
+    simplePopupWindow("資源管理", details, [
+        {
+            text: "清除所有資料",
+            onClick: async () => {
+                const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                if (!confirmed) return;
+                const db = await openDB();
+                const transaction = db.transaction("editorState", "readwrite");
+                const store = transaction.objectStore("editorState");
+                store.clear();
+                try {
+                    await transaction.complete;
+                    console.log("已清除 IndexedDB 中的所有資料");
+                } catch (e) {
+                    console.error("清除 IndexedDB 資料失敗:", e);
+                }
+            }
+        },
+        {
+            text: "清除譜面暫存",
+            onClick: async () => {
+                const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                if (!confirmed) return;
+
+                const db = await openDB();
+                const transaction = db.transaction("editorState", "readwrite");
+                const store = transaction.objectStore("editorState");
+
+                // 1. 取得所有 Key
+                const getKeysRequest = store.getAllKeys();
+
+                getKeysRequest.onsuccess = () => {
+                    const allKeys = getKeysRequest.result;
+                    let deleteCount = 0;
+
+                    // 2. 篩選並刪除符合條件的 Key
+                    allKeys.forEach(key => {
+                        if (typeof key === 'string' && key.startsWith('simai_')) {
+                            store.delete(key);
+                            deleteCount++;
+                        }
+                    });
+
+                    transaction.oncomplete = () => {
+                        console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
+                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                        // location.reload(); 
+                    };
+                };
+
+                transaction.onerror = (e) => {
+                    console.error("清除特定資料失敗:", e);
+                };
+            }
+        },
+        {
+            text: "清除素材暫存",
+            onClick: async () => {
+                const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                if (!confirmed) return;
+
+                const db = await openDB();
+                const transaction = db.transaction("editorState", "readwrite");
+                const store = transaction.objectStore("editorState");
+
+                // 1. 取得所有 Key
+                const getKeysRequest = store.getAllKeys();
+
+                getKeysRequest.onsuccess = () => {
+                    const allKeys = getKeysRequest.result;
+                    let deleteCount = 0;
+
+                    // 2. 篩選並刪除符合條件的 Key
+                    allKeys.forEach(key => {
+                        if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
+                            store.delete(key);
+                            deleteCount++;
+                        }
+                        if (typeof key === 'string' && key.startsWith('img_cache_')) {
+                            store.delete(key);
+                            deleteCount++;
+                        }
+                    });
+
+                    transaction.oncomplete = () => {
+                        console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
+                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                        // location.reload(); 
+                    };
+                };
+
+                transaction.onerror = (e) => {
+                    console.error("清除特定資料失敗:", e);
+                };
+            }
+        },
+        {
             text: "關閉",
             hideOnClick: true
         }
     ]);
 });
-
-const savedContent = await idbGet('simai_editor_content');
-const savedMusicDelay = await idbGet('simai_musicDelay');
-const savedTimeControl = await idbGet('simai_timeControl');
 const getres = ((simaiDataValue) => {
     const result = (() => {
         try {
@@ -324,20 +384,7 @@ const offsetInputDebounce = debounce(() => {
     draw();
 }, 500);
 
-if (savedMusicDelay) {
-    musicDelay = parseFloat(savedMusicDelay);
-    offsetInput.value = musicDelay;
-    console.log("載入偏移值:", musicDelay);
-    offsetInputDebounce();
-}
-if (savedTimeControl && !isNaN(savedTimeControl)) {
-    realTime = savedTimeControl;
-    slider.value = realTime;
-    globalTime = realTime - musicDelay;
 
-    console.log("載入時間控制值:", globalTime);
-    update();
-}
 
 await audioManager.init();
 
@@ -376,7 +423,7 @@ readyBeatCheckbox.checked = readyBeat;
 
 readyBeatCheckbox.addEventListener('change', () => {
     readyBeat = readyBeatCheckbox.checked;
-    idbSet('ready_beat', readyBeatCheckbox.checked).then(() => {
+    idbSet('simai_ready_beat', readyBeatCheckbox.checked).then(() => {
         console.log("已儲存預備拍狀態到 IndexedDB:", readyBeatCheckbox.checked);
     }).catch((error) => {
         console.error("儲存預備拍狀態到 IndexedDB 失敗:", error);
@@ -601,20 +648,6 @@ editorInput.addEventListener('keydown', (e) => {
     }
 });
 
-(async () => {
-    // 1. 從 IndexedDB 抓取暫存的音樂 Blob
-    const savedBlob = await idbGet('simai_resource_bgm');
-
-    if (savedBlob) {
-        // 2. 直接傳入 Blob 物件，不需轉換成 URL
-        await audioManager.setBackgroundMusic(savedBlob);
-        console.log("離線音樂已恢復");
-
-        // 3. 恢復譜面解析 (假設 endTime 已經在 getres 裡設定過)
-        draw();
-    }
-})();
-
 addMusicButton.addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -633,78 +666,6 @@ addMusicButton.addEventListener('click', () => {
 function applyHighlight(text) {
     highlightLayer.innerHTML = getHighlight(text);
 }
-const baseURL = './Skin/';
-
-// 1. 定義基礎圖片清單
-const baseImageKeys = [
-    'tap', 'tap_break', 'tap_each',
-    'hold', 'hold_break', 'hold_each',
-    'touch', 'touch_each', 'touch_point', 'touch_point_each',
-    'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
-    'slide', 'slide_each', 'slide_break',
-    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
-];
-
-async function loadAllImages() {
-    const images = {};
-    const loadQueue = [];
-
-    // 處理基礎圖片
-    baseImageKeys.forEach(key => {
-        const url = `${baseURL}${key}.png`;
-        loadQueue.push(
-            getImgWithCache(url, key).then(img => {
-                if (img) images[key] = img;
-            })
-        );
-    });
-
-    // 處理 WiFi 扇形圖片 (0-10)
-    ['wifi_', 'wifi_break_', 'wifi_each_'].forEach(prefix => {
-        for (let i = 0; i < 11; i++) {
-            const key = prefix + i;
-            const url = `${baseURL}${key}.png`;
-            loadQueue.push(
-                getImgWithCache(url, key).then(img => {
-                    if (img) images[key] = img;
-                }).catch(() => { })
-            );
-        }
-    });
-
-    await Promise.all(loadQueue);
-    console.log("[Asset] 所有圖片素材快取並載入完成");
-    return images;
-}
-
-async function getImgWithCache(url, key) {
-    // 1. 嘗試從 IndexedDB 取得 Blob
-    let blob = await idbGet(`img_cache_${key}`);
-
-    if (!blob) {
-        // 2. 沒快取則抓取網路資料
-        try {
-            const response = await fetch(url);
-            blob = await response.blob();
-            // 3. 存入 IndexedDB
-            await idbSet(`img_cache_${key}`, blob);
-        } catch (e) {
-            console.error(`圖片載入失敗: ${url}`, e);
-            return null;
-        }
-    }
-
-    // 4. 將 Blob 轉為 Image 物件
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.src = URL.createObjectURL(blob);
-    });
-}
-
-// 使用方式
-const images = await loadAllImages();
-// 確保到這一步時，所有圖片 (包括 wifi) 都已經在 images 物件裡了
 
 const wSlideRatio = [
     111, 68, -3, 0,
@@ -723,15 +684,6 @@ const wSlideRatio = [
 {
     let isVisible = localStorage.getItem('simai_hide_editor') !== 'true'; // 改名為 isVisible 較直覺
     setEditorCss(isVisible);
-}
-
-if (savedContent) {
-    editorInput.value = savedContent;
-
-    applyHighlight(savedContent);
-    getres(savedContent);
-
-    resize();
 }
 
 const slideInputDebounce = debounce(() => {

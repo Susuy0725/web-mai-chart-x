@@ -1,0 +1,1440 @@
+import { openDB, idbGet, idbSet } from './indexDB.js';
+import { getImg, imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata } from './helper.js';
+import { simaiDecode } from './decode.js';
+
+const canvas = document.getElementById('main');
+const canvasContainer = document.getElementById('canvasContainer');
+const slider = document.getElementById('timeControl');
+const playButton = getButton("play/stop", "control");
+const quickGenerateButton = getButton("quickGenerate", "utility");
+const hideEditorButton = getButton("hideEditor", "utility");
+const hideUtilityButton = getButton("hide/show", "utility");
+const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
+const offsetInput = getButton("offset", "utility").children[0];
+const addMusicButton = getButton("addMusic", "utility");
+const popup = getButton("popup", "utility");
+const folderInput = getButton("readFolder", "utility");
+
+let ctx = canvas.getContext('2d');
+const scale = 0.98;
+const noteBaseSize = 11;
+const speed = 6.5;
+const touchSpeed = 6.5;
+const effectDecayTime = 0.4;
+const distance = 0.25;
+let globalTime = 0, realTime = 0;
+let lastTimestamp = null;
+let secondCtx = null;
+let externalWindow = null;
+let readyBeat = await idbGet('ready_beat') === 'true';
+let timeControlSliding = false; // 新增滑動狀態標記
+let showSensor = false;
+
+let clockBpm = 60;
+
+// 1. 選取狀態儲存
+let activePointers = new Map();
+
+const editorContainer = document.querySelector('.editor-container');
+const editorInput = document.getElementById('editor-input');
+const highlightLayer = document.getElementById('highlight-layer');
+let notes = [], endTime = 1, chartBaseOffset = false, musicDelay = 1e-4;
+
+
+/**
+* 簡易彈窗函式
+* @param {string} title 彈窗標題
+* @param {string} content 彈窗內容（建議純文字，會自動換行）
+* @param {Array} buttons 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: () => {}, `hideOnClick`: true/false }
+**/
+function simplePopupWindow(title, content, buttons = []) {
+    const backdrop = document.createElement('div');
+    backdrop.style.position = 'fixed';
+    backdrop.style.top = '0';
+    backdrop.style.left = '0';
+    backdrop.style.width = '100%';
+    backdrop.style.height = '100%';
+    backdrop.style.background = 'rgba(0, 0, 0, 0.5)';
+    backdrop.style.zIndex = 50;
+    backdrop.style.display = 'flex'; // 方便置中
+    backdrop.style.alignItems = 'center';
+    backdrop.style.justifyContent = 'center';
+
+    backdrop.addEventListener('click', (e) => {
+        // 只有點擊背景才關閉，點擊彈窗內部 (popup) 不關閉
+        if (e.target === backdrop) closePopup();
+    });
+
+    const closePopup = () => {
+        backdrop.style.pointerEvents = 'none'; // 禁止重複點擊
+        backdrop.style.opacity = '0'; // 立即隱藏背景，避免動畫結束前看到閃爍
+        // 1. 背景淡出
+        backdrop.animate([
+            { opacity: 1 },
+            { opacity: 0 }
+        ], {
+            duration: 100,
+            easing: 'ease'
+        });
+        const popupAnim = popup.animate([
+            { transform: 'translate(-50%, -50%) rotateX(0deg)' },
+            { transform: 'translate(-50%, -50%) rotateX(30deg)' }
+        ], {
+            duration: 200,
+            easing: 'ease'
+        });
+
+        // 3. 當動畫全部結束時，移除 DOM
+        popupAnim.onfinish = () => {
+            backdrop.style.display = 'none'; // 先隱藏，避免動畫結束前看到閃爍
+            if (document.body.contains(backdrop)) {
+                document.body.removeChild(backdrop);
+            }
+        };
+    };
+
+    const popup = document.createElement('div');
+    popup.style.position = 'fixed';
+    popup.style.top = '50%';
+    popup.style.left = '50%';
+    popup.style.transform = 'translate(-50%, -50%)';
+    popup.style.background = '#202020';
+    popup.style.color = 'white';
+    popup.style.padding = '20px';
+    popup.style.paddingBottom = '0';
+    popup.style.border = '1px solid #404040';
+    popup.style.borderRadius = '5px';
+    popup.style.maxWidth = '80%';
+    popup.style.maxHeight = '80%';
+    popup.style.boxShadow = '0 0 20px rgba(0,0,0,0.5)';
+    popup.style.minWidth = '300px';
+
+    const titleElem = document.createElement('h3');
+    titleElem.innerText = title;
+    titleElem.style.marginTop = '0';
+    titleElem.style.width = 'calc(100% - 20px)';
+    titleElem.style.userSelect = 'none';
+
+    const closeButton = document.createElement('div');
+    closeButton.innerText = '×';
+    closeButton.style.position = 'absolute';
+    closeButton.style.top = '10px';
+    closeButton.style.right = '10px';
+    closeButton.style.cursor = 'pointer';
+    closeButton.style.fontSize = '20px';
+    closeButton.style.color = '#aaa';
+    closeButton.style.width = '30px';
+    closeButton.style.height = '30px';
+    closeButton.style.display = 'flex';
+    closeButton.style.alignItems = 'center';
+    closeButton.style.justifyContent = 'center';
+    closeButton.style.userSelect = 'none';
+
+    closeButton.addEventListener('click', closePopup);
+    popup.appendChild(closeButton);
+    const contentElem = document.createElement('pre');
+    contentElem.innerText = content;
+    contentElem.style.fontFamily = 'monospace';
+    contentElem.style.fontSize = '12px';
+    contentElem.style.background = '#151515';
+    contentElem.style.padding = '10px';
+    contentElem.style.borderRadius = '3px';
+    contentElem.style.whiteSpace = 'pre-wrap';
+    contentElem.style.width = 'calc(100% - 20px)';
+    contentElem.style.overflow = 'auto';
+    contentElem.style.minHeight = '190px';
+    contentElem.style.height = '0';
+    contentElem.style.margin = '10px 0';
+    const btnContainer = document.createElement('div');
+    btnContainer.style.display = 'flex';
+    btnContainer.style.justifyContent = 'flex-end';
+    btnContainer.style.gap = '10px';
+    btnContainer.style.height = '30px';
+    btnContainer.style.marginBottom = '10px';
+    if (buttons instanceof Array) {
+        buttons.forEach(btn => {
+            const btnElem = document.createElement('button');
+            btnElem.innerText = btn.text;
+            btnElem.style.background = 'rgb(32, 32, 32)';
+            btnElem.style.color = 'white';
+            btnElem.style.height = '100%';
+            btnElem.style.padding = '5px 10px';
+            btnElem.style.cursor = 'pointer';
+            btnElem.style.border = '1px solid rgb(64, 64, 64)';
+            btnElem.style.borderRadius = '3px';
+            btnElem.style.userSelect = 'none';
+            btnElem.addEventListener('click', () => {
+                if (btn.onClick) btn.onClick();
+                if (btn.hideOnClick || false) closePopup();
+            });
+            btnContainer.appendChild(btnElem);
+        });
+    }
+    popup.appendChild(titleElem);
+    popup.appendChild(contentElem);
+    popup.appendChild(btnContainer);
+    backdrop.appendChild(popup);
+    document.body.appendChild(backdrop);
+    backdrop.style.animation = 'fadeIn 0.3s';
+    backdrop.style.perspective = '1000px';
+    backdrop.animate([
+        { opacity: 0 },
+        { opacity: 1 }
+    ], {
+        duration: 100,
+        easing: 'ease'
+    });
+    popup.animate([
+        { transform: 'translate(-50%, -50%) rotateX(30deg)' },
+        { transform: 'translate(-50%, -50%) rotateX(0deg)' }
+    ], {
+        duration: 200,
+        easing: 'ease'
+    });
+}
+
+getButton("manageResources", "utility").addEventListener('click', async () => {
+    const db = await openDB();
+    const transaction = db.transaction("editorState", "readonly");
+    const store = transaction.objectStore("editorState");
+
+    // 取得所有 Key 並統計大小
+    const keys = await new Promise(res => {
+        const req = store.getAllKeys();
+        req.onsuccess = () => res(req.result);
+    });
+
+    let details = "IndexedDB 儲存狀態：\n\n";
+    let totalSize = 0;
+
+    for (const key of keys) {
+        const data = await idbGet(key);
+        let size = 0;
+        if (data instanceof Blob) size = data.size;
+        else if (data instanceof ArrayBuffer) size = data.byteLength;
+        else size = JSON.stringify(data).length * 2;
+
+        totalSize += size;
+        details += `• ${key}: ${(size / 1024).toFixed(1)} KB\n`;
+    }
+
+    details += `\n總計使用量: ${(totalSize / 1024 / 1024).toFixed(2)} MB`;
+
+    // 呼叫你的 simplePopupWindow
+    simplePopupWindow("資源管理", details, [
+        {
+            text: "清除所有資料",
+            onClick: async () => {
+                const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                if (!confirmed) return;
+                const db = await openDB();
+                const transaction = db.transaction("editorState", "readwrite");
+                const store = transaction.objectStore("editorState");
+                store.clear();
+                try {
+                    await transaction.complete;
+                    console.log("已清除 IndexedDB 中的所有資料");
+                } catch (e) {
+                    console.error("清除 IndexedDB 資料失敗:", e);
+                }
+            }
+        },
+        {
+            text: "僅清除譜面暫存",
+            onClick: async () => {
+                const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                if (!confirmed) return;
+
+                const db = await openDB();
+                const transaction = db.transaction("editorState", "readwrite");
+                const store = transaction.objectStore("editorState");
+
+                // 1. 取得所有 Key
+                const getKeysRequest = store.getAllKeys();
+
+                getKeysRequest.onsuccess = () => {
+                    const allKeys = getKeysRequest.result;
+                    let deleteCount = 0;
+
+                    // 2. 篩選並刪除符合條件的 Key
+                    allKeys.forEach(key => {
+                        if (typeof key === 'string' && key.startsWith('simai_')) {
+                            store.delete(key);
+                            deleteCount++;
+                        }
+                    });
+
+                    transaction.oncomplete = () => {
+                        console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
+                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                        // location.reload(); 
+                    };
+                };
+
+                transaction.onerror = (e) => {
+                    console.error("清除特定資料失敗:", e);
+                };
+            }
+        },
+        {
+            text: "關閉",
+            hideOnClick: true
+        }
+    ]);
+});
+
+const savedContent = await idbGet('simai_editor_content');
+const savedMusicDelay = await idbGet('simai_musicDelay');
+const savedTimeControl = await idbGet('simai_timeControl');
+const getres = ((simaiDataValue) => {
+    const result = (() => {
+        try {
+            return simaiDecode(simaiDataValue, readyBeat);
+        } catch (e) {
+            console.error("解析失敗", e);
+            return null;
+        }
+    })();
+
+    if (result) {
+        notes = result.notes;
+        endTime = result.endTime + 1;
+        slider.max = endTime - musicDelay;
+        chartBaseOffset = result.baseOffset;
+        clockBpm = result.bpm;
+        draw();
+    }
+});
+
+const offsetInputDebounce = debounce(() => {
+    slider.max = endTime - musicDelay;
+    slider.value = realTime;
+
+    globalTime = realTime - musicDelay;
+
+    if (playButton.dataset.playing === 'true') {
+        audioManager.playBGM(realTime);
+    }
+    //localStorage.setItem('simai_musicDelay', musicDelay);
+    idbSet('simai_musicDelay', musicDelay).then(() => {
+        console.log("已儲存偏移值到 IndexedDB:", musicDelay);
+    }).catch((error) => {
+        console.error("儲存偏移值到 IndexedDB 失敗:", error);
+    });
+    draw();
+}, 500);
+
+if (savedMusicDelay) {
+    musicDelay = parseFloat(savedMusicDelay);
+    offsetInput.value = musicDelay;
+    console.log("載入偏移值:", musicDelay);
+    offsetInputDebounce();
+}
+if (savedTimeControl && !isNaN(savedTimeControl)) {
+    realTime = savedTimeControl;
+    slider.value = realTime;
+    globalTime = realTime - musicDelay;
+
+    console.log("載入時間控制值:", globalTime);
+    update();
+}
+
+await audioManager.init();
+
+const inputDebounce = debounce(() => {
+    const value = editorInput.value;
+
+    // 解析 Note 邏輯
+    getres(value);
+
+    // 存入本地空間
+    //localStorage.setItem('simai_editor_content', value);
+    idbSet('simai_editor_content', value).then(() => {
+        console.log("已儲存內容到 IndexedDB");
+    }).catch((error) => {
+        console.error("儲存內容到 IndexedDB 失敗:", error);
+    });
+}, 300);
+
+const setEditorCss = (visible = null) => {
+    // 同步捲動永遠執行
+    highlightLayer.scrollTop = editorInput.scrollTop;
+    highlightLayer.scrollLeft = editorInput.scrollLeft;
+
+    if (visible === null) return;
+
+    // visible 為 true 代表顯示編輯器
+    canvasContainer.style.width = visible ? '50%' : '100%';
+    const displayMode = visible ? 'block' : 'none';
+
+    editorInput.style.display = displayMode;
+    highlightLayer.style.display = displayMode;
+    editorContainer.style.display = displayMode;
+};
+
+readyBeatCheckbox.checked = readyBeat;
+
+readyBeatCheckbox.addEventListener('change', () => {
+    readyBeat = readyBeatCheckbox.checked;
+    idbSet('ready_beat', readyBeatCheckbox.checked).then(() => {
+        console.log("已儲存預備拍狀態到 IndexedDB:", readyBeatCheckbox.checked);
+    }).catch((error) => {
+        console.error("儲存預備拍狀態到 IndexedDB 失敗:", error);
+    });
+    inputDebounce();
+});
+
+editorInput.addEventListener('input', () => {
+    const value = editorInput.value;
+
+    // 同步捲動位置
+    setEditorCss();
+
+    // 立即更新顏色高亮 (視覺上達到打字立刻出現)
+    applyHighlight(value);
+
+    // 延遲處理重解析與存檔 (避免打字時解析幾萬行導致卡頓)
+    inputDebounce();
+});
+
+offsetInput.addEventListener('input', () => {
+    musicDelay = (() => {
+        const val = parseFloat(offsetInput.value);
+        if (isNaN(val)) {
+            console.warn("偏移值無效，請輸入數字");
+            return 0;
+        }
+        return val;
+    })();
+    offsetInputDebounce();
+});
+
+folderInput.addEventListener('click', (e) => {
+    const input = folderInput.children[0];
+    input.click();
+    input.onchange = (event) => {
+        const files = event.target.files;
+        console.log("選擇的檔案列表：", files);
+        if (files.length === 0) {
+            console.warn("未選擇任何檔案");
+            return;
+        }
+        for (var i = 0; i < files.length; i++) {
+            let file = files.item(i);
+            if (file.name.startsWith('track.')) {
+                // 音樂檔
+                const url = URL.createObjectURL(file);
+                audioManager.setBackgroundMusic(url);
+                idbSet('simai_resource_bgm', file).then(() => {
+                    console.log("已儲存音樂檔到 IndexedDB");
+                }).catch((error) => {
+                    console.error("儲存音樂檔到 IndexedDB 失敗:", error);
+                });
+            }
+            if (file.name.startsWith('maidata.')) {
+                // 譜面檔
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const content = parseMaidata(e.target.result);
+                    idbSet('simai_maidata', content).then(() => {
+                        console.log("已儲存譜面內容到 IndexedDB");
+                    }).catch((error) => {
+                        console.error("儲存譜面內容到 IndexedDB 失敗:", error);
+                    });
+                    console.log(content);
+                    if (content["first"]) {
+                        console.log("成功讀取 first");
+                        musicDelay = (() => {
+                            const val = parseFloat(content["first"]);
+                            if (isNaN(val)) {
+                                console.warn("偏移值無效，請輸入數字");
+                                return 0;
+                            }
+                            return val;
+                        })();
+                        offsetInputDebounce();
+                    }
+                    if (content["inote_5"]) {
+                        console.log("成功讀取 inote_5，已載入編輯器");
+                        console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
+                        editorInput.value = content["inote_5"] || ""; // 預設讀取 inote_5，實際可依需求調整
+                        idbSet('simai_editor_content', editorInput.value).then(() => {
+                            console.log("已儲存編輯器內容到 IndexedDB");
+                        }).catch((error) => {
+                            console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
+                        });
+                        applyHighlight(content["inote_5"]);
+                        getres(content["inote_5"]);
+                    } else {
+                        console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
+                    }
+                    resize();
+                };
+                reader.readAsText(file);
+            }
+        }
+    };
+});
+
+hideEditorButton.addEventListener('click', () => {
+    // 檢查目前是否為隱藏狀態
+    const currentlyHidden = editorContainer.style.display === 'none';
+
+    // 如果目前隱藏 -> 點擊後要「顯示」(true)
+    // 如果目前顯示 -> 點擊後要「隱藏」(false)
+    const nextStateVisible = currentlyHidden;
+
+    // 儲存的是 "是否隱藏" 的狀態
+    idbSet('simai_hide_editor', !nextStateVisible).then(() => {
+        console.log("已儲存編輯器顯示狀態到 IndexedDB:", !nextStateVisible);
+    }).catch((error) => {
+        console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
+    });
+
+    setEditorCss(nextStateVisible);
+    resize();
+    console.log(`編輯器已${nextStateVisible ? '顯示' : '隱藏'}`);
+});
+
+hideUtilityButton.addEventListener('click', () => {
+    const utilityBtns = document.getElementById('topUtilityBtns');
+    const isHidden = hideUtilityButton.dataset.hidden === 'true';
+    if (isHidden) {
+        utilityBtns.style.overflowX = 'auto';
+        hideUtilityButton.classList.remove('expanded');
+        editorContainer.classList.remove('expanded');
+    } else {
+        utilityBtns.style.overflowX = 'hidden';
+        utilityBtns.scrollLeft = 0; // 隱藏時強制捲回最左，避免下次展開時看到中間或右邊的按鈕
+        hideUtilityButton.classList.add('expanded');
+        editorContainer.classList.add('expanded');
+    }
+    hideUtilityButton.innerText = isHidden ? '▲' : '▼';
+    hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
+    utilityBtns.style.padding = isHidden ? '5px' : '0px 5px';
+    utilityBtns.style.height = isHidden ? '30px' : 'var(--utility-hidden-height)';
+    editorContainer.style.top = isHidden ? '40px' : 'var(--utility-hidden-height)';
+});
+
+quickGenerateButton.addEventListener('click', () => {
+    const sampleData = `(60){4},`;
+    editorInput.value += sampleData;
+    applyHighlight(editorInput.value);
+    inputDebounce();
+});
+
+editorInput.addEventListener('scroll', () => {
+    highlightLayer.scrollTop = editorInput.scrollTop;
+    highlightLayer.scrollLeft = editorInput.scrollLeft;
+});
+
+// 自動配對括號與智能刪除
+editorInput.addEventListener('keydown', (e) => {
+    const pairs = { '(': ')', '{': '}', '[': ']' };
+    const open = e.key;
+    const close = pairs[open];
+    const value = editorInput.value;
+    const start = editorInput.selectionStart;
+    const end = editorInput.selectionEnd;
+
+    // 輸入開括號 → 補齊並將游標放入或包住選取文字
+    if (close) {
+        e.preventDefault();
+        const selected = value.slice(start, end);
+        const newVal = value.slice(0, start) + open + selected + close + value.slice(end);
+        editorInput.value = newVal;
+        if (start !== end) {
+            editorInput.selectionStart = start + 1;
+            editorInput.selectionEnd = end + 1;
+        } else {
+            editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+        }
+        applyHighlight(editorInput.value);
+        inputDebounce();
+        return;
+    }
+
+    // 輸入閉括號時，若下一字元已為相同閉括號，則跳過（避免重複插入）
+    const closingKeys = Object.values(pairs);
+    if (closingKeys.includes(e.key)) {
+        if (start === end && value[start] === e.key) {
+            e.preventDefault();
+            editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+        }
+        return;
+    }
+
+    // Backspace：若游標剛好在成對括號中（前一個為開、下一個為對應閉），則同時刪除兩個
+    if (e.key === 'Backspace') {
+        if (start === end && start > 0) {
+            const before = value[start - 1];
+            const after = value[start];
+            const matching = Object.entries(pairs).find(([o, c]) => o === before && c === after);
+            if (matching) {
+                e.preventDefault();
+                const newVal = value.slice(0, start - 1) + value.slice(start + 1);
+                editorInput.value = newVal;
+                editorInput.selectionStart = editorInput.selectionEnd = start - 1;
+                applyHighlight(editorInput.value);
+                inputDebounce();
+            }
+        }
+        return;
+    }
+
+    // Delete：若游標在開括號之前且後方為其閉括號，刪除整對（可視需求保留或移除）
+    if (e.key === 'Delete') {
+        if (start === end && start < value.length) {
+            const before = value[start - 1];
+            const after = value[start];
+            const matching = Object.entries(pairs).find(([o, c]) => o === before && c === after);
+            if (matching) {
+                e.preventDefault();
+                const newVal = value.slice(0, start - 1) + value.slice(start + 1);
+                editorInput.value = newVal;
+                editorInput.selectionStart = editorInput.selectionEnd = start - 1;
+                applyHighlight(editorInput.value);
+                inputDebounce();
+            }
+        }
+        return;
+    }
+});
+
+(async () => {
+    // 1. 從 IndexedDB 抓取暫存的音樂 Blob
+    const savedBlob = await idbGet('simai_resource_bgm');
+
+    if (savedBlob) {
+        // 2. 直接傳入 Blob 物件，不需轉換成 URL
+        await audioManager.setBackgroundMusic(savedBlob);
+        console.log("離線音樂已恢復");
+
+        // 3. 恢復譜面解析 (假設 endTime 已經在 getres 裡設定過)
+        draw();
+    }
+})();
+
+addMusicButton.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'audio/*';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            audioManager.setBackgroundMusic(url);
+            idbSet('simai_resource_bgm', file);
+        }
+    };
+    input.click();
+});
+
+function applyHighlight(text) {
+    highlightLayer.innerHTML = getHighlight(text);
+}
+const baseURL = './Skin/';
+
+// 1. 定義基礎圖片清單
+const baseImageKeys = [
+    'tap', 'tap_break', 'tap_each',
+    'hold', 'hold_break', 'hold_each',
+    'touch', 'touch_each', 'touch_point', 'touch_point_each',
+    'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
+    'slide', 'slide_each', 'slide_break',
+    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
+];
+
+async function loadAllImages() {
+    const images = {};
+    const loadQueue = [];
+
+    // 處理基礎圖片
+    baseImageKeys.forEach(key => {
+        const url = `${baseURL}${key}.png`;
+        loadQueue.push(
+            getImgWithCache(url, key).then(img => {
+                if (img) images[key] = img;
+            })
+        );
+    });
+
+    // 處理 WiFi 扇形圖片 (0-10)
+    ['wifi_', 'wifi_break_', 'wifi_each_'].forEach(prefix => {
+        for (let i = 0; i < 11; i++) {
+            const key = prefix + i;
+            const url = `${baseURL}${key}.png`;
+            loadQueue.push(
+                getImgWithCache(url, key).then(img => {
+                    if (img) images[key] = img;
+                }).catch(() => { })
+            );
+        }
+    });
+
+    await Promise.all(loadQueue);
+    console.log("[Asset] 所有圖片素材快取並載入完成");
+    return images;
+}
+
+async function getImgWithCache(url, key) {
+    // 1. 嘗試從 IndexedDB 取得 Blob
+    let blob = await idbGet(`img_cache_${key}`);
+
+    if (!blob) {
+        // 2. 沒快取則抓取網路資料
+        try {
+            const response = await fetch(url);
+            blob = await response.blob();
+            // 3. 存入 IndexedDB
+            await idbSet(`img_cache_${key}`, blob);
+        } catch (e) {
+            console.error(`圖片載入失敗: ${url}`, e);
+            return null;
+        }
+    }
+
+    // 4. 將 Blob 轉為 Image 物件
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = URL.createObjectURL(blob);
+    });
+}
+
+// 使用方式
+const images = await loadAllImages();
+// 確保到這一步時，所有圖片 (包括 wifi) 都已經在 images 物件裡了
+
+const wSlideRatio = [
+    111, 68, -3, 0,
+    160, 90, -3.5, -0.004,
+    204, 110, -4.6, -0.0035,
+    253, 136, -5.5, -0.004,
+    298, 154, -6.5, -0.003,
+    353, 179, -6.2, -0.003,
+    410, 205, -5.75, -0.003,
+    464, 226, -5.45, -0.003,
+    519, 251, -5.4, -0.004,
+    571, 271, -5.2, -0.003,
+    653, 313, -3.9, -0.003,
+];
+
+{
+    let isVisible = localStorage.getItem('simai_hide_editor') !== 'true'; // 改名為 isVisible 較直覺
+    setEditorCss(isVisible);
+}
+
+if (savedContent) {
+    editorInput.value = savedContent;
+
+    applyHighlight(savedContent);
+    getres(savedContent);
+
+    resize();
+}
+
+const slideInputDebounce = debounce(() => {
+    timeControlSliding = false;
+    idbSet('simai_timeControl', realTime).then(() => {
+        console.log("已儲存時間控制值到 IndexedDB:", realTime);
+    }).catch((error) => {
+        console.error("儲存時間控制值到 IndexedDB 失敗:", error);
+    });
+}, 100);
+
+slider.addEventListener('input', () => {
+    timeControlSliding = true;
+    const value = parseFloat(slider.value);
+    globalTime = value - musicDelay;
+    realTime = value;
+
+    activePointers.clear();
+    audioManager.stopAllLongSounds();
+
+    if (playButton.dataset.playing === 'true') {
+        // 2. 播放中拖動：音樂即時同步跳轉 (Seek)
+        // 注意：Web Audio API 重建 Source Node 很快，但極速拖動可能會有噴麥音
+        audioManager.playBGM(realTime);
+    } else {
+        // 3. 暫停中拖動：只需停止 BGM 並更新畫布預覽
+        audioManager.stopBGM();
+        draw();
+    }
+    slideInputDebounce();
+});
+
+let bgmUpdateTimer = null;
+
+playButton.addEventListener('click', () => {
+    bgmUpdateTimer = null; // 重置 BGM 更新計時器
+    if (playButton.dataset.playing === 'true') {
+        playButton.dataset.playing = 'false';
+        lastTimestamp = null;
+        // --- 停止音效與 BGM ---
+        audioManager.stopAllLongSounds();
+        audioManager.stopBGM();
+
+        notes.forEach(n => n.riserActive = false); // 強制重置標記
+    } else {
+        playButton.dataset.playing = 'true';
+        lastTimestamp = performance.now();
+        // --- 從當前的 realTime 同步啟動 BGM ---
+        audioManager.playBGM(realTime);
+
+        requestAnimationFrame(update);
+    }
+});
+
+/*
+function getShapeAt(x, y) {
+    let found = null;
+    for (let i = touchPaths.length - 1; i >= 0; i--) {
+        if (ctx.isPointInPath(touchPaths[i].path, x, y)) {
+            found = touchPaths[i].id;
+            break;
+        }
+    }
+    return found;
+}
+ 
+// 4. 事件監聽
+const handlePointer = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    // console.log(`Pointer Event: ${e.type} - ID: ${e.pointerId} at (${e.clientX - rect.left - canvas.width / 2}, ${e.clientY - rect.top - canvas.height / 2})`);
+    const id = getShapeAt(e.clientX - rect.left, e.clientY - rect.top);
+ 
+    if (id) {
+        activePointers.set(e.pointerId, id);
+    } else {
+        activePointers.delete(e.pointerId); // 移出有效區域時刪除
+    }
+    draw();
+};
+ 
+const removePointer = (e) => {
+    activePointers.delete(e.pointerId); // 放開或離開時刪除
+    draw();
+};
+ 
+// 支援按下與移動時高亮
+canvas.addEventListener('pointerdown', handlePointer);
+canvas.addEventListener('pointermove', handlePointer);
+ 
+// 支援放開、移出、中斷時取消高亮
+canvas.addEventListener('pointerup', removePointer);
+canvas.addEventListener('pointerleave', removePointer);
+canvas.addEventListener('pointercancel', removePointer); // 處理觸控被系統中斷的情況
+*/
+
+function update(timestamp) {
+    if (lastTimestamp === null) lastTimestamp = timestamp;
+    const dt = (timestamp - lastTimestamp) / 1000; // 秒
+    lastTimestamp = timestamp;
+    if (playButton.dataset.playing === 'true') {
+        realTime += dt;
+        globalTime = realTime - musicDelay;
+        if (bgmUpdateTimer === null || bgmUpdateTimer >= 4) {
+            audioManager.playBGM(realTime);
+            bgmUpdateTimer = 0;
+        }
+        bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
+        slider.value = realTime;
+        draw();
+        if (globalTime >= endTime) {
+            playButton.dataset.playing = 'false';
+            globalTime = endTime;
+            slider.value = realTime; // 保持 slider 值與 realTime 一致
+        } else {
+            requestAnimationFrame(update);
+        }
+    }
+}
+
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvasContainer.clientWidth * dpr;
+    const h = canvasContainer.clientHeight * dpr;
+    const p = Math.min(w, h) / scaleBase * scale;
+    canvas.width = w;
+    canvas.height = h;
+    if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
+    draw();
+}
+
+function scaleCanvasContainer() {
+
+}
+
+popup.addEventListener('click', openSecondWindow);
+
+function openSecondWindow() {
+    if (externalWindow && !externalWindow.closed) {
+        externalWindow.focus();
+        return;
+    }
+    externalWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
+    // 注入基礎樣式與 Canvas
+    const style = externalWindow.document.createElement('style');
+    style.textContent = `
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            #canvasContainer {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                top: 0;
+                left: 0;
+            }
+            #canvasContainer img {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                top: 0;
+                left: 0;
+                object-fit: contain;
+                scale: 0.899;
+            }
+            #secondary {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+        `;
+    externalWindow.document.head.appendChild(style);
+    externalWindow.document.body.innerHTML = `
+            <div id="canvasContainer">
+                <img src="./Skin/outline.png" alt="">
+                <canvas id="secondary"></canvas>
+            </div>
+        `;
+    const extCanvas = externalWindow.document.getElementById('secondary');
+    // 這裡需要處理縮放邏輯，建議參考你原有的 resize 函式
+    extCanvas.width = 800;
+    extCanvas.height = 800;
+    secondCtx = extCanvas.getContext('2d');
+
+    externalWindow.addEventListener('beforeunload', () => {
+        console.log("警告：外部視窗即將關閉");
+        // 你可以在這裡重置主視窗的某些狀態
+        secondCtx = null;
+        ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
+    });
+
+    const syncResize = () => {
+        const dpr = externalWindow.devicePixelRatio || 1;
+        const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
+        extCanvas.width = externalWindow.innerWidth * dpr;
+        extCanvas.height = externalWindow.innerHeight * dpr;
+
+        // 重新套用你的座標系統 (這點最重要！)
+        const p = size / scaleBase * scale * dpr;
+        secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
+        draw();
+    };
+
+    syncResize();
+
+    externalWindow.addEventListener('resize', syncResize);
+    ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2); // 清除主 Canvas
+
+    ctx = secondCtx; // 切換到第二個 Canvas 的上下文
+
+    draw(); // 重新繪製到第二個 Canvas
+}
+
+window.addEventListener('resize', resize);
+
+resize();
+
+let playClock = [false, false, false, false];
+function draw() {
+    // 1. 清除畫布
+    ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
+    //drawBackground(ctx);
+
+    if (showSensor) for (let key of activePointers.keys()) {
+        if (typeof key === 'string' && key.startsWith('sim_')) {
+            activePointers.delete(key);
+        }
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
+    ctx.lineWidth = 0.5;
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
+    ctx.lineWidth = 0.7;
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. 準備繪製桶子 (定義視覺疊加順序：由下而上)
+    const buckets = {
+        slide: [],
+        tapnhold: [],
+        touch: []
+    };
+
+    const playing = playButton.dataset.playing === 'true';
+
+    // 3. 核心迴圈：一邊處理音效邏輯，一邊將音符分類到桶子
+    if (playing && readyBeat) {
+        for (let i = 0; i < 4; i++) {
+            const clockT = (i / 4) * (240 / clockBpm) - globalTime;
+            if (clockT > 0) {
+                playClock[i] = false;
+            } else {
+                if (!playClock[i]) {
+                    audioManager.queueSoundSingle('clock', clockT);
+                }
+                playClock[i] = true;
+            }
+        }
+    }
+    for (let i = notes.length - 1; i >= 0; i--) {
+        const note = notes[i];
+        const noteT = (note.time - globalTime);
+        const t = 1 - timeFunction(noteT * (speed * 0.8833 + 0.8167));
+        const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+
+        // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
+        const isVisible = t >= -1 && -noteT <= skipT + effectDecayTime;
+
+        if (playing && !timeControlSliding) {
+            if (showSensor) {
+                const hitWindow = 0.03; // 瞬間音符亮起的持續時間 (秒)
+                const isInsideAction = (noteT <= 0 && -noteT < hitWindow); // 剛擊中
+                const isHolding = (note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration); // 長按中
+
+                if (isInsideAction || isHolding) {
+                    let sensorId = "";
+                    if (note.type === "touch") {
+                        sensorId = note.touchPos === "C" ? "C1" : `${note.touchPos}${note.pos}`;
+                    } else {
+                        // Tap, Hold, Star 預設對應外圈 A 區
+                        sensorId = "A" + note.pos;
+                    }
+                    // 使用 "sim_" 前綴避免與真實 PointerID (數字) 衝突
+                    activePointers.set(`sim_${note.pos}_${note.time}`, sensorId);
+                }
+            }
+
+            // A. 處理 Riser (Touch Hold 長音)
+            const noteId = `riser_${note.pos}_${note.time}`;
+            const isInsideHold = note.type === "touch" && note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration;
+
+            if (isInsideHold) {
+                if (!note.riserActive) {
+                    const soundOffset = -noteT;
+                    audioManager.startLongSound(noteId, 'touchHold_riser', soundOffset);
+                    note.riserActive = true;
+                }
+            } else if (note.riserActive) {
+                audioManager.stopLongSound(noteId);
+                note.riserActive = false;
+            }
+
+            // B. 處理開始打擊音效 (Tap / Slide Start / Hold Start)
+            if (noteT <= 0 && !note.startEffectPlayed) {
+                // 排除連鎖滑軌的非首個箭頭音效
+                if (!(note.type === "slide" && !note.firstSlide)) {
+                    audioManager.queueSound(note, note.time + (note.slideDelay ?? 0));
+                }
+                note.startEffectPlayed = true;
+            }
+
+            // C. 處理結束音效 (Hold End / Slide End / Hanabi)
+            if (-noteT > skipT && !note.endEffectPlayed) {
+                if (note.isBreak || note.isHanabi || (note.holdDuration !== undefined && note.type !== "tap")) {
+                    audioManager.queueSound(note, note.time + skipT);
+                }
+                note.endEffectPlayed = true;
+            }
+        }
+
+        // --- 倒帶或 Slider 拖動時的狀態重置 ---
+        if (noteT > 0) {
+            note.startEffectPlayed = false;
+            note.endEffectPlayed = false;
+            if (note.riserActive) {
+                audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
+                note.riserActive = false;
+            }
+        }
+
+        // --- 將可見音符丟進對應桶子 ---
+        if (isVisible) {
+            if (note.type === 'slide') buckets.slide.push(note);
+            else if (note.type === 'hold') buckets.tapnhold.push(note);
+            else if (note.type === 'tap') buckets.tapnhold.push(note);
+            else if (note.type === 'touch') buckets.touch.push(note);
+        }
+    }
+
+    // 4. 依照「圖層順序」渲染
+    // 先畫底層 Slide -> Hold -> Tap -> Touch (最上層)
+    if (showSensor) drawSensors();
+    buckets.slide.forEach(n => drawSlide(n, ctx));
+    buckets.tapnhold.forEach(n => n.type === "hold" ? drawHold(n, ctx) : (n.isStar ? drawStar(n, ctx) : drawTap(n, ctx)));
+    buckets.touch.forEach(n => drawTouch(n, ctx));
+
+    // 5. 統一更新 Web Audio API 播放佇列
+    audioManager.update(globalTime);
+}
+function drawSensors() {
+    const currentlyLitIds = new Set(activePointers.values());
+    ctx.save();
+    touchPaths.forEach(shape => {
+        const isSelected = currentlyLitIds.has(shape.id);
+        ctx.fillStyle = isSelected ? '#FFD700' : '#00008080'; // 選中改為金色 : 原本深藍
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = isSelected ? 1.2 : 0.8; // 選中時邊框加粗
+
+        ctx.fill(shape.path);
+        ctx.stroke(shape.path);
+    });
+    ctx.restore();
+}
+function simpleEndEffect(t) {
+    const decayAlpha = 1 - Math.max(0, - t / effectDecayTime);
+    const radius = 0.8 * noteBaseSize * (1 - decayAlpha);
+
+    ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+    ctx.lineWidth = 0.5 * noteBaseSize * decayAlpha;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+function drawTap(s) {
+    const { time: noteTime, pos, isBreak, isDouble } = s;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    if (t < -0.8 || -noteT > effectDecayTime) return;
+
+    const img = images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
+    if (imgNotExists(img)) return;
+
+    const posInfo = noteRefPos[pos - 1];
+    ctx.save();
+
+    if (t >= 1) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleEndEffect(noteT);
+    }
+    else {
+        const displayT = Math.max(distance, t);
+        const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
+        const size = noteBaseSize * currentScale;
+
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        /*ctx.font = `3px Arial`;
+        ctx.fillText(t, 10, 10);*/
+        ctx.rotate(posInfo.rot);
+        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    }
+    ctx.restore();
+}
+function drawStar(s) {
+    const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    if (t < -0.8 || -noteT > effectDecayTime) return;
+
+    const img = images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+        : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
+    ];
+    if (imgNotExists(img)) return;
+
+    const posInfo = noteRefPos[pos - 1];
+    ctx.save();
+
+    if (t >= 1) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleEndEffect(noteT);
+    }
+    else {
+        const displayT = Math.max(distance, t);
+        const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
+        const size = noteBaseSize * currentScale;
+
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        ctx.rotate(posInfo.rot);
+        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    }
+    ctx.restore();
+}
+function drawHold(s) {
+    const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+
+    const img = images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
+    if (imgNotExists(img)) return;
+    const sizeOffset = t < distance ? 0 :
+        Math.min((holdDuration + noteT) * 0.9 * (speed * 0.8833 + 0.8167),
+            Math.min((1 - distance) * 2.45,
+                Math.min((t - distance) * 2.45,
+                    holdDuration * 0.9 * (speed * 0.8833 + 0.8167))));
+
+    const posInfo = noteRefPos[pos - 1];
+    ctx.save();
+    if (-noteT >= holdDuration) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleEndEffect(holdDuration + noteT);
+    }
+    else {
+        const displayT = Math.min(1, Math.max(distance, t));
+        const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
+        const size = noteBaseSize * currentScale;
+
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        ctx.rotate(posInfo.rot);
+        ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
+        ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset)); // body
+        ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275); // tail
+    }
+    ctx.restore();
+}
+function timeFunction(x) {
+    return 0.02160482279616 * x * x * x - 0.07553691072 * x * x + 0.43509924 * x + 0.000250029;
+}
+function drawTouch(s) {
+    const { time: noteTime, pos, touchPos, isDouble, holdDuration } = s;
+    if (holdDuration) {
+        const imgs = [];
+        for (let i = 0; i < 4; i++) {
+            const img = images["touchhold_" + i];
+            if (imgNotExists(img)) return;
+            imgs.push(img);
+        }
+        const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
+        const touchBorder = images.touchhold_border;
+        if (imgNotExists(touchPoint) || imgNotExists(touchBorder)) return;
+        const noteT = (noteTime - globalTime);
+        const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
+        const t = 1 - timeFunction(progress);
+
+        if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+
+        const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
+        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+        ctx.save();
+        if (-noteT >= holdDuration) {
+            ctx.translate(posInfo.x, posInfo.y);
+            simpleEndEffect(holdDuration + noteT);
+        }
+        else {
+            const currentScale = 0.8;
+            const size = noteBaseSize * 0.7;
+            const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+
+            let a = touchTimeFunction(11 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+
+            ctx.translate(posInfo.x, posInfo.y);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(touchBorder, -size * 1.3, -size * 1.3, size * 2.6, size * 2.6);
+            ctx.restore();
+            ctx.save();
+            ctx.translate(posInfo.x, posInfo.y);
+            ctx.rotate(Math.PI * -0.75);
+            ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
+            for (let i = 0; i < 4; i++) {
+                ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                ctx.rotate(Math.PI / 2);
+            }
+            ctx.globalAlpha = 1;
+            ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+        }
+        ctx.restore();
+        return;
+    }
+    const img = images[isDouble ? "touch_each" : "touch"];
+    const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
+    if (imgNotExists(img) || imgNotExists(touchPoint)) return;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    if (t < -0.8 || -noteT > effectDecayTime) return;
+
+    const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
+    const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+    ctx.save();
+    if (t >= 1) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleEndEffect(noteT);
+    }
+    else {
+        const currentScale = 0.8;
+        const size = noteBaseSize * 0.7;
+
+        let a = touchTimeFunction(11 * (1 - t) / 1.5) * 1.6;
+
+        ctx.translate(posInfo.x, posInfo.y);
+        /*ctx.font = `3px Arial`;
+        ctx.fillText(1 - (1 - t) / 1.4, 10, 10);*/
+        //ctx.rotate(posInfo.rot);
+        ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.55);
+        for (let i = 0; i < 4; i++) {
+            ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            ctx.rotate(Math.PI / 2);
+        }
+        ctx.globalAlpha = 1;
+        ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+    }
+    ctx.restore();
+}
+function touchTimeFunction(x) {
+    return 0.000753454 * x * x * x - 0.0298793 * x * x + 0.375038 * x + 0.104685;
+}
+function drawSlide(s) {
+    const imgs = (() => {
+        // 預先判斷 prefix
+        const prefix = s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_");
+        const standardKey = s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide");
+
+        if (s.slideType === "w") {
+            const tempImgs = [];
+            for (let i = 0; i < 11; i++) {
+                const target = images[prefix + i];
+                if (imgNotExists(target)) return []; // 只要缺一張就視為失敗
+                tempImgs.push(target);
+            }
+            return tempImgs;
+        }
+
+        // 普通滑軌
+        const target = images[standardKey];
+        return imgNotExists(target) ? [] : [target];
+    })();
+    if (!imgs || imgs.length === 0) return;
+    const starImg = images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
+    const { time: noteTime, pos, slideEnd, isBreak, isDouble, slideDelay, slideDuration, path } = s;
+
+    const noteT = noteTime - globalTime;
+    const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    if (t < distance || -noteT > slideDelay + slideDuration) return;
+
+    const p = path || generatePath(pos, slideEnd);
+    if (p.totalLength < 1e-4) return;
+    ctx.save();
+
+    const isTaped = -noteT > 0;
+    ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - distance) / (1 - distance));
+    let slideProgress = 0;
+    if (-noteT > slideDelay) {
+        slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
+    }
+    /*ctx.beginPath();
+    //drawPathOnCanvas(ctx, p);
+    ctx.closePath();
+    ctx.strokeStyle = '#0000ff';
+    ctx.lineWidth = 1;
+    ctx.stroke();*/
+
+    drawPathWithArrows(ctx, p, slideProgress, imgs, s.slideType === "w");
+    const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
+    if (noteT <= 0 && slideProgress < 1) {
+        if (s.hideHead && sz < 1) {
+            ctx.restore();
+            return;
+        }
+        const { x, y, rot } = p.getPointAt(slideProgress);
+
+        ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
+        ctx.translate(x, y);
+        ctx.rotate(rot + Math.PI * 0.5);
+        ctx.drawImage(starImg, -noteBaseSize * 0.5 * sz, -noteBaseSize * 0.5 * sz, noteBaseSize * sz, noteBaseSize * sz);
+    }
+
+    ctx.restore();
+}
+
+function drawPathWithArrows(ctx, recorder, starProgress, imgs, typew, s = { spacing: 4.36 }) {
+    if (recorder.totalLength === 0 || !imgs || imgs.length === 0) return;
+    // 將參數 t 改名為 starProgress 以避免與內部循環的比例變數 t 衝突
+    const arrowCount = typew ? 12 : Math.floor(recorder.totalLength / s.spacing);
+
+    if (typew) s.spacing = 7;
+    ctx.save(); // 保護環境
+
+    // 從末端開始往前畫，直到遇到滑星目前的位置 (starProgress)
+    for (let i = arrowCount - 1; i > Math.floor(starProgress * arrowCount); i--) {
+        //if (i > 2 && typew) continue;
+        // WiFi 軌跡通常根據索引選擇對應的扇形段圖片
+        const imgIndex = Math.min(i - 1, imgs.length - 1);
+        const img = typew ? imgs[imgIndex] : imgs[0];
+
+        if (!img) continue;
+
+        const dist = i * s.spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+        const percent = dist / recorder.totalLength; // 這是路徑上的比例
+
+        // 取得該點的座標與切線旋轉角度
+        const { x, y, rot } = recorder.getPointAt(percent);
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // 旋轉：rot 是切線方向，+Math.PI 是因為箭頭圖片通常朝向與路徑相反
+        ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+
+        // 繪製箭頭 (這裡的 0.9 是你的縮放倍率)
+        const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+        const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+        ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+    }
+
+    ctx.restore();
+}
+function drawPathOnCanvas(ctx, recorder) {
+    if (recorder.segments.length === 0) return;
+
+    const start = recorder.segments[0].type === 'line'
+        ? recorder.segments[0].start
+        : { x: recorder.segments[0].cx + recorder.segments[0].r * Math.cos(recorder.segments[0].startAngle), y: recorder.segments[0].cy + recorder.segments[0].r * Math.sin(recorder.segments[0].startAngle) };
+
+    ctx.moveTo(start.x, start.y);
+    for (const seg of recorder.segments) {
+        if (seg.type === 'line') {
+            ctx.lineTo(seg.end.x, seg.end.y);
+        } else if (seg.type === 'arc') {
+            ctx.arc(seg.cx, seg.cy, seg.r, seg.startAngle, seg.endAngle, seg.diff < 0);
+        }
+    }
+}
+function generatePath(startPos, endPos) {
+    console.warn("path missing, using straight line as fallback");
+    const recorder = new PathRecorder();
+    const startInfo = noteRefPos[startPos - 1];
+    const endInfo = noteRefPos[endPos - 1];
+
+    recorder.moveTo(startInfo.x, startInfo.y);
+    recorder.lineTo(endInfo.x, endInfo.y);
+
+    return recorder;
+}

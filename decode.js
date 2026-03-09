@@ -7,9 +7,9 @@ export function simaiDecode(data = "", baseOffset = true) {
         throw new Error("Invalid data format\nmabye missing comma at the end?");
     }*/
     const splitParts = raw.split(',');
-    //if (raw.endsWith(',') || raw.endsWith('E')) {
+    if (raw.endsWith(',') || raw.endsWith('E')) {
     splitParts.pop();
-    //}
+    }
     const notes = [];
     const tempNotes = [];
     let
@@ -22,7 +22,7 @@ export function simaiDecode(data = "", baseOffset = true) {
     for (let e of splitParts) {
         if (e.includes('(')) {
             const result = parseTag(e, '(', ')');
-            if (result.error) { console.log(result.error); break; }
+            if (result.error) { console.warn(result.error); break; }
             if (result.value !== null) nowBpm = result.value;
             if (nowTime == 0 && baseOffset) nowTime = 60 / nowBpm * 4; // 如果第一行就是 BPM 定义，则以此作为初始偏移
             if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
@@ -31,7 +31,7 @@ export function simaiDecode(data = "", baseOffset = true) {
         if (e.includes('{')) {
             overrideSplitTime = null; // reset overrideSplit at the start of each new tag
             const result = parseTag(e, '{', '}', true);
-            if (result.error) { console.log(result.error); break; }
+            if (result.error) { console.warn(result.error); break; }
             if (result.value !== null && result.override) {
                 overrideSplitTime = result.value;
             } else if (result.value !== null) {
@@ -44,11 +44,17 @@ export function simaiDecode(data = "", baseOffset = true) {
             break;
         }*/
         if (overrideSplitTime) nowBpm = 240 / overrideSplitTime;
+        let prop;
+        const propMatches = e.match(/^<([^>]*)>$/);
+        if (propMatches) {
+            prop = propMatches[1].trim();
+            // 清除 noteStr 中的標籤，避免影響後續解析 (例如 1<PROP:"RED">b -> 1b)
+            e = e.replace(/^<([^>]*)>$/, '');
+        }
         if (!e || e === '') {
             nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
             continue
         };
-
         {
             let notesToProcess = [];
             if (e.includes('`')) {
@@ -106,6 +112,35 @@ export function simaiDecode(data = "", baseOffset = true) {
                 });
                 doubleSlide = doubleSlide > 1 || doubleSlide === true;
                 parts.forEach(noteStr => {
+                    let props = [];
+
+                    // 1. 從開頭剝皮
+                    while (noteStr.startsWith('<')) {
+                        // 檢查是否有成對標籤
+                        const match = noteStr.match(/^<([^>]*)>/);
+                        if (!match) break; // 如果開頭雖然有 < 但沒對應的 >，就跳出
+
+                        // 這裡要判斷這是不是 Simai 的滑星符號 (例如 <5)
+                        // 通常滑星符號後面一定緊接數字，且長度較短
+                        if (match[1].length === 1 && !isNaN(match[1])) {
+                            // 如果 < 裡面只有一個數字，這通常是 Simai 滑星，不剝它
+                            break;
+                        }
+
+                        props.push(match[1].trim());
+                        noteStr = noteStr.slice(match[0].length); // 剝掉這層標籤
+                    }
+
+                    // 2. 從結尾剝皮
+                    while (noteStr.endsWith('>')) {
+                        const match = noteStr.match(/<([^>]*)>$/);
+                        if (!match) break;
+
+                        // 結尾標籤通常不會是滑星符號，所以可以直接剝
+                        props.push(match[1].trim());
+                        noteStr = noteStr.slice(0, -match[0].length); // 剝掉這層標籤
+                    }
+                    if (props.length === 0) props = null;
                     // 這裡處理音符與 Flags (例如 "1b", "2h")
                     const posMatch = noteStr.match(/^\d+/); // 抓取開頭的數字
                     const touchMatch = noteStr.match(/^([ABCDE])(\d+)|C/); // 抓取 touch 數值
@@ -138,6 +173,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         }
                         return {
                             pos: pos,
+                            props: props || null,
                             touchPos: touchPos || null,
                             isDouble: parts.length > 1,
                             time: time,
@@ -151,6 +187,12 @@ export function simaiDecode(data = "", baseOffset = true) {
                         if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr);
                         noteObj.isBreak = true
                         noteStr = noteStr.replace(/b/g, '');
+                    };
+                    if (noteStr.includes('$') && !slideMatch) {
+                        if (touchMatch) return console.warn("Star flag '$' is not allowed in touch notes, skipping:", noteStr);
+                        if (noteStr.includes('h')) return console.warn("Star flag '$' is not allowed in hold notes, skipping:", noteStr);
+                        noteObj.isStar = true
+                        noteStr = noteStr.replace(/\$/g, '');
                     };
                     if (noteStr.includes('x')) {
                         noteObj.isEx = true
@@ -177,7 +219,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             console.warn("Invalid format in hold note, skipping:", noteStr);
                             return;
                         }
-                        noteObj.holdDuration = 1e-4;
+                        noteObj.holdDuration = parseBeats("1280:1", nowBpm);
                         if (match) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
@@ -189,6 +231,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             if (duration + noteObj.time > endTime) endTime = duration + noteObj.time;
                         }
                     }
+                    let noHeadSlide = false, hideHeadSlide = false;
                     if (slideMatch && !noteStr.includes('h')) {
                         let sameTimeSlide = false;
                         const slideParts = (() => {
@@ -222,6 +265,18 @@ export function simaiDecode(data = "", baseOffset = true) {
                             if (p[0].includes('b')) {
                                 noteObj.isBreak = true;
                                 p[0] = p[0].replace(/b/g, '');
+                            }
+                            if (p[0].includes('@')) {
+                                noteObj.isStar = false;
+                                p[0] = p[0].replace(/@/g, '');
+                            }
+                            if (p[0].includes('?')) {
+                                noHeadSlide = true;
+                                p[0] = p[0].replace(/\?/g, '');
+                            }
+                            if (p[0].includes('!')) {
+                                hideHeadSlide = true;
+                                p[0] = p[0].replace(/!/g, '');
                             }
                             const isSlideBreak = p.some(part => part.includes('b'));
                             if (isSlideBreak) {
@@ -270,9 +325,10 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                                 tempNotes.push({
                                     type: 'slide',
+                                    props: props,
                                     pos: seg.head,
                                     firstSlide: index === 0,
-                                    hideHead: index !== 0,
+                                    hideHead: (hideHeadSlide ? true : index !== 0),
                                     isDouble: sameTimeSlide || doubleSlide,
                                     isBreak: isSlideBreak,
                                     slideEnd: seg.end,
@@ -289,7 +345,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         }
 
                     }
-                    tempNotes.push(noteObj);
+                    if (!noHeadSlide) tempNotes.push(noteObj);
                 });
             });
         }

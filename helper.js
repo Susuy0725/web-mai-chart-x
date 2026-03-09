@@ -419,6 +419,10 @@ class AudioManager {
         return (this.ctx.currentTime - this.bgmStartTime) + this.bgmOffset;
     }
 
+    getBGMDuration() {
+        return this.bgmBuffer ? this.bgmBuffer.duration : 0;
+    }
+
     /**
      * 動態調整全域音量 (0.0 到 1.0)
      */
@@ -756,6 +760,7 @@ export function getHighlight(text) {
     return html + (text.endsWith('\n') ? ' ' : '');
 }
 export function parseMaidata(raw) {
+    if (!raw){console.warn("empty rawdata!"); return {}};
     console.log("Parsing Maidata...");
     const maidata = {};
     raw.split("&").forEach(part => {
@@ -768,13 +773,28 @@ export function parseMaidata(raw) {
 }
 /**
 * 簡易彈窗函式
-* @param {string} title 彈窗標題
-* @param {string} content 彈窗內容（建議純文字，會自動換行）
-* @param {Array} buttons 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: () => {}, `hideOnClick`: true/false }
-* @param {boolean} unclosable 是否可關閉
-* @param {Function} closeWhen 關閉條件函式
+* @param {string} title 
+彈窗標題
+* @param {string} content 
+彈窗內容（建議純文字，會自動換行）
+* @param {Array} buttons 
+按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: () => {}, `hideOnClick`: true/false }
+* @param {boolean} unclosable 
+是否可關閉
+* @param {Function} closeWhen 
+關閉條件函式 (closePopup, updateContent, updButtons, setProgress) => {}，提供內部控制函式讓外部決定何時關閉或更新內容
 **/
-export function simplePopupWindow(title = "", content = "", buttons = [], unclosable = false, closeWhen) {
+export function popupWindow({
+    title = "",
+    content = "",
+    /**
+     * 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: (closePopup, updateContent, updButtons, contentElem) => {}, `hideOnClick`: true/false }
+     */
+    buttons = [],
+    width = 340,       // 預設寬度
+    unclosable = false,
+    closeWhen          // 外部控制回調
+} = {}) {              // 預設為空物件，防止沒傳參數時報錯) {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = `
         position: fixed;
@@ -782,7 +802,8 @@ export function simplePopupWindow(title = "", content = "", buttons = [], unclos
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(2px);
         z-index: 50;
         display: flex; /* 方便置中 */
         align-items: center;
@@ -833,16 +854,16 @@ export function simplePopupWindow(title = "", content = "", buttons = [], unclos
         padding: 0 10px 10px 10px;
         border: 1px solid #404040;
         border-radius: 5px;
-        max-width: 80%;
-        max-height: 80%;
-        box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        min-width: 300px;
+        max-width: calc(100% - 20px);
+        max-height: 100%;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.7);
+        width: ${title ? (typeof width === 'number' ? width + 'px' : width) : '30px'};
     `;
 
     const titleElem = document.createElement('h3');
     titleElem.innerText = title;
     titleElem.style.cssText = `
-        margin: 10px 0;
+        margin: 10px 0 0 10px;
         margin-left: 5px;
         width: calc(100% - 35px);
         min-height: 30px;
@@ -911,16 +932,17 @@ export function simplePopupWindow(title = "", content = "", buttons = [], unclos
             user-select: none;
         `;
         btnElem.addEventListener('click', () => {
-            if (btn.onClick) btn.onClick();
+            if (btn.onClick) btn.onClick(closePopup, updateContent, updButtons, contentElem);
             if (btn.hideOnClick || false) closePopup();
         });
         btnContainer.appendChild(btnElem);
     }
     const contentElem = document.createElement('div');
-    contentElem.innerHTML = content;
+    contentElem.innerHTML = content ? content.trim() : content;
     contentElem.style.cssText = `
         font-family: monospace;
         font-size: 12px;
+        margin-top: 10px;
         background: #151515;
         padding: 10px;
         border-radius: 3px;
@@ -985,6 +1007,7 @@ export function simplePopupWindow(title = "", content = "", buttons = [], unclos
         } else {
             contentElem.style.display = 'block';
         }
+        popup.style.width = (typeof width === 'number' ? width + 'px' : width);
     };
     const updButtons = (newButtons) => {
         btnContainer.innerHTML = '';
@@ -999,6 +1022,7 @@ export function simplePopupWindow(title = "", content = "", buttons = [], unclos
                 genButton(btn);
             });
         }
+        popup.style.width = (typeof width === 'number' ? width + 'px' : width);
     };
     if (typeof closeWhen === 'function') {
         closeWhen(closePopup, updateContent, updButtons, setProgress);

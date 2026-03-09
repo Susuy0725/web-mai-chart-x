@@ -1,172 +1,199 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, simplePopupWindow, loadAllImages } from './helper.js';
+import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages } from './helper.js';
 import { simaiDecode } from './decode.js';
 
-let images, readyBeat;
+let images, readyBeat, maidata, nowDifficulty;
 
-simplePopupWindow("正在準備環境...", "", [], true, async (close, update, updButtons, setProgress) => {
-    try {
-        // 1. 音效 (0% ~ 40%)
-        await audioManager.init((percent, key) => {
-            const totalPercent = percent * 0.4;
-            setProgress(totalPercent);
-            update(`正在載入音效: ${key} (${Math.round(percent)}%)`);
-        });
+window.popupWindow = popupWindow; // 暴露 popupWindow 讓其他模組也能使用
 
-        // 2. 圖片 (40% ~ 90%)
-        images = await loadAllImages((percent, key) => {
-            const totalPercent = 40 + (percent * 0.5); // 從 40 開始，佔比 50
-            setProgress(totalPercent);
-            update(`正在載入素材: ${key} (${Math.round(percent)}%)`);
-        });
-        images = await loadAllImages();
-        readyBeat = await idbGet('simai_ready_beat') === 'true';
+popupWindow({
+    title: "正在準備環境...",
+    content: "",
+    buttons: [],
+    unclosable: true,
+    closeWhen: async (close, update, updButtons, setProgress) => {
+        try {
+            // 1. 音效 (0% ~ 40%)
+            await audioManager.init((percent, key) => {
+                const totalPercent = percent * 0.4;
+                setProgress(totalPercent);
+                update(`正在載入音效: ${key} (${Math.round(percent)}%)`);
+            });
 
-        // 3. 從 IndexedDB 恢復使用者設定
-        update("正在恢復上次的編輯狀態...");
-        const [savedContent, savedMusicDelay, savedTimeControl, savedBgm] = await Promise.all([
-            idbGet('simai_editor_content'),
-            idbGet('simai_musicDelay'),
-            idbGet('simai_timeControl'),
-            idbGet('simai_resource_bgm')
-        ]);
+            // 2. 圖片 (40% ~ 90%)
+            images = await loadAllImages((percent, key) => {
+                const totalPercent = 40 + (percent * 0.5); // 從 40 開始，佔比 50
+                setProgress(totalPercent);
+                update(`正在載入素材: ${key} (${Math.round(percent)}%)`);
+            });
+            images = await loadAllImages();
+            readyBeat = await idbGet('simai_ready_beat') === 'true';
 
-        // 4. 套用恢復的資料
-        if (savedContent) {
-            editorInput.value = savedContent;
+            // 3. 從 IndexedDB 恢復使用者設定
+            update("正在恢復上次的編輯狀態...");
+            const [savedContent, savedMusicDelay, savedTimeControl, savedBgm, savedMaiData, savedDifficulty] = await Promise.all([
+                idbGet('simai_editor_content'),
+                idbGet('simai_musicDelay'),
+                idbGet('simai_timeControl'),
+                idbGet('simai_resource_bgm'),
+                idbGet('simai_maidata'),
+                idbGet('simai_now_difficulty')
+            ]);
 
-            applyHighlight(savedContent);
-            getres(savedContent);
-        }
-        if (savedMusicDelay) {
-            musicDelay = parseFloat(savedMusicDelay);
-            offsetInput.value = musicDelay;
-            console.log("載入偏移值:", musicDelay);
-            offsetInputDebounce();
-        }
-        if (savedTimeControl && !isNaN(savedTimeControl)) {
-            realTime = savedTimeControl;
-            slider.value = realTime;
-            globalTime = realTime - musicDelay;
+            // 4. 套用恢復的資料
+            if (savedContent) {
+                editorInput.value = savedContent;
 
-            console.log("載入時間控制值:", globalTime);
-            update();
-        }
-        if (savedBgm) {
-            update("正在還原背景音樂...");
-            await audioManager.setBackgroundMusic(savedBgm);
-        }
-        setProgress(100);
+                applyHighlight(savedContent);
+                getres(savedContent);
+            }
+            if (savedMusicDelay) {
+                musicDelay = parseFloat(savedMusicDelay);
+                offsetInput.value = musicDelay;
+                console.log("載入偏移值:", musicDelay);
+                offsetInputDebounce();
+            }
+            if (savedTimeControl && !isNaN(savedTimeControl)) {
+                realTime = savedTimeControl;
+                slider.value = realTime;
+                globalTime = realTime - musicDelay;
 
-        // 5. 初始化畫面
-        update("完成！正在渲染畫面...");
-        resize();
-        close(); // 立即關閉載入提示
+                console.log("載入時間控制值:", globalTime);
+                update();
+            }
+            if (savedMaiData) {
+                maidata = savedMaiData;
+            }
+            if (savedDifficulty) {
+                nowDifficulty = savedDifficulty;
+                changeDifficulty.value = nowDifficulty;
+            }
+            {
+                let isVisible = await idbGet('simai_hide_editor') !== true; // 改名為 isVisible 較直覺
+                setEditorCss(isVisible);
+            }
+            if (savedBgm) {
+                update("正在還原背景音樂...");
+                await audioManager.setBackgroundMusic(savedBgm);
+                endTime = Math.max(endTime, audioManager.getBGMDuration() + 1);
+            }
 
-    } catch (e) {
-        console.error("初始化失敗:", e);
-        update(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
-        // 報錯時可以考慮顯示一個「強制關閉」按鈕，或者讓視窗可以被手動關閉
-        updButtons([{
-            text: "清除所有資料",
-            onClick: async () => {
-                const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
-                if (!confirmed) return;
-                const db = await openDB();
-                const transaction = db.transaction("editorState", "readwrite");
-                const store = transaction.objectStore("editorState");
-                store.clear();
-                try {
-                    await transaction.complete;
-                    console.log("已清除 IndexedDB 中的所有資料");
-                } catch (e) {
-                    console.error("清除 IndexedDB 資料失敗:", e);
+            setProgress(100);
+
+            // 5. 初始化畫面
+            update("完成！正在渲染畫面...");
+            resize();
+            close(); // 立即關閉載入提示
+
+        } catch (e) {
+            console.error("初始化失敗:", e);
+            update(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
+            // 報錯時可以考慮顯示一個「強制關閉」按鈕，或者讓視窗可以被手動關閉
+            updButtons([{
+                text: "清除所有資料",
+                onClick: async () => {
+                    const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                    if (!confirmed) return;
+                    const db = await openDB();
+                    const transaction = db.transaction("editorState", "readwrite");
+                    const store = transaction.objectStore("editorState");
+                    store.clear();
+                    try {
+                        await transaction.complete;
+                        console.log("已清除 IndexedDB 中的所有資料");
+                    } catch (e) {
+                        console.error("清除 IndexedDB 資料失敗:", e);
+                    }
                 }
-            }
-        }, {
-            text: "清除譜面暫存",
-            onClick: async () => {
-                const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
-                if (!confirmed) return;
+            }, {
+                text: "清除譜面暫存",
+                onClick: async () => {
+                    const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                    if (!confirmed) return;
 
-                const db = await openDB();
-                const transaction = db.transaction("editorState", "readwrite");
-                const store = transaction.objectStore("editorState");
+                    const db = await openDB();
+                    const transaction = db.transaction("editorState", "readwrite");
+                    const store = transaction.objectStore("editorState");
 
-                // 1. 取得所有 Key
-                const getKeysRequest = store.getAllKeys();
+                    // 1. 取得所有 Key
+                    const getKeysRequest = store.getAllKeys();
 
-                getKeysRequest.onsuccess = () => {
-                    const allKeys = getKeysRequest.result;
-                    let deleteCount = 0;
+                    getKeysRequest.onsuccess = () => {
+                        const allKeys = getKeysRequest.result;
+                        let deleteCount = 0;
 
-                    // 2. 篩選並刪除符合條件的 Key
-                    allKeys.forEach(key => {
-                        if (typeof key === 'string' && key.startsWith('simai_')) {
-                            store.delete(key);
-                            deleteCount++;
-                        }
-                    });
+                        // 2. 篩選並刪除符合條件的 Key
+                        allKeys.forEach(key => {
+                            if (typeof key === 'string' && key.startsWith('simai_')) {
+                                store.delete(key);
+                                deleteCount++;
+                            }
+                        });
 
-                    transaction.oncomplete = () => {
-                        console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                        // location.reload(); 
+                        transaction.oncomplete = () => {
+                            console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
+                            // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                            // location.reload(); 
+                        };
                     };
-                };
 
-                transaction.onerror = (e) => {
-                    console.error("清除特定資料失敗:", e);
-                };
-            }
-        },
-        {
-            text: "清除素材暫存",
-            onClick: async () => {
-                const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
-                if (!confirmed) return;
-
-                const db = await openDB();
-                const transaction = db.transaction("editorState", "readwrite");
-                const store = transaction.objectStore("editorState");
-
-                // 1. 取得所有 Key
-                const getKeysRequest = store.getAllKeys();
-
-                getKeysRequest.onsuccess = () => {
-                    const allKeys = getKeysRequest.result;
-                    let deleteCount = 0;
-
-                    // 2. 篩選並刪除符合條件的 Key
-                    allKeys.forEach(key => {
-                        if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
-                            store.delete(key);
-                            deleteCount++;
-                        }
-                        if (typeof key === 'string' && key.startsWith('img_cache_')) {
-                            store.delete(key);
-                            deleteCount++;
-                        }
-                    });
-
-                    transaction.oncomplete = () => {
-                        console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                        // location.reload(); 
+                    transaction.onerror = (e) => {
+                        console.error("清除特定資料失敗:", e);
                     };
-                };
+                }
+            },
+            {
+                text: "清除素材暫存",
+                onClick: async () => {
+                    const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                    if (!confirmed) return;
 
-                transaction.onerror = (e) => {
-                    console.error("清除特定資料失敗:", e);
-                };
-            }
-        },
-        {
-            text: "關閉",
-            onClick: () => {
-                simplePopupWindow("警告", "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",[{text:"I don't give a fuck", onClick: () => {close();}, hideOnClick: true}]);
-            }
-        }]);
+                    const db = await openDB();
+                    const transaction = db.transaction("editorState", "readwrite");
+                    const store = transaction.objectStore("editorState");
+
+                    // 1. 取得所有 Key
+                    const getKeysRequest = store.getAllKeys();
+
+                    getKeysRequest.onsuccess = () => {
+                        const allKeys = getKeysRequest.result;
+                        let deleteCount = 0;
+
+                        // 2. 篩選並刪除符合條件的 Key
+                        allKeys.forEach(key => {
+                            if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
+                                store.delete(key);
+                                deleteCount++;
+                            }
+                            if (typeof key === 'string' && key.startsWith('img_cache_')) {
+                                store.delete(key);
+                                deleteCount++;
+                            }
+                        });
+
+                        transaction.oncomplete = () => {
+                            console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
+                            // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                            // location.reload(); 
+                        };
+                    };
+
+                    transaction.onerror = (e) => {
+                        console.error("清除特定資料失敗:", e);
+                    };
+                }
+            },
+            {
+                text: "關閉",
+                onClick: () => {
+                    popupWindow({
+                        title: "警告",
+                        content: "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
+                        buttons: [{ text: "繼續", onClick: () => { close(); }, hideOnClick: true }, { text: "取消", hideOnClick: true }]
+                    });
+                }
+            }]);
+        }
     }
 });
 
@@ -179,7 +206,9 @@ const hideEditorButton = getButton("hideEditor", "utility");
 const hideUtilityButton = getButton("hide/show", "utility");
 const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
 const offsetInput = getButton("offset", "utility").children[0];
+const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
+const readMaidataButton = getButton("readMaidata", "utility");
 const popup = getButton("popup", "utility");
 const folderInput = getButton("readFolder", "utility");
 
@@ -208,18 +237,35 @@ const highlightLayer = document.getElementById('highlight-layer');
 let notes = [], endTime = 1, musicDelay = 1e-4, chartBaseOffset = false;
 
 getButton("manageResources", "utility").addEventListener('click', async () => {
-    const db = await openDB();
-    const transaction = db.transaction("editorState", "readonly");
-    const store = transaction.objectStore("editorState");
+    async function getSize() {
+        // open a fresh readonly transaction each time so it won't be closed already
+        const db = await openDB();
+        const transaction = db.transaction("editorState", "readonly");
+        const store = transaction.objectStore("editorState");
 
-    // 取得所有 Key 並統計大小
-    const keys = await new Promise(res => {
-        const req = store.getAllKeys();
-        req.onsuccess = () => res(req.result);
-    });
+        let details = "IndexedDB 儲存狀態：\n\n";
+        let totalSize = 0;
 
-    let details = "IndexedDB 儲存狀態：\n\n";
-    let totalSize = 0;
+        // 取得所有 Key 並統計大小
+        const keys = await new Promise(res => {
+            const req = store.getAllKeys();
+            req.onsuccess = () => res(req.result);
+        });
+
+        for (const key of keys) {
+            const data = await idbGet(key);
+            let size = 0;
+            if (data instanceof Blob) size = data.size;
+            else if (data instanceof ArrayBuffer) size = data.byteLength;
+            else size = JSON.stringify(data).length * 2;
+
+            totalSize += size;
+            details += `• ${key}: ${formatSize(size)}\n`;
+        }
+        details += `\n總計使用量: ${formatSize(totalSize)}`;
+
+        return details;
+    }
 
     function formatSize(size) {
         if (size < 1024) return `${size} B`;
@@ -230,121 +276,135 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
         //return (size / 1024).toFixed(1);
     }
 
-    for (const key of keys) {
-        const data = await idbGet(key);
-        let size = 0;
-        if (data instanceof Blob) size = data.size;
-        else if (data instanceof ArrayBuffer) size = data.byteLength;
-        else size = JSON.stringify(data).length * 2;
-
-        totalSize += size;
-        details += `• ${key}: ${formatSize(size)}\n`;
-    }
-
-    details += `\n總計使用量: ${formatSize(totalSize)}`;
 
     // 呼叫你的 simplePopupWindow
-    simplePopupWindow("資源管理", details, [
+    popupWindow(
         {
-            text: "清除所有資料",
-            onClick: async () => {
-                const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
-                if (!confirmed) return;
-                const db = await openDB();
-                const transaction = db.transaction("editorState", "readwrite");
-                const store = transaction.objectStore("editorState");
-                store.clear();
-                try {
-                    await transaction.complete;
-                    console.log("已清除 IndexedDB 中的所有資料");
-                } catch (e) {
-                    console.error("清除 IndexedDB 資料失敗:", e);
+            title: "資源管理",
+            content: await getSize(),
+            buttons: [
+                {
+                    text: "清除緩存",
+                    onClick: (close, update) => {
+                        popupWindow(
+                            {
+                                title: "清除緩存",
+                                width: "max-content",
+                                buttons: [
+                                    {
+                                        text: "清除所有資料",
+                                        onClick: async () => {
+                                            const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                                            if (!confirmed) return;
+                                            const db = await openDB();
+                                            const transaction = db.transaction("editorState", "readwrite");
+                                            const store = transaction.objectStore("editorState");
+                                            store.clear();
+                                            update(await getSize());
+                                            try {
+                                                await transaction.complete;
+                                                console.log("已清除 IndexedDB 中的所有資料");
+                                            } catch (e) {
+                                                console.error("清除 IndexedDB 資料失敗:", e);
+                                            }
+                                        }
+                                    },
+                                    {
+                                        text: "清除譜面暫存",
+                                        onClick: async () => {
+                                            const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                                            if (!confirmed) return;
+
+                                            const db = await openDB();
+                                            const transaction = db.transaction("editorState", "readwrite");
+                                            const store = transaction.objectStore("editorState");
+
+                                            // 1. 取得所有 Key
+                                            const getKeysRequest = store.getAllKeys();
+
+                                            getKeysRequest.onsuccess = async () => {
+                                                const allKeys = getKeysRequest.result;
+                                                let deleteCount = 0;
+
+                                                // 2. 篩選並刪除符合條件的 Key
+                                                allKeys.forEach(key => {
+                                                    if (typeof key === 'string' && key.startsWith('simai_')) {
+                                                        store.delete(key);
+                                                        deleteCount++;
+                                                    }
+                                                });
+                                                update(await getSize());
+
+                                                transaction.oncomplete = () => {
+                                                    console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
+                                                    // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                                                    // location.reload(); 
+                                                };
+                                            };
+
+                                            transaction.onerror = async (e) => {
+                                                console.error("清除特定資料失敗:", e);
+                                                update(await getSize());
+                                            };
+                                        }
+                                    },
+                                    {
+                                        text: "清除素材暫存",
+                                        onClick: async () => {
+                                            const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                                            if (!confirmed) return;
+
+                                            const db = await openDB();
+                                            const transaction = db.transaction("editorState", "readwrite");
+                                            const store = transaction.objectStore("editorState");
+
+                                            // 1. 取得所有 Key
+                                            const getKeysRequest = store.getAllKeys();
+
+                                            getKeysRequest.onsuccess = async () => {
+                                                const allKeys = getKeysRequest.result;
+                                                let deleteCount = 0;
+
+                                                // 2. 篩選並刪除符合條件的 Key
+                                                allKeys.forEach(key => {
+                                                    if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
+                                                        store.delete(key);
+                                                        deleteCount++;
+                                                    }
+                                                    if (typeof key === 'string' && key.startsWith('img_cache_')) {
+                                                        store.delete(key);
+                                                        deleteCount++;
+                                                    }
+                                                });
+
+                                                update(await getSize());
+
+                                                transaction.oncomplete = () => {
+                                                    console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
+                                                    // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                                                    // location.reload(); 
+                                                };
+                                            };
+
+                                            transaction.onerror = async (e) => {
+                                                console.error("清除特定資料失敗:", e);
+                                                update(await getSize());
+                                            };
+                                        }
+                                    },
+                                    {
+                                        text: "關閉",
+                                        hideOnClick: true
+                                    }]
+                            });
+                    }
+                },
+                {
+                    text: "關閉",
+                    hideOnClick: true
                 }
-            }
-        },
-        {
-            text: "清除譜面暫存",
-            onClick: async () => {
-                const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
-                if (!confirmed) return;
-
-                const db = await openDB();
-                const transaction = db.transaction("editorState", "readwrite");
-                const store = transaction.objectStore("editorState");
-
-                // 1. 取得所有 Key
-                const getKeysRequest = store.getAllKeys();
-
-                getKeysRequest.onsuccess = () => {
-                    const allKeys = getKeysRequest.result;
-                    let deleteCount = 0;
-
-                    // 2. 篩選並刪除符合條件的 Key
-                    allKeys.forEach(key => {
-                        if (typeof key === 'string' && key.startsWith('simai_')) {
-                            store.delete(key);
-                            deleteCount++;
-                        }
-                    });
-
-                    transaction.oncomplete = () => {
-                        console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                        // location.reload(); 
-                    };
-                };
-
-                transaction.onerror = (e) => {
-                    console.error("清除特定資料失敗:", e);
-                };
-            }
-        },
-        {
-            text: "清除素材暫存",
-            onClick: async () => {
-                const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
-                if (!confirmed) return;
-
-                const db = await openDB();
-                const transaction = db.transaction("editorState", "readwrite");
-                const store = transaction.objectStore("editorState");
-
-                // 1. 取得所有 Key
-                const getKeysRequest = store.getAllKeys();
-
-                getKeysRequest.onsuccess = () => {
-                    const allKeys = getKeysRequest.result;
-                    let deleteCount = 0;
-
-                    // 2. 篩選並刪除符合條件的 Key
-                    allKeys.forEach(key => {
-                        if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
-                            store.delete(key);
-                            deleteCount++;
-                        }
-                        if (typeof key === 'string' && key.startsWith('img_cache_')) {
-                            store.delete(key);
-                            deleteCount++;
-                        }
-                    });
-
-                    transaction.oncomplete = () => {
-                        console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                        // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                        // location.reload(); 
-                    };
-                };
-
-                transaction.onerror = (e) => {
-                    console.error("清除特定資料失敗:", e);
-                };
-            }
-        },
-        {
-            text: "關閉",
-            hideOnClick: true
-        }
-    ]);
+            ]
+        });
 });
 const getres = ((simaiDataValue) => {
     const result = (() => {
@@ -375,7 +435,6 @@ const offsetInputDebounce = debounce(() => {
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime);
     }
-    //localStorage.setItem('simai_musicDelay', musicDelay);
     idbSet('simai_musicDelay', musicDelay).then(() => {
         console.log("已儲存偏移值到 IndexedDB:", musicDelay);
     }).catch((error) => {
@@ -384,10 +443,6 @@ const offsetInputDebounce = debounce(() => {
     draw();
 }, 500);
 
-
-
-await audioManager.init();
-
 const inputDebounce = debounce(() => {
     const value = editorInput.value;
 
@@ -395,7 +450,6 @@ const inputDebounce = debounce(() => {
     getres(value);
 
     // 存入本地空間
-    //localStorage.setItem('simai_editor_content', value);
     idbSet('simai_editor_content', value).then(() => {
         console.log("已儲存內容到 IndexedDB");
     }).catch((error) => {
@@ -472,6 +526,7 @@ folderInput.addEventListener('click', (e) => {
                 // 音樂檔
                 const url = URL.createObjectURL(file);
                 audioManager.setBackgroundMusic(url);
+                endTime = Math.max(endTime, audioManager.getBGMDuration() + 1);
                 idbSet('simai_resource_bgm', file).then(() => {
                     console.log("已儲存音樂檔到 IndexedDB");
                 }).catch((error) => {
@@ -482,7 +537,10 @@ folderInput.addEventListener('click', (e) => {
                 // 譜面檔
                 const reader = new FileReader();
                 reader.onload = (e) => {
+                    editorInput.value = "";
+                    applyHighlight("");
                     const content = parseMaidata(e.target.result);
+                    maidata = content;
                     idbSet('simai_maidata', content).then(() => {
                         console.log("已儲存譜面內容到 IndexedDB");
                     }).catch((error) => {
@@ -501,6 +559,13 @@ folderInput.addEventListener('click', (e) => {
                         })();
                         offsetInputDebounce();
                     }
+                    nowDifficulty = 5; // 預設讀取 inote_5，實際可依需求調整
+                    idbSet("simai_now_difficulty", nowDifficulty).then(() => {
+                        console.log("已儲存當前難度到 IndexedDB:", nowDifficulty);
+                    }).catch((error) => {
+                        console.error("儲存當前難度到 IndexedDB 失敗:", error);
+                    });
+                    changeDifficulty.value = nowDifficulty;
                     if (content["inote_5"]) {
                         console.log("成功讀取 inote_5，已載入編輯器");
                         console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
@@ -511,16 +576,66 @@ folderInput.addEventListener('click', (e) => {
                             console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
                         });
                         applyHighlight(content["inote_5"]);
-                        getres(content["inote_5"]);
                     } else {
                         console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
                     }
+                    getres(editorInput.value);
                     resize();
                 };
                 reader.readAsText(file);
             }
         }
     };
+});
+
+readMaidataButton.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = parseMaidata(e.target.result);
+                maidata = content;
+                idbSet('simai_maidata', content).then(() => {
+                    console.log("已儲存譜面內容到 IndexedDB");
+                }).catch((error) => {
+                    console.error("儲存譜面內容到 IndexedDB 失敗:", error);
+                });
+                console.log(content);
+                if (content["first"]) {
+                    console.log("成功讀取 first");
+                    musicDelay = (() => {
+                        const val = parseFloat(content["first"]);
+                        if (isNaN(val)) {
+                            console.warn("偏移值無效，請輸入數字");
+                            return 0;
+                        }
+                        return val;
+                    })();
+                    offsetInputDebounce();
+                }
+                if (content["inote_5"]) {
+                    console.log("成功讀取 inote_5，已載入編輯器");
+                    console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
+                    editorInput.value = content["inote_5"] || ""; // 預設讀取 inote_5，實際可依需求調整
+                    idbSet('simai_editor_content', editorInput.value).then(() => {
+                        console.log("已儲存編輯器內容到 IndexedDB");
+                    }).catch((error) => {
+                        console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
+                    });
+                    applyHighlight(content["inote_5"]);
+                    getres(content["inote_5"]);
+                } else {
+                    console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
+                }
+                resize();
+            };
+            reader.readAsText(file);
+        }
+    };
+    input.click();
 });
 
 hideEditorButton.addEventListener('click', () => {
@@ -541,6 +656,27 @@ hideEditorButton.addEventListener('click', () => {
     setEditorCss(nextStateVisible);
     resize();
     console.log(`編輯器已${nextStateVisible ? '顯示' : '隱藏'}`);
+});
+
+const difficultyInputDebounce = debounce(() => {
+    const difficulty = changeDifficulty.value;
+    idbSet('simai_now_difficulty', difficulty).then(() => {
+        console.log("已儲存難度到 IndexedDB:", difficulty);
+    }).catch((error) => {
+        console.error("儲存難度到 IndexedDB 失敗:", error);
+    });
+}, 500);
+
+changeDifficulty.addEventListener('change', (e) => {
+    console.log("難度變更為:", e.target.value);
+    const nowEditorContent = editorInput.value;
+    maidata['inote_' + nowDifficulty] = nowEditorContent;
+    nowDifficulty = e.target.value;
+    editorInput.value = maidata['inote_' + nowDifficulty] ?? "";
+    console.log(maidata, 'inote_' + nowDifficulty);
+    applyHighlight(editorInput.value);
+    inputDebounce();
+    difficultyInputDebounce();
 });
 
 hideUtilityButton.addEventListener('click', () => {
@@ -564,87 +700,66 @@ hideUtilityButton.addEventListener('click', () => {
 });
 
 quickGenerateButton.addEventListener('click', () => {
-    const sampleData = `(60){4},`;
-    editorInput.value += sampleData;
-    applyHighlight(editorInput.value);
-    inputDebounce();
+    popupWindow({
+        title: "快速生成",
+        content: `
+BPM: <input type="number" id="quickBpm" value="60" style="width: 80px;"><br>
+Beat: <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
+        buttons: [
+            {
+                text: "生成",
+                onClick: (closePopup, updateContent, updButtons, contentElem) => {
+                    const bpm = contentElem.querySelector('#quickBpm').value;
+                    const beat = contentElem.querySelector('#quickBeat').value;
+                    if (isNaN(parseFloat(bpm)) || isNaN(parseFloat(beat))) {
+                        popupWindow({ title: "請確保所有輸入都是有效的數字" });
+                        return;
+                    }
+                    const generated = `(${parseFloat(bpm)}){${parseFloat(beat)}}`;
+                    editorInput.value += generated;
+                    applyHighlight(editorInput.value);
+                    inputDebounce();
+                    closePopup();
+                }
+            }
+        ]
+    });
 });
 
 editorInput.addEventListener('scroll', () => {
     highlightLayer.scrollTop = editorInput.scrollTop;
     highlightLayer.scrollLeft = editorInput.scrollLeft;
 });
+const pairs = { '(': ')', '{': '}', '[': ']' };
+const closingChars = new Set(Object.values(pairs));
 
-// 自動配對括號與智能刪除
-editorInput.addEventListener('keydown', (e) => {
-    const pairs = { '(': ')', '{': '}', '[': ']' };
-    const open = e.key;
-    const close = pairs[open];
-    const value = editorInput.value;
-    const start = editorInput.selectionStart;
-    const end = editorInput.selectionEnd;
+// 括號補齊／跳過（beforeinput 在手機和桌機的文字輸入都可靠）
+editorInput.addEventListener('beforeinput', (e) => {
+    const char = e.data;
+    if (!char || char.length !== 1) return;
 
-    // 輸入開括號 → 補齊並將游標放入或包住選取文字
-    if (close) {
+    const { selectionStart: start, selectionEnd: end, value } = editorInput;
+
+    if (pairs[char]) { // 開括號：自動補齊並包住選取
         e.preventDefault();
-        const selected = value.slice(start, end);
-        const newVal = value.slice(0, start) + open + selected + close + value.slice(end);
-        editorInput.value = newVal;
-        if (start !== end) {
-            editorInput.selectionStart = start + 1;
-            editorInput.selectionEnd = end + 1;
-        } else {
-            editorInput.selectionStart = editorInput.selectionEnd = start + 1;
-        }
-        applyHighlight(editorInput.value);
-        inputDebounce();
-        return;
+        editorInput.setRangeText(char + value.slice(start, end) + pairs[char], start, end, 'end');
+        editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+        editorInput.dispatchEvent(new Event('input'));
+    } else if (closingChars.has(char) && start === end && value[start] === char) { // 閉括號：跳過
+        e.preventDefault();
+        editorInput.selectionStart = editorInput.selectionEnd = start + 1;
     }
+});
 
-    // 輸入閉括號時，若下一字元已為相同閉括號，則跳過（避免重複插入）
-    const closingKeys = Object.values(pairs);
-    if (closingKeys.includes(e.key)) {
-        if (start === end && value[start] === e.key) {
-            e.preventDefault();
-            editorInput.selectionStart = editorInput.selectionEnd = start + 1;
-        }
-        return;
-    }
-
-    // Backspace：若游標剛好在成對括號中（前一個為開、下一個為對應閉），則同時刪除兩個
-    if (e.key === 'Backspace') {
-        if (start === end && start > 0) {
-            const before = value[start - 1];
-            const after = value[start];
-            const matching = Object.entries(pairs).find(([o, c]) => o === before && c === after);
-            if (matching) {
-                e.preventDefault();
-                const newVal = value.slice(0, start - 1) + value.slice(start + 1);
-                editorInput.value = newVal;
-                editorInput.selectionStart = editorInput.selectionEnd = start - 1;
-                applyHighlight(editorInput.value);
-                inputDebounce();
-            }
-        }
-        return;
-    }
-
-    // Delete：若游標在開括號之前且後方為其閉括號，刪除整對（可視需求保留或移除）
-    if (e.key === 'Delete') {
-        if (start === end && start < value.length) {
-            const before = value[start - 1];
-            const after = value[start];
-            const matching = Object.entries(pairs).find(([o, c]) => o === before && c === after);
-            if (matching) {
-                e.preventDefault();
-                const newVal = value.slice(0, start - 1) + value.slice(start + 1);
-                editorInput.value = newVal;
-                editorInput.selectionStart = editorInput.selectionEnd = start - 1;
-                applyHighlight(editorInput.value);
-                inputDebounce();
-            }
-        }
-        return;
+// Backspace 成對刪除（keydown 在桌機鍵盤更可靠）
+editorInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Backspace') return;
+    const { selectionStart: start, selectionEnd: end, value } = editorInput;
+    if (start === end && start > 0 && pairs[value[start - 1]] === value[start]) {
+        e.preventDefault();
+        editorInput.setRangeText('', start - 1, start + 1, 'end');
+        editorInput.selectionStart = editorInput.selectionEnd = start - 1;
+        editorInput.dispatchEvent(new Event('input'));
     }
 });
 
@@ -680,11 +795,6 @@ const wSlideRatio = [
     571, 271, -5.2, -0.003,
     653, 313, -3.9, -0.003,
 ];
-
-{
-    let isVisible = localStorage.getItem('simai_hide_editor') !== 'true'; // 改名為 isVisible 較直覺
-    setEditorCss(isVisible);
-}
 
 const slideInputDebounce = debounce(() => {
     timeControlSliding = false;

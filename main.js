@@ -1,10 +1,11 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages } from './helper.js';
+import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast } from './helper.js';
 import { simaiDecode } from './decode.js';
 
 let images, readyBeat, maidata, nowDifficulty;
 
 window.popupWindow = popupWindow; // 暴露 popupWindow 讓其他模組也能使用
+window.simpleToast = simpleToast; // 暴露 simpleToast 讓其他模組也能使用
 
 popupWindow({
     title: "正在準備環境...",
@@ -13,25 +14,17 @@ popupWindow({
     unclosable: true,
     closeWhen: async (close, update, updButtons, setProgress) => {
         try {
-            // 1. 音效 (0% ~ 40%)
-            await audioManager.init((percent, key) => {
-                const totalPercent = percent * 0.4;
-                setProgress(totalPercent);
-                update(`正在載入音效: ${key} (${Math.round(percent)}%)`);
-            });
+            const step = (p, msg) => (setProgress(p), update(msg));
+            await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
 
-            // 2. 圖片 (40% ~ 90%)
-            images = await loadAllImages((percent, key) => {
-                const totalPercent = 40 + (percent * 0.5); // 從 40 開始，佔比 50
-                setProgress(totalPercent);
-                update(`正在載入素材: ${key} (${Math.round(percent)}%)`);
-            });
-            images = await loadAllImages();
+            images = await loadAllImages((pct, key) => step(40 + pct * 0.5, `正在載入素材: ${key} (${Math.round(pct)}%)`));
             readyBeat = await idbGet('simai_ready_beat') === 'true';
 
-            // 3. 從 IndexedDB 恢復使用者設定
-            update("正在恢復上次的編輯狀態...");
-            const [savedContent, savedMusicDelay, savedTimeControl, savedBgm, savedMaiData, savedDifficulty] = await Promise.all([
+            step(90, "正在恢復上次的編輯狀態...");
+            const [
+                savedContent, savedMusicDelay, savedTimeControl,
+                savedBgm, savedMaiData, savedDifficulty
+            ] = await Promise.all([
                 idbGet('simai_editor_content'),
                 idbGet('simai_musicDelay'),
                 idbGet('simai_timeControl'),
@@ -40,51 +33,18 @@ popupWindow({
                 idbGet('simai_now_difficulty')
             ]);
 
-            // 4. 套用恢復的資料
-            if (savedContent) {
-                editorInput.value = savedContent;
-
-                applyHighlight(savedContent);
-                getres(savedContent);
-            }
-            if (savedMusicDelay) {
-                musicDelay = parseFloat(savedMusicDelay);
-                offsetInput.value = musicDelay;
-                console.log("載入偏移值:", musicDelay);
-                offsetInputDebounce();
-            }
+            if (savedContent) { editorInput.value = savedContent; applyHighlight(savedContent); getres(savedContent); }
+            if (savedMusicDelay) { musicDelay = parseFloat(savedMusicDelay); offsetInput.value = musicDelay; offsetInputDebounce(); }
             if (savedTimeControl && !isNaN(savedTimeControl)) {
-                realTime = savedTimeControl;
-                slider.value = realTime;
-                globalTime = realTime - musicDelay;
+                realTime = savedTimeControl; slider.value = realTime; globalTime = realTime - musicDelay; update();
+            }
+            if (savedMaiData) maidata = savedMaiData;
+            if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
+            setEditorCss(await idbGet('simai_hide_editor') !== true);
+            if (savedBgm) { step(95, "正在還原背景音樂..."); await audioManager.setBackgroundMusic(savedBgm); endTime = Math.max(endTime, audioManager.getBGMDuration() + 1); }
 
-                console.log("載入時間控制值:", globalTime);
-                update();
-            }
-            if (savedMaiData) {
-                maidata = savedMaiData;
-            }
-            if (savedDifficulty) {
-                nowDifficulty = savedDifficulty;
-                changeDifficulty.value = nowDifficulty;
-            }
-            {
-                let isVisible = await idbGet('simai_hide_editor') !== true; // 改名為 isVisible 較直覺
-                setEditorCss(isVisible);
-            }
-            if (savedBgm) {
-                update("正在還原背景音樂...");
-                await audioManager.setBackgroundMusic(savedBgm);
-                endTime = Math.max(endTime, audioManager.getBGMDuration() + 1);
-            }
-
-            setProgress(100);
-
-            // 5. 初始化畫面
-            update("完成！正在渲染畫面...");
-            resize();
-            close(); // 立即關閉載入提示
-
+            step(100, "完成！正在渲染畫面...");
+            resize(); close();
         } catch (e) {
             console.error("初始化失敗:", e);
             update(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
@@ -209,6 +169,7 @@ const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
 const readMaidataButton = getButton("readMaidata", "utility");
+const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const folderInput = getButton("readFolder", "utility");
 
@@ -219,6 +180,7 @@ const speed = 6.5;
 const touchSpeed = 6.5;
 const effectDecayTime = 0.4;
 const distance = 0.25;
+let settings = {};
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
 let secondCtx = null;
@@ -406,6 +368,7 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
             ]
         });
 });
+
 const getres = ((simaiDataValue) => {
     const result = (() => {
         try {
@@ -472,6 +435,28 @@ const setEditorCss = (visible = null) => {
     highlightLayer.style.display = displayMode;
     editorContainer.style.display = displayMode;
 };
+
+settingsButton.addEventListener('click', () => {
+    popupWindow({
+        title: "設定",
+        customContent: (() => {
+            const container = document.createElement('div');
+            container.innerText = "這裡未來會放一些設定選項，目前先暫時空著。";
+            return container;
+        })(),
+        buttons: [{
+            text: "套用",
+        },
+        {
+            text: "確認",
+            hideOnClick: true
+        },
+        {
+            text: "關閉",
+            hideOnClick: true
+        }]
+    })
+});
 
 readyBeatCheckbox.checked = readyBeat;
 
@@ -1016,6 +1001,7 @@ let playClock = [false, false, false, false];
 function draw() {
     // 1. 清除畫布
     ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
+    if (!images) return; // 圖片尚未載入完成前不繪製
     //drawBackground(ctx);
 
     if (showSensor) for (let key of activePointers.keys()) {
@@ -1177,6 +1163,11 @@ function simpleEndEffect(t) {
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
 }
+function drawBackground() {
+    const img = images.sensor;
+    if (imgNotExists(img)) return;
+    ctx.drawImage(img, 1.07 * -scaleBase / 2, 1.07 * (-scaleBase / 2 + 1.5), 1.07 * scaleBase, 1.07 * scaleBase);
+}
 function drawTap(s) {
     const { time: noteTime, pos, isBreak, isDouble } = s;
     const noteT = (noteTime - globalTime);
@@ -1196,10 +1187,17 @@ function drawTap(s) {
         simpleEndEffect(noteT);
     }
     else {
+
         const displayT = Math.max(distance, t);
         const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
         const size = noteBaseSize * currentScale;
 
+        let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        ctx.rotate(posInfo.rot);
+        drawNoteArc(arcimg, 0, 0, displayT * innerCirleBase * 2.25);
+        ctx.restore();
+
+        ctx.save();
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         /*ctx.font = `3px Arial`;
         ctx.fillText(t, 10, 10);*/
@@ -1207,6 +1205,9 @@ function drawTap(s) {
         ctx.drawImage(img, -size / 2, -size / 2, size, size);
     }
     ctx.restore();
+}
+function drawNoteArc(img, x, y, size) {
+    ctx.drawImage(img, -size / 2 + x, -size / 2 + y, size + x, size + y);
 }
 function drawStar(s) {
     const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
@@ -1233,6 +1234,13 @@ function drawStar(s) {
         const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
         const size = noteBaseSize * currentScale;
 
+        ctx.save();
+        let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
+        ctx.rotate(posInfo.rot);
+        drawNoteArc(arcimg, 0, 0, displayT * innerCirleBase * 2.25);
+        ctx.restore();
+
+        ctx.save();
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         ctx.rotate(posInfo.rot);
         ctx.drawImage(img, -size / 2, -size / 2, size, size);
@@ -1256,16 +1264,36 @@ function drawHold(s) {
                     holdDuration * 0.9 * (speed * 0.8833 + 0.8167))));
 
     const posInfo = noteRefPos[pos - 1];
+
     ctx.save();
     if (-noteT >= holdDuration) {
         ctx.translate(posInfo.x, posInfo.y);
         simpleEndEffect(holdDuration + noteT);
     }
     else {
+        const noteT1 = (noteTime - globalTime + holdDuration);
+        const progress1 = noteT1 * (speed * 0.8833 + 0.8167);
+        const t1 = 1 - timeFunction(progress1);
+
         const displayT = Math.min(1, Math.max(distance, t));
         const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
         const size = noteBaseSize * currentScale;
 
+        ctx.save();
+        let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        ctx.rotate(posInfo.rot);
+        drawNoteArc(arcimg, 0, 0, displayT * innerCirleBase * 2.25);
+        ctx.restore();
+
+        if (t1 > distance) {
+            ctx.save();
+            let endimg = images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
+            ctx.translate(posInfo.x * t1, posInfo.y * t1);
+            ctx.drawImage(endimg, -size / 2 * 0.65, -size / 2 * 0.65, size * 0.65, size * 0.65);
+            ctx.restore();
+        }
+
+        ctx.save();
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         ctx.rotate(posInfo.rot);
         ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
@@ -1403,6 +1431,12 @@ function drawSlide(s) {
     const p = path || generatePath(pos, slideEnd);
     if (p.totalLength < 1e-4) return;
     ctx.save();
+    /*drawPathOnCanvas(ctx, p);
+    ctx.strokeStyle = '#0000ff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();*/
 
     const isTaped = -noteT > 0;
     ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - distance) / (1 - distance));
@@ -1410,12 +1444,6 @@ function drawSlide(s) {
     if (-noteT > slideDelay) {
         slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
     }
-    /*ctx.beginPath();
-    //drawPathOnCanvas(ctx, p);
-    ctx.closePath();
-    ctx.strokeStyle = '#0000ff';
-    ctx.lineWidth = 1;
-    ctx.stroke();*/
 
     drawPathWithArrows(ctx, p, slideProgress, imgs, s.slideType === "w");
     const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
@@ -1474,6 +1502,7 @@ function drawPathWithArrows(ctx, recorder, starProgress, imgs, typew, s = { spac
     ctx.restore();
 }
 function drawPathOnCanvas(ctx, recorder) {
+    ctx.beginPath();
     if (recorder.segments.length === 0) return;
 
     const start = recorder.segments[0].type === 'line'
@@ -1488,6 +1517,7 @@ function drawPathOnCanvas(ctx, recorder) {
             ctx.arc(seg.cx, seg.cy, seg.r, seg.startAngle, seg.endAngle, seg.diff < 0);
         }
     }
+    ctx.closePath();
 }
 function generatePath(startPos, endPos) {
     console.warn("path missing, using straight line as fallback");

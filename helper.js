@@ -760,7 +760,7 @@ export function getHighlight(text) {
     return html + (text.endsWith('\n') ? ' ' : '');
 }
 export function parseMaidata(raw) {
-    if (!raw){console.warn("empty rawdata!"); return {}};
+    if (!raw) { console.warn("empty rawdata!"); return {} };
     console.log("Parsing Maidata...");
     const maidata = {};
     raw.split("&").forEach(part => {
@@ -787,6 +787,7 @@ export function parseMaidata(raw) {
 export function popupWindow({
     title = "",
     content = "",
+    customContent = null,   // 可選：自訂內容元素，若提供則忽略 content 參數
     /**
      * 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: (closePopup, updateContent, updButtons, contentElem) => {}, `hideOnClick`: true/false }
      */
@@ -979,7 +980,22 @@ export function popupWindow({
     }
     popup.appendChild(titleElem);
     popup.appendChild(progressContainer);
-    popup.appendChild(contentElem);
+    if (customContent) {
+        if (customContent instanceof Node) {
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = `margin-top: 10px; width: 100%; height: fit-content; box-shadow: 0 0 5px black inset; border-radius: 3px; padding: 10px; background: #151515; box-sizing: border-box;`;
+            wrapper.appendChild(customContent);
+            popup.appendChild(wrapper);
+        } else if (typeof customContent === 'string') {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = customContent;
+            popup.appendChild(wrapper);
+        } else {
+            console.warn("popupWindow: customContent is not a Node or string", customContent);
+        }
+    } else if (content !== "") {
+        popup.appendChild(contentElem);
+    }
     popup.appendChild(btnContainer);
     backdrop.appendChild(popup);
 
@@ -1028,12 +1044,107 @@ export function popupWindow({
         closeWhen(closePopup, updateContent, updButtons, setProgress);
     }
 }
+/**
+ * 簡易提示小標籤 (支援自動堆疊)
+ */
+export function simpleToast({
+    content = "",
+    timeout = 2000,
+    type = "info"
+} = {}) {
+    let container = document.getElementById('hint-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'hint-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 0px;
+            left: 0px;
+            padding: 10px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+            overflow-y: auto;
+            max-height: 100vh;
+        `;
+        document.body.appendChild(container);
+    }
+
+    const popup = document.createElement('div');
+    const color = { info: '#00bbff', error: '#ff4444', success: '#00ffcc' }[type] || '#404040';
+
+    // 核心樣式：預設設定一個足夠大的 max-height 以便動畫計算
+    popup.style.cssText = `
+        background: #202020;
+        color: white;
+        padding: 10px 15px;
+        border-left: 4px solid ${color};
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        font-size: 13px;
+        pointer-events: auto;
+        width: fit-content;
+        max-width: 300px;
+        margin-bottom: 10px; /* 改用 margin 代替 gap，方便縮減空間 */
+        overflow: hidden;
+        height: 30px; 
+        max-height: 100px; 
+        flex-shrink: 0;
+        opacity: 1;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 平滑過渡 */
+    `;
+    popup.innerHTML = content;
+    container.appendChild(popup);
+
+    // --- 1. 出現動畫 (使用 WAAPI) ---
+    popup.animate([
+        { transform: 'translateX(-40px)', opacity: 0 },
+        { transform: 'translateX(0)', opacity: 1 }
+    ], { duration: 300, easing: 'cubic-bezier(0.58, 0.18, 0.34, 1.41)' });
+
+    // --- 2. 移除邏輯 ---
+    let isRemoving = false;
+    const removePopup = () => {
+        if (isRemoving) return;
+        isRemoving = true;
+
+        // 【關鍵】同時將物理尺寸縮減至 0
+        // 這樣 transition 就會接手讓下方的元素慢慢滑上來
+        popup.style.maxHeight = '0px';
+        popup.style.marginTop = '0px';
+        popup.style.marginBottom = '0px';
+        popup.style.paddingTop = '0px';
+        popup.style.paddingBottom = '0px';
+        popup.style.opacity = '0';
+        popup.style.transform = 'translateX(-40px)';
+        popup.style.pointerEvents = 'none';
+        popup.style.zIndex -= 1;
+
+        // 等 transition 結束後再真正移除 DOM
+        popup.addEventListener('transitionend', () => {
+            if (container.contains(popup)) container.removeChild(popup);
+            if (container.childNodes.length === 0 && document.body.contains(container)) {
+                document.body.removeChild(container);
+            }
+        }, { once: true });
+    };
+
+    const timer = setTimeout(removePopup, timeout);
+    popup.onclick = () => {
+        clearTimeout(timer);
+        removePopup();
+    };
+}
 const baseURL = './Skin/', baseImageKeys = [
+    'sensor',
     'tap', 'tap_break', 'tap_each',
+    'NormalArc', 'BreakArc', 'EachArc',
     'hold', 'hold_break', 'hold_each',
+    'Hold_End','Hold_Break_End','Hold_Each_End',
     'touch', 'touch_each', 'touch_point', 'touch_point_each',
     'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
-    'slide', 'slide_each', 'slide_break',
+    'slide', 'slide_each', 'slide_break','SlideArc',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
 ];
 /**

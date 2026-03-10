@@ -77,11 +77,11 @@
         position: absolute;
         width: 100%;
         height: 100%;
-        top: 0px;
+        top: -3px;
         left: 0px;
         object-fit: contain;
         opacity: 0.8;
-        scale: 1;
+        scale: 1.03;
     }
 
     #topUtilityBtns {
@@ -231,7 +231,8 @@
 </style>
 
 <body>
-    <!-- <img src="./image.png" alt="refimg" class="a"> -->
+    <!-- <img src="./image copy.png" alt="refimg" class="a"> -->
+    
     <div id="canvasContainer">
         <img src="./Skin/outline.png" alt="">
         <canvas id="main"></canvas>
@@ -271,6 +272,7 @@
         <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
         <div class="utilityButton noFixedsize" data-buttonAction="readyBeat">預備拍<input type="checkbox" name="d"></div>
         <div class="utilityButton" data-buttonAction="manageResources">資源管理</div>
+        <div class="utilityButton" data-buttonAction="settings">設定</div>
     </div>
 </body>
 <script type="module" src="indexDB.js"></script>

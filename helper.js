@@ -229,7 +229,7 @@ export class PathRecorder {
         this.lineTo(x, y);
     }
 }
-export function drawArrowShape(ctx) {
+/*export function drawArrowShape(ctx) {
     const size = 2.5; // 箭頭大小
     ctx.beginPath();
     ctx.moveTo(-size, -size); // 左後
@@ -238,7 +238,7 @@ export function drawArrowShape(ctx) {
     ctx.lineTo(-size * 0.6, 0); // 往內凹一點點，看起來更像箭頭
     ctx.closePath();
     ctx.fill();
-}
+}*/
 export const touchRefPos = {
     A: Array.from({ length: 8 }, (_, i) => {
         const a = (i - 1.5) * Math.PI / 4;
@@ -993,7 +993,7 @@ export function popupWindow({
         } else {
             console.warn("popupWindow: customContent is not a Node or string", customContent);
         }
-    } else if (content !== "") {
+    } else {
         popup.appendChild(contentElem);
     }
     popup.appendChild(btnContainer);
@@ -1216,4 +1216,15 @@ async function getImgWithCache(url, key) {
         img.onload = () => resolve(img);
         img.src = URL.createObjectURL(blob);
     });
+}
+export function generatePath(startPos, endPos) {
+    console.warn("path missing, using straight line as fallback");
+    const recorder = new PathRecorder();
+    const startInfo = noteRefPos[startPos - 1];
+    const endInfo = noteRefPos[endPos - 1];
+
+    recorder.moveTo(startInfo.x, startInfo.y);
+    recorder.lineTo(endInfo.x, endInfo.y);
+
+    return recorder;
 }

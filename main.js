@@ -1,5 +1,5 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast } from './helper.js';
+import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath } from './helper.js';
 import { simaiDecode } from './decode.js';
 
 let images, readyBeat, maidata, nowDifficulty;
@@ -42,7 +42,6 @@ popupWindow({
             if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
             setEditorCss(await idbGet('simai_hide_editor') !== true);
             if (savedBgm) { step(95, "正在還原背景音樂..."); await audioManager.setBackgroundMusic(savedBgm); endTime = Math.max(endTime, audioManager.getBGMDuration() + 1); }
-
             step(100, "完成！正在渲染畫面...");
             resize(); close();
         } catch (e) {
@@ -163,7 +162,7 @@ const slider = document.getElementById('timeControl');
 const playButton = getButton("play/stop", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
-const hideUtilityButton = getButton("hide/show", "utility");
+const hideUtilityButton = document.querySelector("#utilityContainer .closeBtn");
 const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
 const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
@@ -187,13 +186,14 @@ let secondCtx = null;
 let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
 let showSensor = false;
+let keepRenderingWhilePause = true;
 
 let clockBpm = 60;
 
 // 1. 選取狀態儲存
 let activePointers = new Map();
 
-const editorContainer = document.querySelector('.editor-container');
+const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 let notes = [], endTime = 1, musicDelay = 1e-4, chartBaseOffset = false;
@@ -523,6 +523,8 @@ folderInput.addEventListener('click', (e) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     editorInput.value = "";
+                    offsetInput.value = 0;
+                    musicDelay = 0;
                     applyHighlight("");
                     const content = parseMaidata(e.target.result);
                     maidata = content;
@@ -666,22 +668,19 @@ changeDifficulty.addEventListener('change', (e) => {
 
 hideUtilityButton.addEventListener('click', () => {
     const utilityBtns = document.getElementById('topUtilityBtns');
+    const utilityContainer = document.getElementById('utilityContainer');
     const isHidden = hideUtilityButton.dataset.hidden === 'true';
     if (isHidden) {
-        utilityBtns.style.overflowX = 'auto';
-        hideUtilityButton.classList.remove('expanded');
+        utilityBtns.style.display = 'flex';
         editorContainer.classList.remove('expanded');
+        utilityContainer.classList.remove('expanded');
     } else {
-        utilityBtns.style.overflowX = 'hidden';
-        utilityBtns.scrollLeft = 0; // 隱藏時強制捲回最左，避免下次展開時看到中間或右邊的按鈕
-        hideUtilityButton.classList.add('expanded');
+        utilityBtns.style.display = 'none';
         editorContainer.classList.add('expanded');
+        utilityContainer.classList.add('expanded');
     }
     hideUtilityButton.innerText = isHidden ? '▲' : '▼';
     hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
-    utilityBtns.style.padding = isHidden ? '5px' : '0px 5px';
-    utilityBtns.style.height = isHidden ? '30px' : 'var(--utility-hidden-height)';
-    editorContainer.style.top = isHidden ? '40px' : 'var(--utility-hidden-height)';
 });
 
 quickGenerateButton.addEventListener('click', () => {
@@ -813,6 +812,8 @@ slider.addEventListener('input', () => {
 
 let bgmUpdateTimer = null;
 
+if (keepRenderingWhilePause) requestAnimationFrame(update);
+
 playButton.addEventListener('click', () => {
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
@@ -829,7 +830,7 @@ playButton.addEventListener('click', () => {
         // --- 從當前的 realTime 同步啟動 BGM ---
         audioManager.playBGM(realTime);
 
-        requestAnimationFrame(update);
+        if (!keepRenderingWhilePause) requestAnimationFrame(update);
     }
 });
 
@@ -887,15 +888,19 @@ function update(timestamp) {
         }
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
         slider.value = realTime;
-        draw();
+        draw(dt);
         if (globalTime >= endTime) {
             playButton.dataset.playing = 'false';
             globalTime = endTime;
             slider.value = realTime; // 保持 slider 值與 realTime 一致
         } else {
-            requestAnimationFrame(update);
+            if (!keepRenderingWhilePause) requestAnimationFrame(update);
         }
     }
+    if (keepRenderingWhilePause) {
+        requestAnimationFrame(update);
+        draw(dt);
+    };
 }
 
 function resize() {
@@ -998,19 +1003,19 @@ window.addEventListener('resize', resize);
 resize();
 
 let playClock = [false, false, false, false];
-function draw() {
+function draw(dt = 0) {
     // 1. 清除畫布
     ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
     if (!images) return; // 圖片尚未載入完成前不繪製
-    //drawBackground(ctx);
-
-    if (showSensor) for (let key of activePointers.keys()) {
-        if (typeof key === 'string' && key.startsWith('sim_')) {
-            activePointers.delete(key);
-        }
-    }
 
     ctx.save();
+    ctx.font = "2px Arial";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(`FPS: ${dt === 0 ? 'N/A' : (1 / dt).toFixed(2)}`, -scaleBase / 2, -scaleBase / 2);
+    ctx.fillText(`Time: ${globalTime.toFixed(2)}s`, -scaleBase / 2, -scaleBase / 2 + 4);
+
     ctx.beginPath();
     ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
     ctx.lineWidth = 0.5;
@@ -1059,24 +1064,6 @@ function draw() {
         const isVisible = t >= -1 && -noteT <= skipT + effectDecayTime;
 
         if (playing && !timeControlSliding) {
-            if (showSensor) {
-                const hitWindow = 0.03; // 瞬間音符亮起的持續時間 (秒)
-                const isInsideAction = (noteT <= 0 && -noteT < hitWindow); // 剛擊中
-                const isHolding = (note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration); // 長按中
-
-                if (isInsideAction || isHolding) {
-                    let sensorId = "";
-                    if (note.type === "touch") {
-                        sensorId = note.touchPos === "C" ? "C1" : `${note.touchPos}${note.pos}`;
-                    } else {
-                        // Tap, Hold, Star 預設對應外圈 A 區
-                        sensorId = "A" + note.pos;
-                    }
-                    // 使用 "sim_" 前綴避免與真實 PointerID (數字) 衝突
-                    activePointers.set(`sim_${note.pos}_${note.time}`, sensorId);
-                }
-            }
-
             // A. 處理 Riser (Touch Hold 長音)
             const noteId = `riser_${note.pos}_${note.time}`;
             const isInsideHold = note.type === "touch" && note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration;
@@ -1163,11 +1150,6 @@ function simpleEndEffect(t) {
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
 }
-function drawBackground() {
-    const img = images.sensor;
-    if (imgNotExists(img)) return;
-    ctx.drawImage(img, 1.07 * -scaleBase / 2, 1.07 * (-scaleBase / 2 + 1.5), 1.07 * scaleBase, 1.07 * scaleBase);
-}
 function drawTap(s) {
     const { time: noteTime, pos, isBreak, isDouble } = s;
     const noteT = (noteTime - globalTime);
@@ -1187,14 +1169,13 @@ function drawTap(s) {
         simpleEndEffect(noteT);
     }
     else {
-
         const displayT = Math.max(distance, t);
         const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
         const size = noteBaseSize * currentScale;
 
         let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
         ctx.rotate(posInfo.rot);
-        drawNoteArc(arcimg, 0, 0, displayT * innerCirleBase * 2.25);
+        drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
         ctx.restore();
 
         ctx.save();
@@ -1202,12 +1183,12 @@ function drawTap(s) {
         /*ctx.font = `3px Arial`;
         ctx.fillText(t, 10, 10);*/
         ctx.rotate(posInfo.rot);
-        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+        drawImgAtcenter(img, size, 0, 0);
     }
     ctx.restore();
 }
-function drawNoteArc(img, x, y, size) {
-    ctx.drawImage(img, -size / 2 + x, -size / 2 + y, size + x, size + y);
+function drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
+    ctx.drawImage(img, -size / 2 * imgWidthMul + offsetX, -size / 2 * imgHeightMul + offsetY, size * imgWidthMul, size * imgHeightMul);
 }
 function drawStar(s) {
     const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
@@ -1237,13 +1218,13 @@ function drawStar(s) {
         ctx.save();
         let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
         ctx.rotate(posInfo.rot);
-        drawNoteArc(arcimg, 0, 0, displayT * innerCirleBase * 2.25);
+        drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
         ctx.restore();
 
         ctx.save();
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         ctx.rotate(posInfo.rot);
-        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+        drawImgAtcenter(img, size, 0, 0);
     }
     ctx.restore();
 }
@@ -1282,14 +1263,14 @@ function drawHold(s) {
         ctx.save();
         let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
         ctx.rotate(posInfo.rot);
-        drawNoteArc(arcimg, 0, 0, displayT * innerCirleBase * 2.25);
+        drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
         ctx.restore();
 
         if (t1 > distance) {
             ctx.save();
             let endimg = images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
             ctx.translate(posInfo.x * t1, posInfo.y * t1);
-            ctx.drawImage(endimg, -size / 2 * 0.65, -size / 2 * 0.65, size * 0.65, size * 0.65);
+            drawImgAtcenter(endimg, size * 0.65, 0, 0);
             ctx.restore();
         }
 
@@ -1343,7 +1324,8 @@ function drawTouch(s) {
             ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
             ctx.closePath();
             ctx.clip();
-            ctx.drawImage(touchBorder, -size * 1.3, -size * 1.3, size * 2.6, size * 2.6);
+            //ctx.drawImage(touchBorder, -size * 1.3, -size * 1.3, size * 2.6, size * 2.6);
+            drawImgAtcenter(touchBorder, size * 2.6, 0, 0);
             ctx.restore();
             ctx.save();
             ctx.translate(posInfo.x, posInfo.y);
@@ -1351,10 +1333,12 @@ function drawTouch(s) {
             ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
             for (let i = 0; i < 4; i++) {
                 ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                //drawImgAtcenter(imgs[i], size * 1.365, 0, size * 0.15 * (a - 1.5));
                 ctx.rotate(Math.PI / 2);
             }
             ctx.globalAlpha = 1;
-            ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+            //ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+            drawImgAtcenter(touchPoint, size * 0.4, 0, 0);
         }
         ctx.restore();
         return;
@@ -1391,7 +1375,8 @@ function drawTouch(s) {
             ctx.rotate(Math.PI / 2);
         }
         ctx.globalAlpha = 1;
-        ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+        //ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+        drawImgAtcenter(touchPoint, size * 0.4, 0, 0);
     }
     ctx.restore();
 }
@@ -1457,12 +1442,12 @@ function drawSlide(s) {
         ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
         ctx.translate(x, y);
         ctx.rotate(rot + Math.PI * 0.5);
-        ctx.drawImage(starImg, -noteBaseSize * 0.5 * sz, -noteBaseSize * 0.5 * sz, noteBaseSize * sz, noteBaseSize * sz);
+        //ctx.drawImage(starImg, -noteBaseSize * 0.5 * sz, -noteBaseSize * 0.5 * sz, noteBaseSize * sz, noteBaseSize * sz);
+        drawImgAtcenter(starImg, noteBaseSize * sz * 1.45, 0, 0);
     }
 
     ctx.restore();
 }
-
 function drawPathWithArrows(ctx, recorder, starProgress, imgs, typew, s = { spacing: 4.36 }) {
     if (recorder.totalLength === 0 || !imgs || imgs.length === 0) return;
     // 將參數 t 改名為 starProgress 以避免與內部循環的比例變數 t 衝突
@@ -1495,38 +1480,10 @@ function drawPathWithArrows(ctx, recorder, starProgress, imgs, typew, s = { spac
         // 繪製箭頭 (這裡的 0.9 是你的縮放倍率)
         const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
         const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
-        ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        //ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        drawImgAtcenter(img, 1, 0, 0, dw, dh);
         ctx.restore();
     }
 
     ctx.restore();
-}
-function drawPathOnCanvas(ctx, recorder) {
-    ctx.beginPath();
-    if (recorder.segments.length === 0) return;
-
-    const start = recorder.segments[0].type === 'line'
-        ? recorder.segments[0].start
-        : { x: recorder.segments[0].cx + recorder.segments[0].r * Math.cos(recorder.segments[0].startAngle), y: recorder.segments[0].cy + recorder.segments[0].r * Math.sin(recorder.segments[0].startAngle) };
-
-    ctx.moveTo(start.x, start.y);
-    for (const seg of recorder.segments) {
-        if (seg.type === 'line') {
-            ctx.lineTo(seg.end.x, seg.end.y);
-        } else if (seg.type === 'arc') {
-            ctx.arc(seg.cx, seg.cy, seg.r, seg.startAngle, seg.endAngle, seg.diff < 0);
-        }
-    }
-    ctx.closePath();
-}
-function generatePath(startPos, endPos) {
-    console.warn("path missing, using straight line as fallback");
-    const recorder = new PathRecorder();
-    const startInfo = noteRefPos[startPos - 1];
-    const endInfo = noteRefPos[endPos - 1];
-
-    recorder.moveTo(startInfo.x, startInfo.y);
-    recorder.lineTo(endInfo.x, endInfo.y);
-
-    return recorder;
 }

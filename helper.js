@@ -308,11 +308,13 @@ class AudioManager {
         this.bgmGainNode.connect(this.masterGain);
         this.bgmVolume = 0.8;
         this.bgmGainNode.gain.value = this.bgmVolume;
+        this.bgmStartTime = 0; // 紀錄是在全域時間第幾秒按下播放的
+        this.bgmOffset = 0;    // 紀錄是從歌曲的第幾秒開始播的
 
         this.sfxGainNode = this.ctx.createGain();
         this.sfxGainNode.connect(this.masterGain);
-        this.sfxVolume = 0.2;
-        this.sfxGainNode.gain.value = this.sfxVolume;
+        this.sfxMasterVolume = 0.5;
+        this.sfxGainNode.gain.value = this.sfxMasterVolume;
 
         this.soundFiles = {
             'clock': './Sounds/clock.wav',
@@ -327,6 +329,19 @@ class AudioManager {
             'hanabi': './Sounds/hanabi.wav',
             'touchHold_riser': './Sounds/touchHold_riser.wav'
         };
+
+        this.sfxVolumes = {
+            'clock': 0.8,
+            'answer': 1,
+            'judge': 0.4,
+            'judge_break': 0.4,
+            'judge_break_slide': 0.4,
+            'break': 0.4,
+            'slide': 0.4,
+            'break_slide_start': 0.4,
+            'touch': 0.4,
+            'hanabi': 0.6,
+        }
 
         this.activeLongSounds = new Map();
         this.loopPoints = {
@@ -375,25 +390,20 @@ class AudioManager {
  */
     playBGM(startTime = 0) {
         if (!this.bgmBuffer) return;
-
-        // 1. 如果已經有在播放，先停止舊的
         this.stopBGM();
 
-        // 2. 建立新的 Source
         this.bgmSource = this.ctx.createBufferSource();
         this.bgmSource.buffer = this.bgmBuffer;
         this.bgmSource.connect(this.bgmGainNode);
 
-        // 3. 計算播放位置
-        // 如果 startTime 超過音樂長度，則不播放
-        if (startTime >= this.bgmBuffer.duration) return;
-
-        // 解鎖音訊上下文
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        // 4. 開始播放：start(何時播, 從哪裡播)
-        this.bgmSource.start(0, Math.max(0, startTime));
-        //console.log(`[Audio] BGM 開始播放於: ${startTime}s`);
+        // --- 關鍵修改：紀錄播放時間點 ---
+        this.bgmStartTime = this.ctx.currentTime;
+        this.bgmOffset = Math.max(0, startTime);
+        // ----------------------------
+
+        this.bgmSource.start(0, this.bgmOffset);
     }
 
     /**
@@ -415,8 +425,10 @@ class AudioManager {
  */
     getBGMTime() {
         if (!this.bgmSource || this.ctx.state === 'suspended') return null;
-        // 公式：(現在 Context 時間 - 按下播放的時間) + 起始偏移量
-        return (this.ctx.currentTime - this.bgmStartTime) + this.bgmOffset;
+
+        // 目前時間 = (全域時鐘 - 按下播放時的全域時間) + 起始偏移量
+        const playedDuration = this.ctx.currentTime - this.bgmStartTime;
+        return playedDuration + this.bgmOffset;
     }
 
     getBGMDuration() {
@@ -433,9 +445,9 @@ class AudioManager {
     }
 
     setSFXVolume(value) {
-        this.sfxVolume = Math.max(0, Math.min(1, value));
+        this.sfxMasterVolume = Math.max(0, Math.min(1, value));
         // 使用 exponentialRamp 讓音量調整聽起來更自然，且防止爆音
-        this.sfxGainNode.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
+        this.sfxGainNode.gain.setTargetAtTime(this.sfxMasterVolume, this.ctx.currentTime, 0.05);
     }
 
     /**
@@ -479,7 +491,7 @@ class AudioManager {
      */
     queueSoundSingle(sample, targetTime) {
         //const now = performance.now();
-        this._checkAndPush(sample, targetTime, true);
+        this._checkAndPush(sample, targetTime, true, this.sfxVolumes[sample]);
     }
     queueSound(note, targetTime) {
         const now = performance.now();
@@ -496,16 +508,16 @@ class AudioManager {
             case "tap":
                 if (note.isBreak) {
                     key = "judge_break"
-                    this._checkAndPush("break", targetTime, true);
+                    this._checkAndPush("break", targetTime, true, this.sfxVolumes["break"]);
                 };
-                this._checkAndPush("answer", targetTime, false);
+                this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
                 break;
             case "hold":
-                this._checkAndPush("answer", targetTime, false);
+                this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
                 if (!note.startEffectPlayed) {
                     if (note.isBreak) {
                         key = "judge_break";
-                        this._checkAndPush("break", targetTime, true);
+                        this._checkAndPush("break", targetTime, true, this.sfxVolumes["break"]);
                     } else {
                         key = "judge";
                     }
@@ -516,7 +528,7 @@ class AudioManager {
             case "touch":
                 key = "touch";
                 isMono = false;
-                this._checkAndPush("answer", targetTime, false);
+                this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
                 if (note.isHanabi) {
                     if (note.holdDuration >= 0) {
                         if (note.startEffectPlayed) {
@@ -532,7 +544,7 @@ class AudioManager {
                 break;
             case "slide":
                 if (!note.startEffectPlayed && note.isBreak) {
-                    this._checkAndPush("break_slide", targetTime, true);
+                    this._checkAndPush("break_slide", targetTime, true, this.sfxVolumes["break_slide"]);
                     key = "break_slide_start";
                     isMono = false;
                 } else {
@@ -548,13 +560,13 @@ class AudioManager {
             default: return;
         }
 
-        this._checkAndPush(key, targetTime, isMono);
+        this._checkAndPush(key, targetTime, isMono, this.sfxVolumes[key]);
     }
 
     /**
      * 內部檢查冷卻時間並推入佇列
      */
-    _checkAndPush(key, targetTime, isMono) {
+    _checkAndPush(key, targetTime, isMono, volume = 1) {
         const now = performance.now();
         const lastTime = this.lastQueuedTimes.get(key) || 0;
 
@@ -562,7 +574,7 @@ class AudioManager {
         if (now - lastTime < this.MIN_INTERVAL) return;
 
         this.lastQueuedTimes.set(key, now);
-        this.soundQueue.push({ key, targetTime, isMono });
+        this.soundQueue.push({ key, targetTime, isMono, volume });
 
         // 確保佇列按時間順序排列 (雖然 push 通常就是順序的)
         this.soundQueue.sort((a, b) => a.targetTime - b.targetTime);
@@ -576,22 +588,22 @@ class AudioManager {
     update(globalTime) {
         // 只要佇列首位時間到了，就播放並移出佇列
         while (this.soundQueue.length > 0 && globalTime >= this.soundQueue[0].targetTime) {
-            const { key, isMono } = this.soundQueue.shift();
-            this.play(key, isMono);
+            const { key, isMono, volume } = this.soundQueue.shift();
+            this.play(key, isMono, volume);
         }
     }
 
     /**
      * 執行最終播放 (Web Audio API 核心)
      */
-    play(key, isMono = false) {
+    play(key, isMono = false, volume = 1) {
         const buffer = this.bufferMap.get(key);
         if (!buffer) return;
 
-        // 解鎖 iOS/Chrome 的音訊限制 (如果 ctx 處於 suspended 狀態)
+        // 解鎖音訊限制
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        // 如果是 Mono 模式，中斷該類型上一個正在播放的聲音
+        // Mono 模式處理
         if (isMono && this.playingSources.has(key)) {
             try {
                 this.playingSources.get(key).stop();
@@ -600,13 +612,21 @@ class AudioManager {
 
         const source = this.ctx.createBufferSource();
         source.buffer = buffer;
-        source.connect(this.sfxGainNode);
+
+        // --- 關鍵修正：建立一個 GainNode 來控制這次播放的音量 ---
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.value = volume; // 設定傳入的音量 (0.0 到 1.0)
+
+        // 連接節點：Source -> GainNode -> sfxGainNode (原本的總音效控制)
+        source.connect(gainNode);
+        gainNode.connect(this.sfxGainNode);
+        // ---------------------------------------------------
 
         if (isMono) {
             this.playingSources.set(key, source);
         }
 
-        source.start(0); // 立即發聲
+        source.start(0);
     }
     /**
          * @param {string} id 唯一標籤 (建議用 note_pos_time)
@@ -1141,10 +1161,10 @@ const baseURL = './Skin/', baseImageKeys = [
     'tap', 'tap_break', 'tap_each',
     'NormalArc', 'BreakArc', 'EachArc',
     'hold', 'hold_break', 'hold_each',
-    'Hold_End','Hold_Break_End','Hold_Each_End',
+    'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
     'touch', 'touch_each', 'touch_point', 'touch_point_each',
     'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
-    'slide', 'slide_each', 'slide_break','SlideArc',
+    'slide', 'slide_each', 'slide_break', 'SlideArc',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
 ];
 /**
@@ -1227,4 +1247,19 @@ export function generatePath(startPos, endPos) {
     recorder.lineTo(endInfo.x, endInfo.y);
 
     return recorder;
+}
+
+async function cacheFontWithAPI(url) {
+    const cache = await caches.open('font-assets-v1');
+    
+    // 檢查是否有快取
+    let response = await cache.match(url);
+    
+    if (!response) {
+        console.log("[CacheAPI] 抓取並儲存字體...");
+        await cache.add(url);
+    }
+    
+    // 即使在 Cache API 中，你最後還是要在 CSS 寫 @font-face 
+    // 或者用上述的 FontFace API 來載入。
 }

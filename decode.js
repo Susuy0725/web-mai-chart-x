@@ -8,7 +8,7 @@ export function simaiDecode(data = "", baseOffset = true) {
     }*/
     const splitParts = raw.split(',');
     if (raw.endsWith(',') || raw.endsWith('E')) {
-    splitParts.pop();
+        splitParts.pop();
     }
     const notes = [];
     const tempNotes = [];
@@ -18,7 +18,8 @@ export function simaiDecode(data = "", baseOffset = true) {
         nowTime = 0,
         nowBpm = 60,
         nowSplit = 4,
-        overrideSplitTime = null;
+        overrideSplitTime = null,
+        noteCommaIndex = 0;
     for (let e of splitParts) {
         if (e.includes('(')) {
             const result = parseTag(e, '(', ')');
@@ -52,6 +53,7 @@ export function simaiDecode(data = "", baseOffset = true) {
             e = e.replace(/^<([^>]*)>$/, '');
         }
         if (!e || e === '') {
+            noteCommaIndex++;
             nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
             continue
         };
@@ -91,7 +93,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                             pos: pos,
                             isDouble: true,
                             time: time,
-                            type: 'tap'
+                            type: 'tap',
+                            index: noteCommaIndex
                         };
                         tempNotes.push(noteObj);
                     }
@@ -177,7 +180,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                             touchPos: touchPos || null,
                             isDouble: parts.length > 1,
                             time: time,
-                            type: type
+                            type: type,
+                            index: noteCommaIndex
                         };
                     })();
                     if (!noteObj) return;
@@ -219,11 +223,12 @@ export function simaiDecode(data = "", baseOffset = true) {
                             console.warn("Invalid format in hold note, skipping:", noteStr);
                             return;
                         }
-                        noteObj.holdDuration = parseBeats("1280:1", nowBpm);
+                        //noteObj.holdDuration = parseBeats("1280:1", nowBpm).time;
+                        noteObj.holdDuration = 1e-4;
                         if (match) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
-                            if (duration < 0 || isNaN(duration)) {
+                            if (duration < 0 || isNaN(duration) || duration === Infinity) {
                                 console.warn("Invalid hold syntax in note, skipping:", noteStr);
                                 return;
                             }
@@ -349,6 +354,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                 });
             });
         }
+        noteCommaIndex++;
         nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
     }
     if (nowTime > endTime) endTime = nowTime;
@@ -357,14 +363,14 @@ export function simaiDecode(data = "", baseOffset = true) {
             ...n,
             isBreak: n.isBreak || false,
             isHold: n.isHold || false,
-            isEx: n.isEx || false
+            isEx: n.isEx || false,
         });
     }
     console.group("Decoded Notes:");
     console.log("notes: ", notes);
     console.log("endTime: ", endTime);
     console.groupEnd();
-    return { notes, endTime, bpm: firstBpm, baseOffset };
+    return { notes, endTime, bpm: firstBpm, baseOffset, raw: splitParts };
 }
 function getSlidePath(start, end, type, mid = null) {
     const r = new PathRecorder();

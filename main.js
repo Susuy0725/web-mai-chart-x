@@ -2,7 +2,7 @@ import { openDB, idbGet, idbSet } from './indexDB.js';
 import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath } from './helper.js';
 import { simaiDecode } from './decode.js';
 
-let images, readyBeat, maidata, nowDifficulty;
+let images, readyBeat = false, maidata, nowDifficulty;
 
 window.popupWindow = popupWindow; // 暴露 popupWindow 讓其他模組也能使用
 window.simpleToast = simpleToast; // 暴露 simpleToast 讓其他模組也能使用
@@ -171,13 +171,14 @@ const readMaidataButton = getButton("readMaidata", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const folderInput = getButton("readFolder", "utility");
+const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
 const noteBaseSize = 11;
 const speed = 6.5;
 const touchSpeed = 6.5;
-const effectDecayTime = 0.4;
+const effectDecayTime = 0.3;
 const distance = 0.25;
 let settings = {};
 let globalTime = 0, realTime = 0;
@@ -186,17 +187,18 @@ let secondCtx = null;
 let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
 let showSensor = false;
-let keepRenderingWhilePause = true;
+let keepRenderingWhilePause = false;
+let nowIndex = 0;
 
 let clockBpm = 60;
 
 // 1. 選取狀態儲存
-let activePointers = new Map();
+//let activePointers = new Map();
 
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
-let notes = [], endTime = 1, musicDelay = 1e-4, chartBaseOffset = false;
+let notes = [], endTime = 1, musicDelay = 1e-4, chartBaseOffset = false, rawData = [];
 
 getButton("manageResources", "utility").addEventListener('click', async () => {
     async function getSize() {
@@ -385,6 +387,7 @@ const getres = ((simaiDataValue) => {
         slider.max = endTime - musicDelay;
         chartBaseOffset = result.baseOffset;
         clockBpm = result.bpm;
+        rawData = simaiDataValue.split(',');
         draw();
     }
 });
@@ -396,10 +399,10 @@ const offsetInputDebounce = debounce(() => {
     globalTime = realTime - musicDelay;
 
     if (playButton.dataset.playing === 'true') {
-        audioManager.playBGM(realTime);
+        audioManager.playBGM(realTime); // 調整音樂播放位置，讓它與節拍更貼合
     }
     idbSet('simai_musicDelay', musicDelay).then(() => {
-        console.log("已儲存偏移值到 IndexedDB:", musicDelay);
+        //console.log("已儲存偏移值到 IndexedDB:", musicDelay);
     }).catch((error) => {
         console.error("儲存偏移值到 IndexedDB 失敗:", error);
     });
@@ -414,7 +417,7 @@ const inputDebounce = debounce(() => {
 
     // 存入本地空間
     idbSet('simai_editor_content', value).then(() => {
-        console.log("已儲存內容到 IndexedDB");
+        //console.log("已儲存內容到 IndexedDB");
     }).catch((error) => {
         console.error("儲存內容到 IndexedDB 失敗:", error);
     });
@@ -459,7 +462,6 @@ settingsButton.addEventListener('click', () => {
 });
 
 readyBeatCheckbox.checked = readyBeat;
-
 readyBeatCheckbox.addEventListener('change', () => {
     readyBeat = readyBeatCheckbox.checked;
     idbSet('simai_ready_beat', readyBeatCheckbox.checked).then(() => {
@@ -672,10 +674,22 @@ hideUtilityButton.addEventListener('click', () => {
     const isHidden = hideUtilityButton.dataset.hidden === 'true';
     if (isHidden) {
         utilityBtns.style.display = 'flex';
+        utilityBtns.animate([
+            { opacity: 0, height: '0px', padding: '0 5px' },
+            { opacity: 1, height: '40px', padding: '5px' }
+        ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
+
+        }
         editorContainer.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
     } else {
-        utilityBtns.style.display = 'none';
+        //utilityBtns.style.display = 'none';
+        utilityBtns.animate([
+            { opacity: 1, height: '40px', padding: '5px' },
+            { opacity: 0, height: '0px', padding: '0 5px' }
+        ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
+            utilityBtns.style.display = 'none';
+        }
         editorContainer.classList.add('expanded');
         utilityContainer.classList.add('expanded');
     }
@@ -783,7 +797,7 @@ const wSlideRatio = [
 const slideInputDebounce = debounce(() => {
     timeControlSliding = false;
     idbSet('simai_timeControl', realTime).then(() => {
-        console.log("已儲存時間控制值到 IndexedDB:", realTime);
+        //console.log("已儲存時間控制值到 IndexedDB:", realTime);
     }).catch((error) => {
         console.error("儲存時間控制值到 IndexedDB 失敗:", error);
     });
@@ -794,8 +808,8 @@ slider.addEventListener('input', () => {
     const value = parseFloat(slider.value);
     globalTime = value - musicDelay;
     realTime = value;
-
-    activePointers.clear();
+    //console.log("set realtime to", realTime)
+    //activePointers.clear();
     audioManager.stopAllLongSounds();
 
     if (playButton.dataset.playing === 'true') {
@@ -832,6 +846,14 @@ playButton.addEventListener('click', () => {
 
         if (!keepRenderingWhilePause) requestAnimationFrame(update);
     }
+});
+
+getNowNoteIndex.addEventListener('click', () => {
+    const point = rawData.slice(0, nowIndex+1).join(',').length;
+    // 2. 設定游標位置
+    editorInput.selectionStart = point;
+    editorInput.selectionEnd = point;
+    editorInput.focus();
 });
 
 /*
@@ -882,8 +904,9 @@ function update(timestamp) {
     if (playButton.dataset.playing === 'true') {
         realTime += dt;
         globalTime = realTime - musicDelay;
-        if (bgmUpdateTimer === null || bgmUpdateTimer >= 4) {
-            audioManager.playBGM(realTime);
+        if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
+            //audioManager.playBGM(realTime);
+            if (audioManager.getBGMDuration() > 0) realTime = audioManager.getBGMTime();
             bgmUpdateTimer = 0;
         }
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
@@ -1031,6 +1054,12 @@ function draw(dt = 0) {
     ctx.stroke();
     ctx.restore();
 
+    let foundIndexForThisFrame = false;
+    // 如果當前時間比譜面中第一個音符還早，就將 index 設為 0
+    if (notes.length > 0 && notes[0] && realTime < notes[0].time) {
+        nowIndex = 0;
+    }
+
     // 2. 準備繪製桶子 (定義視覺疊加順序：由下而上)
     const buckets = {
         slide: [],
@@ -1061,7 +1090,12 @@ function draw(dt = 0) {
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
 
         // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
-        const isVisible = t >= -1 && -noteT <= skipT + effectDecayTime;
+        const isVisible = (note.type === "slide" ? t >= distance : t >= -1) && -noteT <= skipT + effectDecayTime * (note.isHanabi ? 2 : 1);
+
+        if (!foundIndexForThisFrame && realTime >= note.time && note.type !== "slide") {
+            nowIndex = note.index ?? nowIndex;
+            foundIndexForThisFrame = true; // 標記本幀已找到，防止被更早的音符覆蓋
+        }
 
         if (playing && !timeControlSliding) {
             // A. 處理 Riser (Touch Hold 長音)
@@ -1127,11 +1161,11 @@ function draw(dt = 0) {
     audioManager.update(globalTime);
 }
 function drawSensors() {
-    const currentlyLitIds = new Set(activePointers.values());
+    //const currentlyLitIds = new Set(activePointers.values());
     ctx.save();
     touchPaths.forEach(shape => {
-        const isSelected = currentlyLitIds.has(shape.id);
-        ctx.fillStyle = isSelected ? '#FFD700' : '#00008080'; // 選中改為金色 : 原本深藍
+        //const isSelected = currentlyLitIds.has(shape.id);
+        //ctx.fillStyle = isSelected ? '#FFD700' : '#00008080'; // 選中改為金色 : 原本深藍
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = isSelected ? 1.2 : 0.8; // 選中時邊框加粗
 
@@ -1140,9 +1174,24 @@ function drawSensors() {
     });
     ctx.restore();
 }
-function simpleEndEffect(t) {
-    const decayAlpha = 1 - Math.max(0, - t / effectDecayTime);
+function simpleHitEffect(t) {
+    if (t < -1) return; // 超過衰減時間就不繪製
+    const decayAlpha = 1 - Math.max(0, - t);
     const radius = 0.8 * noteBaseSize * (1 - decayAlpha);
+
+    ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+    ctx.lineWidth = 0.5 * noteBaseSize * decayAlpha;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+function simpleHanabi(t) {
+    if (t < -1) return; // 超過衰減時間就不繪製
+    function ease(x) {
+        return 1 - Math.pow(1 - x, 2); // 加入緩動效果，讓爆炸更自然
+    }
+    const decayAlpha = 1 - Math.max(0, - t);
+    const radius = 2 * noteBaseSize * ease(1 - decayAlpha);
 
     ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
     ctx.lineWidth = 0.5 * noteBaseSize * decayAlpha;
@@ -1156,7 +1205,7 @@ function drawTap(s) {
     const progress = noteT * (speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    if (t < -0.8 || -noteT > effectDecayTime) return;
+    //if (t < -0.8 || -noteT > effectDecayTime) return;
 
     const img = images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
     if (imgNotExists(img)) return;
@@ -1166,7 +1215,7 @@ function drawTap(s) {
 
     if (t >= 1) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleEndEffect(noteT);
+        simpleHitEffect(noteT / effectDecayTime);
     }
     else {
         const displayT = Math.max(distance, t);
@@ -1196,7 +1245,7 @@ function drawStar(s) {
     const progress = noteT * (speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    if (t < -0.8 || -noteT > effectDecayTime) return;
+    //if (t < -0.8 || -noteT > effectDecayTime) return;
 
     const img = images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
         : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
@@ -1208,7 +1257,7 @@ function drawStar(s) {
 
     if (t >= 1) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleEndEffect(noteT);
+        simpleHitEffect(noteT / effectDecayTime);
     }
     else {
         const displayT = Math.max(distance, t);
@@ -1234,7 +1283,7 @@ function drawHold(s) {
     const progress = noteT * (speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+    //if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
 
     const img = images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
     if (imgNotExists(img)) return;
@@ -1249,7 +1298,7 @@ function drawHold(s) {
     ctx.save();
     if (-noteT >= holdDuration) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleEndEffect(holdDuration + noteT);
+        simpleHitEffect((holdDuration + noteT) / effectDecayTime);
     }
     else {
         const noteT1 = (noteTime - globalTime + holdDuration);
@@ -1280,6 +1329,7 @@ function drawHold(s) {
         ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
         ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset)); // body
         ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275); // tail
+        simpleHitEffect(noteT / effectDecayTime);
     }
     ctx.restore();
 }
@@ -1302,14 +1352,17 @@ function drawTouch(s) {
         const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
-        if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+        //if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
 
         const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
         ctx.save();
         if (-noteT >= holdDuration) {
             ctx.translate(posInfo.x, posInfo.y);
-            simpleEndEffect(holdDuration + noteT);
+            simpleHitEffect((holdDuration + noteT) / effectDecayTime);
+            if (s.isHanabi) {
+                simpleHanabi((holdDuration + noteT) / (2 * effectDecayTime));
+            }
         }
         else {
             const currentScale = 0.8;
@@ -1350,14 +1403,18 @@ function drawTouch(s) {
     const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    if (t < -0.8 || -noteT > effectDecayTime) return;
+    //if (t < -0.8 || -noteT > effectDecayTime) return;
 
     const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
     const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
     ctx.save();
     if (t >= 1) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleEndEffect(noteT);
+        simpleHitEffect(noteT / effectDecayTime);
+        if (s.isHanabi) {
+            simpleHanabi(noteT / (2 * effectDecayTime));
+            //console.log("hanabi", noteT / (2 * effectDecayTime));
+        }
     }
     else {
         const currentScale = 0.8;
@@ -1411,7 +1468,7 @@ function drawSlide(s) {
     const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    if (t < distance || -noteT > slideDelay + slideDuration) return;
+    //if (t < distance || -noteT > slideDelay + slideDuration) return;
 
     const p = path || generatePath(pos, slideEnd);
     if (p.totalLength < 1e-4) return;

@@ -4,299 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>no</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,100,1,200&icon_names=pause,play_arrow"
-        rel="stylesheet" />
+    <title>Web maiChart -beta</title>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=pause,play_arrow,right_panel_close,right_panel_open,skip_previous" />
+    <link rel="stylesheet" href="main.css">
 </head>
-<style>
-    :root {
-        --utility-hidden-height: 16px;
-        --playControls-height: 50px;
-        --editor-bg: #1F1F1F;
-        --top-utility-bg: #181818;
-        --top-utility-btn: #2B2B2B;
-    }
-
-    body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: #101010;
-        /* 深色背景 */
-    }
-
-    .material-symbols-outlined {
-        font-variation-settings:
-            'FILL' 1,
-            'wght' 400,
-            'GRAD' 0,
-            'opsz' 24
-    }
-
-    #canvasContainer {
-        position: absolute;
-        width: 50%;
-        height: calc(100% - var(--playControls-height));
-        top: 0;
-        left: 0;
-    }
-
-    #canvasContainer img {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        top: 0;
-        left: 0;
-        object-fit: contain;
-        scale: 0.89;
-    }
-
-    #main {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        touch-action: none;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-    }
-
-    #playControls {
-        user-select: none;
-        position: absolute;
-        width: 100%;
-        height: var(--playControls-height);
-        bottom: 0;
-        left: 0;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-
-    #playControls #timeControl {
-        width: 100%;
-        margin: 0;
-        background: transparent;
-    }
-
-    #playControls .controlsContainer {
-        display: flex;
-        align-items: center;
-    }
-
-    .controlsContainer .controlButton {
-        display: flex;
-        width: 20px;
-        height: 20px;
-        border: 2px solid var(--top-utility-btn);
-        padding: 5px;
-        border-radius: 5px;
-        color: white;
-        font-size: 14px;
-        margin-right: 20px;
-        cursor: pointer;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .a {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        top: -2px;
-        left: 0px;
-        object-fit: contain;
-        opacity: 0.8;
-        scale: 1;
-    }
-
-    #utilityContainer {
-        position: absolute;
-        width: 50%;
-        height: calc(40px + var(--utility-hidden-height));
-        top: 0;
-        right: 0;
-        z-index: 5;
-        user-select: none;
-    }
-
-    #utilityContainer.expanded {
-        position: absolute;
-        width: 50%;
-        height: var(--utility-hidden-height);
-        top: 0;
-        right: 0;
-        z-index: 5;
-        user-select: none;
-    }
-
-    #utilityContainer .closeBtn {
-        /* 只讓背景半透明，不影響裡面文字 */
-        background-color: rgba(24, 24, 24, 0.8);
-        overflow: hidden;
-        width: 30%;
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        height: var(--utility-hidden-height);
-        color: white;
-        font-size: 10px;
-        text-align: center;
-        display: flex;
-        justify-content: center;
-        cursor: pointer;
-        box-sizing: border-box;
-        box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
-        border-radius: 0 0 10px 10px;
-    }
-
-    #topUtilityBtns {
-        background: var(--top-utility-bg);
-        width: 100%;
-        height: 40px;
-        padding: 5px;
-        display: flex;
-        flex-direction: row;
-        overflow-x: auto;
-        gap: 5px;
-        scrollbar-width: none;
-        box-sizing: border-box;
-    }
-
-    .utilityButton {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex: 0 0 auto;
-        padding: 5px;
-        background: transparent;
-        border: var(--top-utility-btn) 1.5px solid;
-        box-sizing: border-box;
-        color: white;
-        width: 60px;
-        height: 30px;
-        text-align: center;
-        font-size: 12px;
-        border-radius: 5px;
-        word-break: keep-all;
-        cursor: pointer;
-        overflow: hidden;
-    }
-
-    .utilityButton.noFixedsize {
-        width: auto;
-        padding: 5px 10px;
-    }
-
-    .utilityButton input[type="number"] {
-        width: 50px;
-        margin-left: 5px;
-        background: transparent;
-        border: none;
-        border-bottom: 1px solid #838383;
-        box-sizing: border-box;
-        color: white;
-        text-align: center;
-    }
-
-    .utilityButton input[type="checkbox"] {
-        margin-left: 5px;
-        width: 16px;
-        height: 16px;
-    }
-
-    .utilityButton input[type="file"] {
-        display: none;
-    }
-
-    .utilityButton select {
-        min-width: 30px;
-        margin-left: 5px;
-        background: transparent;
-        border: none;
-        border-bottom: 1px solid #838383;
-        box-sizing: border-box;
-        color: white;
-        text-align: center;
-    }
-
-    .utilityButton select option {
-        background: #202020;
-        color: white;
-        border: none;
-    }
-
-    #editorContainer {
-        position: absolute;
-        top: 40px;
-        bottom: 30px;
-        left: 50%;
-        width: 50%;
-        height: calc(100% - var(--playControls-height) - 40px);
-        background: var(--editor-bg);
-        /* 背景深色 */
-    }
-
-    #editorContainer.expanded {
-        top: 0;
-        height: calc(100% - var(--playControls-height));
-    }
-
-    .editor-layer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 5px;
-        padding-top: calc(var(--utility-hidden-height) + 5px);
-        box-sizing: border-box;
-        font-family: 'Consolas', monospace;
-        /* 必須用等寬字型 */
-        font-size: 14px;
-        line-height: 1.5;
-        white-space: break-spaces;
-        word-wrap: break-word;
-        border: none;
-        outline: none;
-        overflow: auto;
-        scrollbar-width: thin;
-        /* auto or thin */
-        scrollbar-color: #838383 transparent;
-        /* 滾動條顏色 */
-    }
-
-    #editor-input {
-        background: transparent;
-        color: transparent;
-        /* 文字透明，我們看底層的字 */
-        caret-color: #ffffff;
-        /* 但要讓閃爍游標看得見 */
-        resize: none;
-        z-index: 2;
-    }
-
-    #highlight-layer {
-        user-select: none;
-        pointer-events: none;
-        color: #d4d4d4;
-        /* 預設文字顏色 */
-        z-index: 1;
-    }
-
-    .utilityButton.expanded {
-        width: 100%;
-        height: 30px;
-        border: none;
-        padding: 0;
-        height: var(--utility-hidden-height);
-    }
-</style>
 
 <body>
     <!--<img src="./image copy.png" alt="refimg" class="a">-->
@@ -308,7 +20,12 @@
     <div id="playControls">
         <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">
         <div class="controlsContainer">
-            <div class="controlButton" data-buttonAction="play/stop" data-playing="false">
+            <div class="controlButton" data-buttonAction="stop">
+                <span class="material-symbols-outlined">
+                    skip_previous
+                </span>
+            </div>
+            <div class="controlButton" data-buttonAction="play/pause" data-playing="false">
                 <span class="material-symbols-outlined">
                     play_arrow
                 </span>
@@ -322,7 +39,10 @@
     </div>
     <div id="utilityContainer">
         <div id="topUtilityBtns">
-            <div class="utilityButton" data-buttonAction="hideEditor">開合編輯器</div>
+            <div class="utilityButton miniButton" data-buttonAction="hideEditor"><span
+                    class="material-symbols-outlined">
+                    right_panel_close
+                </span></div>
             <div class="utilityButton noFixedsize" data-buttonAction="offset">偏移
                 <input type="number" step="0.01" value="0" name="d">
             </div>
@@ -348,6 +68,7 @@
             <div class="utilityButton noFixedsize" data-buttonAction="readyBeat">預備拍<input type="checkbox" name="d">
             </div>
             <div class="utilityButton" data-buttonAction="manageResources">資源管理</div>
+            <div class="utilityButton" data-buttonAction="chartInfo">譜面資訊</div>
             <div class="utilityButton" data-buttonAction="settings">設定</div>
         </div>
         <div class="closeBtn" data-hidden="false">▲</div>

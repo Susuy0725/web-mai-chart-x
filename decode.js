@@ -188,13 +188,13 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     // 檢查 Flags
                     if (noteStr.includes('b') && !slideMatch) {
-                        if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr);
+                        if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                         noteObj.isBreak = true
                         noteStr = noteStr.replace(/b/g, '');
                     };
                     if (noteStr.includes('$') && !slideMatch) {
-                        if (touchMatch) return console.warn("Star flag '$' is not allowed in touch notes, skipping:", noteStr);
-                        if (noteStr.includes('h')) return console.warn("Star flag '$' is not allowed in hold notes, skipping:", noteStr);
+                        if (touchMatch) return console.warn("Star flag '$' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                        if (noteStr.includes('h')) return console.warn("Star flag '$' is not allowed in hold notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                         noteObj.isStar = true
                         noteStr = noteStr.replace(/\$/g, '');
                     };
@@ -206,13 +206,13 @@ export function simaiDecode(data = "", baseOffset = true) {
                         if (!slideMatch && touchMatch) {
                             noteObj.isHanabi = true
                         } else {
-                            console.warn("Hanabi flag 'f' is not allowed in other notes!, skipping:", noteStr);
+                            console.warn("Hanabi flag 'f' is not allowed in other notes!, skipping:", noteStr, splitParts[noteCommaIndex]);
                             return;
                         }
                     }
                     if (noteStr.includes('h')) {
                         if (slideMatch) {
-                            console.warn("Hold flag 'h' is not allowed in slide notes, skipping:", noteStr);
+                            console.warn("Hold flag 'h' is not allowed in slide notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                             return;
                         }
                         noteObj.isHold = true;
@@ -220,7 +220,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         const match = noteStr.match(/\[([^\[\]]*)\]/);
                         const residue = noteStr.replace(/\[([^\[\]]*)\]/, '').replace(/h/, '');
                         if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
-                            console.warn("Invalid format in hold note, skipping:", noteStr);
+                            console.warn("Invalid format in hold note, skipping:", noteStr, splitParts[noteCommaIndex]);
                             return;
                         }
                         //noteObj.holdDuration = parseBeats("1280:1", nowBpm).time;
@@ -229,7 +229,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
                             if (duration < 0 || isNaN(duration) || duration === Infinity) {
-                                console.warn("Invalid hold syntax in note, skipping:", noteStr);
+                                console.warn("Invalid hold syntax in note, skipping:", noteStr, splitParts[noteCommaIndex]);
                                 return;
                             }
                             noteObj.holdDuration = duration;
@@ -255,13 +255,13 @@ export function simaiDecode(data = "", baseOffset = true) {
                         }
                         for (let i = 0; i < slideParts.length; i++) {
                             const slidePartMatch = slideParts[i].match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-                            if (!slidePartMatch) return console.warn("Missing slide type in slide note, skipping:", noteStr);
+                            if (!slidePartMatch) return console.warn("Missing slide type in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
                             const timeMatches = slideParts[i].match(/\[([^\[\]]*)\]/g);
-                            if (!timeMatches) return console.warn("Missing time format:", noteStr);
+                            if (!timeMatches) return console.warn("Missing time format:", noteStr, splitParts[noteCommaIndex]);
                             const timeValues = timeMatches.map(m => m.slice(1, -1));
                             const residue = slideParts[i].replace(/\[([^\[\]]*)\]/g, '');
                             if (residue.includes('[') || residue.includes(']')) {
-                                console.warn("Invalid time format or empty in slide note, skipping:", noteStr);
+                                console.warn("Invalid time format or empty in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
                                 return;
                             }
                             noteObj.isStar = true;
@@ -286,7 +286,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const isSlideBreak = p.some(part => part.includes('b'));
                             if (isSlideBreak) {
                                 p.forEach((c, i) => {
-                                    if (c.startsWith('b')) console.warn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", residue);
+                                    if (c.startsWith('b')) console.warn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", residue, splitParts[noteCommaIndex]);
                                     p[i] = p[i].replace(/b/g, '');
                                 });
                             }
@@ -297,7 +297,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 timeValues.forEach((t, i) => {
                                     const { time: duration, delay } = parseBeats(t, nowBpm, true);
                                     if (duration < 0 || isNaN(duration)) {
-                                        console.warn("Invalid time format in slide note, skipping:", noteStr);
+                                        console.warn("Invalid time format in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
                                         error = true;
                                         return;
                                     }
@@ -319,8 +319,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 return { head, end, mid, type, path, len: path.totalLength };
                             });
 
-                            if (segments.includes(null)) return console.warn("Invalid slide positions:", residue);
-                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return console.warn("Invalid slide positions:", residue);
+                            if (segments.includes(null)) return console.warn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
+                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return console.warn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
                             const totalLen = segments.reduce((sum, s) => sum + s.len, 0);
                             let currentDelay = dlay;
 
@@ -333,6 +333,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     props: props,
                                     pos: seg.head,
                                     firstSlide: index === 0,
+                                    lastSlide: index === segments.length - 1,
                                     hideHead: (hideHeadSlide ? true : index !== 0),
                                     isDouble: sameTimeSlide || doubleSlide,
                                     isBreak: isSlideBreak,
@@ -415,6 +416,8 @@ function getSlidePath(start, end, type, mid = null) {
             }
             const midInfo = noteRefPos[mid - 1];
             r.moveTo(startInfo.x, startInfo.y);
+            r.lineTo(midInfo.x, midInfo.y);
+            r.lineToArc(0, 0, innerCirleBase * 0.974, midInfo.rot - Math.PI * 0.5);
             r.lineTo(midInfo.x, midInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;

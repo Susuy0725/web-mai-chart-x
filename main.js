@@ -1,11 +1,11 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { imgNotExists, PathRecorder, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath } from './helper.js';
+import { imgNotExists, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath, formatSize } from './helper.js';
 import { simaiDecode } from './decode.js';
 
-let images, readyBeat = false, maidata, nowDifficulty;
+let images, readyBeat = false, maidata, nowDifficulty, backgroundImage;
 
-window.popupWindow = popupWindow; // 暴露 popupWindow 讓其他模組也能使用
-window.simpleToast = simpleToast; // 暴露 simpleToast 讓其他模組也能使用
+window.popupWindow = popupWindow;
+window.simpleToast = simpleToast;
 
 popupWindow({
     title: "正在準備環境...",
@@ -23,14 +23,16 @@ popupWindow({
             step(90, "正在恢復上次的編輯狀態...");
             const [
                 savedContent, savedMusicDelay, savedTimeControl,
-                savedBgm, savedMaiData, savedDifficulty
+                savedBgm, savedMaiData, savedDifficulty, bg, hideEditor
             ] = await Promise.all([
                 idbGet('simai_editor_content'),
                 idbGet('simai_musicDelay'),
                 idbGet('simai_timeControl'),
                 idbGet('simai_resource_bgm'),
                 idbGet('simai_maidata'),
-                idbGet('simai_now_difficulty')
+                idbGet('simai_now_difficulty'),
+                idbGet('simai_background_image'),
+                idbGet('simai_hide_editor'),
             ]);
 
             if (savedContent) { editorInput.value = savedContent; applyHighlight(savedContent); getres(savedContent); }
@@ -40,7 +42,11 @@ popupWindow({
             }
             if (savedMaiData) maidata = savedMaiData;
             if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
-            setEditorCss(await idbGet('simai_hide_editor') !== true);
+            if (bg) { backgroundImage = bg; }
+            if (hideEditor) {
+                hideEditorButton.children[0].textContent = "right_panel_open";
+                setEditorCss(false);
+            }
             if (savedBgm) { step(95, "正在還原背景音樂..."); await audioManager.setBackgroundMusic(savedBgm); endTime = Math.max(endTime, audioManager.getBGMDuration() + 1); }
             step(100, "完成！正在渲染畫面...");
             resize(); close();
@@ -159,7 +165,8 @@ popupWindow({
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
 const slider = document.getElementById('timeControl');
-const playButton = getButton("play/stop", "control");
+const playButton = getButton("play/pause", "control");
+const stopButton = getButton("stop", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
 const hideUtilityButton = document.querySelector("#utilityContainer .closeBtn");
@@ -168,6 +175,7 @@ const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
 const readMaidataButton = getButton("readMaidata", "utility");
+const chartInfoButton = getButton("chartInfo", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const folderInput = getButton("readFolder", "utility");
@@ -175,22 +183,25 @@ const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
-const noteBaseSize = 11;
-const speed = 6.5;
-const touchSpeed = 6.5;
-const effectDecayTime = 0.3;
-const distance = 0.25;
-let settings = {};
+const defaultSettings = {
+    speed: 6.5,
+    touchSpeed: 7,
+    effectDecayTime: 0.4,
+    middleDistance: 0.25,
+    noteBaseSize: 11,
+};
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
 let secondCtx = null;
 let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
 let showSensor = false;
-let keepRenderingWhilePause = false;
+let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
 
 let clockBpm = 60;
+
+const testData = `(60){4}1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf,`
 
 // 1. 選取狀態儲存
 //let activePointers = new Map();
@@ -230,16 +241,6 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
 
         return details;
     }
-
-    function formatSize(size) {
-        if (size < 1024) return `${size} B`;
-        for (const unit of ['KiB', 'MiB', 'GiB']) {
-            size /= 1024;
-            if (size < 1024) return `${size.toFixed(1)} ${unit}`;
-        }
-        //return (size / 1024).toFixed(1);
-    }
-
 
     // 呼叫你的 simplePopupWindow
     popupWindow(
@@ -383,7 +384,7 @@ const getres = ((simaiDataValue) => {
 
     if (result) {
         notes = result.notes;
-        endTime = result.endTime + 1;
+        endTime = Math.max(result.endTime + 1, audioManager.getBGMDuration() + 1);
         slider.max = endTime - musicDelay;
         chartBaseOffset = result.baseOffset;
         clockBpm = result.bpm;
@@ -459,6 +460,126 @@ settingsButton.addEventListener('click', () => {
             hideOnClick: true
         }]
     })
+});
+
+chartInfoButton.addEventListener('click', () => {
+    const tempData = { ...(maidata || {}) };
+
+    const createPopupContent = () => {
+        const container = document.createElement('div');
+        container.style.cssText = "display:flex;";
+
+        const imgContainer = document.createElement('div');
+        const img = document.createElement('img');
+        img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['star'].src;
+        img.style.cssText = "width:100%;height:100%;display:block;";
+        imgContainer.appendChild(img);
+        imgContainer.style.cssText = "width:40%;height:100%;overflow:hidden;border:1px solid #ccc;border-radius:8px;object-fit:contain;";
+
+        const diffContainer = document.createElement('div');
+        diffContainer.style.cssText = "width:60%;box-sizing:border-box;display:flex;flex-direction:column;padding:0 0 0 10px;";
+
+        const createLabeledInput = (value, labelText, assign) => {
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
+
+            const label = document.createElement('label');
+            label.textContent = labelText;
+            label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = value ?? '';
+            input.title = labelText;
+            input.placeholder = labelText;
+            input.style.cssText = "padding:4px;border:1px solid #ccc;border-radius:4px;";
+
+            input.addEventListener('input', () => {
+                const newValue = input.value;
+                if (assign) {
+                    tempData[assign] = newValue;
+                }
+            });
+
+            wrapper.appendChild(label);
+            wrapper.appendChild(input);
+            return { wrapper, input };
+        };
+
+        const { wrapper: titleWrapper } = createLabeledInput(tempData.title, "標題", "title");
+        const { wrapper: artistWrapper } = createLabeledInput(tempData.artist, "作者", "artist");
+        const { wrapper: descWrapper } = createLabeledInput(tempData.des, "譜面設計", "des");
+
+        const dropdown = document.createElement('select');
+        dropdown.name = "difficulty";
+        dropdown.style.cssText = "width:100%;padding:3px;font-size:12px;margin-bottom:4px;";
+        dropdown.innerHTML = `
+                <option value="7">ORIGINAL</option>
+                <option value="6">RE:MASTER</option>
+                <option value="5">MASTER</option>
+                <option value="4">EXPERT</option>
+                <option value="3">ADVANCED</option>
+                <option value="2">BASIC</option>
+                <option value="1">EASY</option>
+            `;
+        dropdown.value = nowDifficulty || "5"; // 預設選擇 MASTER
+        dropdown.addEventListener('change', (e) => {
+            const diff = e.target.value;
+            tempData.difficulty = diff;
+
+            infoText.innerHTML = "";
+            const { wrapper: lvWrapper } = createLabeledInput(tempData[`lv_${diff}`], "等級", `lv_${diff}`);
+            const { wrapper: desWrapper } = createLabeledInput(tempData[`des_${diff}`], "難度設計", `des_${diff}`);
+            infoText.appendChild(lvWrapper);
+            infoText.appendChild(desWrapper);
+        });
+
+        diffContainer.appendChild(titleWrapper);
+        diffContainer.appendChild(artistWrapper);
+        diffContainer.appendChild(descWrapper);
+        diffContainer.appendChild(dropdown);
+
+        const infoText = document.createElement('div');
+        infoText.style.cssText = "font-size:14px;white-space:pre-wrap;";
+        diffContainer.appendChild(infoText);
+
+        const currentDifficulty = nowDifficulty || "5";
+        infoText.appendChild(createLabeledInput(tempData[`lv_${currentDifficulty}`], "等級", `lv_${currentDifficulty}`).wrapper);
+        infoText.appendChild(createLabeledInput(tempData[`des_${currentDifficulty}`], "難度設計", `des_${currentDifficulty}`).wrapper);
+
+        container.appendChild(imgContainer);
+        container.appendChild(diffContainer);
+        return container;
+    };
+
+    popupWindow({
+        title: "譜面資訊",
+        customContent: createPopupContent(),
+        buttons: [
+            {
+                text: "確定",
+                onClick: (closePopup) => {
+                    if (!maidata) {
+                        maidata = {};
+                    }
+                    Object.keys(tempData).forEach(key => {
+                        maidata[key] = tempData[key];
+                    });
+                    if (tempData.difficulty) {
+                        nowDifficulty = tempData.difficulty;
+                        changeDifficulty.value = nowDifficulty;
+                    }
+                    idbSet('simai_maidata', maidata).catch(e => console.error('儲存 maidata 失敗', e));
+                    closePopup();
+                },
+                hideOnClick: true
+            },
+            {
+                text: "取消",
+                hideOnClick: true
+            }
+        ]
+    });
 });
 
 readyBeatCheckbox.checked = readyBeat;
@@ -573,6 +694,19 @@ folderInput.addEventListener('click', (e) => {
                 };
                 reader.readAsText(file);
             }
+            if (file.name.startsWith('bg.')) {
+                if (!file.type.startsWith('image/')) {
+                    console.warn("選擇的背景檔案不是圖片類型，已跳過：", file.name);
+                    continue;
+                }
+                // 背景圖
+                backgroundImage = file;
+                //const url = URL.createObjectURL(file);
+                //document.body.style.backgroundImage = `url(${url})`;
+                idbSet('simai_background_image', file).catch((error) => {
+                    console.error("儲存背景圖到 IndexedDB 失敗:", error);
+                });
+            }
         }
     };
 });
@@ -630,6 +764,7 @@ readMaidataButton.addEventListener('click', () => {
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
     const currentlyHidden = editorContainer.style.display === 'none';
+    hideEditorButton.children[0].innerText = currentlyHidden ? 'right_panel_close' : 'right_panel_open';
 
     // 如果目前隱藏 -> 點擊後要「顯示」(true)
     // 如果目前顯示 -> 點擊後要「隱藏」(false)
@@ -637,7 +772,7 @@ hideEditorButton.addEventListener('click', () => {
 
     // 儲存的是 "是否隱藏" 的狀態
     idbSet('simai_hide_editor', !nextStateVisible).then(() => {
-        console.log("已儲存編輯器顯示狀態到 IndexedDB:", !nextStateVisible);
+        //console.log("已儲存編輯器顯示狀態到 IndexedDB:", !nextStateVisible);
     }).catch((error) => {
         console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
     });
@@ -662,7 +797,6 @@ changeDifficulty.addEventListener('change', (e) => {
     maidata['inote_' + nowDifficulty] = nowEditorContent;
     nowDifficulty = e.target.value;
     editorInput.value = maidata['inote_' + nowDifficulty] ?? "";
-    console.log(maidata, 'inote_' + nowDifficulty);
     applyHighlight(editorInput.value);
     inputDebounce();
     difficultyInputDebounce();
@@ -680,6 +814,7 @@ hideUtilityButton.addEventListener('click', () => {
         ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
 
         }
+        canvasContainer.classList.remove('expanded');
         editorContainer.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
     } else {
@@ -690,11 +825,13 @@ hideUtilityButton.addEventListener('click', () => {
         ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
             utilityBtns.style.display = 'none';
         }
+        canvasContainer.classList.add('expanded');
         editorContainer.classList.add('expanded');
         utilityContainer.classList.add('expanded');
     }
     hideUtilityButton.innerText = isHidden ? '▲' : '▼';
     hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
+    resize();
 });
 
 quickGenerateButton.addEventListener('click', () => {
@@ -832,7 +969,9 @@ playButton.addEventListener('click', () => {
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
         playButton.dataset.playing = 'false';
+        playButton.children[0].innerText = "play_arrow";
         lastTimestamp = null;
+
         // --- 停止音效與 BGM ---
         audioManager.stopAllLongSounds();
         audioManager.stopBGM();
@@ -840,7 +979,9 @@ playButton.addEventListener('click', () => {
         notes.forEach(n => n.riserActive = false); // 強制重置標記
     } else {
         playButton.dataset.playing = 'true';
+        playButton.children[0].innerText = "pause";
         lastTimestamp = performance.now();
+
         // --- 從當前的 realTime 同步啟動 BGM ---
         audioManager.playBGM(realTime);
 
@@ -848,8 +989,26 @@ playButton.addEventListener('click', () => {
     }
 });
 
+stopButton.addEventListener('click', () => {
+    bgmUpdateTimer = null;
+    playButton.dataset.playing = 'false';
+    playButton.children[0].innerText = "play_arrow";
+    lastTimestamp = null;
+    realTime = 0;
+    globalTime = realTime - musicDelay;
+    slider.value = realTime;
+
+    // --- 停止音效與 BGM ---
+    audioManager.stopAllLongSounds();
+    audioManager.stopBGM();
+
+    notes.forEach(n => n.riserActive = false); // 強制重置標記
+
+    draw(); // 立即更新畫布，反映停止狀態
+});
+
 getNowNoteIndex.addEventListener('click', () => {
-    const point = rawData.slice(0, nowIndex+1).join(',').length;
+    const point = rawData.slice(0, nowIndex + 1).join(',').length;
     // 2. 設定游標位置
     editorInput.selectionStart = point;
     editorInput.selectionEnd = point;
@@ -914,6 +1073,7 @@ function update(timestamp) {
         draw(dt);
         if (globalTime >= endTime) {
             playButton.dataset.playing = 'false';
+            playButton.children[0].innerText = "play_arrow";
             globalTime = endTime;
             slider.value = realTime; // 保持 slider 值與 realTime 一致
         } else {
@@ -935,10 +1095,6 @@ function resize() {
     canvas.height = h;
     if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
     draw();
-}
-
-function scaleCanvasContainer() {
-
 }
 
 popup.addEventListener('click', openSecondWindow);
@@ -1086,11 +1242,9 @@ function draw(dt = 0) {
     for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
         const noteT = (note.time - globalTime);
-        const t = 1 - timeFunction(noteT * (speed * 0.8833 + 0.8167));
+        const t = 1 - timeFunction(noteT * (defaultSettings.speed * 0.8833 + 0.8167));
+        const touchT = 1 - timeFunction(noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167));
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-
-        // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
-        const isVisible = (note.type === "slide" ? t >= distance : t >= -1) && -noteT <= skipT + effectDecayTime * (note.isHanabi ? 2 : 1);
 
         if (!foundIndexForThisFrame && realTime >= note.time && note.type !== "slide") {
             nowIndex = note.index ?? nowIndex;
@@ -1124,7 +1278,7 @@ function draw(dt = 0) {
 
             // C. 處理結束音效 (Hold End / Slide End / Hanabi)
             if (-noteT > skipT && !note.endEffectPlayed) {
-                if (note.isBreak || note.isHanabi || (note.holdDuration !== undefined && note.type !== "tap")) {
+                if ((note.type === "slide" && note.lastSlide && note.isBreak) || (note.type !== "slide" && note.isBreak) || note.isHanabi || (note.holdDuration !== undefined && note.type !== "tap")) {
                     audioManager.queueSound(note, note.time + skipT);
                 }
                 note.endEffectPlayed = true;
@@ -1140,6 +1294,14 @@ function draw(dt = 0) {
                 note.riserActive = false;
             }
         }
+
+        // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
+        const isVisible = (note.type === "slide" ?
+            t >= defaultSettings.middleDistance :
+            (note.type === "touch" ?
+                touchT >= -1 :
+                t >= -1))
+            && -noteT <= skipT + defaultSettings.effectDecayTime * (note.isHanabi ? 2 : 1);
 
         // --- 將可見音符丟進對應桶子 ---
         if (isVisible) {
@@ -1177,24 +1339,24 @@ function drawSensors() {
 function simpleHitEffect(t) {
     if (t < -1) return; // 超過衰減時間就不繪製
     const decayAlpha = 1 - Math.max(0, - t);
-    const radius = 0.8 * noteBaseSize * (1 - decayAlpha);
+    const radius = 0.8 * defaultSettings.noteBaseSize * (1 - decayAlpha);
 
     ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
-    ctx.lineWidth = 0.5 * noteBaseSize * decayAlpha;
+    ctx.lineWidth = 0.5 * defaultSettings.noteBaseSize * decayAlpha;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
 }
-function simpleHanabi(t) {
+function simpleHanabi(t, isCenter) {
     if (t < -1) return; // 超過衰減時間就不繪製
     function ease(x) {
         return 1 - Math.pow(1 - x, 2); // 加入緩動效果，讓爆炸更自然
     }
     const decayAlpha = 1 - Math.max(0, - t);
-    const radius = 2 * noteBaseSize * ease(1 - decayAlpha);
+    const radius = (2 + isCenter * 2) * defaultSettings.noteBaseSize * ease(1 - decayAlpha);
 
     ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
-    ctx.lineWidth = 0.5 * noteBaseSize * decayAlpha;
+    ctx.lineWidth = 0.5 * defaultSettings.noteBaseSize * decayAlpha;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
@@ -1202,10 +1364,10 @@ function simpleHanabi(t) {
 function drawTap(s) {
     const { time: noteTime, pos, isBreak, isDouble } = s;
     const noteT = (noteTime - globalTime);
-    const progress = noteT * (speed * 0.8833 + 0.8167);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    //if (t < -0.8 || -noteT > effectDecayTime) return;
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime) return;
 
     const img = images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
     if (imgNotExists(img)) return;
@@ -1215,12 +1377,12 @@ function drawTap(s) {
 
     if (t >= 1) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleHitEffect(noteT / effectDecayTime);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
     }
     else {
-        const displayT = Math.max(distance, t);
-        const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
-        const size = noteBaseSize * currentScale;
+        const displayT = Math.max(defaultSettings.middleDistance, t);
+        const currentScale = t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1;
+        const size = defaultSettings.noteBaseSize * currentScale;
 
         let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
         ctx.rotate(posInfo.rot);
@@ -1242,10 +1404,10 @@ function drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, i
 function drawStar(s) {
     const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
     const noteT = (noteTime - globalTime);
-    const progress = noteT * (speed * 0.8833 + 0.8167);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    //if (t < -0.8 || -noteT > effectDecayTime) return;
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime) return;
 
     const img = images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
         : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
@@ -1257,12 +1419,12 @@ function drawStar(s) {
 
     if (t >= 1) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleHitEffect(noteT / effectDecayTime);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
     }
     else {
-        const displayT = Math.max(distance, t);
-        const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
-        const size = noteBaseSize * currentScale;
+        const displayT = Math.max(defaultSettings.middleDistance, t);
+        const currentScale = t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1;
+        const size = defaultSettings.noteBaseSize * currentScale;
 
         ctx.save();
         let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
@@ -1280,34 +1442,34 @@ function drawStar(s) {
 function drawHold(s) {
     const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
     const noteT = (noteTime - globalTime);
-    const progress = noteT * (speed * 0.8833 + 0.8167);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    //if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime + holdDuration) return;
 
     const img = images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
     if (imgNotExists(img)) return;
-    const sizeOffset = t < distance ? 0 :
-        Math.min((holdDuration + noteT) * 0.9 * (speed * 0.8833 + 0.8167),
-            Math.min((1 - distance) * 2.45,
-                Math.min((t - distance) * 2.45,
-                    holdDuration * 0.9 * (speed * 0.8833 + 0.8167))));
+    const sizeOffset = t < defaultSettings.middleDistance ? 0 :
+        Math.min((holdDuration + noteT) * 0.9 * (defaultSettings.speed * 0.8833 + 0.8167),
+            Math.min((1 - defaultSettings.middleDistance) * 2.45,
+                Math.min((t - defaultSettings.middleDistance) * 2.45,
+                    holdDuration * 0.9 * (defaultSettings.speed * 0.8833 + 0.8167))));
 
     const posInfo = noteRefPos[pos - 1];
 
     ctx.save();
     if (-noteT >= holdDuration) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleHitEffect((holdDuration + noteT) / effectDecayTime);
+        simpleHitEffect((holdDuration + noteT) / defaultSettings.effectDecayTime);
     }
     else {
         const noteT1 = (noteTime - globalTime + holdDuration);
-        const progress1 = noteT1 * (speed * 0.8833 + 0.8167);
+        const progress1 = noteT1 * (defaultSettings.speed * 0.8833 + 0.8167);
         const t1 = 1 - timeFunction(progress1);
 
-        const displayT = Math.min(1, Math.max(distance, t));
-        const currentScale = t < distance ? (t + 0.9) / (0.9 + distance) : 1;
-        const size = noteBaseSize * currentScale;
+        const displayT = Math.min(1, Math.max(defaultSettings.middleDistance, t));
+        const currentScale = t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1;
+        const size = defaultSettings.noteBaseSize * currentScale;
 
         ctx.save();
         let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
@@ -1315,7 +1477,7 @@ function drawHold(s) {
         drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
         ctx.restore();
 
-        if (t1 > distance) {
+        if (t1 > defaultSettings.middleDistance) {
             ctx.save();
             let endimg = images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
             ctx.translate(posInfo.x * t1, posInfo.y * t1);
@@ -1329,7 +1491,7 @@ function drawHold(s) {
         ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
         ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset)); // body
         ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275); // tail
-        simpleHitEffect(noteT / effectDecayTime);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
     }
     ctx.restore();
 }
@@ -1349,24 +1511,24 @@ function drawTouch(s) {
         const touchBorder = images.touchhold_border;
         if (imgNotExists(touchPoint) || imgNotExists(touchBorder)) return;
         const noteT = (noteTime - globalTime);
-        const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
+        const progress = noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167);
         const t = 1 - timeFunction(progress);
 
-        //if (t < -0.8 || -noteT > effectDecayTime + holdDuration) return;
+        //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime + holdDuration) return;
 
-        const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
+        const size = defaultSettings.noteBaseSize * (t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
         ctx.save();
         if (-noteT >= holdDuration) {
             ctx.translate(posInfo.x, posInfo.y);
-            simpleHitEffect((holdDuration + noteT) / effectDecayTime);
+            simpleHitEffect((holdDuration + noteT) / defaultSettings.effectDecayTime);
             if (s.isHanabi) {
-                simpleHanabi((holdDuration + noteT) / (2 * effectDecayTime));
+                simpleHanabi((holdDuration + noteT) / (2 * defaultSettings.effectDecayTime), s.touchPos === "C");
             }
         }
         else {
             const currentScale = 0.8;
-            const size = noteBaseSize * 0.7;
+            const size = defaultSettings.noteBaseSize * 0.7;
             const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
 
             let a = touchTimeFunction(11 * (1 - Math.min(1, t)) / 1.5) * 1.6;
@@ -1400,25 +1562,25 @@ function drawTouch(s) {
     const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
     if (imgNotExists(img) || imgNotExists(touchPoint)) return;
     const noteT = (noteTime - globalTime);
-    const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
+    const progress = noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    //if (t < -0.8 || -noteT > effectDecayTime) return;
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime) return;
 
-    const size = noteBaseSize * (t < distance ? (t + 0.9) / (0.9 + distance) : 1);
+    const size = defaultSettings.noteBaseSize * (t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1);
     const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
     ctx.save();
     if (t >= 1) {
         ctx.translate(posInfo.x, posInfo.y);
-        simpleHitEffect(noteT / effectDecayTime);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
         if (s.isHanabi) {
-            simpleHanabi(noteT / (2 * effectDecayTime));
-            //console.log("hanabi", noteT / (2 * effectDecayTime));
+            simpleHanabi(noteT / (2 * defaultSettings.effectDecayTime), s.touchPos === "C");
+            //console.log("hanabi", noteT / (2 * defaultSettings.effectDecayTime));
         }
     }
     else {
         const currentScale = 0.8;
-        const size = noteBaseSize * 0.7;
+        const size = defaultSettings.noteBaseSize * 0.7;
 
         let a = touchTimeFunction(11 * (1 - t) / 1.5) * 1.6;
 
@@ -1465,10 +1627,10 @@ function drawSlide(s) {
     const { time: noteTime, pos, slideEnd, isBreak, isDouble, slideDelay, slideDuration, path } = s;
 
     const noteT = noteTime - globalTime;
-    const progress = noteT * (touchSpeed * 0.8833 + 0.8167);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
     const t = 1 - timeFunction(progress);
 
-    //if (t < distance || -noteT > slideDelay + slideDuration) return;
+    //if (t < defaultSettings.middleDistance || -noteT > slideDelay + slideDuration) return;
 
     const p = path || generatePath(pos, slideEnd);
     if (p.totalLength < 1e-4) return;
@@ -1481,7 +1643,7 @@ function drawSlide(s) {
     ctx.save();*/
 
     const isTaped = -noteT > 0;
-    ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - distance) / (1 - distance));
+    ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - defaultSettings.middleDistance) / (1 - defaultSettings.middleDistance));
     let slideProgress = 0;
     if (-noteT > slideDelay) {
         slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
@@ -1499,8 +1661,8 @@ function drawSlide(s) {
         ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
         ctx.translate(x, y);
         ctx.rotate(rot + Math.PI * 0.5);
-        //ctx.drawImage(starImg, -noteBaseSize * 0.5 * sz, -noteBaseSize * 0.5 * sz, noteBaseSize * sz, noteBaseSize * sz);
-        drawImgAtcenter(starImg, noteBaseSize * sz * 1.45, 0, 0);
+        //ctx.drawImage(starImg, -defaultSettings.noteBaseSize * 0.5 * sz, -defaultSettings.noteBaseSize * 0.5 * sz, defaultSettings.noteBaseSize * sz, defaultSettings.noteBaseSize * sz);
+        drawImgAtcenter(starImg, defaultSettings.noteBaseSize * sz * 1.45, 0, 0);
     }
 
     ctx.restore();

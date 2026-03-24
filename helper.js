@@ -814,7 +814,8 @@ export function popupWindow({
     buttons = [],
     width = 340,       // 預設寬度
     unclosable = false,
-    closeWhen          // 外部控制回調
+    closeWhen,         // 外部控制回調
+    whenOpen           // 開啟時的回調函式
 } = {}) {              // 預設為空物件，防止沒傳參數時報錯) {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = `
@@ -837,6 +838,7 @@ export function popupWindow({
     });
 
     const closePopup = () => {
+        backdrop.style.perspective = '800px'; // 添加透視效果
         backdrop.style.pointerEvents = 'none'; // 禁止重複點擊
         backdrop.style.opacity = '0'; // 立即隱藏背景，避免動畫結束前看到閃爍
         // 1. 背景淡出
@@ -878,6 +880,7 @@ export function popupWindow({
         max-width: calc(100% - 20px);
         max-height: 100%;
         box-shadow: 0 0 15px rgba(0, 0, 0, 0.7);
+        overflow: hidden;
         width: ${title ? (typeof width === 'number' ? width + 'px' : width) : '30px'};
     `;
 
@@ -944,7 +947,7 @@ export function popupWindow({
         btnElem.style.cssText = `
             background: rgb(32, 32, 32);
             color: white;
-             flex: 0 0 auto;
+            flex: 0 0 auto;
             height: 100%;
             padding: 5px 10px;
             cursor: pointer;
@@ -1003,7 +1006,7 @@ export function popupWindow({
     if (customContent) {
         if (customContent instanceof Node) {
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = `margin-top: 10px; width: 100%; height: fit-content; box-shadow: 0 0 5px black inset; border-radius: 3px; padding: 10px; background: #151515; box-sizing: border-box;`;
+            wrapper.style.cssText = `margin-top: 10px; width: 100%; height: fit-content; border-radius: 3px; padding: 10px; background: #1a1a1a; box-sizing: border-box; overflow: hidden; border: 1px solid #333;`;
             wrapper.appendChild(customContent);
             popup.appendChild(wrapper);
         } else if (typeof customContent === 'string') {
@@ -1021,21 +1024,28 @@ export function popupWindow({
 
     document.body.appendChild(backdrop);
     backdrop.style.animation = 'fadeIn 0.3s';
-    backdrop.style.perspective = '1000px';
+    backdrop.style.perspective = '800px'; // 添加透視效果
+
     backdrop.animate([
         { opacity: 0 },
         { opacity: 1 }
     ], {
         duration: 100,
         easing: 'ease'
-    });
-    popup.animate([
-        { transform: 'translate(-50%, -50%) rotateX(30deg)' },
-        { transform: 'translate(-50%, -50%) rotateX(0deg)' }
-    ], {
-        duration: 200,
-        easing: 'ease'
-    });
+    })
+    {
+        let popupAnimation = popup.animate([
+            { transform: 'translate(-50%, -50%) rotateX(30deg)' },
+            { transform: 'translate(-50%, -50%) rotateX(0deg)' }
+        ], {
+            duration: 200,
+            easing: 'ease'
+        });
+        popupAnimation.onfinish = () => {
+            backdrop.style.opacity = '1'; // 確保動畫結束後保持最終狀態
+            backdrop.style.perspective = ''; // 確保動畫結束後保持最終狀態
+        };
+    }
     const updateContent = (newText) => {
         contentElem.innerHTML = newText;
         if (newText === "") {
@@ -1062,6 +1072,9 @@ export function popupWindow({
     };
     if (typeof closeWhen === 'function') {
         closeWhen(closePopup, updateContent, updButtons, setProgress);
+    }
+    if (typeof whenOpen === 'function') {
+        whenOpen(updateContent, updButtons, setProgress, contentElem);
     }
 }
 /**
@@ -1251,15 +1264,22 @@ export function generatePath(startPos, endPos) {
 
 async function cacheFontWithAPI(url) {
     const cache = await caches.open('font-assets-v1');
-    
+
     // 檢查是否有快取
     let response = await cache.match(url);
-    
+
     if (!response) {
         console.log("[CacheAPI] 抓取並儲存字體...");
         await cache.add(url);
     }
-    
+
     // 即使在 Cache API 中，你最後還是要在 CSS 寫 @font-face 
     // 或者用上述的 FontFace API 來載入。
+}
+export function formatSize(size) {
+    if (size < 1024) return `${size} B`;
+    for (const unit of ['KiB', 'MiB', 'GiB']) {
+        size /= 1024;
+        if (size < 1024) return `${size.toFixed(1)} ${unit}`;
+    }
 }

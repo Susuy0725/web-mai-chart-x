@@ -316,9 +316,27 @@ class AudioManager {
         this.sfxMasterVolume = 0.5;
         this.sfxGainNode.gain.value = this.sfxMasterVolume;
 
+        this.longSoundGainNode = this.ctx.createGain();
+        this.longSoundGainNode.gain.value = 0.7;
+
+        // 建立 DynamicsCompressorNode，避免多個 long sound 疊加造成爆音
+        this.longSoundCompressor = this.ctx.createDynamicsCompressor();
+        const now = this.ctx.currentTime;
+        // 初始參數，可依需求微調
+        this.longSoundCompressor.threshold.setValueAtTime(-16, now);
+        this.longSoundCompressor.knee.setValueAtTime(8, now);
+        this.longSoundCompressor.ratio.setValueAtTime(4, now);
+        this.longSoundCompressor.attack.setValueAtTime(0.005, now);
+        this.longSoundCompressor.release.setValueAtTime(0.25, now);
+
+        // 連線：longGain -> compressor -> sfx master
+        this.longSoundGainNode.connect(this.longSoundCompressor);
+        this.longSoundCompressor.connect(this.sfxGainNode);
+
         this.soundFiles = {
             'clock': './Sounds/clock.wav',
             'judge': './Sounds/judge.wav',
+            'judge_ex': './Sounds/judge_ex.wav',
             'judge_break': './Sounds/judge_break.wav',
             'answer': './Sounds/answer.wav',
             'break': './Sounds/break.wav',
@@ -334,6 +352,7 @@ class AudioManager {
             'clock': 0.8,
             'answer': 1,
             'judge': 0.4,
+            'judge_ex': 0.4,
             'judge_break': 0.4,
             'judge_break_slide': 0.4,
             'break': 0.4,
@@ -506,6 +525,9 @@ class AudioManager {
         // 根據 Note 類型決定音效
         switch (note.type) {
             case "tap":
+                if (note.isEx) {
+                    key = "judge_ex";
+                }
                 if (note.isBreak) {
                     key = "judge_break"
                     this._checkAndPush("break", targetTime, true, this.sfxVolumes["break"]);
@@ -515,6 +537,9 @@ class AudioManager {
             case "hold":
                 this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
                 if (!note.startEffectPlayed) {
+                    if (note.isEx) {
+                        key = "judge_ex";
+                    }
                     if (note.isBreak) {
                         key = "judge_break";
                         this._checkAndPush("break", targetTime, true, this.sfxVolumes["break"]);
@@ -662,7 +687,7 @@ class AudioManager {
 
         const gainNode = this.ctx.createGain();
         source.connect(gainNode);
-        gainNode.connect(this.sfxGainNode);
+        gainNode.connect(this.longSoundGainNode);
 
         // Web Audio API 的 start(when, offset)
         // 這裡的 startTimeWithinBuffer 必須小於 buffer.duration
@@ -761,19 +786,20 @@ export function getHighlight(text) {
 
     let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    const combinedRegex = /(\|\|.*$)|((?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(([ABCDE])(\d+)|C|C(d+))/gm;
+    const combinedRegex = /(\|\|.*$)|((?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(([ABCDE])(\d+)|C|C(d+))/gm;
 
-    html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, touch) => {
+    html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, touch) => {
         if (comment) return `<span style="color: #468A55;">${comment}</span>`;
         if (slide) return `<span style="color: #7EBAF0;">${slide}</span>`;
         if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
         if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
         if (split) return `<span style="color: #ce9178;">${split}</span>`;
         if (time) return `<span style="color: #b5cea8;">${time}</span>`;
-        if (bk) return `<span style="color: #F7B268;">${bk}</span>`;
+        if (bk) return `<span style="color: #e19748;">${bk}</span>`;
+        if (ex) return `<span style="color: #ff9f9f;">${ex}</span>`;
         if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
-        if (f) return `<span style="color: #FC7CC6;">${f}</span>`;
-        if (comm) return `<span style="color: #99A9AD;">${comm}</span>`;
+        if (f) return `<span style="color: #f495ff;">${f}</span>`;
+        if (comm) return `<span style="color: #7f888a;">${comm}</span>`;
         return match;
     });
 
@@ -1171,12 +1197,13 @@ export function simpleToast({
 }
 const baseURL = './Skin/', baseImageKeys = [
     'sensor',
-    'tap', 'tap_break', 'tap_each',
+    'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc',
-    'hold', 'hold_break', 'hold_each',
+    'hold', 'hold_break', 'hold_each', 'hold_ex',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
     'touch', 'touch_each', 'touch_point', 'touch_point_each',
-    'star', 'star_break', 'star_each', 'star_double', 'star_break_double', 'star_each_double',
+    'star', 'star_break', 'star_each', 'star_double', 'star_ex',
+    'star_break_double', 'star_each_double', 'star_ex_double',
     'slide', 'slide_each', 'slide_break', 'SlideArc',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
 ];
@@ -1262,6 +1289,105 @@ export function generatePath(startPos, endPos) {
     return recorder;
 }
 
+/**
+ * 對圖像套用色調 (Flat Tint)
+ */
+function tintImage(img, r, g, b, amount = 0.5) {
+    const w = img.width || img.naturalWidth || 0;
+    const h = img.height || img.naturalHeight || 0;
+    if (w === 0 || h === 0) return null;
+
+    // 1. 優先使用 OffscreenCanvas (效能較佳且不影響 DOM)
+    let canvas;
+    if (typeof OffscreenCanvas !== 'undefined') {
+        canvas = new OffscreenCanvas(w, h);
+    } else {
+        canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    // 2. 繪製原始圖像
+    ctx.drawImage(img, 0, 0, w, h);
+
+    // 3. 套用色彩合成
+    // 'source-atop' 會保留原圖透明度，並在有像素的地方填色
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+
+    // 這裡我們直接用 amount 控制全域透明度，效果更精確
+    ctx.globalAlpha = Math.max(0, Math.min(1, amount));
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+
+    return canvas;
+}
+// 建議定義在全域或模組頂層
+const _tintCache = new WeakMap();
+
+/**
+ * 取得染色後的圖片 (具備快取機制)
+ */
+export function getTintedImage(img, amount = 0.5, { r = 255, g = 255, b = 255, colorCode = null } = {}) {
+    if (!img) return null;
+
+    // 1. 初始化圖片對應的快取 Map (使用 WeakMap 避免記憶體洩漏)
+    let map = _tintCache.get(img);
+    if (!map) {
+        map = new Map();
+        _tintCache.set(img, map);
+    }
+
+    // 2. 處理 Hex 色碼 (支援 #號、3位與6位格式)
+    if (colorCode !== null) {
+        let hex = colorCode.replace('#', '');
+        if (hex.length === 3) {
+            hex = hex.split('').map(c => c + c).join('');
+        }
+
+        if (/^[0-9A-Fa-f]{6}$/.test(hex)) {
+            r = parseInt(hex.slice(0, 2), 16);
+            g = parseInt(hex.slice(2, 4), 16);
+            b = parseInt(hex.slice(4, 6), 16);
+        } else {
+            console.warn("Invalid tint color code:", colorCode);
+        }
+    }
+
+    // 3. 數值邊界檢查與正規化
+    const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    r = clamp(r); g = clamp(g); b = clamp(b);
+
+    // Amount 取到小數點後兩位，防止 key 跑掉 (例如 0.5000000001)
+    const normalizedAmount = Math.round(amount * 100) / 100;
+
+    // 4. 快取檢索
+    const key = `${r}|${g}|${b}|${normalizedAmount}`;
+    if (map.has(key)) return map.get(key);
+
+    // 5. 執行真正的染色邏輯
+    const canvas = tintImage(img, r, g, b, normalizedAmount);
+    map.set(key, canvas);
+
+    return canvas;
+}
+
+/**
+ * 清除 tint 快取
+ * 如果傳入 img 只清該圖的快取；不傳則清除全部快取
+ * @param {HTMLImageElement} [img]
+ */
+export function clearTintCache(img) {
+    if (img) {
+        _tintCache.delete(img);
+    } else {
+        _tintCache = new WeakMap();
+    }
+}
+
 async function cacheFontWithAPI(url) {
     const cache = await caches.open('font-assets-v1');
 
@@ -1283,3 +1409,17 @@ export function formatSize(size) {
         if (size < 1024) return `${size.toFixed(1)} ${unit}`;
     }
 }
+
+export const wSlideRatio = [
+    111, 68, -3, 0,
+    160, 90, -3.5, -0.004,
+    204, 110, -4.6, -0.0035,
+    253, 136, -5.5, -0.004,
+    298, 154, -6.5, -0.003,
+    353, 179, -6.2, -0.003,
+    410, 205, -5.75, -0.003,
+    464, 226, -5.45, -0.003,
+    519, 251, -5.4, -0.004,
+    571, 271, -5.2, -0.003,
+    653, 313, -3.9, -0.003,
+];

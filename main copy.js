@@ -1,13 +1,11 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath, formatSize, getTintedImage } from './helper.js';
+import { imgNotExists, scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath, formatSize, getTintedImage } from './helper.js';
 import { simaiDecode } from './decode.js';
-import { SimaiRenderer } from './renderer.js';
 
-let images, readyBeat = false, maidata, nowDifficulty, backgroundImage, renderer;
+let images, readyBeat = false, maidata, nowDifficulty, backgroundImage;
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
-
 
 popupWindow({
     title: "正在準備環境...",
@@ -20,8 +18,6 @@ popupWindow({
             await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
 
             images = await loadAllImages((pct, key) => step(40 + pct * 0.5, `正在載入素材: ${key} (${Math.round(pct)}%)`));
-            renderer = new SimaiRenderer(canvas, defaultSettings);
-            renderer.setImages(images);
             readyBeat = await idbGet('simai_ready_beat') === 'true';
 
             step(90, "正在恢復上次的編輯狀態...");
@@ -188,7 +184,7 @@ const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
-export const defaultSettings = {
+const defaultSettings = {
     speed: 6.5,
     touchSpeed: 7,
     effectDecayTime: 0.4,
@@ -944,6 +940,20 @@ function applyHighlight(text) {
     highlightLayer.innerHTML = getHighlight(text);
 }
 
+const wSlideRatio = [
+    111, 68, -3, 0,
+    160, 90, -3.5, -0.004,
+    204, 110, -4.6, -0.0035,
+    253, 136, -5.5, -0.004,
+    298, 154, -6.5, -0.003,
+    353, 179, -6.2, -0.003,
+    410, 205, -5.75, -0.003,
+    464, 226, -5.45, -0.003,
+    519, 251, -5.4, -0.004,
+    571, 271, -5.2, -0.003,
+    653, 313, -3.9, -0.003,
+];
+
 const slideInputDebounce = debounce(() => {
     timeControlSliding = false;
     idbSet('simai_timeControl', realTime).then(() => {
@@ -1290,8 +1300,8 @@ function draw(dt = 0) {
     for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
         const noteT = (note.time - globalTime);
-        const t = 1 - renderer.timeFunction(noteT * (defaultSettings.speed * 0.8833 + 0.8167));
-        const touchT = 1 - renderer.timeFunction(noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167));
+        const t = 1 - timeFunction(noteT * (defaultSettings.speed * 0.8833 + 0.8167));
+        const touchT = 1 - timeFunction(noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167));
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
 
         if (!foundIndexForThisFrame && realTime >= note.time && note.type !== "slide") {
@@ -1360,15 +1370,413 @@ function draw(dt = 0) {
         }
     }
 
-    renderer.drawFrame({
-        globalTime,
-        notes,
-        buckets,
-        dt,
-        showSensor,
-        backgroundImage
-    });
+    // 4. 依照「圖層順序」渲染
+    // 先畫底層 Slide -> Hold -> Tap -> Touch (最上層)
+    if (showSensor) drawSensors();
+    buckets.slide.forEach(n => drawSlide(n, ctx));
+    buckets.tapnhold.forEach(n => n.type === "hold" ? drawHold(n, ctx) : (n.isStar ? drawStar(n, ctx) : drawTap(n, ctx)));
+    buckets.touch.forEach(n => drawTouch(n, ctx));
 
     // 5. 統一更新 Web Audio API 播放佇列
     audioManager.update(globalTime);
+}
+function drawSensors() {
+    //const currentlyLitIds = new Set(activePointers.values());
+    ctx.save();
+    touchPaths.forEach(shape => {
+        //const isSelected = currentlyLitIds.has(shape.id);
+        //ctx.fillStyle = isSelected ? '#FFD700' : '#00008080'; // 選中改為金色 : 原本深藍
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = isSelected ? 1.2 : 0.8; // 選中時邊框加粗
+
+        ctx.fill(shape.path);
+        ctx.stroke(shape.path);
+    });
+    ctx.restore();
+}
+function simpleHitEffect(t) {
+    if (t < -1) return; // 超過衰減時間就不繪製
+    const decayAlpha = 1 - Math.max(0, - t);
+    const radius = 0.8 * defaultSettings.noteBaseSize * (1 - decayAlpha);
+
+    ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+    ctx.lineWidth = 0.5 * defaultSettings.noteBaseSize * decayAlpha;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+function simpleHanabi(t, isCenter) {
+    if (t < -1) return; // 超過衰減時間就不繪製
+    function ease(x) {
+        return 1 - Math.pow(1 - x, 2); // 加入緩動效果，讓爆炸更自然
+    }
+    const decayAlpha = 1 - Math.max(0, - t);
+    const radius = (2 + isCenter * 2) * defaultSettings.noteBaseSize * ease(1 - decayAlpha);
+
+    ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+    ctx.lineWidth = 0.5 * defaultSettings.noteBaseSize * decayAlpha;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+const exColor = {
+    tap: '#D8A2C9',
+    star: '#00DBF4',
+    double: '#DCDA6B',
+    break: '#EBBA63',
+}
+function drawTap(s) {
+    const { time: noteTime, pos, isBreak, isDouble } = s;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime) return;
+
+    const img = images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
+    if (imgNotExists(img) || imgNotExists(images["tap_ex"])) return;
+    const ex = getTintedImage(images["tap_ex"], 0.5, { colorCode: exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
+
+    const posInfo = noteRefPos[pos - 1];
+    ctx.save();
+
+    if (t >= 1) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
+    }
+    else {
+        const displayT = Math.max(defaultSettings.middleDistance, t);
+        const currentScale = t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1;
+        const size = defaultSettings.noteBaseSize * currentScale;
+
+        let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        ctx.rotate(posInfo.rot);
+        drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        /*ctx.font = `3px Arial`;
+        ctx.fillText(t, 10, 10);*/
+        ctx.rotate(posInfo.rot);
+        drawImgAtcenter(img, size, 0, 0);
+        if (s.isEx) drawImgAtcenter(ex, size, 0, 0);
+    }
+    ctx.restore();
+}
+function drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
+    ctx.drawImage(img, -size / 2 * imgWidthMul + offsetX, -size / 2 * imgHeightMul + offsetY, size * imgWidthMul, size * imgHeightMul);
+}
+function drawStar(s) {
+    const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime) return;
+
+    const img = images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+        : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
+    ];
+    if (imgNotExists(img) || imgNotExists(images["star_ex"]) || imgNotExists(images["star_ex_double"])) return;
+    const ex = getTintedImage(images[isMultiple ? "star_ex_double" : "star_ex"], 0.5, { colorCode: exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
+
+    const posInfo = noteRefPos[pos - 1];
+    ctx.save();
+
+    if (t >= 1) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
+    }
+    else {
+        const displayT = Math.max(defaultSettings.middleDistance, t);
+        const currentScale = t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1;
+        const size = defaultSettings.noteBaseSize * currentScale;
+
+        ctx.save();
+        let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
+        ctx.rotate(posInfo.rot);
+        drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        ctx.rotate(posInfo.rot);
+        drawImgAtcenter(img, size, 0, 0);
+        if (s.isEx) drawImgAtcenter(ex, size * 0.95, 0, 0);
+    }
+    ctx.restore();
+}
+function drawHold(s) {
+    const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime + holdDuration) return;
+
+    const img = images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
+    if (imgNotExists(img) || imgNotExists(images["hold_ex"])) return;
+    const ex = getTintedImage(images["hold_ex"], 0.5, { colorCode: isBreak ? exColor.break : (isDouble ? exColor.double : exColor.tap) });
+    const sizeOffset = t < defaultSettings.middleDistance ? 0 :
+        Math.min((holdDuration + noteT) * 0.9 * (defaultSettings.speed * 0.8833 + 0.8167),
+            Math.min((1 - defaultSettings.middleDistance) * 2.45,
+                Math.min((t - defaultSettings.middleDistance) * 2.45,
+                    holdDuration * 0.9 * (defaultSettings.speed * 0.8833 + 0.8167))));
+
+    const posInfo = noteRefPos[pos - 1];
+
+    ctx.save();
+    if (-noteT >= holdDuration) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleHitEffect((holdDuration + noteT) / defaultSettings.effectDecayTime);
+    }
+    else {
+        const noteT1 = (noteTime - globalTime + holdDuration);
+        const progress1 = noteT1 * (defaultSettings.speed * 0.8833 + 0.8167);
+        const t1 = 1 - timeFunction(progress1);
+
+        const displayT = Math.min(1, Math.max(defaultSettings.middleDistance, t));
+        const currentScale = t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1;
+        const size = defaultSettings.noteBaseSize * currentScale;
+
+        ctx.save();
+        let arcimg = images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        ctx.rotate(posInfo.rot);
+        drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25, 0, 0);
+        ctx.restore();
+
+        if (t1 > defaultSettings.middleDistance) {
+            ctx.save();
+            let endimg = images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
+            ctx.translate(posInfo.x * t1, posInfo.y * t1);
+            drawImgAtcenter(endimg, size * 0.65, 0, 0);
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        ctx.rotate(posInfo.rot);
+        ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
+        ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset)); // body
+        ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275); // tail
+        if (s.isEx) {
+            ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275); // head
+            ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset)); // body
+            ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275); // tail
+        }
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
+    }
+    ctx.restore();
+}
+function timeFunction(x) {
+    return 0.02160482279616 * x * x * x - 0.07553691072 * x * x + 0.43509924 * x + 0.000250029;
+}
+function drawTouch(s) {
+    const { time: noteTime, pos, touchPos, isDouble, holdDuration } = s;
+    if (holdDuration) {
+        const imgs = [];
+        for (let i = 0; i < 4; i++) {
+            const img = images["touchhold_" + i];
+            if (imgNotExists(img)) return;
+            imgs.push(img);
+        }
+        const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
+        const touchBorder = images.touchhold_border;
+        if (imgNotExists(touchPoint) || imgNotExists(touchBorder)) return;
+        const noteT = (noteTime - globalTime);
+        const progress = noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167);
+        const t = 1 - timeFunction(progress);
+
+        //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime + holdDuration) return;
+
+        const size = defaultSettings.noteBaseSize * (t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1);
+        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+        ctx.save();
+        if (-noteT >= holdDuration) {
+            ctx.translate(posInfo.x, posInfo.y);
+            simpleHitEffect((holdDuration + noteT) / defaultSettings.effectDecayTime);
+            if (s.isHanabi) {
+                simpleHanabi((holdDuration + noteT) / (2 * defaultSettings.effectDecayTime), s.touchPos === "C");
+            }
+        }
+        else {
+            const currentScale = 0.8;
+            const size = defaultSettings.noteBaseSize * 0.7;
+            const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+
+            let a = touchTimeFunction(11 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+
+            ctx.translate(posInfo.x, posInfo.y);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+            ctx.closePath();
+            ctx.clip();
+            //ctx.drawImage(touchBorder, -size * 1.3, -size * 1.3, size * 2.6, size * 2.6);
+            drawImgAtcenter(touchBorder, size * 2.6, 0, 0);
+            ctx.restore();
+            ctx.save();
+            ctx.translate(posInfo.x, posInfo.y);
+            ctx.rotate(Math.PI * -0.75);
+            ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
+            for (let i = 0; i < 4; i++) {
+                ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                //drawImgAtcenter(imgs[i], size * 1.365, 0, size * 0.15 * (a - 1.5));
+                ctx.rotate(Math.PI / 2);
+            }
+            ctx.globalAlpha = 1;
+            //ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+            drawImgAtcenter(touchPoint, size * 0.4, 0, 0);
+        }
+        ctx.restore();
+        return;
+    }
+    const img = images[isDouble ? "touch_each" : "touch"];
+    const touchPoint = images[isDouble ? "touch_point_each" : "touch_point"];
+    if (imgNotExists(img) || imgNotExists(touchPoint)) return;
+    const noteT = (noteTime - globalTime);
+    const progress = noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    //if (t < -0.8 || -noteT > defaultSettings.effectDecayTime) return;
+
+    const size = defaultSettings.noteBaseSize * (t < defaultSettings.middleDistance ? (t + 0.9) / (0.9 + defaultSettings.middleDistance) : 1);
+    const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+    ctx.save();
+    if (t >= 1) {
+        ctx.translate(posInfo.x, posInfo.y);
+        simpleHitEffect(noteT / defaultSettings.effectDecayTime);
+        if (s.isHanabi) {
+            simpleHanabi(noteT / (2 * defaultSettings.effectDecayTime), s.touchPos === "C");
+            //console.log("hanabi", noteT / (2 * defaultSettings.effectDecayTime));
+        }
+    }
+    else {
+        const currentScale = 0.8;
+        const size = defaultSettings.noteBaseSize * 0.7;
+
+        let a = touchTimeFunction(11 * (1 - t) / 1.5) * 1.6;
+
+        ctx.translate(posInfo.x, posInfo.y);
+        /*ctx.font = `3px Arial`;
+        ctx.fillText(1 - (1 - t) / 1.4, 10, 10);*/
+        //ctx.rotate(posInfo.rot);
+        ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.55);
+        for (let i = 0; i < 4; i++) {
+            ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            ctx.rotate(Math.PI / 2);
+        }
+        ctx.globalAlpha = 1;
+        //ctx.drawImage(touchPoint, -size * 0.2, -size * 0.2, size * 0.4, size * 0.4);
+        drawImgAtcenter(touchPoint, size * 0.4, 0, 0);
+    }
+    ctx.restore();
+}
+function touchTimeFunction(x) {
+    return 0.000753454 * x * x * x - 0.0298793 * x * x + 0.375038 * x + 0.104685;
+}
+function drawSlide(s) {
+    const imgs = (() => {
+        // 預先判斷 prefix
+        const prefix = s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_");
+        const standardKey = s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide");
+
+        if (s.slideType === "w") {
+            const tempImgs = [];
+            for (let i = 0; i < 11; i++) {
+                const target = images[prefix + i];
+                if (imgNotExists(target)) return []; // 只要缺一張就視為失敗
+                tempImgs.push(target);
+            }
+            return tempImgs;
+        }
+
+        // 普通滑軌
+        const target = images[standardKey];
+        return imgNotExists(target) ? [] : [target];
+    })();
+    if (!imgs || imgs.length === 0) return;
+    const starImg = images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
+    const { time: noteTime, pos, slideEnd, isBreak, isDouble, slideDelay, slideDuration, path } = s;
+
+    const noteT = noteTime - globalTime;
+    const progress = noteT * (defaultSettings.speed * 0.8833 + 0.8167);
+    const t = 1 - timeFunction(progress);
+
+    //if (t < defaultSettings.middleDistance || -noteT > slideDelay + slideDuration) return;
+
+    const p = path || generatePath(pos, slideEnd);
+    if (p.totalLength < 1e-4) return;
+    ctx.save();
+    /*drawPathOnCanvas(ctx, p);
+    ctx.strokeStyle = '#0000ff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();*/
+
+    const isTaped = -noteT > 0;
+    ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - defaultSettings.middleDistance) / (1 - defaultSettings.middleDistance));
+    let slideProgress = 0;
+    if (-noteT > slideDelay) {
+        slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
+    }
+
+    drawPathWithArrows(ctx, p, slideProgress, imgs, s.slideType === "w");
+    const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
+    if (noteT <= 0 && slideProgress < 1) {
+        if (s.hideHead && sz < 1) {
+            ctx.restore();
+            return;
+        }
+        const { x, y, rot } = p.getPointAt(slideProgress);
+
+        ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
+        ctx.translate(x, y);
+        ctx.rotate(rot + Math.PI * 0.5);
+        //ctx.drawImage(starImg, -defaultSettings.noteBaseSize * 0.5 * sz, -defaultSettings.noteBaseSize * 0.5 * sz, defaultSettings.noteBaseSize * sz, defaultSettings.noteBaseSize * sz);
+        drawImgAtcenter(starImg, defaultSettings.noteBaseSize * sz * 1.45, 0, 0);
+    }
+
+    ctx.restore();
+}
+function drawPathWithArrows(ctx, recorder, starProgress, imgs, typew, s = { spacing: 4.36 }) {
+    if (recorder.totalLength === 0 || !imgs || imgs.length === 0) return;
+    // 將參數 t 改名為 starProgress 以避免與內部循環的比例變數 t 衝突
+    const arrowCount = typew ? 12 : Math.floor(recorder.totalLength / s.spacing);
+
+    if (typew) s.spacing = 7;
+    ctx.save(); // 保護環境
+
+    // 從末端開始往前畫，直到遇到滑星目前的位置 (starProgress)
+    for (let i = arrowCount - 1; i > Math.floor(starProgress * arrowCount); i--) {
+        //if (i > 2 && typew) continue;
+        // WiFi 軌跡通常根據索引選擇對應的扇形段圖片
+        const imgIndex = Math.min(i - 1, imgs.length - 1);
+        const img = typew ? imgs[imgIndex] : imgs[0];
+
+        if (!img) continue;
+
+        const dist = i * s.spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+        const percent = dist / recorder.totalLength; // 這是路徑上的比例
+
+        // 取得該點的座標與切線旋轉角度
+        const { x, y, rot } = recorder.getPointAt(percent);
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // 旋轉：rot 是切線方向，+Math.PI 是因為箭頭圖片通常朝向與路徑相反
+        ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+
+        // 繪製箭頭 (這裡的 0.9 是你的縮放倍率)
+        const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+        const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+        //ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        drawImgAtcenter(img, 1, 0, 0, dw, dh);
+        ctx.restore();
+    }
+
+    ctx.restore();
 }

@@ -1,13 +1,13 @@
-import { 
-    scaleBase, 
-    innerCirleBase, 
-    noteRefPos, 
-    touchRefPos, 
-    imgNotExists, 
-    getTintedImage, 
+import {
+    scaleBase,
+    innerCirleBase,
+    noteRefPos,
+    touchRefPos,
+    imgNotExists,
+    getTintedImage,
     generatePath,
-    touchPaths, // 確保從 helper 引入
-    wSlideRatio // 確保從 helper 引入
+    touchPaths,
+    wSlideRatio
 } from './helper.js';
 
 export class SimaiRenderer {
@@ -39,10 +39,10 @@ export class SimaiRenderer {
 
     drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
         this.ctx.drawImage(
-            img, 
-            -size / 2 * imgWidthMul + offsetX, 
-            -size / 2 * imgHeightMul + offsetY, 
-            size * imgWidthMul, 
+            img,
+            -size / 2 * imgWidthMul + offsetX,
+            -size / 2 * imgHeightMul + offsetY,
+            size * imgWidthMul,
             size * imgHeightMul
         );
     }
@@ -59,7 +59,7 @@ export class SimaiRenderer {
 
     simpleHitEffect(noteT) {
         const t = noteT / this.settings.effectDecayTime;
-        if (t < -1) return; 
+        if (t < -1) return;
         const decayAlpha = 1 - Math.max(0, -t);
         const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
 
@@ -103,6 +103,8 @@ export class SimaiRenderer {
         // 3. 傳感器
         if (showSensor) this.drawSensors();
 
+        this.drawMiddleDisplay();
+
         // 4. 桶子繪製 (順序由下而上)
         buckets.slide.forEach(n => this.drawSlide(n));
         buckets.tapnhold.forEach(n => {
@@ -140,12 +142,72 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
+    drawMiddleDisplay() {
+        const { ctx } = this;
+        ctx.save();
+        function outlineText(text, x, y, fontSize, outlinePx) {
+            ctx.lineWidth = outlinePx;
+            ctx.font = `bold ${fontSize}px combo`;
+            ctx.strokeText(text, x, y);
+            ctx.fillText(text, x, y);
+        }
+        switch (this.settings.middleDisplay) {
+            case 1:
+                if (this.settings.play_combo != 0) {
+                    ctx.fillStyle = "#FF569B";
+                    ctx.strokeStyle = "white";
+                    ctx.lineWidth = 2;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.letterSpacing = "0px";
+                    outlineText("COMBO", 0, -7, 4.4, 0.5);
+                    ctx.letterSpacing = "0.5px";
+                    outlineText(`${this.settings.play_combo}`, 0, 0, 7.4, 0.5);
+                }
+                ctx.letterSpacing = "0px";
+                break;
+            case 2:
+                const trueScore = Math.round(Math.max(this.settings.play_score, 0));
+                // use gamma correction for more natural progression
+                ctx.fillStyle = adjustBrightness("#498BFF", (1 - this.settings.backgroundDarkness) ** 0.45);
+                if (trueScore > 800000) {
+                    ctx.fillStyle = adjustBrightness("#FF6353", (1 - this.settings.backgroundDarkness) ** 0.45);
+                }
+                if (trueScore > 1000000) {
+                    ctx.fillStyle = adjustBrightness("#FFD559", (1 - this.settings.backgroundDarkness) ** 0.45);
+                }
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = Math.floor(hbw * 0.015);
+                ctx.textAlign = "left";
+                ctx.letterSpacing = "0px";
+                ctx.font = "bold " + Math.floor(hbw * 0.13) + "px combo"
+                ctx.strokeText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.085, hh + hbw * 0.06);
+                ctx.fillText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.085, hh + hbw * 0.06);
+                const lastScoreL = ctx.measureText(`${((trueScore / 10000) % 1).toFixed(4).slice(2, 6)}`).width;
+                ctx.font = "bold " + Math.floor(hbw * 0.1) + "px combo"
+                ctx.strokeText(`%`, hw - hbw * 0.045 + lastScoreL, hh + hbw * 0.06);
+                ctx.fillText(`%`, hw - hbw * 0.045 + lastScoreL, hh + hbw * 0.06);
+                ctx.textAlign = "right";
+                ctx.letterSpacing = Math.floor(hbw * 0.01) + "px";
+                ctx.font = "bold " + Math.floor(hbw * 0.18) + "px combo"
+                ctx.strokeText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.075, hh + hbw * 0.06);
+                ctx.fillText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.075, hh + hbw * 0.06);
+                break;
+            default:
+                break;
+        }
+        ctx.restore();
+    }
+
     drawSensors() {
         const { ctx } = this;
         ctx.save();
         touchPaths.forEach(shape => {
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 0.8;
+            if (shape.type === 'D' || shape.type === 'C1' || shape.type === 'C2') return; // 目前不繪製 D 區域和 A 區域
+            ctx.strokeStyle = '#ffffff80';
+            ctx.lineWidth = 0.3;
+            if (shape.type === 'A') { ctx.lineWidth = 0.4; ctx.setLineDash([0.2, 0.8]); }
+            else ctx.setLineDash([]);
             ctx.stroke(shape.path);
         });
         ctx.restore();
@@ -249,9 +311,9 @@ export class SimaiRenderer {
             const size = this.settings.noteBaseSize * (t < this.settings.middleDistance ? (t + 0.9) / (0.9 + this.settings.middleDistance) : 1);
             const sizeOffset = t < this.settings.middleDistance ? 0 :
                 Math.min((holdDuration + noteT) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
-                Math.min((1 - this.settings.middleDistance) * 2.45,
-                Math.min((t - this.settings.middleDistance) * 2.45,
-                holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
+                    Math.min((1 - this.settings.middleDistance) * 2.45,
+                        Math.min((t - this.settings.middleDistance) * 2.45,
+                            holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
 
             this.ctx.save();
             const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
@@ -273,7 +335,7 @@ export class SimaiRenderer {
             this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
             this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
             this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-            
+
             if (s.isEx) {
                 const ex = getTintedImage(this.images["hold_ex"], 0.5, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
                 this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
@@ -366,7 +428,7 @@ export class SimaiRenderer {
     drawSlide(s) {
         const prefix = s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_");
         const standardKey = s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide");
-        
+
         const imgs = [];
         if (s.slideType === "w") {
             for (let i = 0; i < 11; i++) {
@@ -389,7 +451,7 @@ export class SimaiRenderer {
         this.ctx.save();
         const isTaped = -noteT > 0;
         this.ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - this.settings.middleDistance) / (1 - this.settings.middleDistance));
-        
+
         let slideProgress = 0;
         if (-noteT > slideDelay) {
             slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
@@ -414,11 +476,11 @@ export class SimaiRenderer {
     }
 
     drawPathWithArrows(recorder, starProgress, imgs, typew, config = { spacing: 4.36 }) {
-        const arrowCount = typew ? 12 : Math.floor(recorder.totalLength / config.spacing);
+        const arrowCount = typew ? 12 : Math.floor((recorder.totalLength - 1) / config.spacing);
         const spacing = typew ? 7 : config.spacing;
 
         this.ctx.save();
-        for (let i = arrowCount - 1; i > Math.floor(starProgress * arrowCount); i--) {
+        for (let i = arrowCount; i > Math.floor(starProgress * arrowCount); i--) {
             const imgIndex = Math.min(i - 1, imgs.length - 1);
             const img = typew ? imgs[imgIndex] : imgs[0];
             const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);

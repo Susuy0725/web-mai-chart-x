@@ -6,6 +6,12 @@
     --top-utility-btn: #2B2B2B;
 }
 
+@font-face {
+    font-family: 'combo';
+    src: url('Fonts/Inter.ttf') format('truetype');
+    font-display: swap;
+}
+
 body {
     margin: 0;
     padding: 0;

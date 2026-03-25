@@ -1,13 +1,12 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { scaleBase, innerCirleBase, noteRefPos, touchRefPos, getButton, debounce, audioManager, touchPaths, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, generatePath, formatSize, getTintedImage } from './helper.js';
+import { scaleBase, getButton, debounce, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize } from './helper.js';
 import { simaiDecode } from './decode.js';
 import { SimaiRenderer } from './renderer.js';
 
-let images, readyBeat = false, maidata, nowDifficulty, backgroundImage, renderer;
+let images, readyBeat = false, maidata, nowDifficulty, backgroundImage, renderer, settings = {};
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
-
 
 popupWindow({
     title: "正在準備環境...",
@@ -20,14 +19,12 @@ popupWindow({
             await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
 
             images = await loadAllImages((pct, key) => step(40 + pct * 0.5, `正在載入素材: ${key} (${Math.round(pct)}%)`));
-            renderer = new SimaiRenderer(canvas, defaultSettings);
-            renderer.setImages(images);
             readyBeat = await idbGet('simai_ready_beat') === 'true';
 
             step(90, "正在恢復上次的編輯狀態...");
             const [
                 savedContent, savedMusicDelay, savedTimeControl,
-                savedBgm, savedMaiData, savedDifficulty, bg, hideEditor
+                savedBgm, savedMaiData, savedDifficulty, bg, hideEditor, savedSettings
             ] = await Promise.all([
                 idbGet('simai_editor_content'),
                 idbGet('simai_musicDelay'),
@@ -37,6 +34,7 @@ popupWindow({
                 idbGet('simai_now_difficulty'),
                 idbGet('simai_background_image'),
                 idbGet('simai_hide_editor'),
+                idbGet('simai_settings')
             ]);
 
             if (savedContent) { editorInput.value = savedContent; applyHighlight(savedContent); getres(savedContent); }
@@ -51,7 +49,33 @@ popupWindow({
                 hideEditorButton.children[0].textContent = "right_panel_open";
                 setEditorCss(false);
             }
-            if (savedBgm) { step(95, "正在還原背景音樂..."); await audioManager.setBackgroundMusic(savedBgm); endTime = Math.max(endTime, audioManager.getBGMDuration() + 1); }
+            if (savedBgm) {
+                step(95, "正在還原背景音樂...");
+                await audioManager.setBackgroundMusic(savedBgm);
+                endTime = Math.max(endTime + 1, audioManager.getBGMDuration() + 1);
+                slider.max = endTime - musicDelay;
+            }
+            if (savedSettings) {
+                settings = JSON.parse(savedSettings);
+                let isMissingSettings = false;
+                for (const key in defaultSettings) {
+                    if (!(key in settings)) {
+                        settings[key] = defaultSettings[key];
+                        console.warn(`設定項 "${key}" 在已儲存的設定中缺失，已自動補齊預設值。`);
+                        isMissingSettings = true;
+                    }
+                }
+                if (isMissingSettings) {
+                    await idbSet('simai_settings', JSON.stringify(settings));
+                }
+            }
+            else {
+                settings = { ...defaultSettings }
+                await idbSet('simai_settings', JSON.stringify(settings));
+            };
+            renderer = new SimaiRenderer(canvas, settings);
+            renderer.setImages(images);
+
             step(100, "完成！正在渲染畫面...");
             resize(); close();
         } catch (e) {
@@ -194,13 +218,16 @@ export const defaultSettings = {
     effectDecayTime: 0.4,
     middleDistance: 0.25,
     noteBaseSize: 11,
+    play_combo: 100,
+    play_score: 100,
+    middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
 };
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
 let secondCtx = null;
 let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
-let showSensor = false;
+let showSensor = true;
 let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
 
@@ -661,7 +688,8 @@ folderInput.addEventListener('click', (e) => {
                 // 音樂檔
                 const url = URL.createObjectURL(file);
                 audioManager.setBackgroundMusic(url);
-                endTime = Math.max(endTime, audioManager.getBGMDuration() + 1);
+                endTime = Math.max(endTime + 1, audioManager.getBGMDuration() + 1);
+                slider.max = endTime - musicDelay;
                 idbSet('simai_resource_bgm', file).then(() => {
                     console.log("已儲存音樂檔到 IndexedDB");
                 }).catch((error) => {
@@ -1113,7 +1141,7 @@ function update(timestamp) {
         globalTime = realTime - musicDelay;
         if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
             //audioManager.playBGM(realTime);
-            if (audioManager.getBGMDuration() > 0) realTime = audioManager.getBGMTime();
+            if (audioManager.getBGMDuration() > 0 && audioManager.getBGMTime() !== realTime) realTime = audioManager.getBGMTime();
             bgmUpdateTimer = 0;
         }
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
@@ -1228,35 +1256,11 @@ function openSecondWindow() {
 window.addEventListener('resize', resize);
 
 resize();
-
 let playClock = [false, false, false, false];
 function draw(dt = 0) {
     // 1. 清除畫布
     ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
-    if (!images) return; // 圖片尚未載入完成前不繪製
-
-    ctx.save();
-    ctx.font = "2px Arial";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(`FPS: ${dt === 0 ? 'N/A' : (1 / dt).toFixed(2)}`, -scaleBase / 2, -scaleBase / 2);
-    ctx.fillText(`Time: ${globalTime.toFixed(2)}s`, -scaleBase / 2, -scaleBase / 2 + 4);
-
-    ctx.beginPath();
-    ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
-    ctx.lineWidth = 0.5;
-    ctx.closePath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
-    ctx.lineWidth = 0.7;
-    ctx.closePath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
-    ctx.stroke();
-    ctx.restore();
+    if (!renderer) return;
 
     let foundIndexForThisFrame = false;
     // 如果當前時間比譜面中第一個音符還早，就將 index 設為 0
@@ -1287,16 +1291,37 @@ function draw(dt = 0) {
             }
         }
     }
+    settings.play_combo = 0;
     for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
         const noteT = (note.time - globalTime);
-        const t = 1 - renderer.timeFunction(noteT * (defaultSettings.speed * 0.8833 + 0.8167));
-        const touchT = 1 - renderer.timeFunction(noteT * (defaultSettings.touchSpeed * 0.8833 + 0.8167));
+        const t = 1 - renderer.timeFunction(noteT * (settings.speed * 0.8833 + 0.8167));
+        const touchT = 1 - renderer.timeFunction(noteT * (settings.touchSpeed * 0.8833 + 0.8167));
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
 
         if (!foundIndexForThisFrame && realTime >= note.time && note.type !== "slide") {
             nowIndex = note.index ?? nowIndex;
             foundIndexForThisFrame = true; // 標記本幀已找到，防止被更早的音符覆蓋
+        }
+
+        if (noteT < 0) {
+            if (note.type === "slide") {
+                if (note.lastSlide && skipT + noteT < 0) {
+                    settings.play_combo++;
+                }
+            } else if (note.type === "hold") {
+                if (skipT + noteT < 0) {
+                    settings.play_combo++;
+                }
+            } else {
+                if (note.type === "touch" && note.holdDuration !== undefined) {
+                    if (skipT + noteT < 0) {
+                        settings.play_combo++;
+                    }
+                } else {
+                    settings.play_combo++;
+                }
+            }
         }
 
         if (playing && !timeControlSliding) {
@@ -1345,11 +1370,11 @@ function draw(dt = 0) {
 
         // --- 效能過濾：如果太早或太晚，就不處理繪製 ---
         const isVisible = (note.type === "slide" ?
-            t >= defaultSettings.middleDistance :
+            t >= settings.middleDistance :
             (note.type === "touch" ?
                 touchT >= -1 :
                 t >= -1))
-            && -noteT <= skipT + defaultSettings.effectDecayTime * (note.isHanabi ? 2 : 1);
+            && -noteT <= skipT + settings.effectDecayTime * (note.isHanabi ? 2 : 1);
 
         // --- 將可見音符丟進對應桶子 ---
         if (isVisible) {

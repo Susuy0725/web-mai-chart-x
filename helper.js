@@ -745,7 +745,7 @@ for (let i = 1; i <= 8; i++) {
             if (j >= len) angleOffset = -angleOffset;
 
             const angle = (base - angleOffset) * (Math.PI / 4);
-            const radius = innerCirleBase * radiusMult;
+            const radius = innerCirleBase * radiusMult * 1.135;
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
 
@@ -760,22 +760,22 @@ for (let i = 1; i <= 8; i++) {
 
 }
 const c1 = new Path2D();
-c1.moveTo(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 - 3, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
-c1.lineTo(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
-c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205);
-c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205);
-c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
-c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 - 3, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
+c1.moveTo(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135 - 3, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135);
+c1.lineTo(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205 * 1.135);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205 * 1.135);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135);
+c1.lineTo(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135 - 3, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135);
 c1.closePath();
 touchPaths.push({ id: `C1`, type: 'C1', path: c1 });
 const c2 = new Path2D();
 // mirrored horizontally: negate x and adjust offset
-c2.moveTo(-(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 - 3), Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
-c2.lineTo(-Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205);
-c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205);
-c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205);
-c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
-c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 - 3), Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205);
+c2.moveTo(-(Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135 - 3), Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135);
+c2.lineTo(-Math.cos(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * -0.375) * innerCirleBase * 0.205 * 1.135);
+c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * (-0.375 + 0.25)) * innerCirleBase * 0.205 * 1.135);
+c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * (-0.375 + 0.5)) * innerCirleBase * 0.205 * 1.135);
+c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135, Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135);
+c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135 - 3), Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135);
 c2.closePath();
 touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
 
@@ -805,6 +805,7 @@ export function getHighlight(text) {
 
     return html + (text.endsWith('\n') ? ' ' : '');
 }
+
 export function parseMaidata(raw) {
     if (!raw) { console.warn("empty rawdata!"); return {} };
     console.log("Parsing Maidata...");
@@ -818,290 +819,137 @@ export function parseMaidata(raw) {
     return maidata;
 }
 /**
-* 簡易彈窗函式
-* @param {string} title 
-彈窗標題
-* @param {string} content 
-彈窗內容（建議純文字，會自動換行）
-* @param {Array} buttons 
-按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: () => {}, `hideOnClick`: true/false }
-* @param {boolean} unclosable 
-是否可關閉
-* @param {Function} closeWhen 
-關閉條件函式 (closePopup, updateContent, updButtons, setProgress) => {}，提供內部控制函式讓外部決定何時關閉或更新內容
-**/
+ * 精簡版 popupWindow
+ */
 export function popupWindow({
     title = "",
     content = "",
-    customContent = null,   // 可選：自訂內容元素，若提供則忽略 content 參數
-    /**
-     * 按鈕列表，每個按鈕為 { `text`: '按鈕文字', `onClick`: (closePopup, updateContent, updButtons, contentElem) => {}, `hideOnClick`: true/false }
-     */
+    customContent = null,
     buttons = [],
-    width = 340,       // 預設寬度
+    width = 340,
     unclosable = false,
-    closeWhen,         // 外部控制回調
-    whenOpen           // 開啟時的回調函式
-} = {}) {              // 預設為空物件，防止沒傳參數時報錯) {
-    const backdrop = document.createElement('div');
-    backdrop.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(2px);
-        z-index: 50;
-        display: flex; /* 方便置中 */
-        align-items: center;
-        justify-content: center;
-    `;
+    closeWhen,
+    whenOpen
+} = {}) {
+    const setStyle = (el, styles) => Object.assign(el.style, styles);
 
-    if (!unclosable) backdrop.addEventListener('click', (e) => {
-        // 只有點擊背景才關閉，點擊彈窗內部 (popup) 不關閉
-        if (e.target === backdrop) closePopup();
+    // 1. 建立背景 (Backdrop)
+    const backdrop = document.createElement('div');
+    setStyle(backdrop, {
+        position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+        background: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(2px)', zIndex: '50',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        opacity: '0', transition: 'opacity 0.2s ease', perspective: '800px'
     });
 
-    const closePopup = () => {
-        backdrop.style.perspective = '800px'; // 添加透視效果
-        backdrop.style.pointerEvents = 'none'; // 禁止重複點擊
-        backdrop.style.opacity = '0'; // 立即隱藏背景，避免動畫結束前看到閃爍
-        // 1. 背景淡出
-        backdrop.animate([
-            { opacity: 1 },
-            { opacity: 0 }
-        ], {
-            duration: 100,
-            easing: 'ease'
-        });
-        const popupAnim = popup.animate([
-            { transform: 'translate(-50%, -50%) rotateX(0deg)' },
-            { transform: 'translate(-50%, -50%) rotateX(30deg)' }
-        ], {
-            duration: 200,
-            easing: 'ease'
-        });
-
-        // 3. 當動畫全部結束時，移除 DOM
-        popupAnim.onfinish = () => {
-            backdrop.style.display = 'none'; // 先隱藏，避免動畫結束前看到閃爍
-            if (document.body.contains(backdrop)) {
-                document.body.removeChild(backdrop);
-            }
-        };
-    };
-
+    // 2. 建立彈窗主體 (Popup)
     const popup = document.createElement('div');
-    popup.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: #202020;
-        color: white;
-        padding: 0 10px 10px 10px;
-        border: 1px solid #404040;
-        border-radius: 5px;
-        max-width: calc(100% - 20px);
-        max-height: 100%;
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.7);
-        overflow: hidden;
-        width: ${title ? (typeof width === 'number' ? width + 'px' : width) : '30px'};
-    `;
+    const popupWidth = typeof width === 'number' ? `${width}px` : width;
+    setStyle(popup, {
+        background: '#202020', color: 'white', padding: '10px',
+        border: '1px solid #404040', borderRadius: '5px',
+        maxWidth: 'calc(100% - 20px)', maxHeight: '95%',
+        boxShadow: '0 0 15px rgba(0, 0, 0, 0.7)', overflow: 'hidden',
+        width: title ? popupWidth : 'fit-content', position: 'relative'
+    });
 
+    // 3. 內部組件
     const titleElem = document.createElement('h3');
+    setStyle(titleElem, { margin: '5px 0 10px 5px', minHeight: '30px', display: 'flex', alignItems: 'center', userSelect: 'none' });
     titleElem.innerText = title;
-    titleElem.style.cssText = `
-        margin: 10px 0 0 10px;
-        margin-left: 5px;
-        width: calc(100% - 35px);
-        min-height: 30px;
-        user-select: none;
-        display: flex;
-        align-items: center;
-    `;
-    const progressContainer = document.createElement('div');
-    progressContainer.style.cssText = `
-    width: 100%;
-    height: 6px;
-    background: #333;
-    border-radius: 3px;
-    overflow: hidden;
-    display: none; /* 預設隱藏，有進度時才顯示 */
-`;
 
+    const progressContainer = document.createElement('div');
     const progressBar = document.createElement('div');
-    progressBar.style.cssText = `
-    width: 0%;
-    height: 100%;
-    background: #00ffcc; /* 亮色進度條 */
-    transition: width 0.5s ease;
-`;
+    setStyle(progressContainer, { width: '100%', height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', display: 'none' });
+    setStyle(progressBar, { width: '0%', height: '100%', background: '#00ffcc', transition: 'width 0.3s ease' });
     progressContainer.appendChild(progressBar);
 
-    // 更新進度的函式
-    const setProgress = (percent) => {
-        progressContainer.style.display = 'block';
-        progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    const contentElem = document.createElement('div');
+    setStyle(contentElem, {
+        fontFamily: 'monospace', fontSize: '12px', background: '#151515',
+        padding: '10px', borderRadius: '3px', whiteSpace: 'pre-wrap',
+        overflow: 'auto', maxHeight: '190px', display: content ? 'block' : 'none'
+    });
+    contentElem.innerHTML = content.trim();
+
+    const btnContainer = document.createElement('div');
+    setStyle(btnContainer, { display: 'flex', gap: '10px', marginTop: '10px', overflowX: 'auto', flexWrap: 'nowrap' });
+
+    // --- 功能函式 ---
+    
+    const closePopup = () => {
+        backdrop.style.pointerEvents = 'none';
+        backdrop.style.opacity = '0';
+        popup.animate([
+            { transform: 'rotateX(0deg)', opacity: 1 },
+            { transform: 'rotateX(30deg)', opacity: 0 }
+        ], { duration: 200, easing: 'ease-in' }).onfinish = () => backdrop.remove();
     };
 
-    if (!unclosable) {
-        const closeButton = document.createElement('div');
-        closeButton.innerText = '×';
-        closeButton.style.cssText = `
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            cursor: pointer;
-            font-size: 20px;
-            color: #aaa;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            user-select: none;
-        `;
+    const updateContent = (text) => {
+        contentElem.innerHTML = text;
+        contentElem.style.display = text ? 'block' : 'none';
+    };
 
-        closeButton.addEventListener('click', closePopup);
-        popup.appendChild(closeButton);
-    }
-    function genButton(btn) {
-        const btnElem = document.createElement('button');
-        btnElem.innerText = btn.text || "";
-        btnElem.style.cssText = `
-            background: rgb(32, 32, 32);
-            color: white;
-            flex: 0 0 auto;
-            height: 100%;
-            padding: 5px 10px;
-            cursor: pointer;
-            border: 1px solid rgb(64, 64, 64);
-            border-radius: 3px;
-            user-select: none;
-        `;
-        btnElem.addEventListener('click', () => {
-            if (btn.onClick) btn.onClick(closePopup, updateContent, updButtons, contentElem);
-            if (btn.hideOnClick || false) closePopup();
+    const updButtons = (newBtns = []) => {
+        btnContainer.innerHTML = '';
+        btnContainer.style.display = newBtns.length ? 'flex' : 'none';
+        newBtns.forEach(btn => {
+            const b = document.createElement('button');
+            b.innerText = btn.text;
+            setStyle(b, { background: '#202020', color: 'white', padding: '5px 10px', cursor: 'pointer', border: '1px solid #404040', borderRadius: '3px', whiteSpace: 'nowrap' });
+            b.onclick = () => {
+                if (btn.onClick) btn.onClick(closePopup, updateContent, updButtons, contentElem);
+                if (btn.hideOnClick) closePopup();
+            };
+            btnContainer.appendChild(b);
         });
-        btnContainer.appendChild(btnElem);
+    };
+
+    const setProgress = (pct) => {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    };
+
+    // --- 初始化組合 ---
+
+    if (!unclosable) {
+        backdrop.onclick = (e) => e.target === backdrop && closePopup();
+        const closeX = document.createElement('div');
+        closeX.innerText = '×';
+        setStyle(closeX, { position: 'absolute', top: '10px', right: '10px', cursor: 'pointer', fontSize: '20px', color: '#aaa', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' });
+        closeX.onclick = closePopup;
+        popup.appendChild(closeX);
     }
-    const contentElem = document.createElement('div');
-    contentElem.innerHTML = content ? content.trim() : content;
-    contentElem.style.cssText = `
-        font-family: monospace;
-        font-size: 12px;
-        margin-top: 10px;
-        background: #151515;
-        padding: 10px;
-        border-radius: 3px;
-        white-space: pre-wrap;
-        width: calc(100% - 20px);
-        overflow: auto;
-        max-height: 190px;
-        height: fit-content;
-    `;
-    const btnContainer = document.createElement('div');
-    btnContainer.style.cssText = `
-        display: flex;
-        justify-content: flex-start; /* start at left so overflow happens on right */
-        gap: 10px;
-        height: 30px;
-        width: 100%;
-        margin-top: 10px;
-        overflow-x: auto;
-        overflow-y: hidden;   /* prevent vertical scroll */
-        flex-wrap: nowrap;     /* keep buttons in one line so overflow occurs */
-        -webkit-overflow-scrolling: touch; /* smoother swipe on mobile */
-    `;
-    if (!buttons || buttons.length === 0) {
-        btnContainer.style.display = 'none';
-    } else {
-        if (buttons instanceof Array) {
-            buttons.forEach(btn => {
-                genButton(btn);
-            });
-        }
-    }
-    if (content === "") {
-        contentElem.style.display = 'none';
-    }
-    popup.appendChild(titleElem);
-    popup.appendChild(progressContainer);
+
+    popup.append(titleElem, progressContainer);
+    
     if (customContent) {
-        if (customContent instanceof Node) {
-            const wrapper = document.createElement('div');
-            wrapper.style.cssText = `margin-top: 10px; width: 100%; height: fit-content; border-radius: 3px; padding: 10px; background: #1a1a1a; box-sizing: border-box; overflow: hidden; border: 1px solid #333;`;
-            wrapper.appendChild(customContent);
-            popup.appendChild(wrapper);
-        } else if (typeof customContent === 'string') {
-            const wrapper = document.createElement('div');
-            wrapper.innerHTML = customContent;
-            popup.appendChild(wrapper);
-        } else {
-            console.warn("popupWindow: customContent is not a Node or string", customContent);
-        }
+        const wrapper = document.createElement('div');
+        setStyle(wrapper, { marginTop: '10px', padding: '10px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '3px' });
+        customContent instanceof Node ? wrapper.appendChild(customContent) : (wrapper.innerHTML = customContent);
+        popup.appendChild(wrapper);
     } else {
         popup.appendChild(contentElem);
     }
+
     popup.appendChild(btnContainer);
     backdrop.appendChild(popup);
-
     document.body.appendChild(backdrop);
-    backdrop.style.animation = 'fadeIn 0.3s';
-    backdrop.style.perspective = '800px'; // 添加透視效果
 
-    backdrop.animate([
-        { opacity: 0 },
-        { opacity: 1 }
-    ], {
-        duration: 100,
-        easing: 'ease'
-    })
-    {
-        let popupAnimation = popup.animate([
-            { transform: 'translate(-50%, -50%) rotateX(30deg)' },
-            { transform: 'translate(-50%, -50%) rotateX(0deg)' }
-        ], {
-            duration: 200,
-            easing: 'ease'
-        });
-        popupAnimation.onfinish = () => {
-            backdrop.style.opacity = '1'; // 確保動畫結束後保持最終狀態
-            backdrop.style.perspective = ''; // 確保動畫結束後保持最終狀態
-        };
-    }
-    const updateContent = (newText) => {
-        contentElem.innerHTML = newText;
-        if (newText === "") {
-            contentElem.style.display = 'none';
-        } else {
-            contentElem.style.display = 'block';
-        }
-        popup.style.width = (typeof width === 'number' ? width + 'px' : width);
-    };
-    const updButtons = (newButtons) => {
-        btnContainer.innerHTML = '';
-        if (!newButtons || newButtons.length === 0) {
-            btnContainer.style.display = 'none';
-            return;
-        } else {
-            btnContainer.style.display = 'flex';
-        }
-        if (newButtons instanceof Array) {
-            newButtons.forEach(btn => {
-                genButton(btn);
-            });
-        }
-        popup.style.width = (typeof width === 'number' ? width + 'px' : width);
-    };
-    if (typeof closeWhen === 'function') {
-        closeWhen(closePopup, updateContent, updButtons, setProgress);
-    }
-    if (typeof whenOpen === 'function') {
-        whenOpen(updateContent, updButtons, setProgress, contentElem);
-    }
+    // 啟動動畫
+    requestAnimationFrame(() => {
+        backdrop.style.opacity = '1';
+        popup.animate([
+            { transform: 'rotateX(30deg)', opacity: 0 },
+            { transform: 'rotateX(0deg)', opacity: 1 }
+        ], { duration: 200, easing: 'ease-out' });
+    });
+
+    // 執行回調
+    updButtons(buttons);
+    if (closeWhen) closeWhen(closePopup, updateContent, updButtons, setProgress);
+    if (whenOpen) whenOpen(updateContent, updButtons, setProgress, contentElem);
 }
 /**
  * 簡易提示小標籤 (支援自動堆疊)
@@ -1252,7 +1100,6 @@ export async function loadAllImages(onProgress) {
     await Promise.all(loadQueue);
     return images;
 }
-
 async function getImgWithCache(url, key) {
     // 1. 嘗試從 IndexedDB 取得 Blob
     let blob = await idbGet(`img_cache_${key}`);
@@ -1288,7 +1135,6 @@ export function generatePath(startPos, endPos) {
 
     return recorder;
 }
-
 /**
  * 對圖像套用色調 (Flat Tint)
  */
@@ -1409,7 +1255,6 @@ export function formatSize(size) {
         if (size < 1024) return `${size.toFixed(1)} ${unit}`;
     }
 }
-
 export const wSlideRatio = [
     111, 68, -3, 0,
     160, 90, -3.5, -0.004,

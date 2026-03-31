@@ -52,6 +52,7 @@ export class SimaiRenderer {
     }
 
     touchTimeFunction(x) {
+        if (x > 10.24938) return 1.62102;
         return 0.000753454 * x * x * x - 0.0298793 * x * x + 0.375038 * x + 0.104685;
     }
 
@@ -375,7 +376,7 @@ export class SimaiRenderer {
             } else {
                 const size = this.settings.noteBaseSize * 0.7;
                 const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
-                const a = this.touchTimeFunction(11 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+                const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
 
                 this.ctx.translate(posInfo.x, posInfo.y);
                 this.ctx.save();
@@ -386,7 +387,6 @@ export class SimaiRenderer {
                 this.ctx.clip();
                 this.drawImgAtcenter(touchBorder, size * 2.6);
                 this.ctx.restore();
-
                 this.ctx.rotate(Math.PI * -0.75);
                 this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
                 for (let i = 0; i < 4; i++) {
@@ -395,6 +395,7 @@ export class SimaiRenderer {
                 }
                 this.ctx.globalAlpha = 1;
                 this.drawImgAtcenter(touchPoint, size * 0.4);
+                this.simpleHitEffect(noteT);
             }
             this.ctx.restore();
             return;
@@ -411,7 +412,7 @@ export class SimaiRenderer {
             if (s.isHanabi) this.simpleHanabi(noteT, s.touchPos === "C");
         } else {
             const size = this.settings.noteBaseSize * 0.7;
-            const a = this.touchTimeFunction(11 * (1 - t) / 1.5) * 1.6;
+            const a = this.touchTimeFunction(18 * (1 - t) / 1.5) * 1.6;
 
             this.ctx.translate(posInfo.x, posInfo.y);
             this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.55);

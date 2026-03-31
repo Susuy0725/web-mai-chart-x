@@ -13,9 +13,9 @@ popupWindow({
     content: "",
     buttons: [],
     unclosable: true,
-    closeWhen: async (close, update, updButtons, setProgress) => {
+    onOpen: async (ctx) => {
         try {
-            const step = (p, msg) => (setProgress(p), update(msg));
+            const step = (p, msg) => (ctx.setProgress(p), ctx.setContent(msg));
             await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
 
             images = await loadAllImages((pct, key) => step(40 + pct * 0.5, `正在載入素材: ${key} (${Math.round(pct)}%)`));
@@ -45,10 +45,6 @@ popupWindow({
             if (savedMaiData) maidata = savedMaiData;
             if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
             if (bg) { backgroundImage = bg; }
-            if (hideEditor) {
-                hideEditorButton.children[0].textContent = "right_panel_open";
-                setEditorCss(false);
-            }
             if (savedBgm) {
                 step(95, "正在還原背景音樂...");
                 await audioManager.setBackgroundMusic(savedBgm);
@@ -73,16 +69,24 @@ popupWindow({
                 settings = { ...defaultSettings }
                 await idbSet('simai_settings', JSON.stringify(settings));
             };
+
+            window.settings = settings;
+            if (hideEditor) {
+                hideEditorButton.children[0].textContent = "right_panel_open";
+                editorContainer.dataset.hidden = 'true';
+            }
+            setEditorCss(!hideEditor);
+            changeDisplayMode.value = settings.displayMode ?? 'simai';
             renderer = new SimaiRenderer(canvas, settings);
             renderer.setImages(images);
 
             step(100, "完成！正在渲染畫面...");
-            resize(); close();
+            resize(); ctx.close();
         } catch (e) {
             console.error("初始化失敗:", e);
-            update(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
+            ctx.setContent(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
             // 報錯時可以考慮顯示一個「強制關閉」按鈕，或者讓視窗可以被手動關閉
-            updButtons([{
+            ctx.setButtons([{
                 text: "清除所有資料",
                 onClick: async () => {
                     const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
@@ -182,7 +186,7 @@ popupWindow({
                     popupWindow({
                         title: "警告",
                         content: "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
-                        buttons: [{ text: "繼續", onClick: () => { close(); }, hideOnClick: true }, { text: "取消", hideOnClick: true }]
+                        buttons: [{ text: "繼續", onClick: () => { ctx.close(); }, hideOnClick: true }, { text: "取消", hideOnClick: true }]
                     });
                 }
             }]);
@@ -208,7 +212,9 @@ const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const folderInput = getButton("readFolder", "utility");
 const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
+const changeDisplayMode = getButton("displayMode", "utility").children[0];
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
+const visualEditor = document.getElementById('visualEditor');
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
@@ -221,6 +227,9 @@ export const defaultSettings = {
     play_combo: 100,
     play_score: 100,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
+    moviebrightness: -1,
+    // #ffffff -> #404040
+    displayMode: 'simai', // simai 或 visual
 };
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
@@ -230,8 +239,26 @@ let timeControlSliding = false; // 新增滑動狀態標記
 let showSensor = true;
 let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
+let visualCtx = null;
+
+const VISUAL_WINDOW = 4; // 顯示目前時間前後秒數
+const VISUAL_COLORS = {
+    tap: '#47d1ff',
+    hold: '#42f59b',
+    slide: '#ffc247',
+    touch: '#ff6e7a',
+    default: '#c7c7c7'
+};
 
 let clockBpm = 60;
+
+const isVisualMode = () => settings.displayMode === 'visual';
+
+const saveSettingsDebounce = debounce(() => {
+    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
+        console.error('儲存設定到 IndexedDB 失敗:', error);
+    });
+}, 300);
 
 const testData = `(60){4}1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf,`
 
@@ -275,133 +302,136 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
     }
 
     // 呼叫你的 simplePopupWindow
-    popupWindow(
-        {
-            title: "資源管理",
-            content: await getSize(),
-            buttons: [
-                {
-                    text: "清除緩存",
-                    onClick: (close, update) => {
-                        popupWindow(
+    popupWindow({
+        title: "資源管理",
+        content: await getSize(),
+        buttons: [
+            {
+                text: "清除緩存",
+                onClick: (manageCtx) => {
+                    const refreshManage = async () => {
+                        manageCtx.setContent(await getSize());
+                    };
+
+                    popupWindow({
+                        title: "清除緩存",
+                        width: "max-content",
+                        buttons: [
                             {
-                                title: "清除緩存",
-                                width: "max-content",
-                                buttons: [
-                                    {
-                                        text: "清除所有資料",
-                                        onClick: async () => {
-                                            const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
-                                            if (!confirmed) return;
-                                            const db = await openDB();
-                                            const transaction = db.transaction("editorState", "readwrite");
-                                            const store = transaction.objectStore("editorState");
-                                            store.clear();
-                                            update(await getSize());
-                                            try {
-                                                await transaction.complete;
-                                                console.log("已清除 IndexedDB 中的所有資料");
-                                            } catch (e) {
-                                                console.error("清除 IndexedDB 資料失敗:", e);
+                                text: "清除所有資料",
+                                onClick: async () => {
+                                    const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                                    if (!confirmed) return;
+                                    const db = await openDB();
+                                    const transaction = db.transaction("editorState", "readwrite");
+                                    const store = transaction.objectStore("editorState");
+                                    store.clear();
+                                    await refreshManage();
+                                    try {
+                                        await transaction.complete;
+                                        console.log("已清除 IndexedDB 中的所有資料");
+                                    } catch (e) {
+                                        console.error("清除 IndexedDB 資料失敗:", e);
+                                    }
+                                }
+                            },
+                            {
+                                text: "清除譜面暫存",
+                                onClick: async () => {
+                                    const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                                    if (!confirmed) return;
+
+                                    const db = await openDB();
+                                    const transaction = db.transaction("editorState", "readwrite");
+                                    const store = transaction.objectStore("editorState");
+
+                                    // 1. 取得所有 Key
+                                    const getKeysRequest = store.getAllKeys();
+
+                                    getKeysRequest.onsuccess = async () => {
+                                        const allKeys = getKeysRequest.result;
+                                        let deleteCount = 0;
+
+                                        // 2. 篩選並刪除符合條件的 Key
+                                        allKeys.forEach(key => {
+                                            if (typeof key === 'string' && key.startsWith('simai_')) {
+                                                store.delete(key);
+                                                deleteCount++;
                                             }
-                                        }
-                                    },
-                                    {
-                                        text: "清除譜面暫存",
-                                        onClick: async () => {
-                                            const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
-                                            if (!confirmed) return;
+                                        });
+                                        await refreshManage();
 
-                                            const db = await openDB();
-                                            const transaction = db.transaction("editorState", "readwrite");
-                                            const store = transaction.objectStore("editorState");
+                                        transaction.oncomplete = () => {
+                                            console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
+                                            // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                                            // location.reload(); 
+                                        };
+                                    };
 
-                                            // 1. 取得所有 Key
-                                            const getKeysRequest = store.getAllKeys();
+                                    transaction.onerror = async (e) => {
+                                        console.error("清除特定資料失敗:", e);
+                                        await refreshManage();
+                                    };
+                                }
+                            },
+                            {
+                                text: "清除素材暫存",
+                                onClick: async () => {
+                                    const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                                    if (!confirmed) return;
 
-                                            getKeysRequest.onsuccess = async () => {
-                                                const allKeys = getKeysRequest.result;
-                                                let deleteCount = 0;
+                                    const db = await openDB();
+                                    const transaction = db.transaction("editorState", "readwrite");
+                                    const store = transaction.objectStore("editorState");
 
-                                                // 2. 篩選並刪除符合條件的 Key
-                                                allKeys.forEach(key => {
-                                                    if (typeof key === 'string' && key.startsWith('simai_')) {
-                                                        store.delete(key);
-                                                        deleteCount++;
-                                                    }
-                                                });
-                                                update(await getSize());
+                                    // 1. 取得所有 Key
+                                    const getKeysRequest = store.getAllKeys();
 
-                                                transaction.oncomplete = () => {
-                                                    console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                                                    // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                                                    // location.reload(); 
-                                                };
-                                            };
+                                    getKeysRequest.onsuccess = async () => {
+                                        const allKeys = getKeysRequest.result;
+                                        let deleteCount = 0;
 
-                                            transaction.onerror = async (e) => {
-                                                console.error("清除特定資料失敗:", e);
-                                                update(await getSize());
-                                            };
-                                        }
-                                    },
-                                    {
-                                        text: "清除素材暫存",
-                                        onClick: async () => {
-                                            const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
-                                            if (!confirmed) return;
+                                        // 2. 篩選並刪除符合條件的 Key
+                                        allKeys.forEach(key => {
+                                            if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
+                                                store.delete(key);
+                                                deleteCount++;
+                                            }
+                                            if (typeof key === 'string' && key.startsWith('img_cache_')) {
+                                                store.delete(key);
+                                                deleteCount++;
+                                            }
+                                        });
 
-                                            const db = await openDB();
-                                            const transaction = db.transaction("editorState", "readwrite");
-                                            const store = transaction.objectStore("editorState");
+                                        await refreshManage();
 
-                                            // 1. 取得所有 Key
-                                            const getKeysRequest = store.getAllKeys();
+                                        transaction.oncomplete = () => {
+                                            console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
+                                            // 這裡可以選擇是否要 reload 頁面或是更新 UI
+                                            // location.reload(); 
+                                        };
+                                    };
 
-                                            getKeysRequest.onsuccess = async () => {
-                                                const allKeys = getKeysRequest.result;
-                                                let deleteCount = 0;
-
-                                                // 2. 篩選並刪除符合條件的 Key
-                                                allKeys.forEach(key => {
-                                                    if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
-                                                        store.delete(key);
-                                                        deleteCount++;
-                                                    }
-                                                    if (typeof key === 'string' && key.startsWith('img_cache_')) {
-                                                        store.delete(key);
-                                                        deleteCount++;
-                                                    }
-                                                });
-
-                                                update(await getSize());
-
-                                                transaction.oncomplete = () => {
-                                                    console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                                                    // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                                                    // location.reload(); 
-                                                };
-                                            };
-
-                                            transaction.onerror = async (e) => {
-                                                console.error("清除特定資料失敗:", e);
-                                                update(await getSize());
-                                            };
-                                        }
-                                    },
-                                    {
-                                        text: "關閉",
-                                        hideOnClick: true
-                                    }]
-                            });
-                    }
-                },
-                {
-                    text: "關閉",
-                    hideOnClick: true
+                                    transaction.onerror = async (e) => {
+                                        console.error("清除特定資料失敗:", e);
+                                        await refreshManage();
+                                    };
+                                }
+                            },
+                            {
+                                text: "關閉",
+                                hideOnClick: true
+                            }
+                        ]
+                    });
                 }
-            ]
-        });
+            },
+            {
+                text: "關閉",
+                hideOnClick: true
+            }
+        ]
+    });
 });
 
 const getres = ((simaiDataValue) => {
@@ -456,15 +486,11 @@ const inputDebounce = debounce(() => {
     });
 }, 300);
 
-const setEditorCss = (visible = null) => {
-    // 同步捲動永遠執行
-    highlightLayer.scrollTop = editorInput.scrollTop;
-    highlightLayer.scrollLeft = editorInput.scrollLeft;
+function setElementDisplay(element, visible, value = 'block') {
+    element.style.display = visible ? value : 'none';
+}
 
-    if (visible === null) return;
-
-    // visible 為 true 代表顯示編輯器
-    //canvasContainer.style.width = visible ? '50%' : '100%';
+function animateCanvasWidth(visible) {
     const canvasAnimation = canvasContainer.animate(
         [{ width: visible ? '50%' : '100%' }],
         { duration: 400, fill: 'forwards', easing: 'ease' }
@@ -474,24 +500,141 @@ const setEditorCss = (visible = null) => {
 
     function syncResize() {
         if (animationRunning) {
-            resize(); // 調整畫布大小
-            requestAnimationFrame(syncResize); // 繼續下一幀
+            resize();
+            requestAnimationFrame(syncResize);
         }
     }
 
     canvasAnimation.onfinish = () => {
-        animationRunning = false; // 停止同步
-        resize(); // 確保最後執行一次
+        animationRunning = false;
+        resize();
     };
 
-    animationRunning = true;
-    syncResize(); // 開始同步
+    syncResize();
+}
 
-    const displayMode = visible ? 'block' : 'none';
+function ensureVisualEditorContext() {
+    if (!visualCtx) {
+        visualCtx = visualEditor.getContext('2d');
+    }
+    return visualCtx;
+}
 
-    editorInput.style.display = displayMode;
-    highlightLayer.style.display = displayMode;
-    editorContainer.style.display = displayMode;
+function resizeVisualEditor() {
+    const ctx2d = ensureVisualEditorContext();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, editorContainer.clientWidth);
+    const h = Math.max(1, editorContainer.clientHeight);
+    visualEditor.width = Math.floor(w * dpr);
+    visualEditor.height = Math.floor(h * dpr);
+    ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function renderVisualEditor() {
+    if (!isVisualMode() || visualEditor.style.display === 'none') return;
+
+    const ctx2d = ensureVisualEditorContext();
+    const w = visualEditor.clientWidth;
+    const h = visualEditor.clientHeight;
+    if (w <= 0 || h <= 0) return;
+
+    ctx2d.clearRect(0, 0, w, h);
+
+    ctx2d.fillStyle = '#141414';
+    ctx2d.fillRect(0, 0, w, h);
+
+    const centerX = w / 2;
+    const lanes = [
+        { key: 'tap', y: h * 0.23, label: 'TAP' },
+        { key: 'hold', y: h * 0.43, label: 'HOLD' },
+        { key: 'slide', y: h * 0.63, label: 'SLIDE' },
+        { key: 'touch', y: h * 0.83, label: 'TOUCH' }
+    ];
+
+    ctx2d.strokeStyle = '#2b2b2b';
+    ctx2d.lineWidth = 1;
+    for (const lane of lanes) {
+        ctx2d.beginPath();
+        ctx2d.moveTo(0, lane.y);
+        ctx2d.lineTo(w, lane.y);
+        ctx2d.stroke();
+
+        ctx2d.fillStyle = '#9a9a9a';
+        ctx2d.font = '12px Consolas, monospace';
+        ctx2d.fillText(lane.label, 8, lane.y - 6);
+    }
+
+    ctx2d.strokeStyle = '#ffffff';
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    ctx2d.moveTo(centerX, 0);
+    ctx2d.lineTo(centerX, h);
+    ctx2d.stroke();
+
+    if (!notes || notes.length === 0) {
+        ctx2d.fillStyle = '#c9c9c9';
+        ctx2d.font = '14px Consolas, monospace';
+        ctx2d.fillText('目前沒有可視化音符資料', 16, 24);
+        return;
+    }
+
+    const start = realTime - VISUAL_WINDOW;
+    const end = realTime + VISUAL_WINDOW;
+    const duration = end - start;
+
+    for (const note of notes) {
+        if (note.time < start || note.time > end) continue;
+
+        const lane = lanes.find(l => l.key === note.type);
+        if (!lane) continue;
+
+        const x = ((note.time - start) / duration) * w;
+        const color = VISUAL_COLORS[note.type] ?? VISUAL_COLORS.default;
+
+        ctx2d.fillStyle = color;
+        ctx2d.beginPath();
+        ctx2d.arc(x, lane.y, 5, 0, Math.PI * 2);
+        ctx2d.fill();
+
+        if (note.holdDuration > 0 || note.slideDuration > 0) {
+            const noteLen = (note.holdDuration ?? 0) + (note.slideDelay ?? 0) + (note.slideDuration ?? 0);
+            const endX = Math.min(w, ((note.time + noteLen - start) / duration) * w);
+            ctx2d.strokeStyle = color;
+            ctx2d.lineWidth = 3;
+            ctx2d.beginPath();
+            ctx2d.moveTo(x, lane.y);
+            ctx2d.lineTo(endX, lane.y);
+            ctx2d.stroke();
+        }
+    }
+
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.font = '12px Consolas, monospace';
+    ctx2d.fillText(`t=${realTime.toFixed(2)}s`, centerX + 6, 14);
+}
+
+const setEditorCss = (visible = null) => {
+    // 同步捲動永遠執行
+    highlightLayer.scrollTop = editorInput.scrollTop;
+    highlightLayer.scrollLeft = editorInput.scrollLeft;
+
+    if (visible === null) return;
+
+    const visualMode = isVisualMode();
+    const editorVisible = visible && !visualMode;
+    const visualVisible = visible && visualMode;
+
+    setElementDisplay(editorContainer, visible);
+    setElementDisplay(editorInput, editorVisible);
+    setElementDisplay(highlightLayer, editorVisible);
+    setElementDisplay(visualEditor, visualVisible);
+
+    if (visualVisible) {
+        resizeVisualEditor();
+        renderVisualEditor();
+    }
+
+    animateCanvasWidth(visible);
 };
 
 settingsButton.addEventListener('click', () => {
@@ -818,23 +961,21 @@ readMaidataButton.addEventListener('click', () => {
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
-    const currentlyHidden = editorContainer.style.display === 'none';
+    //const currentlyHidden = editorContainer.style.display === 'none';
+    const currentlyHidden = editorContainer.dataset.hidden === 'true';
     hideEditorButton.children[0].innerText = currentlyHidden ? 'right_panel_close' : 'right_panel_open';
 
-    // 如果目前隱藏 -> 點擊後要「顯示」(true)
-    // 如果目前顯示 -> 點擊後要「隱藏」(false)
-    const nextStateVisible = currentlyHidden;
-
     // 儲存的是 "是否隱藏" 的狀態
-    idbSet('simai_hide_editor', !nextStateVisible).then(() => {
+    idbSet('simai_hide_editor', !currentlyHidden).then(() => {
         //console.log("已儲存編輯器顯示狀態到 IndexedDB:", !nextStateVisible);
     }).catch((error) => {
         console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
     });
 
-    setEditorCss(nextStateVisible);
+    setEditorCss(currentlyHidden);
+    editorContainer.dataset.hidden = currentlyHidden ? 'false' : 'true';
     resize();
-    console.log(`編輯器已${nextStateVisible ? '顯示' : '隱藏'}`);
+    console.log(`編輯器已${currentlyHidden === 'true' ? '顯示' : '隱藏'}`);
 });
 
 const difficultyInputDebounce = debounce(() => {
@@ -855,6 +996,13 @@ changeDifficulty.addEventListener('change', (e) => {
     applyHighlight(editorInput.value);
     inputDebounce();
     difficultyInputDebounce();
+});
+
+changeDisplayMode.addEventListener('change', (e) => {
+    settings.displayMode = e.target.value;
+    saveSettingsDebounce();
+    setEditorCss(editorContainer.dataset.hidden !== 'true');
+    draw();
 });
 
 hideUtilityButton.addEventListener('click', () => {
@@ -898,9 +1046,9 @@ Beat: <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
         buttons: [
             {
                 text: "生成",
-                onClick: (closePopup, updateContent, updButtons, contentElem) => {
-                    const bpm = contentElem.querySelector('#quickBpm').value;
-                    const beat = contentElem.querySelector('#quickBeat').value;
+                onClick: (ctx) => {
+                    const bpm = ctx.elements.content.querySelector('#quickBpm').value;
+                    const beat = ctx.elements.content.querySelector('#quickBeat').value;
                     if (isNaN(parseFloat(bpm)) || isNaN(parseFloat(beat))) {
                         popupWindow({ title: "請確保所有輸入都是有效的數字" });
                         return;
@@ -909,7 +1057,7 @@ Beat: <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
                     editorInput.value += generated;
                     applyHighlight(editorInput.value);
                     inputDebounce();
-                    closePopup();
+                    ctx.close();
                 }
             }
         ]
@@ -986,8 +1134,6 @@ slider.addEventListener('input', () => {
     const value = parseFloat(slider.value);
     globalTime = value - musicDelay;
     realTime = value;
-    //console.log("set realtime to", realTime)
-    //activePointers.clear();
     audioManager.stopAllLongSounds();
 
     if (playButton.dataset.playing === 'true') {
@@ -1028,6 +1174,7 @@ playButton.addEventListener('click', () => {
 
         if (!keepRenderingWhilePause) requestAnimationFrame(update);
     }
+    slideInputDebounce();
 });
 
 stopButton.addEventListener('click', () => {
@@ -1170,6 +1317,7 @@ function resize() {
     canvas.width = w;
     canvas.height = h;
     if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
+    resizeVisualEditor();
     draw();
 }
 
@@ -1396,4 +1544,7 @@ function draw(dt = 0) {
 
     // 5. 統一更新 Web Audio API 播放佇列
     audioManager.update(globalTime);
+
+    // visual 模式使用獨立 canvas 渲染時間軸預覽
+    renderVisualEditor();
 }

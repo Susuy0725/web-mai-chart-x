@@ -317,7 +317,7 @@ class AudioManager {
         this.sfxGainNode.gain.value = this.sfxMasterVolume;
 
         this.longSoundGainNode = this.ctx.createGain();
-        this.longSoundGainNode.gain.value = 0.7;
+        this.longSoundGainNode.gain.value = 0.5;
 
         // 建立 DynamicsCompressorNode，避免多個 long sound 疊加造成爆音
         this.longSoundCompressor = this.ctx.createDynamicsCompressor();
@@ -819,7 +819,16 @@ export function parseMaidata(raw) {
     return maidata;
 }
 /**
- * 精簡版 popupWindow
+ * popupWindow
+ *
+ * 新 API：
+ * - onOpen(ctx): 開啟後呼叫，可使用 ctx 操作內容、按鈕、進度、關閉等。
+ * - onClose(): 關閉後呼叫。
+ * - buttons: [{ text, onClick(ctx), hideOnClick, disabled }]
+ *
+ * 相容舊 API：
+ * - closeWhen(close, update, updButtons, setProgress)
+ * - whenOpen(update, updButtons, setProgress, contentElem)
  */
 export function popupWindow({
     title = "",
@@ -828,10 +837,63 @@ export function popupWindow({
     buttons = [],
     width = 340,
     unclosable = false,
+    onOpen,
+    onClose,
     closeWhen,
     whenOpen
 } = {}) {
     const setStyle = (el, styles) => Object.assign(el.style, styles);
+    const popupWidth = typeof width === 'number' ? `${width}px` : width;
+
+    const applyContent = (container, value) => {
+        container.innerHTML = '';
+        if (!value) {
+            container.style.display = 'none';
+            return;
+        }
+        container.style.display = 'block';
+        if (value instanceof Node) {
+            container.appendChild(value);
+            return;
+        }
+        container.innerHTML = `${value}`;
+    };
+
+    const createBtn = (btn, ctx) => {
+        const normalized = typeof btn === 'string' ? { text: btn } : btn;
+        const button = document.createElement('button');
+        button.innerText = normalized.text ?? '按鈕';
+        setStyle(button, {
+            background: '#202020',
+            color: 'white',
+            padding: '5px 10px',
+            cursor: normalized.disabled ? 'not-allowed' : 'pointer',
+            border: '1px solid #404040',
+            borderRadius: '3px',
+            whiteSpace: 'nowrap',
+            opacity: normalized.disabled ? '0.6' : '1'
+        });
+
+        button.disabled = !!normalized.disabled;
+        button.onclick = () => {
+            if (normalized.disabled) return;
+            if (typeof normalized.onClick === 'function') {
+                const compatArg = Object.assign(
+                    (...args) => ctx.close(...args),
+                    ctx
+                );
+                if (normalized.onClick.length <= 1) {
+                    // support both new API (ctx) and legacy single-arg close callback
+                    normalized.onClick(compatArg);
+                } else {
+                    // backward compatibility: onClick(close, update, updButtons, contentElem)
+                    normalized.onClick(ctx.close, ctx.setContent, ctx.setButtons, ctx.elements.content, compatArg);
+                }
+            }
+            if (normalized.hideOnClick) ctx.close();
+        };
+        return button;
+    };
 
     // 1. 建立背景 (Backdrop)
     const backdrop = document.createElement('div');
@@ -844,7 +906,6 @@ export function popupWindow({
 
     // 2. 建立彈窗主體 (Popup)
     const popup = document.createElement('div');
-    const popupWidth = typeof width === 'number' ? `${width}px` : width;
     setStyle(popup, {
         background: '#202020', color: 'white', padding: '10px',
         border: '1px solid #404040', borderRadius: '5px',
@@ -870,45 +931,83 @@ export function popupWindow({
         padding: '10px', borderRadius: '3px', whiteSpace: 'pre-wrap',
         overflow: 'auto', maxHeight: '190px', display: content ? 'block' : 'none'
     });
-    contentElem.innerHTML = content.trim();
+    applyContent(contentElem, typeof content === 'string' ? content.trim() : content);
+
+    const customContentElem = document.createElement('div');
+    setStyle(customContentElem, {
+        marginTop: '10px',
+        padding: '10px',
+        background: '#1a1a1a',
+        border: '1px solid #333',
+        borderRadius: '3px',
+        display: 'none'
+    });
 
     const btnContainer = document.createElement('div');
     setStyle(btnContainer, { display: 'flex', gap: '10px', marginTop: '10px', overflowX: 'auto', flexWrap: 'nowrap' });
 
     // --- 功能函式 ---
-    
+
+    let closed = false;
     const closePopup = () => {
+        if (closed) return;
+        closed = true;
         backdrop.style.pointerEvents = 'none';
         backdrop.style.opacity = '0';
         popup.animate([
             { transform: 'rotateX(0deg)', opacity: 1 },
             { transform: 'rotateX(30deg)', opacity: 0 }
-        ], { duration: 200, easing: 'ease-in' }).onfinish = () => backdrop.remove();
+        ], { duration: 200, easing: 'ease-in' }).onfinish = () => {
+            backdrop.remove();
+            if (typeof onClose === 'function') onClose();
+        };
     };
 
-    const updateContent = (text) => {
-        contentElem.innerHTML = text;
-        contentElem.style.display = text ? 'block' : 'none';
+    const setContent = (value) => {
+        applyContent(contentElem, value);
+        customContentElem.style.display = 'none';
     };
 
-    const updButtons = (newBtns = []) => {
+    const setCustomContent = (value) => {
+        customContentElem.innerHTML = '';
+        if (!value) {
+            customContentElem.style.display = 'none';
+            return;
+        }
+        customContentElem.style.display = 'block';
+        if (value instanceof Node) {
+            customContentElem.appendChild(value);
+            return;
+        }
+        customContentElem.innerHTML = `${value}`;
+        contentElem.style.display = 'none';
+    };
+
+    const ctx = {
+        close: closePopup,
+        setContent,
+        setCustomContent,
+        setButtons: (newBtns = []) => setButtons(newBtns),
+        setProgress: (pct) => {
+            progressContainer.style.display = 'block';
+            progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        },
+        elements: {
+            backdrop,
+            popup,
+            content: contentElem,
+            customContent: customContentElem,
+            progressBar,
+            buttons: btnContainer
+        }
+    };
+
+    const setButtons = (newBtns = []) => {
         btnContainer.innerHTML = '';
         btnContainer.style.display = newBtns.length ? 'flex' : 'none';
         newBtns.forEach(btn => {
-            const b = document.createElement('button');
-            b.innerText = btn.text;
-            setStyle(b, { background: '#202020', color: 'white', padding: '5px 10px', cursor: 'pointer', border: '1px solid #404040', borderRadius: '3px', whiteSpace: 'nowrap' });
-            b.onclick = () => {
-                if (btn.onClick) btn.onClick(closePopup, updateContent, updButtons, contentElem);
-                if (btn.hideOnClick) closePopup();
-            };
-            btnContainer.appendChild(b);
+            btnContainer.appendChild(createBtn(btn, ctx));
         });
-    };
-
-    const setProgress = (pct) => {
-        progressContainer.style.display = 'block';
-        progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
     };
 
     // --- 初始化組合 ---
@@ -923,14 +1022,13 @@ export function popupWindow({
     }
 
     popup.append(titleElem, progressContainer);
-    
+
     if (customContent) {
-        const wrapper = document.createElement('div');
-        setStyle(wrapper, { marginTop: '10px', padding: '10px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '3px' });
-        customContent instanceof Node ? wrapper.appendChild(customContent) : (wrapper.innerHTML = customContent);
-        popup.appendChild(wrapper);
+        setCustomContent(customContent);
+        popup.appendChild(customContentElem);
     } else {
         popup.appendChild(contentElem);
+        popup.appendChild(customContentElem);
     }
 
     popup.appendChild(btnContainer);
@@ -947,9 +1045,23 @@ export function popupWindow({
     });
 
     // 執行回調
-    updButtons(buttons);
-    if (closeWhen) closeWhen(closePopup, updateContent, updButtons, setProgress);
-    if (whenOpen) whenOpen(updateContent, updButtons, setProgress, contentElem);
+    setButtons(buttons);
+
+    if (typeof closeWhen === 'function') {
+        // backward compatibility
+        closeWhen(ctx.close, ctx.setContent, ctx.setButtons, ctx.setProgress);
+    }
+
+    if (typeof whenOpen === 'function') {
+        // backward compatibility
+        whenOpen(ctx.setContent, ctx.setButtons, ctx.setProgress, contentElem);
+    }
+
+    if (typeof onOpen === 'function') {
+        onOpen(ctx);
+    }
+
+    return ctx;
 }
 /**
  * 簡易提示小標籤 (支援自動堆疊)

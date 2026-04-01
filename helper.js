@@ -377,6 +377,8 @@ class AudioManager {
  */
     async setBackgroundMusic(source) {
         try {
+            this.bgmFile = source; // 保存原始來源（File/Blob 或 URL）
+
             let arrayBuffer;
             if (source instanceof Blob) {
                 // 直接從 IndexedDB 取出的 File/Blob 轉為 ArrayBuffer
@@ -393,6 +395,31 @@ class AudioManager {
         } catch (e) {
             console.error(`[Audio] BGM 載入失敗`, e);
         }
+    }
+
+    async removeBackgroundMusic() {
+        this.stopBGM();
+        this.bgmBuffer = null;
+        this.bgmFile = null;
+    }
+
+    haveBGM() {
+        return !!this.bgmBuffer;
+    }
+
+    getBGMFile() {
+        // 如果背景音樂是 File/Blob，直接回傳；若是 URL，嘗試從 gain node 下載或回傳 null
+        // 主要用於「打包/儲存當前背景音樂」需求。
+        if (this.bgmFile instanceof Blob) {
+            return this.bgmFile;
+        }
+
+        // 如果是 URL 字串，無法直接回傳 Blob，但我們可提供可下載的 URL
+        if (typeof this.bgmFile === 'string') {
+            return this.bgmFile; // 由呼叫端自行處理 fetch/Blob 轉換
+        }
+
+        return null;
     }
 
     /**
@@ -817,6 +844,11 @@ export function parseMaidata(raw) {
         }
     });
     return maidata;
+}
+
+export function getSimaiDataString(maidata) {
+    if (!maidata || typeof maidata !== "object") return "";
+    return "&" + Object.entries(maidata).map(([key, value]) => `${key}=${value}`).join("\n&");
 }
 /**
  * popupWindow

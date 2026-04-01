@@ -231,12 +231,13 @@ export class SimaiRenderer {
             this.simpleHitEffect(noteT);
         } else {
             const displayT = Math.max(this.settings.middleDistance, t);
-            const currentScale = t < this.settings.middleDistance ? (t + 0.9) / (0.9 + this.settings.middleDistance) : 1;
+            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
             const size = this.settings.noteBaseSize * currentScale;
 
             const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
             this.ctx.save();
             this.ctx.rotate(posInfo.rot);
+            this.ctx.globalAlpha = currentScale;
             this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
             this.ctx.restore();
 
@@ -271,11 +272,13 @@ export class SimaiRenderer {
             this.simpleHitEffect(noteT);
         } else {
             const displayT = Math.max(this.settings.middleDistance, t);
-            const size = this.settings.noteBaseSize * (t < this.settings.middleDistance ? (t + 0.9) / (0.9 + this.settings.middleDistance) : 1);
+            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
+            const size = this.settings.noteBaseSize * currentScale;
 
             this.ctx.save();
             const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
             this.ctx.rotate(posInfo.rot);
+            this.ctx.globalAlpha = currentScale;
             this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
             this.ctx.restore();
 
@@ -309,7 +312,8 @@ export class SimaiRenderer {
 
             const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
             const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
-            const size = this.settings.noteBaseSize * (t < this.settings.middleDistance ? (t + 0.9) / (0.9 + this.settings.middleDistance) : 1);
+            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
+            const size = this.settings.noteBaseSize * currentScale;
             const sizeOffset = t < this.settings.middleDistance ? 0 :
                 Math.min((holdDuration + noteT) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
                     Math.min((1 - this.settings.middleDistance) * 2.45,
@@ -319,6 +323,7 @@ export class SimaiRenderer {
             this.ctx.save();
             const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
             this.ctx.rotate(posInfo.rot);
+            this.ctx.globalAlpha = currentScale;
             this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
             this.ctx.restore();
 

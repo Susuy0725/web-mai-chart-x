@@ -1,9 +1,9 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { scaleBase, getButton, debounce, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize } from './helper.js';
+import { scaleBase, getButton, debounce, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString } from './helper.js';
 import { simaiDecode } from './decode.js';
 import { SimaiRenderer } from './renderer.js';
 
-let images, readyBeat = false, maidata, nowDifficulty, backgroundImage, renderer, settings = {};
+let images, readyBeat = false, maidata, nowDifficulty = 5, backgroundImage, renderer, settings = {};
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
@@ -215,6 +215,8 @@ const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
 const changeDisplayMode = getButton("displayMode", "utility").children[0];
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
+const downloadButton = getButton("download", "utility");
+const createNewButton = getButton("createNew", "utility");
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
@@ -268,7 +270,7 @@ const testData = `(60){4}1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
-let notes = [], endTime = 1, musicDelay = 1e-4, rawData = [];
+let notes = [], endTime = 1, musicDelay = 0, rawData = [];
 
 getButton("manageResources", "utility").addEventListener('click', async () => {
     async function getSize() {
@@ -434,6 +436,32 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
     });
 });
 
+createNewButton.addEventListener('click', () => {
+    if (!confirm('是否要建立新的譜面？這將重置目前編輯內容。')) return;
+    maidata = {};
+    nowDifficulty = 5;
+    backgroundImage = null;
+    applyHighlight('');
+    musicDelay = 0;
+    realTime = 0;
+    globalTime = 0;
+    slider.max = 1;
+    slider.value = 0;
+    offsetInput.value = 0;
+    editorInput.value = '';
+    audioManager.removeBackgroundMusic().catch(() => { });
+    changeDifficulty.value = nowDifficulty;
+    inputDebounce();
+
+    idbSet('simai_editor_content', '').catch(() => { });
+    idbSet('simai_maidata', maidata).catch(() => { });
+    idbSet('simai_background_image', null).catch(() => { });
+    idbSet('simai_now_difficulty', nowDifficulty).catch(() => { });
+    idbSet('simai_resource_bgm', null).catch(() => { });
+    idbSet('simai_timeControl', 0).catch(() => { });
+    simpleToast({ content: '已建立新譜面', type: 'success', timeout: 1200 });
+});
+
 const getres = ((simaiDataValue) => {
     const result = (() => {
         try {
@@ -474,9 +502,9 @@ const offsetInputDebounce = debounce(() => {
 
 const inputDebounce = debounce(() => {
     const value = editorInput.value;
-
     // 解析 Note 邏輯
     getres(value);
+    maidata["inote_" + nowDifficulty] = value;
 
     // 存入本地空間
     idbSet('simai_editor_content', value).then(() => {
@@ -672,6 +700,23 @@ chartInfoButton.addEventListener('click', () => {
         img.style.cssText = "width:100%;height:100%;display:block;";
         imgContainer.appendChild(img);
         imgContainer.style.cssText = "width:40%;height:100%;overflow:hidden;border:1px solid #ccc;border-radius:8px;object-fit:contain;";
+        imgContainer.addEventListener('click', () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const objectUrl = URL.createObjectURL(file);
+                    img.src = objectUrl;
+                    backgroundImage = file;
+                    idbSet('simai_background_image', file).catch((error) => {
+                        console.error("儲存背景圖片到 IndexedDB 失敗:", error);
+                    });
+                }
+            };
+            fileInput.click();
+        });
 
         const diffContainer = document.createElement('div');
         diffContainer.style.cssText = "width:60%;box-sizing:border-box;display:flex;flex-direction:column;padding:0 0 0 10px;";
@@ -815,6 +860,55 @@ offsetInput.addEventListener('input', () => {
     offsetInputDebounce();
 });
 
+function maidataProcess(e) {
+    maidata = null; // 先清空舊譜面資料，避免讀取失敗時殘留舊資料干擾
+    editorInput.value = "";
+    offsetInput.value = 0;
+    musicDelay = 0;
+    applyHighlight("");
+    const content = parseMaidata(e);
+    maidata = content;
+    idbSet('simai_maidata', content).then(() => {
+        console.log("已儲存譜面內容到 IndexedDB");
+    }).catch((error) => {
+        console.error("儲存譜面內容到 IndexedDB 失敗:", error);
+    });
+    console.log(content);
+    if (content["first"]) {
+        console.log("成功讀取 first");
+        musicDelay = (() => {
+            const val = parseFloat(content["first"]);
+            if (isNaN(val)) {
+                console.warn("偏移值無效，請輸入數字");
+                return 0;
+            }
+            return val;
+        })();
+        offsetInputDebounce();
+    }
+    nowDifficulty = 5; // 預設讀取 inote_5，實際可依需求調整
+    idbSet("simai_now_difficulty", nowDifficulty).then(() => {
+        console.log("已儲存當前難度到 IndexedDB:", nowDifficulty);
+    }).catch((error) => {
+        console.error("儲存當前難度到 IndexedDB 失敗:", error);
+    });
+    changeDifficulty.value = nowDifficulty;
+    if (content["inote_5"]) {
+        console.log("成功讀取 inote_5，已載入編輯器");
+        console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
+        editorInput.value = content["inote_5"] || ""; // 預設讀取 inote_5，實際可依需求調整
+        idbSet('simai_editor_content', editorInput.value).then(() => {
+            console.log("已儲存編輯器內容到 IndexedDB");
+        }).catch((error) => {
+            console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
+        });
+        applyHighlight(content["inote_5"]);
+    } else {
+        console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
+    }
+    getres(editorInput.value);
+}
+
 folderInput.addEventListener('click', (e) => {
     const input = folderInput.children[0];
     input.click();
@@ -843,51 +937,7 @@ folderInput.addEventListener('click', (e) => {
                 // 譜面檔
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    editorInput.value = "";
-                    offsetInput.value = 0;
-                    musicDelay = 0;
-                    applyHighlight("");
-                    const content = parseMaidata(e.target.result);
-                    maidata = content;
-                    idbSet('simai_maidata', content).then(() => {
-                        console.log("已儲存譜面內容到 IndexedDB");
-                    }).catch((error) => {
-                        console.error("儲存譜面內容到 IndexedDB 失敗:", error);
-                    });
-                    console.log(content);
-                    if (content["first"]) {
-                        console.log("成功讀取 first");
-                        musicDelay = (() => {
-                            const val = parseFloat(content["first"]);
-                            if (isNaN(val)) {
-                                console.warn("偏移值無效，請輸入數字");
-                                return 0;
-                            }
-                            return val;
-                        })();
-                        offsetInputDebounce();
-                    }
-                    nowDifficulty = 5; // 預設讀取 inote_5，實際可依需求調整
-                    idbSet("simai_now_difficulty", nowDifficulty).then(() => {
-                        console.log("已儲存當前難度到 IndexedDB:", nowDifficulty);
-                    }).catch((error) => {
-                        console.error("儲存當前難度到 IndexedDB 失敗:", error);
-                    });
-                    changeDifficulty.value = nowDifficulty;
-                    if (content["inote_5"]) {
-                        console.log("成功讀取 inote_5，已載入編輯器");
-                        console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
-                        editorInput.value = content["inote_5"] || ""; // 預設讀取 inote_5，實際可依需求調整
-                        idbSet('simai_editor_content', editorInput.value).then(() => {
-                            console.log("已儲存編輯器內容到 IndexedDB");
-                        }).catch((error) => {
-                            console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
-                        });
-                        applyHighlight(content["inote_5"]);
-                    } else {
-                        console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
-                    }
-                    getres(editorInput.value);
+                    maidataProcess(e.target.result);
                     resize();
                 };
                 reader.readAsText(file);
@@ -917,40 +967,7 @@ readMaidataButton.addEventListener('click', () => {
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                const content = parseMaidata(e.target.result);
-                maidata = content;
-                idbSet('simai_maidata', content).then(() => {
-                    console.log("已儲存譜面內容到 IndexedDB");
-                }).catch((error) => {
-                    console.error("儲存譜面內容到 IndexedDB 失敗:", error);
-                });
-                console.log(content);
-                if (content["first"]) {
-                    console.log("成功讀取 first");
-                    musicDelay = (() => {
-                        const val = parseFloat(content["first"]);
-                        if (isNaN(val)) {
-                            console.warn("偏移值無效，請輸入數字");
-                            return 0;
-                        }
-                        return val;
-                    })();
-                    offsetInputDebounce();
-                }
-                if (content["inote_5"]) {
-                    console.log("成功讀取 inote_5，已載入編輯器");
-                    console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
-                    editorInput.value = content["inote_5"] || ""; // 預設讀取 inote_5，實際可依需求調整
-                    idbSet('simai_editor_content', editorInput.value).then(() => {
-                        console.log("已儲存編輯器內容到 IndexedDB");
-                    }).catch((error) => {
-                        console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
-                    });
-                    applyHighlight(content["inote_5"]);
-                    getres(content["inote_5"]);
-                } else {
-                    console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
-                }
+                maidataProcess(e.target.result);
                 resize();
             };
             reader.readAsText(file);
@@ -1114,6 +1131,70 @@ addMusicButton.addEventListener('click', () => {
         }
     };
     input.click();
+});
+
+downloadButton.addEventListener('click', () => {
+    popupWindow({
+        title: "下載譜面",
+        content: "",
+        buttons: [
+            {
+                text: "下載 Maidata",
+                onClick: (ctx) => {
+                    // Implementation for downloading Maidata
+                    const blob = new Blob([getSimaiDataString(maidata)], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'maidata.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            },
+            {
+                text: "下載壓縮檔",
+                onClick: (ctx) => {
+                    // Implementation for downloading ZIP
+                    let zip = JSZip();
+                    zip.file("maidata.txt", getSimaiDataString(maidata));
+
+                    const getBackgroundFilename = (bg) => {
+                        if (!bg) return 'bg.png';
+                        const mime = bg.type || '';
+                        const fallback = 'png';
+                        if (!mime.includes('/')) return `bg.${fallback}`;
+                        const ext = mime.split('/')[1].split(';')[0].trim() || fallback;
+                        return `bg.${ext}`;
+                    };
+
+                    if (backgroundImage) {
+                        const bgFilename = getBackgroundFilename(backgroundImage);
+                        console.log('Background image type:', backgroundImage.type, '->', bgFilename);
+                        zip.file(bgFilename, backgroundImage);
+                    }
+
+                    if (audioManager.haveBGM()) {
+                        const bgmFilename = audioManager.bgmFile.name || 'track.mp3';
+                        console.log('BGM file name:', bgmFilename);
+                        zip.file(bgmFilename, audioManager.bgmFile);
+                    }
+
+                    zip.generateAsync({ type: "blob" }).then(function (content) {
+                        const url = URL.createObjectURL(content);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'simai_package.zip';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }).catch(e => console.error('ZIP 生成失敗', e));
+                }
+            }
+        ]
+    });
 });
 
 function applyHighlight(text) {
@@ -1288,7 +1369,7 @@ function update(timestamp) {
         globalTime = realTime - musicDelay;
         if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
             //audioManager.playBGM(realTime);
-            if (audioManager.getBGMDuration() > 0 && audioManager.getBGMTime() !== realTime) realTime = audioManager.getBGMTime();
+            if (audioManager.haveBGM() && audioManager.getBGMTime() !== realTime) realTime = audioManager.getBGMTime();
             bgmUpdateTimer = 0;
         }
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
@@ -1402,6 +1483,20 @@ function openSecondWindow() {
 }
 
 window.addEventListener('resize', resize);
+
+window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        // 如果你有儲存邏輯可放這裡
+        simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
+        maidata['inote_' + nowDifficulty] = editorInput.value;
+        idbSet('simai_maidata', maidata).then(() => {
+            console.log("已儲存譜面內容到 IndexedDB");
+        }).catch((error) => {
+            console.error("儲存譜面內容到 IndexedDB 失敗:", error);
+        });
+    }
+});
 
 resize();
 let playClock = [false, false, false, false];

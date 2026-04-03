@@ -2,6 +2,7 @@ import {
     scaleBase,
     innerCirleBase,
     noteRefPos,
+    visualNoteRefPos,
     touchRefPos,
     imgNotExists,
     getTintedImage,
@@ -482,7 +483,7 @@ export class SimaiRenderer {
     }
 
     drawPathWithArrows(recorder, starProgress, imgs, typew, config = { spacing: 4.36 }) {
-        const arrowCount = typew ? 12 : Math.floor((recorder.totalLength - 1) / config.spacing);
+        const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 1) / config.spacing);
         const spacing = typew ? 7 : config.spacing;
 
         this.ctx.save();
@@ -503,3 +504,189 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 }
+
+export class SimaiVisualEditor {
+    constructor(canvas, settings) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.settings = settings;
+        this.images = null;
+        this.globalTime = 0;
+
+        this.zoom = 20;
+
+        this.passOpacity = 0.5;
+
+        this.exColor = {
+            tap: '#D8A2C9',
+            star: '#00DBF4',
+            double: '#DCDA6B',
+            break: '#EBBA63',
+        };
+    }
+
+    setZoom(zoom) {
+        this.zoom = zoom;
+    }
+
+    setImages(images) {
+        this.images = images;
+    }
+
+    setContext(ctx) {
+        this.ctx = ctx;
+    }
+
+    drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
+        this.ctx.drawImage(
+            img,
+            -size / 2 * imgWidthMul + offsetX,
+            -size / 2 * imgHeightMul + offsetY,
+            size * imgWidthMul,
+            size * imgHeightMul
+        );
+    }
+
+    drawTap(s) {
+        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const t = (noteTime - this.globalTime);
+
+        const img = this.images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
+        if (imgNotExists(img)) return;
+        const size = this.settings.noteBaseSize;
+
+        this.ctx.save();
+        this.ctx.translate(visualNoteRefPos[pos - 1].x, t * -this.zoom);
+        if (t <= 0) {
+            this.ctx.globalAlpha = this.passOpacity;
+        }
+        this.drawImgAtcenter(img, size);
+        if (s.isEx) {
+            const ex = getTintedImage(this.images["tap_ex"], 0.5, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
+            this.drawImgAtcenter(ex, size);
+        }
+        this.ctx.restore();
+    }
+
+    drawStar(s) {
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
+        const t = (noteTime - this.globalTime);
+
+        const img = this.images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+            : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
+        ];
+        if (imgNotExists(img)) return;
+        const size = this.settings.noteBaseSize;
+
+        this.ctx.save();
+        this.ctx.translate(visualNoteRefPos[pos - 1].x, t * -this.zoom);
+        if (t <= 0) {
+            this.ctx.globalAlpha = this.passOpacity;
+        }
+        this.drawImgAtcenter(img, size);
+        if (s.isEx) {
+            const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.5, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
+            this.drawImgAtcenter(ex, size * 0.95);
+        }
+        this.ctx.restore();
+    }
+
+    drawTouch(s) {
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration } = s;
+        const t = (noteTime - this.globalTime);
+        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+
+        if (holdDuration) {
+            return; // 目前不在觸摸軌道上繪製長按
+            const imgs = [];
+            for (let i = 0; i < 4; i++) {
+                const img = this.images["touchhold_" + i];
+                if (imgNotExists(img)) return;
+                imgs.push(img);
+            }
+            const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
+            const touchBorder = this.images.touchhold_border;
+
+            this.ctx.save();
+            if (-noteT >= holdDuration) {
+                this.ctx.translate(posInfo.x, posInfo.y);
+                this.simpleHitEffect(holdDuration + noteT);
+                if (s.isHanabi) this.simpleHanabi(holdDuration + noteT, s.touchPos === "C");
+            } else {
+                const size = this.settings.noteBaseSize * 0.7;
+                const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+                const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+
+                this.ctx.translate(posInfo.x, posInfo.y);
+                this.ctx.save();
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+                this.ctx.closePath();
+                this.ctx.clip();
+                this.drawImgAtcenter(touchBorder, size * 2.6);
+                this.ctx.restore();
+                this.ctx.rotate(Math.PI * -0.75);
+                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
+                for (let i = 0; i < 4; i++) {
+                    this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                    this.ctx.rotate(Math.PI / 2);
+                }
+                this.ctx.globalAlpha = 1;
+                this.drawImgAtcenter(touchPoint, size * 0.4);
+                this.simpleHitEffect(noteT);
+            }
+            this.ctx.restore();
+            return;
+        }
+
+        const img = this.images[isDouble ? "touch_each" : "touch"];
+        const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
+        if (imgNotExists(img)) return;
+
+        this.ctx.save();
+
+        const size = this.settings.noteBaseSize * 0.6;
+        const a = 1.5;
+
+        this.ctx.translate(posInfo.x, t * -this.zoom);
+        if (t <= 0) {
+            this.ctx.globalAlpha = this.passOpacity;
+        }
+        for (let i = 0; i < 4; i++) {
+            this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.rotate(Math.PI / 2);
+        }
+        this.drawImgAtcenter(touchPoint, size * 0.4);
+
+        this.ctx.restore();
+    }
+
+    render(isVisualMode, ensureVisualEditorContext, state) {
+        if (!isVisualMode() || this.canvas.style.display === 'none') return;
+
+        const ctx2d = this.ctx || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null);
+        if (!ctx2d) return;
+
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+        if (w <= 0 || h <= 0) return;
+        const { globalTime, visualBuckets, notes, dt } = state;
+        this.globalTime = globalTime;
+
+        ctx2d.clearRect(-w, -h, w * 2, h * 2);
+        ctx2d.strokeStyle = '#ccc';
+        ctx2d.beginPath();
+        ctx2d.moveTo(-w, 0);
+        ctx2d.lineTo(w, 0);
+        ctx2d.stroke();
+        //visualBuckets.slide.forEach(n => this.drawSlide(n));
+        visualBuckets.tapnhold.forEach(n => {
+            //if (n.type === "hold") this.drawHold(n);
+            /*else*/ if (n.isStar) this.drawStar(n);
+            else this.drawTap(n);
+        });
+        visualBuckets.touch.forEach(n => this.drawTouch(n));
+    }
+}
+

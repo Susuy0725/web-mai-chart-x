@@ -1,9 +1,9 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
 import { scaleBase, getButton, debounce, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString } from './helper.js';
 import { simaiDecode } from './decode.js';
-import { SimaiRenderer } from './renderer.js';
+import { SimaiRenderer, SimaiVisualEditor } from './renderer.js';
 
-let images, readyBeat = false, maidata, nowDifficulty = 5, backgroundImage, renderer, settings = {};
+let images, readyBeat = false, maidata = {}, nowDifficulty = 5, backgroundImage, renderer, visualEditorRenderer, settings = {};
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
@@ -38,11 +38,15 @@ popupWindow({
             ]);
 
             if (savedContent) { editorInput.value = savedContent; applyHighlight(savedContent); getres(savedContent); }
-            if (savedMusicDelay) { musicDelay = parseFloat(savedMusicDelay); offsetInput.value = musicDelay; offsetInputDebounce(); }
+            /*if (savedMusicDelay) { musicDelay = parseFloat(savedMusicDelay); offsetInput.value = musicDelay; offsetInputDebounce(); }*/
             if (savedTimeControl && !isNaN(savedTimeControl)) {
                 realTime = savedTimeControl; slider.value = realTime; globalTime = realTime - musicDelay; update();
             }
             if (savedMaiData) maidata = savedMaiData;
+            musicDelay = parseFloat(maidata.first) || 0;
+            offsetInput.value = musicDelay;
+            offsetInputDebounce();
+
             if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
             if (bg) { backgroundImage = bg; }
             if (savedBgm) {
@@ -79,6 +83,10 @@ popupWindow({
             changeDisplayMode.value = settings.displayMode ?? 'simai';
             renderer = new SimaiRenderer(canvas, settings);
             renderer.setImages(images);
+            visualEditorRenderer = new SimaiVisualEditor(visualEditor, settings);
+            visualEditorRenderer.setImages(images);
+            visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
+            draw();
 
             step(100, "完成！正在渲染畫面...");
             resize(); ctx.close();
@@ -243,14 +251,8 @@ let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持�
 let nowIndex = 0;
 let visualCtx = null;
 
-const VISUAL_WINDOW = 4; // 顯示目前時間前後秒數
-const VISUAL_COLORS = {
-    tap: '#47d1ff',
-    hold: '#42f59b',
-    slide: '#ffc247',
-    touch: '#ff6e7a',
-    default: '#c7c7c7'
-};
+let lastCanvasSize = { w: 0, h: 0 };
+let lastVisualEditorSize = { w: 0, h: 0 };
 
 let clockBpm = 60;
 
@@ -261,11 +263,6 @@ const saveSettingsDebounce = debounce(() => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
     });
 }, 300);
-
-const testData = `(60){4}1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf/1h/2h/3h/4h/5h/6h/7h/8h/E1f/E2f/E3f/E4f/E5f/E6f/E7f/E8f/A1f/A2f/A3f/A4f/A5f/A6f/A7f/A8f/B1f/B2f/B3f/B4f/B5f/B6f/B7f/B8f/D1f/D2f/D3f/D4f/D5f/D6f/D7f/D8f/Cf,`
-
-// 1. 選取狀態儲存
-//let activePointers = new Map();
 
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
@@ -492,11 +489,12 @@ const offsetInputDebounce = debounce(() => {
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime); // 調整音樂播放位置，讓它與節拍更貼合
     }
-    idbSet('simai_musicDelay', musicDelay).then(() => {
+    maidata.first = musicDelay;
+    /*idbSet('simai_musicDelay', musicDelay).then(() => {
         //console.log("已儲存偏移值到 IndexedDB:", musicDelay);
     }).catch((error) => {
         console.error("儲存偏移值到 IndexedDB 失敗:", error);
-    });
+    });*/
     draw();
 }, 500);
 
@@ -551,100 +549,41 @@ function ensureVisualEditorContext() {
 function resizeVisualEditor() {
     const ctx2d = ensureVisualEditorContext();
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, editorContainer.clientWidth);
-    const h = Math.max(1, editorContainer.clientHeight);
-    visualEditor.width = Math.floor(w * dpr);
-    visualEditor.height = Math.floor(h * dpr);
-    ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = editorContainer.clientWidth * dpr;
+    const h = editorContainer.clientHeight * dpr;
+
+    if (lastVisualEditorSize.w === w && lastVisualEditorSize.h === h) {
+        //resizeVisualEditor();
+        return; // 尺寸不變，避免重設畫布造成多餘重排
+    }
+
+    lastVisualEditorSize.w = w;
+    lastVisualEditorSize.h = h;
+
+    const p = Math.min(w, h) / scaleBase * scale;
+    visualEditor.width = w;
+    visualEditor.height = h;
+    ctx2d.setTransform(p, 0, 0, p, w / 2, h / 2);
+    //resizeVisualEditor();
+    draw();
 }
 
-function renderVisualEditor() {
-    if (!isVisualMode() || visualEditor.style.display === 'none') return;
+// renderVisualEditor 已移至 renderer.js 的 renderVisualEditorFromRenderer
 
-    const ctx2d = ensureVisualEditorContext();
-    const w = visualEditor.clientWidth;
-    const h = visualEditor.clientHeight;
-    if (w <= 0 || h <= 0) return;
-
-    ctx2d.clearRect(0, 0, w, h);
-
-    ctx2d.fillStyle = '#141414';
-    ctx2d.fillRect(0, 0, w, h);
-
-    const centerX = w / 2;
-    const lanes = [
-        { key: 'tap', y: h * 0.23, label: 'TAP' },
-        { key: 'hold', y: h * 0.43, label: 'HOLD' },
-        { key: 'slide', y: h * 0.63, label: 'SLIDE' },
-        { key: 'touch', y: h * 0.83, label: 'TOUCH' }
-    ];
-
-    ctx2d.strokeStyle = '#2b2b2b';
-    ctx2d.lineWidth = 1;
-    for (const lane of lanes) {
-        ctx2d.beginPath();
-        ctx2d.moveTo(0, lane.y);
-        ctx2d.lineTo(w, lane.y);
-        ctx2d.stroke();
-
-        ctx2d.fillStyle = '#9a9a9a';
-        ctx2d.font = '12px Consolas, monospace';
-        ctx2d.fillText(lane.label, 8, lane.y - 6);
-    }
-
-    ctx2d.strokeStyle = '#ffffff';
-    ctx2d.lineWidth = 2;
-    ctx2d.beginPath();
-    ctx2d.moveTo(centerX, 0);
-    ctx2d.lineTo(centerX, h);
-    ctx2d.stroke();
-
-    if (!notes || notes.length === 0) {
-        ctx2d.fillStyle = '#c9c9c9';
-        ctx2d.font = '14px Consolas, monospace';
-        ctx2d.fillText('目前沒有可視化音符資料', 16, 24);
-        return;
-    }
-
-    const start = realTime - VISUAL_WINDOW;
-    const end = realTime + VISUAL_WINDOW;
-    const duration = end - start;
-
-    for (const note of notes) {
-        if (note.time < start || note.time > end) continue;
-
-        const lane = lanes.find(l => l.key === note.type);
-        if (!lane) continue;
-
-        const x = ((note.time - start) / duration) * w;
-        const color = VISUAL_COLORS[note.type] ?? VISUAL_COLORS.default;
-
-        ctx2d.fillStyle = color;
-        ctx2d.beginPath();
-        ctx2d.arc(x, lane.y, 5, 0, Math.PI * 2);
-        ctx2d.fill();
-
-        if (note.holdDuration > 0 || note.slideDuration > 0) {
-            const noteLen = (note.holdDuration ?? 0) + (note.slideDelay ?? 0) + (note.slideDuration ?? 0);
-            const endX = Math.min(w, ((note.time + noteLen - start) / duration) * w);
-            ctx2d.strokeStyle = color;
-            ctx2d.lineWidth = 3;
-            ctx2d.beginPath();
-            ctx2d.moveTo(x, lane.y);
-            ctx2d.lineTo(endX, lane.y);
-            ctx2d.stroke();
-        }
-    }
-
-    ctx2d.fillStyle = '#ffffff';
-    ctx2d.font = '12px Consolas, monospace';
-    ctx2d.fillText(`t=${realTime.toFixed(2)}s`, centerX + 6, 14);
+let _highlightSyncPending = false;
+function syncHighlightLayerScroll() {
+    if (_highlightSyncPending) return;
+    _highlightSyncPending = true;
+    requestAnimationFrame(() => {
+        highlightLayer.scrollTop = editorInput.scrollTop;
+        highlightLayer.scrollLeft = editorInput.scrollLeft;
+        _highlightSyncPending = false;
+    });
 }
 
 const setEditorCss = (visible = null) => {
-    // 同步捲動永遠執行
-    highlightLayer.scrollTop = editorInput.scrollTop;
-    highlightLayer.scrollLeft = editorInput.scrollLeft;
+    // 同步捲動永遠執行（透過 rAF 批次處理，避免頻繁 layout thrash）
+    syncHighlightLayerScroll();
 
     if (visible === null) return;
 
@@ -659,7 +598,7 @@ const setEditorCss = (visible = null) => {
 
     if (visualVisible) {
         resizeVisualEditor();
-        renderVisualEditor();
+        visualEditorRenderer?.render(isVisualMode, ensureVisualEditorContext);
     }
 
     animateCanvasWidth(visible);
@@ -1082,8 +1021,7 @@ Beat: <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
 });
 
 editorInput.addEventListener('scroll', () => {
-    highlightLayer.scrollTop = editorInput.scrollTop;
-    highlightLayer.scrollLeft = editorInput.scrollLeft;
+    syncHighlightLayerScroll();
 });
 const pairs = { '(': ')', '{': '}', '[': ']' };
 const closingChars = new Set(Object.values(pairs));
@@ -1319,47 +1257,6 @@ getCursorNoteIndex.addEventListener('click', () => {
     }
 });
 
-/*
-function getShapeAt(x, y) {
-    let found = null;
-    for (let i = touchPaths.length - 1; i >= 0; i--) {
-        if (ctx.isPointInPath(touchPaths[i].path, x, y)) {
-            found = touchPaths[i].id;
-            break;
-        }
-    }
-    return found;
-}
- 
-// 4. 事件監聽
-const handlePointer = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    // console.log(`Pointer Event: ${e.type} - ID: ${e.pointerId} at (${e.clientX - rect.left - canvas.width / 2}, ${e.clientY - rect.top - canvas.height / 2})`);
-    const id = getShapeAt(e.clientX - rect.left, e.clientY - rect.top);
- 
-    if (id) {
-        activePointers.set(e.pointerId, id);
-    } else {
-        activePointers.delete(e.pointerId); // 移出有效區域時刪除
-    }
-    draw();
-};
- 
-const removePointer = (e) => {
-    activePointers.delete(e.pointerId); // 放開或離開時刪除
-    draw();
-};
- 
-// 支援按下與移動時高亮
-canvas.addEventListener('pointerdown', handlePointer);
-canvas.addEventListener('pointermove', handlePointer);
- 
-// 支援放開、移出、中斷時取消高亮
-canvas.addEventListener('pointerup', removePointer);
-canvas.addEventListener('pointerleave', removePointer);
-canvas.addEventListener('pointercancel', removePointer); // 處理觸控被系統中斷的情況
-*/
-
 function update(timestamp) {
     if (lastTimestamp === null) lastTimestamp = timestamp;
     const dt = (timestamp - lastTimestamp) / 1000; // 秒
@@ -1394,6 +1291,15 @@ function resize() {
     const dpr = window.devicePixelRatio || 1;
     const w = canvasContainer.clientWidth * dpr;
     const h = canvasContainer.clientHeight * dpr;
+
+    if (lastCanvasSize.w === w && lastCanvasSize.h === h) {
+        resizeVisualEditor();
+        return; // 尺寸不變，避免重設畫布造成多餘重排
+    }
+
+    lastCanvasSize.w = w;
+    lastCanvasSize.h = h;
+
     const p = Math.min(w, h) / scaleBase * scale;
     canvas.width = w;
     canvas.height = h;
@@ -1518,6 +1424,12 @@ function draw(dt = 0) {
         touch: []
     };
 
+    const visualBuckets = {
+        slide: [],
+        tapnhold: [],
+        touch: []
+    };
+
     const playing = playButton.dataset.playing === 'true';
 
     // 3. 核心迴圈：一邊處理音效邏輯，一邊將音符分類到桶子
@@ -1626,6 +1538,12 @@ function draw(dt = 0) {
             else if (note.type === 'tap') buckets.tapnhold.push(note);
             else if (note.type === 'touch') buckets.touch.push(note);
         }
+        {
+            if (note.type === 'slide') visualBuckets.slide.push(note);
+            else if (note.type === 'hold') visualBuckets.tapnhold.push(note);
+            else if (note.type === 'tap') visualBuckets.tapnhold.push(note);
+            else if (note.type === 'touch') visualBuckets.touch.push(note);
+        }
     }
 
     renderer.drawFrame({
@@ -1641,5 +1559,11 @@ function draw(dt = 0) {
     audioManager.update(globalTime);
 
     // visual 模式使用獨立 canvas 渲染時間軸預覽
-    renderVisualEditor();
+    visualEditorRenderer?.render(isVisualMode, ensureVisualEditorContext,
+        {
+            globalTime,
+            notes,
+            visualBuckets,
+            dt
+        });
 }

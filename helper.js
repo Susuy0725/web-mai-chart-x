@@ -282,6 +282,11 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
         rot: a + Math.PI / 2
     };
 });
+export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
+    return {
+        x: (i - 3.5) * innerCirleBase / 4,
+    };
+});
 class AudioManager {
     constructor() {
         this.globalGain = 0.8; // 預設音量

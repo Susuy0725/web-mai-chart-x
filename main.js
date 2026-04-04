@@ -234,8 +234,8 @@ export const defaultSettings = {
     effectDecayTime: 0.4,
     middleDistance: 0.25,
     noteBaseSize: 11,
-    play_combo: 100,
-    play_score: 100,
+    play_combo: 0,
+    play_score: 0,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
     moviebrightness: -1,
     // #ffffff -> #404040
@@ -560,7 +560,7 @@ function resizeVisualEditor() {
     lastVisualEditorSize.w = w;
     lastVisualEditorSize.h = h;
 
-    const p = Math.min(w, h) / scaleBase * scale;
+    const p = Math.min(w, h) / scaleBase;
     visualEditor.width = w;
     visualEditor.height = h;
     ctx2d.setTransform(p, 0, 0, p, w / 2, h / 2);
@@ -598,7 +598,9 @@ const setEditorCss = (visible = null) => {
 
     if (visualVisible) {
         resizeVisualEditor();
-        visualEditorRenderer?.render(isVisualMode, ensureVisualEditorContext);
+        /*visualEditorRenderer?.render(isVisualMode, ensureVisualEditorContext, {
+
+        });*/
     }
 
     animateCanvasWidth(visible);
@@ -660,7 +662,7 @@ chartInfoButton.addEventListener('click', () => {
         const diffContainer = document.createElement('div');
         diffContainer.style.cssText = "width:60%;box-sizing:border-box;display:flex;flex-direction:column;padding:0 0 0 10px;";
 
-        const createLabeledInput = (value, labelText, assign) => {
+        const createLabeledInput = (value, labelText, assign, isTextarea) => {
             const wrapper = document.createElement('div');
             wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
 
@@ -668,8 +670,10 @@ chartInfoButton.addEventListener('click', () => {
             label.textContent = labelText;
             label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
 
-            const input = document.createElement('input');
-            input.type = 'text';
+            const input =isTextarea ? document.createElement('textarea') : document.createElement('input');
+            if (!isTextarea) {
+                input.type = 'text';
+            }
             input.value = value ?? '';
             input.title = labelText;
             input.placeholder = labelText;
@@ -719,14 +723,27 @@ chartInfoButton.addEventListener('click', () => {
         diffContainer.appendChild(artistWrapper);
         diffContainer.appendChild(descWrapper);
         diffContainer.appendChild(dropdown);
-
+        
         const infoText = document.createElement('div');
         infoText.style.cssText = "font-size:14px;white-space:pre-wrap;";
         diffContainer.appendChild(infoText);
-
+        
         const currentDifficulty = nowDifficulty || "5";
         infoText.appendChild(createLabeledInput(tempData[`lv_${currentDifficulty}`], "等級", `lv_${currentDifficulty}`).wrapper);
         infoText.appendChild(createLabeledInput(tempData[`des_${currentDifficulty}`], "難度設計", `des_${currentDifficulty}`).wrapper);
+        
+        const excludedKeys = new Set(["title", "artist", "des", "first"]);
+        for (let i = 1; i <= 7; i++) {
+            excludedKeys.add(`des_${i}`);
+            excludedKeys.add(`lv_${i}`);
+            excludedKeys.add(`inote_${i}`);
+        }
+        const insVal = Object.keys(tempData)
+            .filter(key => !excludedKeys.has(key))
+            .map(key => `&${key}=${tempData[key]}`)
+            .join("\n");
+        const {wrapper: customInstruction} = createLabeledInput(insVal, "自訂指令", "custom", true);
+        diffContainer.appendChild(customInstruction);
 
         container.appendChild(imgContainer);
         container.appendChild(diffContainer);
@@ -744,8 +761,22 @@ chartInfoButton.addEventListener('click', () => {
                         maidata = {};
                     }
                     Object.keys(tempData).forEach(key => {
+                        if (key === 'custom') return;
                         maidata[key] = tempData[key];
                     });
+
+                    if (typeof tempData.custom === 'string') {
+                        tempData.custom.split(/\r?\n/).forEach(line => {
+                            const trimmed = line.trim();
+                            if (!trimmed) return;
+                            const normalized = trimmed.startsWith('&') ? trimmed.slice(1) : trimmed;
+                            const [key, ...rest] = normalized.split('=');
+                            if (!key) return;
+                            const value = rest.join('=');
+                            maidata[key] = value;
+                        });
+                    }
+
                     if (tempData.difficulty) {
                         nowDifficulty = tempData.difficulty;
                         changeDifficulty.value = nowDifficulty;
@@ -993,6 +1024,21 @@ hideUtilityButton.addEventListener('click', () => {
     resize();
 });
 
+const utilityDropdown = document.querySelector('.utilityDropdown');
+const utilityDropdownBtn = document.querySelector('.utilityDropdown-btn');
+if (utilityDropdown && utilityDropdownBtn) {
+    utilityDropdownBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        utilityDropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!utilityDropdown.contains(event.target)) {
+            utilityDropdown.classList.remove('open');
+        }
+    });
+}
+
 quickGenerateButton.addEventListener('click', () => {
     popupWindow({
         title: "快速生成",
@@ -1021,6 +1067,12 @@ Beat: <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
 });
 
 editorInput.addEventListener('scroll', () => {
+    syncHighlightLayerScroll();
+});
+editorInput.addEventListener('touchmove', () => {
+    syncHighlightLayerScroll();
+});
+editorInput.addEventListener('touchstart', () => {
     syncHighlightLayerScroll();
 });
 const pairs = { '(': ')', '{': '}', '[': ']' };
@@ -1300,7 +1352,9 @@ function resize() {
     lastCanvasSize.w = w;
     lastCanvasSize.h = h;
 
-    const p = Math.min(w, h) / scaleBase * scale;
+    const scaleValue = renderer?.scale ?? scale;
+    const p = Math.min(w, h) / scaleBase * scaleValue;
+
     canvas.width = w;
     canvas.height = h;
     if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
@@ -1373,7 +1427,7 @@ function openSecondWindow() {
         extCanvas.height = externalWindow.innerHeight * dpr;
 
         // 重新套用你的座標系統 (這點最重要！)
-        const p = size / scaleBase * scale * dpr;
+        const p = size / scaleBase * (renderer?.scale ?? scale) * dpr;
         secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
         draw();
     };
@@ -1381,7 +1435,7 @@ function openSecondWindow() {
     syncResize();
 
     externalWindow.addEventListener('resize', syncResize);
-    ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2); // 清除主 Canvas
+    //ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2); // 清除主 Canvas
 
     ctx = secondCtx; // 切換到第二個 Canvas 的上下文
 
@@ -1404,11 +1458,10 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-resize();
 let playClock = [false, false, false, false];
 function draw(dt = 0) {
     // 1. 清除畫布
-    ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
+    //ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2);
     if (!renderer) return;
 
     let foundIndexForThisFrame = false;
@@ -1564,6 +1617,7 @@ function draw(dt = 0) {
             globalTime,
             notes,
             visualBuckets,
+            audioBuffer: audioManager.buffers,
             dt
         });
 }

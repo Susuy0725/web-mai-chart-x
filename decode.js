@@ -20,6 +20,7 @@ export function simaiDecode(data = "", baseOffset = true) {
         nowSplit = 4,
         overrideSplitTime = null,
         noteCommaIndex = 0;
+    let tapCounts = 0, holdCounts = 0, slideCounts = 0, touchCounts = 0, breakCounts = 0;
     for (let e of splitParts) {
         if (e.includes('(')) {
             const result = parseTag(e, '(', ')');
@@ -167,12 +168,15 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 }
                             }
                             type = 'touch';
+
+                            touchCounts++;
                         } else {
                             pos = parseInt(posMatch[0]);
                             if (pos < 1 || pos > 8) {
                                 console.warn("Invalid note position:", pos);
                                 return;
                             }
+                            tapCounts++;
                         }
                         return {
                             pos: pos,
@@ -190,6 +194,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                     if (noteStr.includes('b') && !slideMatch) {
                         if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                         noteObj.isBreak = true
+                        breakCounts++;
                         noteStr = noteStr.replace(/b/g, '');
                     };
                     if (noteStr.includes('$') && !slideMatch) {
@@ -235,6 +240,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                             noteObj.holdDuration = duration;
                             if (duration + noteObj.time > endTime) endTime = duration + noteObj.time;
                         }
+                        holdCounts++;
+                        tapCounts--; // 因為 hold 會被同時算作 tap，所以這裡要扣掉之前加的 tap 計數
                     }
                     let noHeadSlide = false, hideHeadSlide = false;
                     if (slideMatch && !noteStr.includes('h')) {
@@ -270,6 +277,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             if (p[0].includes('b')) {
                                 noteObj.isBreak = true;
                                 p[0] = p[0].replace(/b/g, '');
+                                breakCounts++;
                             }
                             if (p[0].includes('@')) {
                                 noteObj.isStar = false;
@@ -278,6 +286,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             if (p[0].includes('?')) {
                                 noHeadSlide = true;
                                 p[0] = p[0].replace(/\?/g, '');
+                                tapCounts--;
                             }
                             if (p[0].includes('!')) {
                                 hideHeadSlide = true;
@@ -371,7 +380,14 @@ export function simaiDecode(data = "", baseOffset = true) {
     console.log("notes: ", notes);
     console.log("endTime: ", endTime);
     console.groupEnd();
-    return { notes, endTime, bpm: firstBpm, baseOffset, raw: splitParts };
+    return {
+        notes,
+        endTime,
+        bpm: firstBpm,
+        baseOffset,
+        noteValue: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5),
+        raw: splitParts
+    };
 }
 function getSlidePath(start, end, type, mid = null) {
     const r = new PathRecorder();

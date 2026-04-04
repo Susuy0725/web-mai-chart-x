@@ -19,6 +19,8 @@ export class SimaiRenderer {
         this.images = null;
         this.globalTime = 0;
 
+        this.scale = 0.98;
+
         // EX 顏色定義
         this.exColor = {
             tap: '#D8A2C9',
@@ -26,6 +28,13 @@ export class SimaiRenderer {
             double: '#DCDA6B',
             break: '#EBBA63',
         };
+    }
+
+    getCanvasWH() {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const invP = scaleBase / (Math.min(w, h) * this.scale);
+        return { width: w * invP, height: h * invP, halfWidth: w * invP * 0.5, halfHeight: h * invP * 0.5 };
     }
 
     setImages(images) {
@@ -96,11 +105,14 @@ export class SimaiRenderer {
         if (!this.images) return;
 
         // 1. 清除畫布
-        ctx.clearRect(-this.canvas.width, -this.canvas.height, this.canvas.width * 2, this.canvas.height * 2);
+        {
+            let { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
+            ctx.clearRect(-hw, -hh, w, h);
+        }
 
         // 2. 基礎 UI
-        this.drawUI(dt, globalTime);
         this.drawStaticBackground();
+        this.drawUI(dt, globalTime);
 
         // 3. 傳感器
         if (showSensor) this.drawSensors();
@@ -119,13 +131,14 @@ export class SimaiRenderer {
 
     drawUI(dt, globalTime) {
         const { ctx } = this;
+        const { width: w, height: h } = this.getCanvasWH();
         ctx.save();
         ctx.font = "2px Arial";
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillText(`FPS: ${dt === 0 ? 'N/A' : (1 / dt).toFixed(2)}`, -scaleBase / 2, -scaleBase / 2);
-        ctx.fillText(`Time: ${globalTime.toFixed(2)}s`, -scaleBase / 2, -scaleBase / 2 + 4);
+        ctx.fillText(`FPS: ${dt === 0 ? 'N/A' : (1 / dt).toFixed(2)}`, -w / 2, -h / 2);
+        ctx.fillText(`Time: ${globalTime.toFixed(2)}s`, -w / 2, -h / 2 + 4);
         ctx.restore();
     }
 
@@ -483,7 +496,7 @@ export class SimaiRenderer {
     }
 
     drawPathWithArrows(recorder, starProgress, imgs, typew, config = { spacing: 4.36 }) {
-        const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 1) / config.spacing);
+        const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / config.spacing);
         const spacing = typew ? 7 : config.spacing;
 
         this.ctx.save();
@@ -513,7 +526,7 @@ export class SimaiVisualEditor {
         this.images = null;
         this.globalTime = 0;
 
-        this.zoom = 20;
+        this.zoom = 200;
 
         this.passOpacity = 0.5;
 
@@ -523,6 +536,13 @@ export class SimaiVisualEditor {
             double: '#DCDA6B',
             break: '#EBBA63',
         };
+    }
+
+    getCanvasWH() {
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+        const invP = scaleBase / Math.min(w, h) * 0.5;
+        return { width: w * invP, height: h * invP };
     }
 
     setZoom(zoom) {
@@ -662,28 +682,67 @@ export class SimaiVisualEditor {
         this.ctx.restore();
     }
 
+    drawHold(s) {
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+        const t = (noteTime - this.globalTime);
+        const posInfo = visualNoteRefPos[pos - 1];
+
+        const img = this.images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
+        if (imgNotExists(img)) return;
+
+        const size = this.settings.noteBaseSize;
+        const sizeOffset = holdDuration * 5.5555 * this.zoom / 100;
+
+        this.ctx.save();
+        this.ctx.translate(posInfo.x, t * -this.zoom);
+        this.ctx.rotate(Math.PI);
+        if (t <= -holdDuration) {
+            this.ctx.globalAlpha = this.passOpacity;
+        }
+        this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+        this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+        this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+
+        if (s.isEx) {
+            const ex = getTintedImage(this.images["hold_ex"], 0.5, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
+            this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+            this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+            this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+        this.ctx.restore();
+    }
+
     render(isVisualMode, ensureVisualEditorContext, state) {
         if (!isVisualMode() || this.canvas.style.display === 'none') return;
 
-        const ctx2d = this.ctx || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null);
-        if (!ctx2d) return;
+        const ctx = this.ctx || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null);
+        if (!ctx) return;
 
-        const w = this.canvas.clientWidth;
-        const h = this.canvas.clientHeight;
+        const { width: w, height: h } = this.getCanvasWH();
         if (w <= 0 || h <= 0) return;
-        const { globalTime, visualBuckets, notes, dt } = state;
+        const { globalTime, visualBuckets, audioBuffer, dt } = state;
         this.globalTime = globalTime;
 
-        ctx2d.clearRect(-w, -h, w * 2, h * 2);
-        ctx2d.strokeStyle = '#ccc';
-        ctx2d.beginPath();
-        ctx2d.moveTo(-w, 0);
-        ctx2d.lineTo(w, 0);
-        ctx2d.stroke();
+        ctx.clearRect(-w, -h, w * 2, h * 2);
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "4px Arial";
+        for (let i = 0; i < 8; i++) {
+            ctx.fillStyle = i % 2 === 0 ? '#555' : '#333';
+            ctx.fillRect(visualNoteRefPos[i].x - this.settings.noteBaseSize / 2, -h, this.settings.noteBaseSize, h * 2);
+            ctx.fillStyle = "gray";
+            ctx.fillText(i + 1, visualNoteRefPos[i].x, h - 2);
+        }
+        ctx.strokeStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(-w, 0);
+        ctx.lineTo(w, 0);
+        ctx.stroke();
         //visualBuckets.slide.forEach(n => this.drawSlide(n));
         visualBuckets.tapnhold.forEach(n => {
-            //if (n.type === "hold") this.drawHold(n);
-            /*else*/ if (n.isStar) this.drawStar(n);
+            if (n.type === "hold") this.drawHold(n);
+            else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
         });
         visualBuckets.touch.forEach(n => this.drawTouch(n));

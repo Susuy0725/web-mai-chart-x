@@ -282,6 +282,11 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
         rot: a + Math.PI / 2
     };
 });
+export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
+    return {
+        x: (i - 3.5) * innerCirleBase / 4,
+    };
+});
 class AudioManager {
     constructor() {
         this.globalGain = 0.8; // 預設音量
@@ -848,7 +853,10 @@ export function parseMaidata(raw) {
 
 export function getSimaiDataString(maidata) {
     if (!maidata || typeof maidata !== "object") return "";
-    return "&" + Object.entries(maidata).map(([key, value]) => `${key}=${value}`).join("\n&");
+    return "&" + Object.entries(maidata)
+        .filter(([ key, value ]) => value.toString().trim().length > 0)
+        .map(([key, value]) => `${key}=${value}`)
+        .join("\n&");
 }
 /**
  * popupWindow

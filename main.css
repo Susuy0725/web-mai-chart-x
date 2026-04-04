@@ -34,6 +34,8 @@ body {
     height: calc(100% - var(--playControls-height) - 40px);
     top: 40px;
     left: 0;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #canvasContainer.expanded {
@@ -61,10 +63,12 @@ body {
     touch-action: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
 }
 
 #playControls {
     user-select: none;
+    -webkit-user-select: none;
     position: absolute;
     width: 100%;
     height: var(--playControls-height);
@@ -124,6 +128,7 @@ body {
     right: 0;
     z-index: 5;
     user-select: none;
+    -webkit-user-select: none;
 }
 
 #utilityContainer.expanded {
@@ -133,6 +138,7 @@ body {
     right: 0;
     z-index: 5;
     user-select: none;
+    -webkit-user-select: none;
 }
 
 #utilityContainer .closeBtn {
@@ -284,8 +290,13 @@ body {
     /* 必須設置寬度 */
     font-size: 14px;
     line-height: 1.5;
-    white-space: break-spaces;
-    word-wrap: break-word;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-wrap: normal;
+    word-break: break-all;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-overflow-scrolling: touch;
     border: none;
     outline: none;
     overflow: auto;
@@ -307,6 +318,7 @@ body {
 
 #highlight-layer {
     user-select: none;
+    -webkit-user-select: none;
     pointer-events: none;
     color: #d4d4d4;
     /* 預設文字顏色 */
@@ -329,6 +341,14 @@ body {
     margin-bottom: -5px;
 }
 
+.utilityDropdown.open .utilityDropdown-content,
+.utilityDropdown:hover .utilityDropdown-content {
+    left: 20px;
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .utilityDropdown-content {
     display: none;
     position: absolute;
@@ -346,13 +366,6 @@ body {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease-out;
-}
-
-.utilityDropdown:hover .utilityDropdown-content {
-    left: 20px;
-    display: flex;
-    opacity: 1;
-    pointer-events: auto;
 }
 
 .utilityDropdown-content .utilityButton {

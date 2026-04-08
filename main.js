@@ -470,13 +470,29 @@ const getres = ((simaiDataValue) => {
     })();
 
     if (result) {
-        notes = result.notes;
-        endTime = Math.max(result.endTime + 1, audioManager.getBGMDuration() + 1);
-        slider.max = endTime - musicDelay;
-        // chartBaseOffset = result.baseOffset;
-        clockBpm = result.bpm;
-        rawData = simaiDataValue.split(',');
-        draw();
+        if (result.failed) {
+            simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
+        } else {
+            notes = result.notes;
+            endTime = Math.max(result.endTime + 1, audioManager.getBGMDuration() + 1);
+            slider.max = endTime - musicDelay;
+            // chartBaseOffset = result.baseOffset;
+            clockBpm = result.bpm;
+            rawData = simaiDataValue.split(',');
+            draw();
+
+            if (result.warnings && result.warnings.length > 0) {
+                const maxShow = 3;
+                const preview = result.warnings.slice(0, maxShow).join('； ');
+                const suffix = result.warnings.length > maxShow ? ` +${result.warnings.length - maxShow} more` : '';
+                simpleToast({
+                    content: `解析完成，含 ${result.warnings.length} 則警告：${preview}${suffix}`,
+                    type: 'warning',
+                    timeout: 3600
+                });
+                console.warn('Decode warnings:', result.warnings);
+            }
+        }
     }
 });
 
@@ -670,7 +686,7 @@ chartInfoButton.addEventListener('click', () => {
             label.textContent = labelText;
             label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
 
-            const input =isTextarea ? document.createElement('textarea') : document.createElement('input');
+            const input = isTextarea ? document.createElement('textarea') : document.createElement('input');
             if (!isTextarea) {
                 input.type = 'text';
             }
@@ -723,15 +739,15 @@ chartInfoButton.addEventListener('click', () => {
         diffContainer.appendChild(artistWrapper);
         diffContainer.appendChild(descWrapper);
         diffContainer.appendChild(dropdown);
-        
+
         const infoText = document.createElement('div');
         infoText.style.cssText = "font-size:14px;white-space:pre-wrap;";
         diffContainer.appendChild(infoText);
-        
+
         const currentDifficulty = nowDifficulty || "5";
         infoText.appendChild(createLabeledInput(tempData[`lv_${currentDifficulty}`], "等級", `lv_${currentDifficulty}`).wrapper);
         infoText.appendChild(createLabeledInput(tempData[`des_${currentDifficulty}`], "難度設計", `des_${currentDifficulty}`).wrapper);
-        
+
         const excludedKeys = new Set(["title", "artist", "des", "first"]);
         for (let i = 1; i <= 7; i++) {
             excludedKeys.add(`des_${i}`);
@@ -740,9 +756,9 @@ chartInfoButton.addEventListener('click', () => {
         }
         const insVal = Object.keys(tempData)
             .filter(key => !excludedKeys.has(key))
-            .map(key => `&${key}=${tempData[key]}`)
+            .map(key => `&${key} = ${tempData[key]}`)
             .join("\n");
-        const {wrapper: customInstruction} = createLabeledInput(insVal, "自訂指令", "custom", true);
+        const { wrapper: customInstruction } = createLabeledInput(insVal, "自訂指令", "custom", true);
         diffContainer.appendChild(customInstruction);
 
         container.appendChild(imgContainer);
@@ -894,7 +910,7 @@ folderInput.addEventListener('click', (e) => {
             if (file.name.startsWith('track.')) {
                 // 音樂檔
                 const url = URL.createObjectURL(file);
-                audioManager.setBackgroundMusic(url);
+                audioManager.setBackgroundMusic(url, file);
                 endTime = Math.max(endTime + 1, audioManager.getBGMDuration() + 1);
                 slider.max = endTime - musicDelay;
                 idbSet('simai_resource_bgm', file).then(() => {
@@ -1075,6 +1091,26 @@ editorInput.addEventListener('touchmove', () => {
 editorInput.addEventListener('touchstart', () => {
     syncHighlightLayerScroll();
 });
+
+// visualEditor 滾輪縮放功能
+visualEditor.addEventListener('wheel', (e) => {
+    if (!visualEditorRenderer) return;
+
+    e.preventDefault();
+
+    // 計算縮放變化（向上滾動放大，向下滾動縮小）
+    const zoomSpeed = 10; // 每次滾動改變 10 單位的縮放
+    const deltaZoom = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+
+    // 應用新的縮放值，設定最小和最大限制
+    const minZoom = 50;
+    const maxZoom = 500;
+    const newZoom = Math.max(minZoom, Math.min(maxZoom, visualEditorRenderer.zoom + deltaZoom));
+
+    visualEditorRenderer.setZoom(newZoom);
+    draw();
+});
+
 const pairs = { '(': ')', '{': '}', '[': ']' };
 const closingChars = new Set(Object.values(pairs));
 
@@ -1116,7 +1152,7 @@ addMusicButton.addEventListener('click', () => {
         const file = e.target.files[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            audioManager.setBackgroundMusic(url);
+            audioManager.setBackgroundMusic(url, file);
             idbSet('simai_resource_bgm', file);
         }
     };
@@ -1145,7 +1181,7 @@ downloadButton.addEventListener('click', () => {
             },
             {
                 text: "下載壓縮檔",
-                onClick: (ctx) => {
+                onClick: async (ctx) => {
                     // Implementation for downloading ZIP
                     let zip = JSZip();
                     zip.file("maidata.txt", getSimaiDataString(maidata));
@@ -1166,12 +1202,27 @@ downloadButton.addEventListener('click', () => {
                     }
 
                     if (audioManager.haveBGM()) {
-                        const bgmFilename = audioManager.bgmFile.name || 'track.mp3';
-                        console.log('BGM file name:', bgmFilename);
-                        zip.file(bgmFilename, audioManager.bgmFile);
+                        const bgmFile = audioManager.bgmFile;
+                        const bgmFilename = (bgmFile && bgmFile.name) ? bgmFile.name : 'track.mp3';
+                        console.log('BGM file name:', bgmFilename, 'Type:', bgmFile?.type);
+                        
+                        // 確保傳遞給 JSZip 的是 Blob 或 File，不是 URL
+                        if (bgmFile instanceof Blob) {
+                            zip.file(bgmFilename, bgmFile);
+                        } else if (typeof bgmFile === 'string') {
+                            // 如果是 URL/ObjectURL，需要先轉換為 Blob
+                            try {
+                                const response = await fetch(bgmFile);
+                                const blob = await response.blob();
+                                zip.file(bgmFilename, blob);
+                            } catch (e) {
+                                console.error('無法取得 BGM Blob:', e);
+                            }
+                        }
                     }
 
-                    zip.generateAsync({ type: "blob" }).then(function (content) {
+                    try {
+                        const content = await zip.generateAsync({ type: "blob" });
                         const url = URL.createObjectURL(content);
                         const a = document.createElement('a');
                         a.href = url;
@@ -1180,7 +1231,9 @@ downloadButton.addEventListener('click', () => {
                         a.click();
                         document.body.removeChild(a);
                         URL.revokeObjectURL(url);
-                    }).catch(e => console.error('ZIP 生成失敗', e));
+                    } catch (e) {
+                        console.error('ZIP 生成失敗', e);
+                    }
                 }
             }
         ]
@@ -1234,7 +1287,7 @@ playButton.addEventListener('click', () => {
         audioManager.stopAllLongSounds();
         audioManager.stopBGM();
 
-        notes.forEach(n => n.riserActive = false); // 強制重置標記
+        notes.forEach(n => n._riserActive = false); // 強制重置標記
     } else {
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
@@ -1261,7 +1314,7 @@ stopButton.addEventListener('click', () => {
     audioManager.stopAllLongSounds();
     audioManager.stopBGM();
 
-    notes.forEach(n => n.riserActive = false); // 強制重置標記
+    notes.forEach(n => n._riserActive = false); // 強制重置標記
 
     draw(); // 立即更新畫布，反映停止狀態
 });
@@ -1538,41 +1591,41 @@ function draw(dt = 0) {
             const isInsideHold = note.type === "touch" && note.holdDuration > 0 && noteT <= 0 && -noteT < note.holdDuration;
 
             if (isInsideHold) {
-                if (!note.riserActive) {
+                if (!note._riserActive) {
                     const soundOffset = -noteT;
                     audioManager.startLongSound(noteId, 'touchHold_riser', soundOffset);
-                    note.riserActive = true;
+                    note._riserActive = true;
                 }
-            } else if (note.riserActive) {
+            } else if (note._riserActive) {
                 audioManager.stopLongSound(noteId);
-                note.riserActive = false;
+                note._riserActive = false;
             }
 
             // B. 處理開始打擊音效 (Tap / Slide Start / Hold Start)
-            if (noteT <= 0 && !note.startEffectPlayed) {
+            if (noteT <= 0 && !note._startEffectPlayed) {
                 // 排除連鎖滑軌的非首個箭頭音效
                 if (!(note.type === "slide" && !note.firstSlide)) {
                     audioManager.queueSound(note, note.time + (note.slideDelay ?? 0));
                 }
-                note.startEffectPlayed = true;
+                note._startEffectPlayed = true;
             }
 
             // C. 處理結束音效 (Hold End / Slide End / Hanabi)
-            if (-noteT > skipT && !note.endEffectPlayed) {
+            if (-noteT > skipT && !note._endEffectPlayed) {
                 if ((note.type === "slide" && note.lastSlide && note.isBreak) || (note.type !== "slide" && note.isBreak) || note.isHanabi || (note.holdDuration !== undefined && note.type !== "tap")) {
                     audioManager.queueSound(note, note.time + skipT);
                 }
-                note.endEffectPlayed = true;
+                note._endEffectPlayed = true;
             }
         }
 
         // --- 倒帶或 Slider 拖動時的狀態重置 ---
         if (noteT > 0) {
-            note.startEffectPlayed = false;
-            note.endEffectPlayed = false;
-            if (note.riserActive) {
+            note._startEffectPlayed = false;
+            note._endEffectPlayed = false;
+            if (note._riserActive) {
                 audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
-                note.riserActive = false;
+                note._riserActive = false;
             }
         }
 

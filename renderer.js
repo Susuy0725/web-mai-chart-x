@@ -691,7 +691,7 @@ export class SimaiVisualEditor {
         if (imgNotExists(img)) return;
 
         const size = this.settings.noteBaseSize;
-        const sizeOffset = holdDuration * 5.5555 * this.zoom / 100;
+        const sizeOffset = holdDuration * 5.55 * this.zoom / 100;
 
         this.ctx.save();
         this.ctx.translate(posInfo.x, t * -this.zoom);
@@ -699,6 +699,7 @@ export class SimaiVisualEditor {
         if (t <= -holdDuration) {
             this.ctx.globalAlpha = this.passOpacity;
         }
+
         this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
         this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
         this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
@@ -708,6 +709,41 @@ export class SimaiVisualEditor {
             this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
             this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
             this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+        this.ctx.restore();
+    }
+
+    drawSlide(s) {
+        const target = this.images[s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")];
+        if (imgNotExists(target)) return;
+
+        const { time: noteTime, pos, slideDelay, slideDuration } = s;
+        const t = noteTime - this.globalTime;
+
+        this.drawPathWithArrows(target, visualNoteRefPos[pos - 1].x, t + slideDelay, slideDuration, -(t + slideDelay) / slideDuration);
+
+        /*if (t >= 0 || t <= -(slideDuration + slideDelay) || !s.firstSlide) return;
+        const starImg = this.images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
+        this.ctx.save();
+        this.ctx.translate(visualNoteRefPos[pos - 1].x, 0);
+        this.ctx.globalAlpha = Math.min(-t / slideDelay, 1);
+        this.drawImgAtcenter(starImg, this.settings.noteBaseSize * 1.3 * Math.min(-t / slideDelay, 1));
+        this.ctx.restore();*/
+    }
+
+    drawPathWithArrows(img, x, t, len, passT, config = { spacing: 4.36 }) {
+        const arrowCount = Math.floor((len * this.zoom) / config.spacing);
+
+        this.ctx.save();
+        for (let i = arrowCount; i > 0; i--) {
+            this.ctx.save();
+            this.ctx.translate(x, -t * this.zoom - i * config.spacing);
+            this.ctx.rotate(Math.PI / 2);
+            if (passT >= i / arrowCount) {
+                this.ctx.globalAlpha = this.passOpacity;
+            }
+            this.drawImgAtcenter(img, 1, 0, 0, 7 * 0.9, 9.4 * 0.9);
+            this.ctx.restore();
         }
         this.ctx.restore();
     }
@@ -739,7 +775,7 @@ export class SimaiVisualEditor {
         ctx.moveTo(-w, 0);
         ctx.lineTo(w, 0);
         ctx.stroke();
-        //visualBuckets.slide.forEach(n => this.drawSlide(n));
+        visualBuckets.slide.forEach(n => this.drawSlide(n));
         visualBuckets.tapnhold.forEach(n => {
             if (n.type === "hold") this.drawHold(n);
             else if (n.isStar) this.drawStar(n);

@@ -1,6 +1,16 @@
 import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase } from './helper.js';
-
+export let warns = [];
+const pushWarn = (...args) => warns.push(args.map(formatWarnArg).join(' '));
+const formatWarnArg = (arg) => {
+    if (typeof arg === 'string') return arg;
+    try {
+        return JSON.stringify(arg);
+    } catch {
+        return String(arg);
+    }
+};
 export function simaiDecode(data = "", baseOffset = true) {
+    warns = [];
     const raw = data.replace(/\|\|.*$/gm, "")/* remove comments */.replace(/\s+/g, '');
     if (raw === '') return { notes: [], endTime: 0 };
     /*if (!(raw.endsWith(',') || raw.endsWith('E') || raw.endsWith(')') || raw.endsWith('}'))) {
@@ -21,10 +31,12 @@ export function simaiDecode(data = "", baseOffset = true) {
         overrideSplitTime = null,
         noteCommaIndex = 0;
     let tapCounts = 0, holdCounts = 0, slideCounts = 0, touchCounts = 0, breakCounts = 0;
+    let decodeFailed = false;
+    //pushWarn = (...args) => Array.prototype.push.call(warns, args.map(formatWarnArg).join(' '));
     for (let e of splitParts) {
         if (e.includes('(')) {
             const result = parseTag(e, '(', ')');
-            if (result.error) { console.warn(result.error); break; }
+            if (result.error) { pushWarn(result.error); decodeFailed = true; break; }
             if (result.value !== null) nowBpm = result.value;
             if (nowTime == 0 && baseOffset) nowTime = 60 / nowBpm * 4; // 如果第一行就是 BPM 定义，则以此作为初始偏移
             if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
@@ -33,7 +45,7 @@ export function simaiDecode(data = "", baseOffset = true) {
         if (e.includes('{')) {
             overrideSplitTime = null; // reset overrideSplit at the start of each new tag
             const result = parseTag(e, '{', '}', true);
-            if (result.error) { console.warn(result.error); break; }
+            if (result.error) { pushWarn(result.error); decodeFailed = true; break; }
             if (result.value !== null && result.override) {
                 overrideSplitTime = result.value;
             } else if (result.value !== null) {
@@ -63,7 +75,7 @@ export function simaiDecode(data = "", baseOffset = true) {
             if (e.includes('`')) {
                 const rawsub = e.split('`').map(s => s.trim());
                 if (rawsub.some(s => s === '')) {
-                    console.warn("Empty note detected in backticks, skipping:", e);
+                    pushWarn("Empty note detected in backticks, skipping:", e);
                     continue;
                 }
                 const subNotes = e.split('`').filter(n => n.trim() !== '');
@@ -80,14 +92,14 @@ export function simaiDecode(data = "", baseOffset = true) {
                     }
                 })();
                 if (splitr.some(s => s === '')) {
-                    console.warn("Empty note detected in split, skipping:", raw);
+                    pushWarn("Empty note detected in split, skipping:", raw);
                     return;
                 }
                 if (splitr.length === 1 && !isNaN(splitr[0]) && splitr[0].length === 2) {
                     for (let i = 0; i < 2; i++) {
                         const pos = parseInt(splitr[0].charAt(i));
                         if (pos < 1 || pos > 8 || isNaN(pos)) {
-                            console.warn("Invalid note position:", pos);
+                            pushWarn("Invalid note position:", pos);
                             return;
                         }
                         const noteObj = {
@@ -149,7 +161,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                     const posMatch = noteStr.match(/^\d+/); // 抓取開頭的數字
                     const touchMatch = noteStr.match(/^([ABCDE])(\d+)|C/); // 抓取 touch 數值
                     if (!(posMatch || touchMatch)) {
-                        console.warn("Invalid note format:", noteStr);
+                        pushWarn("Invalid note format:", noteStr);
                         return;
                     };
                     const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
@@ -163,7 +175,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 touchPos = touchMatch[1];
                                 pos = parseInt(touchMatch[2]);
                                 if (pos < 1 || pos > 8) {
-                                    console.warn("Invalid touch position:", pos);
+                                    pushWarn("Invalid touch position:", pos);
                                     return;
                                 }
                             }
@@ -173,7 +185,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         } else {
                             pos = parseInt(posMatch[0]);
                             if (pos < 1 || pos > 8) {
-                                console.warn("Invalid note position:", pos);
+                                pushWarn("Invalid note position:", pos);
                                 return;
                             }
                             tapCounts++;
@@ -192,14 +204,14 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     // 檢查 Flags
                     if (noteStr.includes('b') && !slideMatch) {
-                        if (touchMatch) return console.warn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                        if (touchMatch) return pushWarn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                         noteObj.isBreak = true
                         breakCounts++;
                         noteStr = noteStr.replace(/b/g, '');
                     };
                     if (noteStr.includes('$') && !slideMatch) {
-                        if (touchMatch) return console.warn("Star flag '$' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
-                        if (noteStr.includes('h')) return console.warn("Star flag '$' is not allowed in hold notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                        if (touchMatch) return pushWarn("Star flag '$' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                        if (noteStr.includes('h')) return pushWarn("Star flag '$' is not allowed in hold notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                         noteObj.isStar = true
                         noteStr = noteStr.replace(/\$/g, '');
                     };
@@ -211,13 +223,13 @@ export function simaiDecode(data = "", baseOffset = true) {
                         if (!slideMatch && touchMatch) {
                             noteObj.isHanabi = true
                         } else {
-                            console.warn("Hanabi flag 'f' is not allowed in other notes!, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            pushWarn("Hanabi flag 'f' is not allowed in other notes!, skipping:", noteStr, splitParts[noteCommaIndex]);
                             return;
                         }
                     }
                     if (noteStr.includes('h')) {
                         if (slideMatch) {
-                            console.warn("Hold flag 'h' is not allowed in slide notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            pushWarn("Hold flag 'h' is not allowed in slide notes, skipping:", noteStr, splitParts[noteCommaIndex]);
                             return;
                         }
                         noteObj.isHold = true;
@@ -225,7 +237,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         const match = noteStr.match(/\[([^\[\]]*)\]/);
                         const residue = noteStr.replace(/\[([^\[\]]*)\]/, '').replace(/h/, '');
                         if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
-                            console.warn("Invalid format in hold note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            pushWarn("Invalid format in hold note, skipping:", noteStr, splitParts[noteCommaIndex]);
                             return;
                         }
                         //noteObj.holdDuration = parseBeats("1280:1", nowBpm).time;
@@ -234,7 +246,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
                             if (duration < 0 || isNaN(duration) || duration === Infinity) {
-                                console.warn("Invalid hold syntax in note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                                pushWarn("Invalid hold syntax in note, skipping:", noteStr, splitParts[noteCommaIndex]);
                                 return;
                             }
                             noteObj.holdDuration = duration;
@@ -262,13 +274,13 @@ export function simaiDecode(data = "", baseOffset = true) {
                         }
                         for (let i = 0; i < slideParts.length; i++) {
                             const slidePartMatch = slideParts[i].match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-                            if (!slidePartMatch) return console.warn("Missing slide type in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            if (!slidePartMatch) return pushWarn("Missing slide type in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
                             const timeMatches = slideParts[i].match(/\[([^\[\]]*)\]/g);
-                            if (!timeMatches) return console.warn("Missing time format:", noteStr, splitParts[noteCommaIndex]);
+                            if (!timeMatches) return pushWarn("Missing time format:", noteStr, splitParts[noteCommaIndex]);
                             const timeValues = timeMatches.map(m => m.slice(1, -1));
                             const residue = slideParts[i].replace(/\[([^\[\]]*)\]/g, '');
                             if (residue.includes('[') || residue.includes(']')) {
-                                console.warn("Invalid time format or empty in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                                pushWarn("Invalid time format or empty in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
                                 return;
                             }
                             noteObj.isStar = true;
@@ -295,7 +307,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const isSlideBreak = p.some(part => part.includes('b'));
                             if (isSlideBreak) {
                                 p.forEach((c, i) => {
-                                    if (c.startsWith('b')) console.warn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", residue, splitParts[noteCommaIndex]);
+                                    if (c.startsWith('b')) pushWarn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", residue, splitParts[noteCommaIndex]);
                                     p[i] = p[i].replace(/b/g, '');
                                 });
                             }
@@ -306,7 +318,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 timeValues.forEach((t, i) => {
                                     const { time: duration, delay } = parseBeats(t, nowBpm, true);
                                     if (duration < 0 || isNaN(duration)) {
-                                        console.warn("Invalid time format in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                                        pushWarn("Invalid time format in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
                                         error = true;
                                         return;
                                     }
@@ -328,8 +340,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 return { head, end, mid, type, path, len: path.totalLength };
                             });
 
-                            if (segments.includes(null)) return console.warn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
-                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return console.warn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
+                            if (segments.includes(null)) return pushWarn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
+                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return pushWarn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
                             const totalLen = segments.reduce((sum, s) => sum + s.len, 0);
                             let currentDelay = dlay;
 
@@ -376,6 +388,9 @@ export function simaiDecode(data = "", baseOffset = true) {
             isEx: n.isEx || false,
         });
     }
+    if (warns.length > 0) {
+        console.warn("Decoding finished with warnings:", warns);
+    }
     console.group("Decoded Notes:");
     console.log("notes: ", notes);
     console.log("endTime: ", endTime);
@@ -386,7 +401,9 @@ export function simaiDecode(data = "", baseOffset = true) {
         bpm: firstBpm,
         baseOffset,
         noteValue: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5),
-        raw: splitParts
+        raw: splitParts,
+        failed: decodeFailed,
+        warnings: warns
     };
 }
 function getSlidePath(start, end, type, mid = null) {
@@ -397,14 +414,14 @@ function getSlidePath(start, end, type, mid = null) {
     switch (type) {
         case '-':
             if ((end - start + 8) % 8 === 1 || (end - start + 8) % 8 === 7 || start === end) {
-                console.warn(`Illegal slide: ${start}${type}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${end}`);
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case '^':
             if ((end - start + 8) % 8 === 4 || start === end) {
-                console.warn(`Illegal slide: ${start}${type}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${end}`);
             }
             r.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, (end - start + 8) % 8 > 4);
             break;
@@ -416,7 +433,7 @@ function getSlidePath(start, end, type, mid = null) {
             break;
         case 'v':
             if ((end - start + 8) % 8 === 4 || start === end) {
-                console.warn(`Illegal slide: ${start}${type}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${end}`);
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(0, 0);
@@ -428,7 +445,7 @@ function getSlidePath(start, end, type, mid = null) {
                 (start - mid + 8) % 8 !== 2 && (start - mid + 8) % 8 !== 6 ||
                 start === end || mid === end || start === mid
             ) {
-                console.warn(`Illegal slide: ${start}${type}${mid}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${mid}${end}`);
             }
             const midInfo = noteRefPos[mid - 1];
             r.moveTo(startInfo.x, startInfo.y);
@@ -505,7 +522,7 @@ function getSlidePath(start, end, type, mid = null) {
         }
         case 's':
             if ((end - start + 8) % 8 !== 4 || start === end) {
-                console.warn(`Illegal slide: ${start}${type}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${end}`);
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
@@ -514,7 +531,7 @@ function getSlidePath(start, end, type, mid = null) {
             break;
         case 'z':
             if ((end - start + 8) % 8 !== 4 || start === end) {
-                console.warn(`Illegal slide: ${start}${type}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${end}`);
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 2);
@@ -523,16 +540,16 @@ function getSlidePath(start, end, type, mid = null) {
             break;
         case 'w':
             if ((end - start + 8) % 8 !== 4 || start === end) {
-                console.warn(`Illegal slide: ${start}${type}${end}`);
+                pushWarn(`Illegal slide: ${start}${type}${end}`);
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         default:
-            if (start === end) console.warn("This slide will not be visible since start and end are the same!! :", `${start}${type}${end}`);
+            if (start === end) pushWarn("This slide will not be visible since start and end are the same!! :", `${start}${type}${end}`);
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
-            console.warn("Not implemented slide type, defaulting to straight line:", type);
+            pushWarn("Not implemented slide type, defaulting to straight line:", type);
             break;
     }
 

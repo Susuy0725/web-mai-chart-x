@@ -374,23 +374,23 @@ class AudioManager {
     }
 
     /**
-    * 設定並載入背景音樂
-    */
-    /**
- * 設定並載入背景音樂 (支援 URL 或 Blob/File)
- * @param {string|Blob} source - 音訊來源
- */
-    async setBackgroundMusic(source) {
+     * 設定並載入背景音樂 (支援 URL 或 Blob/File)
+     * @param {string|Blob} source - 音訊來源
+     * @param {File} originalFile - 原始 File 對象 (用於導出時保留檔案名和二進制數據)
+     */
+    async setBackgroundMusic(source, originalFile = null) {
         try {
-            this.bgmFile = source; // 保存原始來源（File/Blob 或 URL）
+            // 優先保存原始 File 對象，否則保存來源
+            this.bgmFile = originalFile || source;
 
             let arrayBuffer;
             if (source instanceof Blob) {
-                // 直接從 IndexedDB 取出的 File/Blob 轉為 ArrayBuffer
                 arrayBuffer = await source.arrayBuffer();
             } else {
-                // 如果是 URL 則使用 fetch
                 const response = await fetch(source);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch BGM: HTTP ${response.status}`);
+                }
                 arrayBuffer = await response.arrayBuffer();
             }
 
@@ -568,7 +568,7 @@ class AudioManager {
                 break;
             case "hold":
                 this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
-                if (!note.startEffectPlayed) {
+                if (!note._startEffectPlayed) {
                     if (note.isEx) {
                         key = "judge_ex";
                     }
@@ -588,7 +588,7 @@ class AudioManager {
                 this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
                 if (note.isHanabi) {
                     if (note.holdDuration >= 0) {
-                        if (note.startEffectPlayed) {
+                        if (note._startEffectPlayed) {
                             key = "hanabi"
                             isMono = true;
                         } else return;
@@ -597,10 +597,10 @@ class AudioManager {
                         isMono = true;
                     }
                 }
-                if (note.startEffectPlayed && !note.isHanabi) return;
+                if (note._startEffectPlayed && !note.isHanabi) return;
                 break;
             case "slide":
-                if (!note.startEffectPlayed && note.isBreak) {
+                if (!note._startEffectPlayed && note.isBreak) {
                     this._checkAndPush("break_slide", targetTime, true, this.sfxVolumes["break_slide"]);
                     key = "break_slide_start";
                     isMono = false;
@@ -818,11 +818,16 @@ export function getHighlight(text) {
 
     let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    const combinedRegex = /(\|\|.*$)|((?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(([ABCDE])(\d+)|C|C(d+))/gm;
+    const combinedRegex = /(\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(([ABCDE])(\d+)|C|C(d+))/gm;
 
     html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, touch) => {
         if (comment) return `<span style="color: #468A55;">${comment}</span>`;
-        if (slide) return `<span style="color: #7EBAF0;">${slide}</span>`;
+        if (slide) {
+            if (slide.startsWith('&lt;') && slide.endsWith('&gt;')) {
+                return `<span style="color: #c586c0;">${slide}</span>`;
+            }
+            return `<span style="color: #7EBAF0;">${slide}</span>`;
+        }
         if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
         if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
         if (split) return `<span style="color: #ce9178;">${split}</span>`;
@@ -854,7 +859,7 @@ export function parseMaidata(raw) {
 export function getSimaiDataString(maidata) {
     if (!maidata || typeof maidata !== "object") return "";
     return "&" + Object.entries(maidata)
-        .filter(([ key, value ]) => value.toString().trim().length > 0)
+        .filter(([key, value]) => value.toString().trim().length > 0)
         .map(([key, value]) => `${key}=${value}`)
         .join("\n&");
 }
@@ -1131,7 +1136,7 @@ export function simpleToast({
     }
 
     const popup = document.createElement('div');
-    const color = { info: '#00bbff', error: '#ff4444', success: '#00ffcc' }[type] || '#404040';
+    const color = { info: '#00bbff', error: '#ff4444', success: '#00ffcc', warning: '#ffcc00' }[type] || '#404040';
 
     // 核心樣式：預設設定一個足夠大的 max-height 以便動畫計算
     popup.style.cssText = `

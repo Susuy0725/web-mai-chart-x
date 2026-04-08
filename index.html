@@ -6,9 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web maiChart -beta</title>
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=keyboard_arrow_down,menu,pause,play_arrow,right_panel_close,right_panel_open,skip_previous" />
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=chevron_right,keyboard_arrow_down,menu,pause,play_arrow,right_panel_close,right_panel_open,skip_previous" />
     <link rel="stylesheet" href="main.css">
     <script src="jszip.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
 
 <body>
@@ -56,13 +57,21 @@
                     <span class="material-symbols-outlined">menu</span>
                 </div>
                 <div class="utilityDropdown-content">
-                    <div class="utilityButton" data-buttonAction="createNew">新建</div>
-                    <div class="utilityButton" data-buttonAction="readFolder">讀取資料夾
-                        <input type="file" webkitdirectory directory multiple />
+                    <div class="utilityButton utilityMenuTitle">
+                        <span>檔案</span>
+                        <span class="utilityMenuArrow material-symbols-outlined">
+                            chevron_right
+                        </span>
+                        <div class="utilitySubmenu">
+                            <div class="utilityButton" data-buttonAction="createNew">新建</div>
+                            <div class="utilityButton" data-buttonAction="readFolder">讀取資料夾
+                                <input type="file" webkitdirectory directory multiple />
+                            </div>
+                            <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div>
+                            <div class="utilityButton" data-buttonAction="readMaidata">讀取maidata</div>
+                            <div class="utilityButton" data-buttonAction="download">下載</div>
+                        </div>
                     </div>
-                    <div class="utilityButton" data-buttonAction="download">下載</div>
-                    <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div>
-                    <div class="utilityButton" data-buttonAction="readMaidata">讀取maidata</div>
                     <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
                     <div class="utilityButton" data-buttonAction="getNowNoteIndex">目前音符位置</div>
                     <div class="utilityButton" data-buttonAction="getCursorNoteIndex">游標音符位置</div>

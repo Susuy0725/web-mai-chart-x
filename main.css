@@ -381,3 +381,43 @@ body {
 .utilityDropdown-content .utilityButton:hover {
     background-color: var(--top-utility-btn);
 }
+
+.utilityDropdown-content .utilityMenuTitle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 0px;
+    cursor: default;
+    overflow: visible;
+}
+
+.utilityDropdown-content .utilityMenuTitle .utilityMenuArrow {
+    margin-left: 0px;
+    font-size: 20px;
+    color: #d4d4d4;
+}
+
+.utilitySubmenu {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 100%;
+    min-width: 150px;
+    background-color: var(--top-utility-bg);
+    border: 1px solid var(--top-utility-btn);
+    border-radius: 10px;
+    padding: 5px;
+    flex-direction: column;
+    gap: 5px;
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.5);
+    z-index: 110;
+}
+
+.utilityDropdown-content .utilityMenuTitle:hover .utilitySubmenu {
+    display: flex;
+}
+
+.utilitySubmenu .utilityButton {
+    white-space: nowrap;
+}

@@ -23,11 +23,8 @@ popupWindow({
 
             step(90, "正在恢復上次的編輯狀態...");
             const [
-                savedContent, savedMusicDelay, savedTimeControl,
-                savedBgm, savedMaiData, savedDifficulty, bg, hideEditor, savedSettings
+                savedTimeControl, savedBgm, savedMaiData, savedDifficulty, bg, hideEditor, savedSettings
             ] = await Promise.all([
-                idbGet('simai_editor_content'),
-                idbGet('simai_musicDelay'),
                 idbGet('simai_timeControl'),
                 idbGet('simai_resource_bgm'),
                 idbGet('simai_maidata'),
@@ -37,23 +34,26 @@ popupWindow({
                 idbGet('simai_settings')
             ]);
 
-            if (savedContent) { editorInput.value = savedContent; applyHighlight(savedContent); getres(savedContent); }
-            /*if (savedMusicDelay) { musicDelay = parseFloat(savedMusicDelay); offsetInput.value = musicDelay; offsetInputDebounce(); }*/
             if (savedTimeControl && !isNaN(savedTimeControl)) {
                 realTime = savedTimeControl; slider.value = realTime; globalTime = realTime - musicDelay; update();
             }
-            if (savedMaiData) maidata = savedMaiData;
-            musicDelay = parseFloat(maidata.first) || 0;
-            offsetInput.value = musicDelay;
-            offsetInputDebounce();
 
             if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
+            if (savedMaiData) {
+                maidata = savedMaiData;
+                editorInput.value = maidata["inote_" + nowDifficulty];
+                applyHighlight(editorInput.value);
+                getres(editorInput.value);
+
+                musicDelay = parseFloat(maidata.first) || 0;
+                offsetInput.value = musicDelay;
+                offsetInputDebounce();
+            };
             if (bg) { backgroundImage = bg; }
             if (savedBgm) {
                 step(95, "正在還原背景音樂...");
                 await audioManager.setBackgroundMusic(savedBgm);
-                endTime = Math.max(endTime + 1, audioManager.getBGMDuration() + 1);
-                slider.max = endTime - musicDelay;
+                setEndtime(endTime);
             }
             if (savedSettings) {
                 settings = JSON.parse(savedSettings);
@@ -225,6 +225,352 @@ const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
 const downloadButton = getButton("download", "utility");
 const createNewButton = getButton("createNew", "utility");
+const warnEl = document.querySelector("#utilityContainer .warnbtn");
+const editMusicButton = getButton("editMusic", "utility");
+const rCwiseButton = getButton("rotateClockwise", "utility");
+const rCCwiseButton = getButton("rotateCounterClockwise", "utility");
+const r180Button = getButton("rotate180", "utility");
+const fVerticalButton = getButton("flipVertical", "utility");
+const fHorizontalButton = getButton("flipHorizontal", "utility");
+
+editMusicButton.addEventListener('click', () => {
+    if (!audioManager.bgmBuffer) {
+        simpleToast({ content: '請先匯入音樂', type: 'warning' });
+        return;
+    }
+
+    const container = document.createElement('div');
+    container.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;width:min(90vw,600px);';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 120;
+    canvas.style.cssText = 'width:100%;height:120px;background:#111;border:1px solid #555;border-radius:4px;cursor:crosshair;';
+    container.appendChild(canvas);
+
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:flex;gap:15px;align-items:center;flex-wrap:wrap;';
+    controls.innerHTML = `
+        <label style="display:flex;align-items:center;gap:5px;">
+            BPM: <input type="number" id="editBpmInput" value="${clockBpm}" step="1" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;">
+            第一拍偏移(s): <input type="number" id="editOffsetInput" value="${musicDelay}" step="0.001" style="width:80px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;">
+            縮放: <input type="number" id="editZoomInput" value="1" min="1" max="20" step="0.1" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">x
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;">
+            BGM音量: <input type="number" id="editBgmVolumeInput" value="0.75" min="0" max="1" step="0.05" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">x
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;">
+            音訊偏移(s): <input type="number" id="editShiftInput" value="0" step="0.001" style="width:80px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
+        </label>
+    `;
+    container.appendChild(controls);
+
+    const zoomInput = controls.querySelector('#editZoomInput');
+    zoomInput.addEventListener('change', () => {
+        drawWaveform();
+    });
+    const shiftInput = controls.querySelector('#editShiftInput');
+    const visualOffsetSlider = document.createElement('input');
+    visualOffsetSlider.type = 'range';
+    visualOffsetSlider.min = -5;
+    visualOffsetSlider.max = 5;
+    visualOffsetSlider.step = 0.01;
+    visualOffsetSlider.value = 0;
+    visualOffsetSlider.style.cssText = 'width:100%;';
+    const bgmVolumeInput = controls.querySelector('#editBgmVolumeInput');
+
+    const visualOffsetLabel = document.createElement('div');
+    visualOffsetLabel.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:#ccc;';
+    visualOffsetLabel.innerHTML = `<span>視覺偏移: </span><strong id="visualOffsetValue">0.00s</strong>`;
+
+    const offsetControl = document.createElement('div');
+    offsetControl.style.cssText = 'display:flex;flex-direction:column;gap:6px;width:100%;';
+    offsetControl.appendChild(visualOffsetLabel);
+    offsetControl.appendChild(visualOffsetSlider);
+    container.appendChild(offsetControl);
+
+    const actionBox = document.createElement('div');
+    actionBox.style.cssText = 'display:flex;gap:10px;margin-top:5px;flex-wrap:wrap;';
+
+    let offsetTime = musicDelay;
+    let visualOffset = 0;
+    const ctxCanvas = canvas.getContext('2d');
+    let bgmBuffer = audioManager.bgmBuffer;
+    let duration = bgmBuffer.duration;
+
+    const drawWaveform = () => {
+        bgmBuffer = audioManager.bgmBuffer;
+        duration = bgmBuffer.duration;
+        const data = bgmBuffer.getChannelData(0);
+        const zoom = Math.max(1, parseFloat(zoomInput.value) || 1);
+        const viewLength = Math.max(0.1, duration / zoom);
+        const viewCenter = Math.min(duration, Math.max(0, offsetTime + visualOffset));
+        let viewStart = viewCenter - viewLength / 2;
+        if (viewStart < 0) viewStart = 0;
+        if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
+        const viewEnd = viewStart + viewLength;
+        const startSample = Math.floor(viewStart * bgmBuffer.sampleRate);
+        const endSample = Math.min(data.length, Math.ceil(viewEnd * bgmBuffer.sampleRate));
+        const viewSamples = Math.max(1, endSample - startSample);
+        const step = Math.ceil(viewSamples / canvas.width);
+
+        ctxCanvas.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctxCanvas.fillStyle = '#1e90ff';
+        for (let i = 0; i < canvas.width; i++) {
+            let min = 1.0;
+            let max = -1.0;
+            const sampleBase = startSample + Math.floor((i / canvas.width) * viewSamples);
+            for (let j = 0; j < step; j++) {
+                const idx = sampleBase + j;
+                if (idx >= endSample) break;
+                const datum = data[idx];
+                if (datum < min) min = datum;
+                if (datum > max) max = datum;
+            }
+            const y = (1 - max) * canvas.height / 2;
+            const h = Math.max(1, (max - min) * canvas.height / 2);
+            ctxCanvas.fillRect(i, y, 1, h);
+        }
+
+        // Draw Playhead
+        const x = ((offsetTime - viewStart) / viewLength) * canvas.width;
+        ctxCanvas.strokeStyle = '#ff3333';
+        ctxCanvas.lineWidth = 2;
+        ctxCanvas.beginPath();
+        ctxCanvas.moveTo(Math.max(0, Math.min(canvas.width, x)), 0);
+        ctxCanvas.lineTo(Math.max(0, Math.min(canvas.width, x)), canvas.height);
+        ctxCanvas.stroke();
+
+        // Draw playing Playhead
+        //const x = Math.max(0, Math.min((offsetTime / duration) * canvas.width, canvas.width));
+        /*ctxCanvas.strokeStyle = '#ff3333';
+        ctxCanvas.lineWidth = 2;
+        ctxCanvas.beginPath();
+        ctxCanvas.moveTo(x, 0);
+        ctxCanvas.lineTo(x, canvas.height);
+        ctxCanvas.stroke();*/
+    };
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        offsetTime = Math.max(0, (x / rect.width) * duration / zoomInput.value - visualOffset);
+        container.querySelector('#editOffsetInput').value = offsetTime.toFixed(3);
+        drawWaveform();
+        if (isPreviewing) {
+            audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
+        }
+    });
+
+    visualOffsetSlider.addEventListener('input', () => {
+        visualOffset = parseFloat(visualOffsetSlider.value) || 0;
+        container.querySelector('#visualOffsetValue').innerText = `${visualOffset.toFixed(2)}s`;
+        drawWaveform();
+    });
+
+    controls.querySelector('#editOffsetInput').addEventListener('change', (e) => {
+        offsetTime = parseFloat(e.target.value) || 0;
+        drawWaveform();
+    });
+
+    const playClockBtn = document.createElement('button');
+    playClockBtn.innerText = '節拍器預覽 (從播放頭)';
+    playClockBtn.style.cssText = 'padding:4px 10px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    controls.appendChild(playClockBtn);
+
+    let isPreviewing = false;
+    let previewInterval;
+
+    const stopPreview = () => {
+        if (isPreviewing) {
+            clearInterval(previewInterval);
+            audioManager.stopBGM();
+            playClockBtn.innerText = '節拍器預覽 (從播放頭)';
+            isPreviewing = false;
+        }
+    };
+
+    playClockBtn.addEventListener('click', () => {
+        if (isPreviewing) {
+            stopPreview();
+        } else {
+            const bpm = parseFloat(container.querySelector('#editBpmInput').value) || clockBpm;
+            const msPerBeat = 60000 / bpm;
+
+            audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
+
+            // 使用 setTimeout 模擬基本的節拍器
+            let expectedTickTime = performance.now() + msPerBeat;
+            previewInterval = setInterval(() => {
+                const now = performance.now();
+                if (now >= expectedTickTime) {
+                    console.log('Tick!');
+                    audioManager.play('clock')
+                    expectedTickTime += msPerBeat;
+                }
+            }, 10);
+
+            playClockBtn.innerText = '停止預覽';
+            isPreviewing = true;
+        }
+    });
+
+    // 裁切與補白功能
+    const modifyBgmBufferButton = document.createElement('button');
+    modifyBgmBufferButton.innerText = '裁去播放頭前所有音訊';
+    modifyBgmBufferButton.style.cssText = 'padding:4px 8px;background:#8b0000;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+
+    modifyBgmBufferButton.addEventListener('click', () => {
+        if (offsetTime <= 0) return;
+        if (!confirm('確定要從播放頭處裁切掉前面的音樂嗎？此操作會重新建立音訊緩衝。')) return;
+
+        stopPreview();
+        const ctx = audioManager.ctx;
+        const oldBuf = audioManager.bgmBuffer;
+        const startOffset = Math.floor(offsetTime * oldBuf.sampleRate);
+        const newLen = oldBuf.length - startOffset;
+
+        if (newLen <= 0) return;
+
+        const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, oldBuf.sampleRate);
+        for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
+            const oldData = oldBuf.getChannelData(ch);
+            const newData = newBuffer.getChannelData(ch);
+            newData.set(oldData.subarray(startOffset));
+        }
+
+        audioManager.bgmBuffer = newBuffer;
+        offsetTime = 0; // 裁掉後，前面就沒了，播放頭歸零
+        container.querySelector('#editOffsetInput').value = 0;
+        musicDelay = 0;
+        offsetInput.value = 0;
+        drawWaveform();
+        simpleToast({ content: '音訊已自播放頭裁剪', type: 'success' });
+    });
+
+    const padBgmBufferButton = document.createElement('button');
+    padBgmBufferButton.innerText = '在開頭補白 1 拍 (依 BPM)';
+    padBgmBufferButton.style.cssText = 'padding:4px 8px;background:#006400;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+
+    padBgmBufferButton.addEventListener('click', () => {
+        stopPreview();
+        const bpm = parseFloat(container.querySelector('#editBpmInput').value) || clockBpm;
+        const secPerBeat = 60 / bpm;
+
+        const ctx = audioManager.ctx;
+        const oldBuf = audioManager.bgmBuffer;
+        const padSamples = Math.floor(secPerBeat * oldBuf.sampleRate);
+        const newLen = oldBuf.length + padSamples;
+
+        const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, oldBuf.sampleRate);
+        for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
+            const oldData = oldBuf.getChannelData(ch);
+            const newData = newBuffer.getChannelData(ch);
+            newData.set(oldData, padSamples); // 前面的會是預設的 0 (靜音)
+        }
+
+        audioManager.bgmBuffer = newBuffer;
+        offsetTime += secPerBeat; // 補白後，播放頭向後延伸
+        container.querySelector('#editOffsetInput').value = offsetTime.toFixed(3);
+        drawWaveform();
+        simpleToast({ content: '已在音訊開頭補白', type: 'success' });
+    });
+
+    const applyShiftButton = document.createElement('button');
+    applyShiftButton.innerText = '套用音訊偏移';
+    applyShiftButton.style.cssText = 'padding:4px 8px;background:#004a75;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    applyShiftButton.addEventListener('click', () => {
+        const shiftSeconds = parseFloat(shiftInput.value) || 0;
+        if (shiftSeconds === 0) {
+            simpleToast({ content: '請填寫非零的音訊偏移值。', type: 'warning' });
+            return;
+        }
+
+        stopPreview();
+        const ctx = audioManager.ctx;
+        const oldBuf = audioManager.bgmBuffer;
+        const sampleRate = oldBuf.sampleRate;
+        const shiftSamples = Math.round(Math.abs(shiftSeconds) * sampleRate);
+
+        if (shiftSeconds > 0) {
+            const newLen = oldBuf.length + shiftSamples;
+            const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, sampleRate);
+            for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
+                const oldData = oldBuf.getChannelData(ch);
+                const newData = newBuffer.getChannelData(ch);
+                newData.set(oldData, shiftSamples);
+            }
+            audioManager.bgmBuffer = newBuffer;
+            offsetTime += shiftSeconds;
+            simpleToast({ content: `已補 ${shiftSeconds.toFixed(3)}s 靜音於音訊開頭。`, type: 'success' });
+        } else {
+            if (shiftSamples >= oldBuf.length) {
+                simpleToast({ content: '裁剪長度超過音訊總長度，請縮小數值。', type: 'error' });
+                return;
+            }
+            const newLen = oldBuf.length - shiftSamples;
+            const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, sampleRate);
+            for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
+                const oldData = oldBuf.getChannelData(ch);
+                const newData = newBuffer.getChannelData(ch);
+                newData.set(oldData.subarray(shiftSamples));
+            }
+            audioManager.bgmBuffer = newBuffer;
+            offsetTime = Math.max(0, offsetTime + shiftSeconds);
+            simpleToast({ content: `已裁剪音訊開頭 ${Math.abs(shiftSeconds).toFixed(3)}s。`, type: 'success' });
+        }
+
+        container.querySelector('#editOffsetInput').value = offsetTime.toFixed(3);
+        drawWaveform();
+    });
+
+    actionBox.appendChild(modifyBgmBufferButton);
+    actionBox.appendChild(padBgmBufferButton);
+    actionBox.appendChild(applyShiftButton);
+    container.appendChild(actionBox);
+
+    setTimeout(drawWaveform, 100);
+
+    popupWindow({
+        title: '編輯音樂與第一拍 offset',
+        customContent: container,
+        width: 'max-content',
+        buttons: [
+            {
+                text: '套用',
+                onClick: (ctx) => {
+                    const bpm = parseFloat(container.querySelector('#editBpmInput').value) || clockBpm;
+                    musicDelay = offsetTime;
+                    offsetInput.value = musicDelay;
+                    editorInput.value += `\n(${bpm})`;
+                    applyHighlight(editorInput.value);
+                    inputDebounce();
+                    offsetInputDebounce();
+                    stopPreview();
+                    ctx.close();
+                }
+            },
+            {
+                text: '取消',
+                hideOnClick: true,
+                onClick: () => {
+                    stopPreview();
+                }
+            }
+        ],
+        onClose: () => {
+            stopPreview();
+        }
+    });
+});
+
+const tapBpmButton = getButton("tapBpm", "utility");
+const manageResourcesButton = getButton("manageResources", "utility");
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
@@ -240,16 +586,19 @@ export const defaultSettings = {
     moviebrightness: -1,
     // #ffffff -> #404040
     displayMode: 'simai', // simai 或 visual
+    showSensor: true,
+    showSensorTextWhenPaused: true,
+    maxSlideCount: 500, // on screen
 };
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
 let secondCtx = null;
 let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
-let showSensor = true;
 let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
 let visualCtx = null;
+let warnings = [];
 
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
@@ -264,12 +613,17 @@ const saveSettingsDebounce = debounce(() => {
     });
 }, 300);
 
+const setEndtime = (e) => {
+    endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
+    slider.max = endTime - musicDelay;
+};
+
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 let notes = [], endTime = 1, musicDelay = 0, rawData = [];
 
-getButton("manageResources", "utility").addEventListener('click', async () => {
+manageResourcesButton.addEventListener('click', async () => {
     async function getSize() {
         // open a fresh readonly transaction each time so it won't be closed already
         const db = await openDB();
@@ -433,8 +787,117 @@ getButton("manageResources", "utility").addEventListener('click', async () => {
     });
 });
 
-createNewButton.addEventListener('click', () => {
-    if (!confirm('是否要建立新的譜面？這將重置目前編輯內容。')) return;
+
+tapBpmButton.addEventListener('click', () => {
+    let taps = [];
+
+    const container = document.createElement('div');
+    container.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;';
+
+    const hint = document.createElement('div');
+    hint.innerText = '請連續敲擊「Tap」至少 2 次以計算 BPM，建議 4 次以上會更穩定。';
+    container.appendChild(hint);
+
+    const stats = document.createElement('div');
+    stats.style.cssText = 'display:flex;justify-content:space-between;gap:10px; flex-wrap:wrap;';
+    stats.innerHTML = `
+            <div>Tap 次數: <strong id="tapBpmCount">0</strong></div>
+            <div>BPM: <strong id="tapBpmValue">--</strong></div>
+        `;
+    container.appendChild(stats);
+
+    const tapButton = document.createElement('button');
+    tapButton.type = 'button';
+    tapButton.innerText = 'Tap';
+    tapButton.style.cssText = 'width:100%;padding:10px 0;font-size:16px;font-weight:600;background:#333;color:#fff;border:1px solid #555;border-radius:6px;cursor:pointer;';
+    container.appendChild(tapButton);
+
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.innerText = '重置';
+    resetButton.style.cssText = 'width:100%;padding:8px 0;font-size:14px;background:#222;color:#fff;border:1px solid #444;border-radius:6px;cursor:pointer;';
+    container.appendChild(resetButton);
+
+    const message = document.createElement('div');
+    message.style.cssText = 'color:#ccc;font-size:12px;line-height:1.4;';
+    message.innerText = '尚未開始敲擊。';
+    container.appendChild(message);
+
+    const updateDisplay = () => {
+        const countElem = container.querySelector('#tapBpmCount');
+        const bpmElem = container.querySelector('#tapBpmValue');
+        if (countElem) countElem.innerText = taps.length.toString();
+
+        if (taps.length < 2) {
+            if (bpmElem) bpmElem.innerText = '--';
+            message.innerText = taps.length === 0 ? '尚未開始敲擊。' : '再敲一次即可計算 BPM。';
+            return;
+        }
+
+        const intervals = [];
+        for (let i = 1; i < taps.length; i++) {
+            intervals.push(taps[i] - taps[i - 1]);
+        }
+        const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
+        const bpm = 60000 / avg;
+        if (bpmElem) bpmElem.innerText = isFinite(bpm) ? bpm.toFixed(1) : '--';
+        message.innerText = `目前使用 ${intervals.length} 個間隔計算 BPM。建議使用 4 次以上敲擊以減少誤差。`;
+    };
+
+    tapButton.addEventListener('click', () => {
+        taps.push(performance.now());
+        if (taps.length > 12) taps.shift();
+        updateDisplay();
+    });
+
+    resetButton.addEventListener('click', () => {
+        taps = [];
+        updateDisplay();
+    });
+
+    popupWindow({
+        title: 'Tap BPM',
+        customContent: container,
+        buttons: [
+            {
+                text: '加入 BPM',
+                onClick: (ctx) => {
+                    if (taps.length < 2) {
+                        simpleToast({ content: '請先敲擊至少 2 次 Tap 再保存 BPM。', type: 'warning', timeout: 1800 });
+                        return;
+                    }
+
+                    const intervals = [];
+                    for (let i = 1; i < taps.length; i++) {
+                        intervals.push(taps[i] - taps[i - 1]);
+                    }
+                    const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
+                    const bpm = 60000 / avg;
+                    if (!isFinite(bpm) || bpm <= 0) {
+                        simpleToast({ content: 'BPM 計算失敗，請重新敲擊。', type: 'error', timeout: 1800 });
+                        return;
+                    }
+                    editorInput.value += `(${bpm.toFixed(1)})`;
+
+                    setEditorCss();
+                    applyHighlight(editorInput.value);
+
+                    inputDebounce();
+                    simpleToast({ content: `已設定 BPM：${clockBpm}`, type: 'success', timeout: 1800 });
+                    ctx.close();
+                },
+                hideOnClick: true
+            },
+            {
+                text: '關閉',
+                hideOnClick: true
+            }
+        ]
+    });
+});
+
+function setDataEmpty() {
+    playButton.dataset.playing = 'false';
     maidata = {};
     nowDifficulty = 5;
     backgroundImage = null;
@@ -449,13 +912,18 @@ createNewButton.addEventListener('click', () => {
     audioManager.removeBackgroundMusic().catch(() => { });
     changeDifficulty.value = nowDifficulty;
     inputDebounce();
+    saveMaidata();
 
     idbSet('simai_editor_content', '').catch(() => { });
-    idbSet('simai_maidata', maidata).catch(() => { });
     idbSet('simai_background_image', null).catch(() => { });
     idbSet('simai_now_difficulty', nowDifficulty).catch(() => { });
     idbSet('simai_resource_bgm', null).catch(() => { });
     idbSet('simai_timeControl', 0).catch(() => { });
+}
+
+createNewButton.addEventListener('click', () => {
+    if (!confirm('是否要建立新的譜面？這將重置目前編輯內容。')) return;
+    setDataEmpty();
     simpleToast({ content: '已建立新譜面', type: 'success', timeout: 1200 });
 });
 
@@ -474,26 +942,36 @@ const getres = ((simaiDataValue) => {
             simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
         } else {
             notes = result.notes;
-            endTime = Math.max(result.endTime + 1, audioManager.getBGMDuration() + 1);
-            slider.max = endTime - musicDelay;
+            setEndtime(result.endTime);
             // chartBaseOffset = result.baseOffset;
             clockBpm = result.bpm;
             rawData = simaiDataValue.split(',');
             draw();
-
+            warnings = result.warnings || [];
             if (result.warnings && result.warnings.length > 0) {
-                const maxShow = 3;
+                warnEl.style.visibility = 'visible';
+                warnEl.querySelector('.warnCount').textContent = result.warnings.length;
+                /*const maxShow = 3;
                 const preview = result.warnings.slice(0, maxShow).join('； ');
                 const suffix = result.warnings.length > maxShow ? ` +${result.warnings.length - maxShow} more` : '';
                 simpleToast({
                     content: `解析完成，含 ${result.warnings.length} 則警告：${preview}${suffix}`,
                     type: 'warning',
                     timeout: 3600
-                });
+                });*/
                 console.warn('Decode warnings:', result.warnings);
+            } else {
+                warnEl.style.visibility = 'hidden';
             }
         }
     }
+});
+
+warnEl.addEventListener('click', () => {
+    popupWindow({
+        title: "警告",
+        content: warnings.map((w, i) => `• ${w}`).join('<br>'),
+    });
 });
 
 const offsetInputDebounce = debounce(() => {
@@ -506,12 +984,15 @@ const offsetInputDebounce = debounce(() => {
         audioManager.playBGM(realTime); // 調整音樂播放位置，讓它與節拍更貼合
     }
     maidata.first = musicDelay;
-    /*idbSet('simai_musicDelay', musicDelay).then(() => {
-        //console.log("已儲存偏移值到 IndexedDB:", musicDelay);
-    }).catch((error) => {
-        console.error("儲存偏移值到 IndexedDB 失敗:", error);
-    });*/
+    saveMaidata();
     draw();
+}, 500);
+
+const saveMaidata = debounce(() => {
+    console.log("Saving maidata to IndexedDB...", maidata);
+    idbSet('simai_maidata', maidata).catch((error) => {
+        console.error("儲存maidata到IndexedDB失敗:", error);
+    });
 }, 500);
 
 const inputDebounce = debounce(() => {
@@ -520,12 +1001,7 @@ const inputDebounce = debounce(() => {
     getres(value);
     maidata["inote_" + nowDifficulty] = value;
 
-    // 存入本地空間
-    idbSet('simai_editor_content', value).then(() => {
-        //console.log("已儲存內容到 IndexedDB");
-    }).catch((error) => {
-        console.error("儲存內容到 IndexedDB 失敗:", error);
-    });
+    saveMaidata();
 }, 300);
 
 function setElementDisplay(element, visible, value = 'block') {
@@ -797,7 +1273,7 @@ chartInfoButton.addEventListener('click', () => {
                         nowDifficulty = tempData.difficulty;
                         changeDifficulty.value = nowDifficulty;
                     }
-                    idbSet('simai_maidata', maidata).catch(e => console.error('儲存 maidata 失敗', e));
+                    saveMaidata();
                     closePopup();
                 },
                 hideOnClick: true
@@ -854,11 +1330,7 @@ function maidataProcess(e) {
     applyHighlight("");
     const content = parseMaidata(e);
     maidata = content;
-    idbSet('simai_maidata', content).then(() => {
-        console.log("已儲存譜面內容到 IndexedDB");
-    }).catch((error) => {
-        console.error("儲存譜面內容到 IndexedDB 失敗:", error);
-    });
+    saveMaidata();
     console.log(content);
     if (content["first"]) {
         console.log("成功讀取 first");
@@ -905,14 +1377,13 @@ folderInput.addEventListener('click', (e) => {
             console.warn("未選擇任何檔案");
             return;
         }
+        setDataEmpty(); // 先清空現有資料，避免讀取失敗時殘留舊資料干擾
         for (var i = 0; i < files.length; i++) {
             let file = files.item(i);
             if (file.name.startsWith('track.')) {
                 // 音樂檔
                 const url = URL.createObjectURL(file);
                 audioManager.setBackgroundMusic(url, file);
-                endTime = Math.max(endTime + 1, audioManager.getBGMDuration() + 1);
-                slider.max = endTime - musicDelay;
                 idbSet('simai_resource_bgm', file).then(() => {
                     console.log("已儲存音樂檔到 IndexedDB");
                 }).catch((error) => {
@@ -942,6 +1413,7 @@ folderInput.addEventListener('click', (e) => {
                 });
             }
         }
+        setEndtime(endTime);
     };
 });
 
@@ -1153,6 +1625,7 @@ addMusicButton.addEventListener('click', () => {
         if (file) {
             const url = URL.createObjectURL(file);
             audioManager.setBackgroundMusic(url, file);
+            setEndtime(endTime);
             idbSet('simai_resource_bgm', file);
         }
     };
@@ -1205,7 +1678,7 @@ downloadButton.addEventListener('click', () => {
                         const bgmFile = audioManager.bgmFile;
                         const bgmFilename = (bgmFile && bgmFile.name) ? bgmFile.name : 'track.mp3';
                         console.log('BGM file name:', bgmFilename, 'Type:', bgmFile?.type);
-                        
+
                         // 確保傳遞給 JSZip 的是 Blob 或 File，不是 URL
                         if (bgmFile instanceof Blob) {
                             zip.file(bgmFilename, bgmFile);
@@ -1288,6 +1761,8 @@ playButton.addEventListener('click', () => {
         audioManager.stopBGM();
 
         notes.forEach(n => n._riserActive = false); // 強制重置標記
+
+        draw(); // 立即更新畫布，反映暫停狀態
     } else {
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
@@ -1362,6 +1837,145 @@ getCursorNoteIndex.addEventListener('click', () => {
     }
 });
 
+const contantRotate = (selected, direction) => {
+    if (typeof selected !== 'string' || selected.length === 0) return selected;
+
+    const bracketPairs = {
+        '[': ']',
+        '{': '}',
+        '(': ')'
+    };
+
+    const rotateDigit = (digit) => {
+        const base = parseInt(digit, 10);
+        if (Number.isNaN(base) || base < 1 || base > 8) return digit;
+        return String(((base - 1 + direction) % 8 + 8) % 8 + 1);
+    };
+
+    const extractEdgeTags = (token) => {
+        let prefix = '';
+        let current = token;
+        while (current.startsWith('<')) {
+            const closeIndex = current.indexOf('>');
+            if (closeIndex <= 0) break;
+            const inner = current.slice(1, closeIndex);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            prefix += current.slice(0, closeIndex + 1);
+            current = current.slice(closeIndex + 1);
+        }
+
+        let suffix = '';
+        while (current.endsWith('>')) {
+            const openIndex = current.lastIndexOf('<');
+            if (openIndex < 0) break;
+            const inner = current.slice(openIndex + 1, current.length - 1);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            suffix = current.slice(openIndex) + suffix;
+            current = current.slice(0, openIndex);
+        }
+
+        return { prefix, content: current, suffix };
+    };
+
+    const processContent = (content) => {
+        const stack = [];
+        let result = '';
+        let lastOldDigit = null;
+        let lastNewDigit = null;
+        let firstOldDigit = null;
+        let firstNewDigit = null;
+
+        for (let i = 0; i < content.length; i++) {
+            const ch = content[i];
+            if (bracketPairs[ch]) {
+                stack.push(bracketPairs[ch]);
+                result += ch;
+                continue;
+            }
+            if (stack.length > 0) {
+                if (ch === stack[stack.length - 1]) {
+                    stack.pop();
+                }
+                result += ch;
+                continue;
+            }
+            if (ch >= '1' && ch <= '8') {
+                const oldD = parseInt(ch, 10);
+                const rotated = rotateDigit(ch);
+                const newD = parseInt(rotated, 10);
+
+                lastOldDigit = oldD;
+                lastNewDigit = newD;
+                if (firstOldDigit === null) {
+                    firstOldDigit = oldD;
+                    firstNewDigit = newD;
+                }
+                result += rotated;
+            } else if (ch === '*') {
+                lastOldDigit = firstOldDigit;
+                lastNewDigit = firstNewDigit;
+                result += ch;
+            } else if (ch === '<' || ch === '>') {
+                if (lastOldDigit !== null && lastNewDigit !== null) {
+                    const oldFlip = (lastOldDigit >= 3 && lastOldDigit <= 6);
+                    const newFlip = (lastNewDigit >= 3 && lastNewDigit <= 6);
+                    if (oldFlip !== newFlip) {
+                        result += (ch === '<' ? '>' : '<');
+                    } else {
+                        result += ch;
+                    }
+                } else {
+                    result += ch;
+                }
+            } else {
+                result += ch;
+            }
+        }
+        return result;
+    };
+
+    return selected.split(/(\s*,\s*)/).map((part, index) => {
+        if (index % 2 === 1) return part;
+        const { prefix, content, suffix } = extractEdgeTags(part);
+        return prefix + processContent(content) + suffix;
+    }).join('');
+};
+
+const applySelectedRotation = (direction) => {
+    const fullText = editorInput.value;
+    if (!fullText) return;
+
+    const start = editorInput.selectionStart;
+    const end = editorInput.selectionEnd;
+    const selected = start === end ? fullText : fullText.slice(start, end);
+    const rotated = contantRotate(selected, direction);
+    if (rotated === selected) return;
+
+    const newText = start === end
+        ? rotated
+        : `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
+
+    editorInput.value = newText;
+    editorInput.selectionStart = start;
+    editorInput.selectionEnd = start + rotated.length;
+    editorInput.setSelectionRange(start, start + rotated.length);
+    applyHighlight(newText);
+    inputDebounce();
+    editorInput.focus();
+};
+
+rCwiseButton.addEventListener('click', () => {
+    applySelectedRotation(1);
+});
+
+rCCwiseButton.addEventListener('click', () => {
+    applySelectedRotation(-1);
+});
+
+r180Button.addEventListener('click', () => {
+    applySelectedRotation(4);
+});
+
 function update(timestamp) {
     if (lastTimestamp === null) lastTimestamp = timestamp;
     const dt = (timestamp - lastTimestamp) / 1000; // 秒
@@ -1371,7 +1985,11 @@ function update(timestamp) {
         globalTime = realTime - musicDelay;
         if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
             //audioManager.playBGM(realTime);
-            if (audioManager.haveBGM() && audioManager.getBGMTime() !== realTime) realTime = audioManager.getBGMTime();
+            const bgmTime = audioManager.haveBGM() ? audioManager.getBGMTime() : null;
+            if (bgmTime !== null && Math.abs(bgmTime - realTime) > 0.03) {
+                realTime = bgmTime;
+                globalTime = realTime - musicDelay;
+            }
             bgmUpdateTimer = 0;
         }
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
@@ -1430,6 +2048,7 @@ function openSecondWindow() {
                 margin: 0;
                 padding: 0;
                 overflow: hidden;
+                background-color: #000;
             }
             #canvasContainer {
                 position: absolute;
@@ -1451,6 +2070,8 @@ function openSecondWindow() {
                 position: absolute;
                 top: 0;
                 left: 0;
+                width: 100%;
+                height: 100%;
             }
         `;
     externalWindow.document.head.appendChild(style);
@@ -1488,9 +2109,7 @@ function openSecondWindow() {
     syncResize();
 
     externalWindow.addEventListener('resize', syncResize);
-    //ctx.clearRect(-canvas.width, -canvas.height, canvas.width * 2, canvas.height * 2); // 清除主 Canvas
-
-    ctx = secondCtx; // 切換到第二個 Canvas 的上下文
+    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
 
     draw(); // 重新繪製到第二個 Canvas
 }
@@ -1503,11 +2122,7 @@ window.addEventListener('keydown', (e) => {
         // 如果你有儲存邏輯可放這裡
         simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
         maidata['inote_' + nowDifficulty] = editorInput.value;
-        idbSet('simai_maidata', maidata).then(() => {
-            console.log("已儲存譜面內容到 IndexedDB");
-        }).catch((error) => {
-            console.error("儲存譜面內容到 IndexedDB 失敗:", error);
-        });
+        saveMaidata();
     }
 });
 
@@ -1553,6 +2168,7 @@ function draw(dt = 0) {
         }
     }
     settings.play_combo = 0;
+    let slideOnScreenCount = 0;
     for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
         const noteT = (note.time - globalTime);
@@ -1639,7 +2255,11 @@ function draw(dt = 0) {
 
         // --- 將可見音符丟進對應桶子 ---
         if (isVisible) {
-            if (note.type === 'slide') buckets.slide.push(note);
+            if (note.type === 'slide') {
+                if (slideOnScreenCount >= settings.maxSlideCount) continue;
+                buckets.slide.push(note);
+                slideOnScreenCount++;
+            }
             else if (note.type === 'hold') buckets.tapnhold.push(note);
             else if (note.type === 'tap') buckets.tapnhold.push(note);
             else if (note.type === 'touch') buckets.touch.push(note);
@@ -1657,8 +2277,9 @@ function draw(dt = 0) {
         notes,
         buckets,
         dt,
-        showSensor,
-        backgroundImage
+        showSensor: settings.showSensor,
+        showSensorText: (settings.showSensorTextWhenPaused && !playing),
+        backgroundImage,
     });
 
     // 5. 統一更新 Web Audio API 播放佇列

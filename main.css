@@ -17,7 +17,6 @@ body {
     padding: 0;
     overflow: hidden;
     background: #101010;
-    /* 深色?�景 */
 }
 
 .material-symbols-outlined {
@@ -142,7 +141,6 @@ body {
 }
 
 #utilityContainer .closeBtn {
-    /* ?��??�景?�透�?，�?影響裡面?��? */
     background-color: var(--top-utility-bg);
     overflow: hidden;
     width: 30%;
@@ -159,6 +157,32 @@ body {
     box-sizing: border-box;
     box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
     border-radius: 0 0 10px 10px;
+    transition: background-color 100ms ease;
+}
+
+#utilityContainer .closeBtn:hover {
+    background-color: var(--top-utility-btn);
+}
+
+#utilityContainer .warnbtn {
+    visibility: hidden;
+    position: inherit;
+    background: rgba(0, 0, 0, 0.3);
+    width: 60px;
+    height: 20px;
+    color: white;
+    margin: 4px;
+    right: 0;
+    display: flex;
+    align-items: center;
+    border-radius: 20px;
+    cursor: pointer;
+    justify-content: space-around;
+}
+
+.warnbtn span {
+    font-size: 10px;
+    line-height: 16px;
 }
 
 #topUtilityBtns {

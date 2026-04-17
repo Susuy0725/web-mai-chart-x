@@ -289,7 +289,7 @@ export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
 });
 class AudioManager {
     constructor() {
-        this.globalGain = 0.8; // 預設音量
+        this.globalGain = 0.65; // 預設音量
 
         // 1. 初始化 Web Audio 上下文
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -438,14 +438,19 @@ class AudioManager {
     /**
  * 播放背景音樂
  * @param {number} startTime - 從歌曲的第幾秒開始 (對應 globalTime)
+ * @param {number} volume - 音量 (0.0 到 1.0)
  */
-    playBGM(startTime = 0) {
+    playBGM(startTime = 0, volume = 1) {
         if (!this.bgmBuffer) return;
         this.stopBGM();
 
         this.bgmSource = this.ctx.createBufferSource();
         this.bgmSource.buffer = this.bgmBuffer;
-        this.bgmSource.connect(this.bgmGainNode);
+
+        const sourceGain = this.ctx.createGain();
+        sourceGain.gain.value = typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : this.bgmVolume;
+        this.bgmSource.connect(sourceGain);
+        sourceGain.connect(this.bgmGainNode);
 
         if (this.ctx.state === 'suspended') this.ctx.resume();
 

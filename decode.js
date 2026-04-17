@@ -133,7 +133,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                     // 1. 從開頭剝皮
                     while (noteStr.startsWith('<')) {
                         // 檢查是否有成對標籤
-                        const match = noteStr.match(/^<([^>]*)>/);
+                        const match = noteStr.match(/^<([^<>]*)>/);
                         if (!match) break; // 如果開頭雖然有 < 但沒對應的 >，就跳出
 
                         // 這裡要判斷這是不是 Simai 的滑星符號 (例如 <5)
@@ -149,7 +149,7 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     // 2. 從結尾剝皮
                     while (noteStr.endsWith('>')) {
-                        const match = noteStr.match(/<([^>]*)>$/);
+                        const match = noteStr.match(/<([^<>]*)>$/);
                         if (!match) break;
 
                         // 結尾標籤通常不會是滑星符號，所以可以直接剝

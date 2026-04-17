@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web maiChart -beta</title>
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=chevron_right,keyboard_arrow_down,menu,pause,play_arrow,right_panel_close,right_panel_open,skip_previous" />
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=chevron_right,keyboard_arrow_down,menu,pause,play_arrow,right_panel_close,right_panel_open,skip_previous,warning" />
     <link rel="stylesheet" href="main.css">
     <script src="jszip.min.js"></script>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -72,10 +72,35 @@
                             <div class="utilityButton" data-buttonAction="download">下載</div>
                         </div>
                     </div>
-                    <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
-                    <div class="utilityButton" data-buttonAction="getNowNoteIndex">目前音符位置</div>
-                    <div class="utilityButton" data-buttonAction="getCursorNoteIndex">游標音符位置</div>
-                    <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
+                    <div class="utilityButton utilityMenuTitle">
+                        <span>編輯</span>
+                        <span class="utilityMenuArrow material-symbols-outlined">
+                            chevron_right
+                        </span>
+                        <div class="utilitySubmenu">
+                            <div class="utilityButton" data-buttonAction="undo">復原</div>
+                            <div class="utilityButton" data-buttonAction="redo">重作</div>
+                            <div class="utilityButton" data-buttonAction="rotateClockwise">順時針旋轉</div>
+                            <div class="utilityButton" data-buttonAction="rotateCounterClockwise">逆時針旋轉</div>
+                            <div class="utilityButton" data-buttonAction="rotate180">180度旋轉</div>
+                            <div class="utilityButton" data-buttonAction="flipVertical">上下反轉</div>
+                            <div class="utilityButton" data-buttonAction="flipHorizontal">左右反轉</div>
+                        </div>
+                    </div>
+                    <div class="utilityButton utilityMenuTitle">
+                        <span>功能</span>
+                        <span class="utilityMenuArrow material-symbols-outlined">
+                            chevron_right
+                        </span>
+                        <div class="utilitySubmenu">
+                            <div class="utilityButton" data-buttonAction="getNowNoteIndex">游標移至播放頭</div>
+                            <div class="utilityButton" data-buttonAction="getCursorNoteIndex">播放頭移至游標</div>
+                            <div class="utilityButton" data-buttonAction="editMusic">編輯音樂開頭</div>
+                            <div class="utilityButton" data-buttonAction="tapBpm">Tap BPM</div>
+                            <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
+                            <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
+                        </div>
+                    </div>
                     <div class="utilityButton" data-buttonAction="manageResources">資源管理</div>
                     <div class="utilityButton" data-buttonAction="chartInfo">譜面資訊</div>
                     <div class="utilityButton" data-buttonAction="settings">設定</div>
@@ -107,6 +132,8 @@
             </div>
         </div>
         <div class="closeBtn" data-hidden="false">▲</div>
+        <div class="warnbtn"><span class="material-symbols-outlined">warning</span><span class="warnCount">0</span>
+        </div>
     </div>
 </body>
 <script type="module" src="indexDB.js"></script>

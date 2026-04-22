@@ -816,34 +816,101 @@ c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135
 c2.closePath();
 touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
 
-export function getHighlight(text) {
+export function getHighlight(text, errpos = []) {
     if (!text) {
         return '';
     }
 
-    let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const escapeHTML = (value) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const normalizeRanges = (pos) => {
+        if (!Array.isArray(pos) || pos.length === 0) return [];
+
+        const normalizeRange = ({ start, end }) => {
+            const s = Number(start);
+            const e = Number(end);
+            if (!Number.isFinite(s) || !Number.isFinite(e) || s >= e) return null;
+            return { start: Math.max(0, Math.min(text.length, s)), end: Math.max(0, Math.min(text.length, e)) };
+        };
+
+        const mergeRanges = (validRanges) => {
+            const merged = [];
+            for (const current of validRanges) {
+                if (merged.length === 0) {
+                    merged.push(current);
+                } else {
+                    const last = merged[merged.length - 1];
+                    if (current.start <= last.end) {
+                        last.end = Math.max(last.end, current.end);
+                    } else {
+                        merged.push(current);
+                    }
+                }
+            }
+            return merged;
+        };
+
+        if (pos.every(item => item && typeof item === 'object' && 'start' in item && 'end' in item)) {
+            const valid = pos
+                .map(normalizeRange)
+                .filter(Boolean)
+                .sort((a, b) => a.start - b.start);
+            return mergeRanges(valid);
+        }
+
+        if (pos.length === 2 && Array.isArray(pos[0]) && Array.isArray(pos[1])) {
+            const [starts, ends] = pos;
+            const ranges = [];
+            for (let i = 0; i < Math.min(starts.length, ends.length); i++) {
+                const range = normalizeRange({ start: starts[i], end: ends[i] });
+                if (range) ranges.push(range);
+            }
+            const valid = ranges.sort((a, b) => a.start - b.start);
+            return mergeRanges(valid);
+        }
+
+        return [];
+    };
+
+    const ranges = normalizeRanges(errpos);
 
     const combinedRegex = /(\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(([ABCDE])(\d+)|C|C(d+))/gm;
 
-    html = html.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, touch) => {
-        if (comment) return `<span style="color: #468A55;">${comment}</span>`;
-        if (slide) {
-            if (slide.startsWith('&lt;') && slide.endsWith('&gt;')) {
-                return `<span style="color: #c586c0;">${slide}</span>`;
+    const highlightText = (segment) => {
+        const escaped = escapeHTML(segment);
+        return escaped.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, touch) => {
+            if (comment) return `<span style="color: #468A55;">${comment}</span>`;
+            if (slide) {
+                if (slide.startsWith('&lt;') && slide.endsWith('&gt;')) {
+                    return `<span style="color: #c586c0;">${slide}</span>`;
+                }
+                return `<span style="color: #7EBAF0;">${slide}</span>`;
             }
-            return `<span style="color: #7EBAF0;">${slide}</span>`;
+            if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
+            if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
+            if (split) return `<span style="color: #ce9178;">${split}</span>`;
+            if (time) return `<span style="color: #b5cea8;">${time}</span>`;
+            if (bk) return `<span style="color: #e19748;">${bk}</span>`;
+            if (ex) return `<span style="color: #ff9f9f;">${ex}</span>`;
+            if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
+            if (f) return `<span style="color: #f495ff;">${f}</span>`;
+            if (comm) return `<span style="color: #7f888a;">${comm}</span>`;
+            return match;
+        });
+    };
+
+    let html = '';
+    let cursor = 0;
+    for (const range of ranges) {
+        if (cursor < range.start) {
+            html += highlightText(text.slice(cursor, range.start));
         }
-        if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
-        if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
-        if (split) return `<span style="color: #ce9178;">${split}</span>`;
-        if (time) return `<span style="color: #b5cea8;">${time}</span>`;
-        if (bk) return `<span style="color: #e19748;">${bk}</span>`;
-        if (ex) return `<span style="color: #ff9f9f;">${ex}</span>`;
-        if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
-        if (f) return `<span style="color: #f495ff;">${f}</span>`;
-        if (comm) return `<span style="color: #7f888a;">${comm}</span>`;
-        return match;
-    });
+        html += `<span class="highlight-warning">${highlightText(text.slice(range.start, range.end))}</span>`;
+        cursor = range.end;
+    }
+    if (cursor < text.length) {
+        html += highlightText(text.slice(cursor));
+    }
 
     return html + (text.endsWith('\n') ? ' ' : '');
 }
@@ -1210,6 +1277,7 @@ const baseURL = './Skin/', baseImageKeys = [
     'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc',
     'hold', 'hold_break', 'hold_each', 'hold_ex',
+    'hold_break_on', 'hold_each_on', 'hold_on',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
     'touch', 'touch_each', 'touch_point', 'touch_point_each',
     'star', 'star_break', 'star_each', 'star_double', 'star_ex',
@@ -1430,3 +1498,6 @@ export const wSlideRatio = [
     571, 271, -5.2, -0.003,
     653, 313, -3.9, -0.003,
 ];
+export function isObject(val) {
+    return val instanceof Object;
+}

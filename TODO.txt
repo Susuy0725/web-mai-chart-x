@@ -1,2 +1,4 @@
 visual editor
-滑星
+滑星依感應器消失
+按鍵錄製功能
+vertical mode

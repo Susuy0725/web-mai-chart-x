@@ -3,7 +3,17 @@ import { scaleBase, getButton, debounce, audioManager, getHighlight, parseMaidat
 import { simaiDecode } from './decode.js';
 import { SimaiRenderer, SimaiVisualEditor } from './renderer.js';
 
-let images, readyBeat = false, maidata = {}, nowDifficulty = 5, backgroundImage, renderer, visualEditorRenderer, settings = {};
+let
+    images,
+    readyBeat = false,
+    maidata = {},
+    nowDifficulty = 5,
+    backgroundImage,
+    renderer,
+    visualEditorRenderer,
+    settings = {},
+    isContextEdited = false,
+    isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587;
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
@@ -23,7 +33,14 @@ popupWindow({
 
             step(90, "正在恢復上次的編輯狀態...");
             const [
-                savedTimeControl, savedBgm, savedMaiData, savedDifficulty, bg, hideEditor, savedSettings
+                savedTimeControl,
+                savedBgm,
+                savedMaiData,
+                savedDifficulty,
+                bg,
+                hideEditor,
+                savedSettings,
+                isEdited
             ] = await Promise.all([
                 idbGet('simai_timeControl'),
                 idbGet('simai_resource_bgm'),
@@ -31,29 +48,12 @@ popupWindow({
                 idbGet('simai_now_difficulty'),
                 idbGet('simai_background_image'),
                 idbGet('simai_hide_editor'),
-                idbGet('simai_settings')
+                idbGet('simai_settings'),
+                idbGet('simai_isEdited'),
             ]);
-
+            isContextEdited = isEdited === 'true';
             if (savedTimeControl && !isNaN(savedTimeControl)) {
                 realTime = savedTimeControl; slider.value = realTime; globalTime = realTime - musicDelay; update();
-            }
-
-            if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
-            if (savedMaiData) {
-                maidata = savedMaiData;
-                editorInput.value = maidata["inote_" + nowDifficulty];
-                applyHighlight(editorInput.value);
-                getres(editorInput.value);
-
-                musicDelay = parseFloat(maidata.first) || 0;
-                offsetInput.value = musicDelay;
-                offsetInputDebounce();
-            };
-            if (bg) { backgroundImage = bg; }
-            if (savedBgm) {
-                step(95, "正在還原背景音樂...");
-                await audioManager.setBackgroundMusic(savedBgm);
-                setEndtime(endTime);
             }
             if (savedSettings) {
                 settings = JSON.parse(savedSettings);
@@ -68,12 +68,32 @@ popupWindow({
                 if (isMissingSettings) {
                     await idbSet('simai_settings', JSON.stringify(settings));
                 }
-            }
-            else {
+            } else {
                 settings = { ...defaultSettings }
                 await idbSet('simai_settings', JSON.stringify(settings));
             };
+            if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
+            if (savedMaiData) {
+                maidata = savedMaiData;
+                editorInput.value = maidata["inote_" + nowDifficulty];
+                getres(editorInput.value);
+                applyHighlight(editorInput.value);
 
+                musicDelay = parseFloat(maidata.first) || 0;
+                offsetInput.value = musicDelay;
+                offsetInputDebounce();
+            };
+            if (bg) {
+                backgroundImage = bg;
+                editorBackgroundImage.src = URL.createObjectURL(bg);
+                editorBackgroundImage.style.display = 'block';
+                editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
+            }
+            if (savedBgm) {
+                step(95, "正在還原背景音樂...");
+                await audioManager.setBackgroundMusic(savedBgm);
+                setEndtime(endTime);
+            }
             window.settings = settings;
             if (hideEditor) {
                 hideEditorButton.children[0].textContent = "right_panel_open";
@@ -232,6 +252,7 @@ const rCCwiseButton = getButton("rotateCounterClockwise", "utility");
 const r180Button = getButton("rotate180", "utility");
 const fVerticalButton = getButton("flipVertical", "utility");
 const fHorizontalButton = getButton("flipHorizontal", "utility");
+const editorBackgroundImage = document.getElementById('backgroundImage');
 
 editMusicButton.addEventListener('click', () => {
     if (!audioManager.bgmBuffer) {
@@ -582,6 +603,7 @@ export const defaultSettings = {
     noteBaseSize: 11,
     play_combo: 0,
     play_score: 0,
+    inputDebounceTime: 800, // ms
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
     moviebrightness: -1,
     // #ffffff -> #404040
@@ -598,7 +620,7 @@ let timeControlSliding = false; // 新增滑動狀態標記
 let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
 let visualCtx = null;
-let warnings = [];
+let warnings = [], warningPositions = [];
 
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
@@ -898,6 +920,7 @@ tapBpmButton.addEventListener('click', () => {
 
 function setDataEmpty() {
     playButton.dataset.playing = 'false';
+    playButton.children[0].innerText = "play_arrow";
     maidata = {};
     nowDifficulty = 5;
     backgroundImage = null;
@@ -911,6 +934,9 @@ function setDataEmpty() {
     editorInput.value = '';
     audioManager.removeBackgroundMusic().catch(() => { });
     changeDifficulty.value = nowDifficulty;
+    editorBackgroundImage.src = "";
+    editorBackgroundImage.style.display = 'none';
+    editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
     inputDebounce();
     saveMaidata();
 
@@ -948,17 +974,10 @@ const getres = ((simaiDataValue) => {
             rawData = simaiDataValue.split(',');
             draw();
             warnings = result.warnings || [];
+            warningPositions = result.errpositions || [];
             if (result.warnings && result.warnings.length > 0) {
                 warnEl.style.visibility = 'visible';
                 warnEl.querySelector('.warnCount').textContent = result.warnings.length;
-                /*const maxShow = 3;
-                const preview = result.warnings.slice(0, maxShow).join('； ');
-                const suffix = result.warnings.length > maxShow ? ` +${result.warnings.length - maxShow} more` : '';
-                simpleToast({
-                    content: `解析完成，含 ${result.warnings.length} 則警告：${preview}${suffix}`,
-                    type: 'warning',
-                    timeout: 3600
-                });*/
                 console.warn('Decode warnings:', result.warnings);
             } else {
                 warnEl.style.visibility = 'hidden';
@@ -989,20 +1008,19 @@ const offsetInputDebounce = debounce(() => {
 }, 500);
 
 const saveMaidata = debounce(() => {
-    console.log("Saving maidata to IndexedDB...", maidata);
     idbSet('simai_maidata', maidata).catch((error) => {
         console.error("儲存maidata到IndexedDB失敗:", error);
     });
-}, 500);
+}, 2000);
 
 const inputDebounce = debounce(() => {
     const value = editorInput.value;
     // 解析 Note 邏輯
     getres(value);
+    applyHighlight(value);
     maidata["inote_" + nowDifficulty] = value;
-
     saveMaidata();
-}, 300);
+}, settings.inputDebounceTime || 500);
 
 function setElementDisplay(element, visible, value = 'block') {
     element.style.display = visible ? value : 'none';
@@ -1143,6 +1161,9 @@ chartInfoButton.addEventListener('click', () => {
                     const objectUrl = URL.createObjectURL(file);
                     img.src = objectUrl;
                     backgroundImage = file;
+                    editorBackgroundImage.src = objectUrl;
+                    editorBackgroundImage.style.display = 'block';
+                    editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
                     idbSet('simai_background_image', file).catch((error) => {
                         console.error("儲存背景圖片到 IndexedDB 失敗:", error);
                     });
@@ -1360,17 +1381,21 @@ function maidataProcess(e) {
         }).catch((error) => {
             console.error("儲存編輯器內容到 IndexedDB 失敗:", error);
         });
-        applyHighlight(content["inote_5"]);
     } else {
         console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
     }
     getres(editorInput.value);
+    applyHighlight(editorInput.value);
 }
 
 folderInput.addEventListener('click', (e) => {
     const input = folderInput.children[0];
+    if (maidata) {
+        const confirmReset = confirm("載入新的資料夾將會覆蓋目前的編輯內容，是否繼續？");
+        if (!confirmReset) return;
+    }
     input.click();
-    input.onchange = (event) => {
+    input.onchange = async (event) => {
         const files = event.target.files;
         console.log("選擇的檔案列表：", files);
         if (files.length === 0) {
@@ -1383,7 +1408,8 @@ folderInput.addEventListener('click', (e) => {
             if (file.name.startsWith('track.')) {
                 // 音樂檔
                 const url = URL.createObjectURL(file);
-                audioManager.setBackgroundMusic(url, file);
+                await audioManager.setBackgroundMusic(url, file);
+                setEndtime(endTime);
                 idbSet('simai_resource_bgm', file).then(() => {
                     console.log("已儲存音樂檔到 IndexedDB");
                 }).catch((error) => {
@@ -1406,8 +1432,9 @@ folderInput.addEventListener('click', (e) => {
                 }
                 // 背景圖
                 backgroundImage = file;
-                //const url = URL.createObjectURL(file);
-                //document.body.style.backgroundImage = `url(${url})`;
+                editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
+                editorBackgroundImage.style.display = 'block';
+                editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
                 idbSet('simai_background_image', file).catch((error) => {
                     console.error("儲存背景圖到 IndexedDB 失敗:", error);
                 });
@@ -1563,25 +1590,160 @@ editorInput.addEventListener('touchmove', () => {
 editorInput.addEventListener('touchstart', () => {
     syncHighlightLayerScroll();
 });
+// --- 狀態管理物件 ---
+const visualScroller = {
+    isActive: false,
+    startY: 0,
+    startTime: 0,
+    lastY: 0,
+    lastTime: 0,
+    velocity: 0, // px/ms
+    momentumFrame: null,
+    friction: 0.95, // 慣性摩擦力 (0.9 ~ 0.98)
 
-// visualEditor 滾輪縮放功能
+    // 將像素位移轉換為秒數 (依據目前的 Zoom 等級)
+    // 假設 zoom 是 100 代表 1秒佔 100px
+    pxToSec(px) {
+        const zoom = visualEditorRenderer ? visualEditorRenderer.zoom : 100;
+        return px / zoom;
+    }
+};
+
+// --- 核心更新函式 ---
+const updateVisualTime = (newTime) => {
+    const min = parseFloat(slider.min) || 0;
+    const max = parseFloat(slider.max) || 0;
+
+    // 限制範圍
+    const clampedTime = Math.max(min, Math.min(max, newTime));
+
+    timeControlSliding = true;
+    slider.value = clampedTime;
+    realTime = clampedTime;
+    globalTime = clampedTime - musicDelay;
+
+    // 音訊同步
+    audioManager.stopAllLongSounds();
+    if (playButton.dataset.playing === 'true') {
+        audioManager.playBGM(realTime);
+    } else {
+        audioManager.stopBGM();
+        draw(); // 重繪畫布
+    }
+    slideInputDebounce();
+};
+
+// --- 慣性滾動引擎 ---
+const startMomentum = () => {
+    cancelAnimationFrame(visualScroller.momentumFrame);
+
+    let vel = visualScroller.velocity;
+    let lastFrameTime = performance.now();
+
+    const step = (now) => {
+        const dt = now - lastFrameTime;
+        lastFrameTime = now;
+
+        if (Math.abs(vel) < 0.01 || !timeControlSliding) {
+            visualScroller.momentumFrame = null;
+            return;
+        }
+
+        // 根據速度計算這幀移動的秒數 (向上滑是正速度，時間要增加，所以是 -vel)
+        const deltaSec = visualScroller.pxToSec(vel * dt);
+        updateVisualTime(realTime + deltaSec);
+
+        // 摩擦力衰減
+        vel *= visualScroller.friction;
+        visualScroller.momentumFrame = requestAnimationFrame(step);
+    };
+
+    visualScroller.momentumFrame = requestAnimationFrame(step);
+};
+
+// --- 事件綁定 (使用 Pointer Events 統一滑鼠與觸控) ---
+
+visualEditor.style.touchAction = 'none'; // 完全由 JS 接手
+visualEditor.style.cursor = 'grab';
+
+visualEditor.addEventListener('pointerdown', (e) => {
+    if (!visualEditorRenderer || e.button !== 0) return; // 僅限左鍵/單指
+
+    cancelAnimationFrame(visualScroller.momentumFrame);
+    visualScroller.isActive = true;
+    visualScroller.startY = e.clientY;
+    visualScroller.lastY = e.clientY;
+    visualScroller.lastTime = performance.now();
+    visualScroller.startTime = realTime;
+    visualScroller.velocity = 0;
+
+    visualEditor.setPointerCapture(e.pointerId);
+    visualEditor.style.cursor = 'grabbing';
+});
+
+visualEditor.addEventListener('pointermove', (e) => {
+    if (!visualScroller.isActive) return;
+
+    const now = performance.now();
+    const dt = now - visualScroller.lastTime;
+    const currentY = e.clientY;
+
+    if (dt > 0) {
+        // 計算即時速度
+        const instantVel = (currentY - visualScroller.lastY) / dt;
+        // 平滑速度處理，避免突跳
+        visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
+    }
+
+    const deltaY = visualScroller.startY - currentY;
+    const deltaSec = visualScroller.pxToSec(deltaY);
+
+    updateVisualTime(visualScroller.startTime - deltaSec);
+
+    visualScroller.lastY = currentY;
+    visualScroller.lastTime = now;
+});
+
+visualEditor.addEventListener('pointerup', (e) => {
+    if (!visualScroller.isActive) return;
+    visualScroller.isActive = false;
+    visualEditor.releasePointerCapture(e.pointerId);
+    visualEditor.style.cursor = 'grab';
+
+    // 如果結束時速度夠快，啟動慣性
+    if (Math.abs(visualScroller.velocity) > 0.1) {
+        startMomentum();
+    }
+});
+
+visualEditor.addEventListener('pointercancel', () => {
+    visualScroller.isActive = false;
+    visualEditor.style.cursor = 'grab';
+});
+
+// --- 滾輪功能：縮放與捲動 ---
 visualEditor.addEventListener('wheel', (e) => {
     if (!visualEditorRenderer) return;
-
     e.preventDefault();
 
-    // 計算縮放變化（向上滾動放大，向下滾動縮小）
-    const zoomSpeed = 10; // 每次滾動改變 10 單位的縮放
-    const deltaZoom = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+    if (e.ctrlKey) {
+        // Ctrl + 滾輪 = 縮放
+        const zoomStep = 1.15; // 倍率縮放比線性加減更自然
+        const factor = e.deltaY > 0 ? (1 / zoomStep) : zoomStep;
 
-    // 應用新的縮放值，設定最小和最大限制
-    const minZoom = 50;
-    const maxZoom = 500;
-    const newZoom = Math.max(minZoom, Math.min(maxZoom, visualEditorRenderer.zoom + deltaZoom));
+        const minZoom = 50;
+        const maxZoom = 1000;
+        const newZoom = Math.max(minZoom, Math.min(maxZoom, visualEditorRenderer.zoom * factor));
 
-    visualEditorRenderer.setZoom(newZoom);
-    draw();
-});
+        visualEditorRenderer.setZoom(newZoom);
+        draw();
+    } else {
+        // 純滾輪 = 垂直移動時間軸
+        // 模擬一個較小的位移
+        const scrollDelta = visualScroller.pxToSec(e.deltaY);
+        updateVisualTime(realTime + scrollDelta);
+    }
+}, { passive: false });
 
 const pairs = { '(': ')', '{': '}', '[': ']' };
 const closingChars = new Set(Object.values(pairs));
@@ -1714,7 +1876,13 @@ downloadButton.addEventListener('click', () => {
 });
 
 function applyHighlight(text) {
-    highlightLayer.innerHTML = getHighlight(text);
+    const warningRanges = warningPositions.map(index => {
+        const start = rawData.slice(0, index).join(',').length + 1;
+        const end = rawData.slice(0, index + 1).join(',').length;
+        return { start, end };
+    });
+    highlightLayer.innerHTML = getHighlight(text, warningRanges);
+    warningPositions = []; // 重置警告位置，等待下一次解析更新
 }
 
 const slideInputDebounce = debounce(() => {
@@ -1974,6 +2142,184 @@ rCCwiseButton.addEventListener('click', () => {
 
 r180Button.addEventListener('click', () => {
     applySelectedRotation(4);
+});
+
+function flipSelectedText(selected, deMap, transformDigit, swapPairs = {}) {
+    if (typeof selected !== 'string') return selected;
+
+    const bracketPairs = {
+        '[': ']',
+        '{': '}',
+        '(': ')'
+    };
+
+    const extractEdgeTags = (token) => {
+        let prefix = '';
+        let current = token;
+
+        while (current.startsWith('<')) {
+            const closeIndex = current.indexOf('>');
+            if (closeIndex <= 0) break;
+            const inner = current.slice(1, closeIndex);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            prefix += current.slice(0, closeIndex + 1);
+            current = current.slice(closeIndex + 1);
+        }
+
+        let suffix = '';
+        while (current.endsWith('>')) {
+            const openIndex = current.lastIndexOf('<');
+            if (openIndex < 0) break;
+            const inner = current.slice(openIndex + 1, current.length - 1);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            suffix = current.slice(openIndex) + suffix;
+            current = current.slice(0, openIndex);
+        }
+
+        return { prefix, content: current, suffix };
+    };
+
+    const processContent = (content) => {
+        const stack = [];
+        let result = '';
+
+        for (let i = 0; i < content.length; i++) {
+            const ch = content[i];
+            if (bracketPairs[ch]) {
+                stack.push(bracketPairs[ch]);
+                result += ch;
+                continue;
+            }
+
+            if (stack.length > 0) {
+                if (ch === stack[stack.length - 1]) {
+                    stack.pop();
+                }
+                result += ch;
+                continue;
+            }
+
+            const up = ch.toUpperCase();
+            if (up === 'C') {
+                const next = content[i + 1];
+                if (next === '1') {
+                    result += ch + next;
+                    i++;
+                    continue;
+                }
+                result += ch;
+                continue;
+            }
+
+            if (up === 'D' || up === 'E') {
+                const next = content[i + 1];
+                if (next && /\d/.test(next)) {
+                    const d = parseInt(next, 10);
+                    if (d >= 1 && d <= 8) {
+                        const mapped = deMap[d];
+                        result += ch + mapped.toString();
+                        i++;
+                        continue;
+                    }
+                }
+                result += ch;
+                continue;
+            }
+
+            if (/\d/.test(ch)) {
+                result += transformDigit(ch);
+                continue;
+            }
+
+            if (ch === '>') {
+                result += '<';
+                continue;
+            }
+            if (ch === '<') {
+                result += '>';
+                continue;
+            }
+
+            if (swapPairs[ch]) {
+                result += swapPairs[ch];
+                continue;
+            }
+
+            result += ch;
+        }
+
+        return result;
+    };
+
+    return selected.split(/(\s*,\s*)/).map((part, index) => {
+        if (index % 2 === 1) return part;
+        const { prefix, content, suffix } = extractEdgeTags(part);
+        return prefix + processContent(content) + suffix;
+    }).join('');
+}
+
+function applyVerticalFlip() {
+    const start = editorInput.selectionStart;
+    const end = editorInput.selectionEnd;
+    if (start === end) return;
+
+    const fullText = editorInput.value;
+    const selected = fullText.slice(start, end);
+
+    const deMap = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1, 6: 8, 7: 7, 8: 6 };
+    const rotated = flipSelectedText(selected, deMap, (ch) => {
+        const n = parseInt(ch, 10);
+        return ((12 - n) % 8 + 1).toString();
+    }, {
+        p: 'q',
+        q: 'p'
+    });
+
+    const newText = `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
+    editorInput.value = newText;
+    editorInput.selectionStart = start;
+    editorInput.selectionEnd = start + rotated.length;
+    editorInput.setSelectionRange(start, start + rotated.length);
+    applyHighlight(newText);
+    inputDebounce();
+    editorInput.focus();
+}
+
+function applyHorizontalFlip() {
+    const start = editorInput.selectionStart;
+    const end = editorInput.selectionEnd;
+    if (start === end) return;
+
+    const fullText = editorInput.value;
+    const selected = fullText.slice(start, end);
+
+    const deMap = { 1: 1, 2: 8, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2 };
+    const rotated = flipSelectedText(selected, deMap, (ch) => {
+        const n = parseInt(ch, 10);
+        return ((8 - n) % 8 + 1).toString();
+    }, {
+        p: 'q',
+        q: 'p',
+        s: 'z',
+        z: 's'
+    });
+
+    const newText = `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
+    editorInput.value = newText;
+    editorInput.selectionStart = start;
+    editorInput.selectionEnd = start + rotated.length;
+    editorInput.setSelectionRange(start, start + rotated.length);
+    applyHighlight(newText);
+    inputDebounce();
+    editorInput.focus();
+}
+
+fVerticalButton.addEventListener('click', () => {
+    applyVerticalFlip();
+});
+
+fHorizontalButton.addEventListener('click', () => {
+    applyHorizontalFlip();
 });
 
 function update(timestamp) {

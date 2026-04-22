@@ -101,6 +101,25 @@ export class SimaiRenderer {
         this.ctx.stroke();
     }
 
+    simpleHoldEffect(noteT) {
+        const t = noteT * -2;
+        const decayAlpha = 1 - Math.max(0, t % 1);
+        const decayAlpha1 = 1 - Math.max(0, (t + 0.5) % 1);
+        const radius = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha);
+        const radius1 = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha1);
+
+        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha})`;
+        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha1})`;
+        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha1;
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, radius1, 0, Math.PI * 2);
+        this.ctx.stroke();
+    }
+
     // --- 渲染流程 ---
 
     drawFrame(state) {
@@ -166,24 +185,40 @@ export class SimaiRenderer {
     drawMiddleDisplay() {
         const { ctx } = this;
         ctx.save();
-        function outlineText(text, x, y, fontSize, outlinePx) {
-            ctx.lineWidth = outlinePx;
-            ctx.font = `bold ${fontSize}px combo`;
-            ctx.strokeText(text, x, y);
+        function outlineText(text, x, y, fontSize, outlinePx = 2, {
+            fillStyle = "#FFFFFF",
+            strokeStyle = "#000000",
+            strokeWidth = outlinePx,
+            fontWeight = "bold",
+            fontFamily = "combo",
+            textAlign = "center",
+            textBaseline = "middle",
+            letterSpacing = "0px",
+            shadowHeight = 0.3,
+        } = {}) {
+            ctx.save();
+            ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+            ctx.textAlign = textAlign;
+            ctx.textBaseline = textBaseline;
+            if ('letterSpacing' in ctx) {
+                ctx.letterSpacing = letterSpacing;
+            }
+            ctx.fillStyle = fillStyle;
+            ctx.lineWidth = strokeWidth;
+            if (strokeWidth > 0) {
+                ctx.strokeStyle = "#000";
+                ctx.strokeText(text, x, y + shadowHeight);
+                ctx.strokeStyle = strokeStyle;
+                ctx.strokeText(text, x, y);
+            }
             ctx.fillText(text, x, y);
+            ctx.restore();
         }
         switch (this.settings.middleDisplay) {
             case 1:
                 if (this.settings.play_combo != 0) {
-                    ctx.fillStyle = "#FF569B";
-                    ctx.strokeStyle = "white";
-                    ctx.lineWidth = 2;
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    ctx.letterSpacing = "0px";
-                    outlineText("COMBO", 0, -7, 4.4, 0.5);
-                    ctx.letterSpacing = "0.5px";
-                    outlineText(`${this.settings.play_combo}`, 0, 0, 7.4, 0.5);
+                    outlineText("COMBO", 0, -7, 4.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" });
+                    outlineText(`${this.settings.play_combo}`, 0, 0, 7.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: "0.5px" });
                 }
                 ctx.letterSpacing = "0px";
                 break;
@@ -338,8 +373,10 @@ export class SimaiRenderer {
         const noteT = (noteTime - this.globalTime);
         const progress = noteT * (this.settings.speed * 0.8833 + 0.8167);
         const t = 1 - this.timeFunction(progress);
-
-        const img = this.images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
+        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const img = isBreak ? getTintedImage(this.images["tap_break"], br, {
+            colorCode: "#fff8a6"
+        }) : (isDouble ? this.images["tap_each"] : this.images["tap"]);
         //if (imgNotExists(img)) return;
 
         const posInfo = noteRefPos[pos - 1];
@@ -365,7 +402,7 @@ export class SimaiRenderer {
             this.ctx.rotate(posInfo.rot);
             this.drawImgAtcenter(img, size);
             if (s.isEx) {
-                const ex = getTintedImage(this.images["tap_ex"], 0.5, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
+                const ex = getTintedImage(this.images["tap_ex"], 0.6, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
                 this.drawImgAtcenter(ex, size);
             }
             this.ctx.restore();
@@ -378,9 +415,12 @@ export class SimaiRenderer {
         const noteT = (noteTime - this.globalTime);
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167));
 
-        const img = this.images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const img = getTintedImage(this.images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
             : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
-        ];
+        ], br, {
+            colorCode: "#fff8a6"
+        });
         //if (imgNotExists(img)) return;
 
         const posInfo = noteRefPos[pos - 1];
@@ -406,7 +446,7 @@ export class SimaiRenderer {
             this.ctx.rotate(posInfo.rot);
             this.drawImgAtcenter(img, size);
             if (s.isEx) {
-                const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.5, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
+                const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.6, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
                 this.drawImgAtcenter(ex, size * 0.95);
             }
             this.ctx.restore();
@@ -426,9 +466,13 @@ export class SimaiRenderer {
             this.simpleHitEffect(holdDuration + noteT);
             this.ctx.restore();
         } else {
-            const img = this.images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
-            //if (imgNotExists(img)) return;
-
+            const isOn = (noteTime - this.globalTime) <= -0.1;
+            let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+            const img = getTintedImage(this.images[isOn ?
+                (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on")) :
+                (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))], br, {
+                colorCode: "#fff8a6"
+            });
             const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
             const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
             const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
@@ -462,7 +506,7 @@ export class SimaiRenderer {
             this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
 
             if (s.isEx) {
-                const ex = getTintedImage(this.images["hold_ex"], 0.5, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
+                const ex = getTintedImage(this.images["hold_ex"], 0.6, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
                 this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
                 this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
                 this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
@@ -472,6 +516,7 @@ export class SimaiRenderer {
             this.ctx.save();
             this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
             this.simpleHitEffect(noteT);
+            if (isOn) this.simpleHoldEffect(noteT);
             this.ctx.restore();
         }
     }
@@ -483,6 +528,7 @@ export class SimaiRenderer {
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
         if (holdDuration) {
+            const isOn = (noteTime - this.globalTime) <= -0.1;
             const imgs = [];
             for (let i = 0; i < 4; i++) {
                 const img = this.images["touchhold_" + i];
@@ -520,6 +566,7 @@ export class SimaiRenderer {
                 this.ctx.globalAlpha = 1;
                 this.drawImgAtcenter(touchPoint, size * 0.4);
                 this.simpleHitEffect(noteT);
+                if (isOn) this.simpleHoldEffect(noteT);
             }
             this.ctx.restore();
             return;
@@ -558,12 +605,10 @@ export class SimaiRenderer {
         if (s.slideType === "w") {
             for (let i = 0; i < 11; i++) {
                 const target = this.images[prefix + i];
-                //if (imgNotExists(target)) return;
                 imgs.push(target);
             }
         } else {
             const target = this.images[standardKey];
-            //if (imgNotExists(target)) return;
             imgs.push(target);
         }
 
@@ -581,8 +626,8 @@ export class SimaiRenderer {
         if (-noteT > slideDelay) {
             slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
-
-        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w");
+        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br);
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && slideProgress < 1) {
@@ -600,14 +645,15 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawPathWithArrows(recorder, starProgress, imgs, typew, config = { spacing: 4.36 }) {
+    drawPathWithArrows(recorder, starProgress, imgs, typew, br, config = { spacing: 4.36 }) {
         const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / config.spacing);
         const spacing = typew ? 7 : config.spacing;
-
         this.ctx.save();
         for (let i = arrowCount; i > Math.floor(starProgress * arrowCount); i--) {
             const imgIndex = Math.min(i - 1, imgs.length - 1);
-            const img = typew ? imgs[imgIndex] : imgs[0];
+            const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], br, {
+                colorCode: "#fff8a6"
+            });
             const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
             const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
 
@@ -687,7 +733,7 @@ export class SimaiVisualEditor {
         }
         this.drawImgAtcenter(img, size);
         if (s.isEx) {
-            const ex = getTintedImage(this.images["tap_ex"], 0.5, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
+            const ex = getTintedImage(this.images["tap_ex"], 0.6, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
             this.drawImgAtcenter(ex, size);
         }
         this.ctx.restore();
@@ -710,7 +756,7 @@ export class SimaiVisualEditor {
         }
         this.drawImgAtcenter(img, size);
         if (s.isEx) {
-            const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.5, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
+            const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.4, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
             this.drawImgAtcenter(ex, size * 0.95);
         }
         this.ctx.restore();
@@ -801,7 +847,7 @@ export class SimaiVisualEditor {
         this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
 
         if (s.isEx) {
-            const ex = getTintedImage(this.images["hold_ex"], 0.5, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
+            const ex = getTintedImage(this.images["hold_ex"], 0.6, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
             this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
             this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
             this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);

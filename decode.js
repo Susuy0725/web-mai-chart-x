@@ -1,16 +1,26 @@
-import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase } from './helper.js';
-export let warns = [];
-const pushWarn = (...args) => warns.push(args.map(formatWarnArg).join(' '));
+import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase, isObject } from './helper.js';
+export let warns = [], warnpos = [];
+const pushWarn = (...args) => {
+    warns.push(args.map(formatWarnArg).join(' '));
+};
 const formatWarnArg = (arg) => {
     if (typeof arg === 'string') return arg;
     try {
-        return JSON.stringify(arg);
+        if (isObject(arg)) {
+            if (arg.errpos !== undefined) {
+                warnpos.push(arg.errpos);
+                return `${_sp[arg.errpos]}, at comma position: ${arg.errpos}`;
+            }
+            return JSON.stringify(arg);
+        }
     } catch {
         return String(arg);
     }
 };
+let _sp = []
 export function simaiDecode(data = "", baseOffset = true) {
     warns = [];
+    warnpos = []
     const raw = data.replace(/\|\|.*$/gm, "")/* remove comments */.replace(/\s+/g, '');
     if (raw === '') return { notes: [], endTime: 0 };
     /*if (!(raw.endsWith(',') || raw.endsWith('E') || raw.endsWith(')') || raw.endsWith('}'))) {
@@ -20,6 +30,7 @@ export function simaiDecode(data = "", baseOffset = true) {
     if (raw.endsWith(',') || raw.endsWith('E')) {
         splitParts.pop();
     }
+    _sp = splitParts;
     const notes = [];
     const tempNotes = [];
     let
@@ -75,7 +86,7 @@ export function simaiDecode(data = "", baseOffset = true) {
             if (e.includes('`')) {
                 const rawsub = e.split('`').map(s => s.trim());
                 if (rawsub.some(s => s === '')) {
-                    pushWarn("Empty note detected in backticks, skipping:", e);
+                    pushWarn("Empty note detected in backticks, skipping:", { errpos: noteCommaIndex });
                     continue;
                 }
                 const subNotes = e.split('`').filter(n => n.trim() !== '');
@@ -84,6 +95,35 @@ export function simaiDecode(data = "", baseOffset = true) {
                 notesToProcess = [{ raw: e, time: nowTime }];
             }
             notesToProcess.forEach(({ raw, time }) => {
+                let props = [];
+
+                // 1. 從開頭剝皮
+                while (raw.startsWith('<')) {
+                    // 檢查是否有成對標籤
+                    const match = raw.match(/^<([^<>]*)>/);
+                    if (!match) break; // 如果開頭雖然有 < 但沒對應的 >，就跳出
+
+                    // 這裡要判斷這是不是 Simai 的滑星符號 (例如 <5)
+                    // 通常滑星符號後面一定緊接數字，且長度較短
+                    if (match[1].length === 1 && !isNaN(match[1])) {
+                        // 如果 < 裡面只有一個數字，這通常是 Simai 滑星，不剝它
+                        break;
+                    }
+
+                    props.push(match[1].trim());
+                    raw = raw.slice(match[0].length); // 剝掉這層標籤
+                }
+
+                // 2. 從結尾剝皮
+                while (raw.endsWith('>')) {
+                    const match = raw.match(/<([^<>]*)>$/);
+                    if (!match) break;
+
+                    // 結尾標籤通常不會是滑星符號，所以可以直接剝
+                    props.push(match[1].trim());
+                    raw = raw.slice(0, -match[0].length); // 剝掉這層標籤
+                }
+                if (props.length === 0) props = null;
                 const splitr = (() => {
                     if (raw.includes('/')) {
                         return raw.split('/').map(s => s.trim());
@@ -92,18 +132,23 @@ export function simaiDecode(data = "", baseOffset = true) {
                     }
                 })();
                 if (splitr.some(s => s === '')) {
-                    pushWarn("Empty note detected in split, skipping:", raw);
+                    pushWarn("Empty note detected in split, skipping:", { errpos: noteCommaIndex });
                     return;
                 }
                 if (splitr.length === 1 && !isNaN(splitr[0]) && splitr[0].length === 2) {
+                    if (splitr[0].charAt(0) === splitr[0].charAt(1)) {
+                        pushWarn("Overlapping note position:", { errpos: noteCommaIndex });
+                        return;
+                    }
                     for (let i = 0; i < 2; i++) {
-                        const pos = parseInt(splitr[0].charAt(i));
-                        if (pos < 1 || pos > 8 || isNaN(pos)) {
-                            pushWarn("Invalid note position:", pos);
+                        const pos = splitr[0].charAt(i);
+                        if (pos < 1 || pos > 8) {
+                            pushWarn("Invalid note position:", { errpos: noteCommaIndex });
                             return;
                         }
                         const noteObj = {
                             pos: pos,
+                            props: props || null,
                             isDouble: true,
                             time: time,
                             type: 'tap',
@@ -128,40 +173,11 @@ export function simaiDecode(data = "", baseOffset = true) {
                 });
                 doubleSlide = doubleSlide > 1 || doubleSlide === true;
                 parts.forEach(noteStr => {
-                    let props = [];
-
-                    // 1. 從開頭剝皮
-                    while (noteStr.startsWith('<')) {
-                        // 檢查是否有成對標籤
-                        const match = noteStr.match(/^<([^<>]*)>/);
-                        if (!match) break; // 如果開頭雖然有 < 但沒對應的 >，就跳出
-
-                        // 這裡要判斷這是不是 Simai 的滑星符號 (例如 <5)
-                        // 通常滑星符號後面一定緊接數字，且長度較短
-                        if (match[1].length === 1 && !isNaN(match[1])) {
-                            // 如果 < 裡面只有一個數字，這通常是 Simai 滑星，不剝它
-                            break;
-                        }
-
-                        props.push(match[1].trim());
-                        noteStr = noteStr.slice(match[0].length); // 剝掉這層標籤
-                    }
-
-                    // 2. 從結尾剝皮
-                    while (noteStr.endsWith('>')) {
-                        const match = noteStr.match(/<([^<>]*)>$/);
-                        if (!match) break;
-
-                        // 結尾標籤通常不會是滑星符號，所以可以直接剝
-                        props.push(match[1].trim());
-                        noteStr = noteStr.slice(0, -match[0].length); // 剝掉這層標籤
-                    }
-                    if (props.length === 0) props = null;
                     // 這裡處理音符與 Flags (例如 "1b", "2h")
                     const posMatch = noteStr.match(/^\d+/); // 抓取開頭的數字
                     const touchMatch = noteStr.match(/^([ABCDE])(\d+)|C/); // 抓取 touch 數值
                     if (!(posMatch || touchMatch)) {
-                        pushWarn("Invalid note format:", noteStr);
+                        pushWarn("Invalid note format:", { errpos: noteCommaIndex });
                         return;
                     };
                     const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
@@ -175,7 +191,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 touchPos = touchMatch[1];
                                 pos = parseInt(touchMatch[2]);
                                 if (pos < 1 || pos > 8) {
-                                    pushWarn("Invalid touch position:", pos);
+                                    pushWarn("Invalid touch position:", { errpos: noteCommaIndex });
                                     return;
                                 }
                             }
@@ -185,7 +201,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         } else {
                             pos = parseInt(posMatch[0]);
                             if (pos < 1 || pos > 8) {
-                                pushWarn("Invalid note position:", pos);
+                                pushWarn("Invalid note position:", { errpos: noteCommaIndex });
                                 return;
                             }
                             tapCounts++;
@@ -204,14 +220,14 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     // 檢查 Flags
                     if (noteStr.includes('b') && !slideMatch) {
-                        if (touchMatch) return pushWarn("Break flag 'b' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                        if (touchMatch) return pushWarn("Break flag 'b' is not allowed in touch notes, skipping:", { errpos: noteCommaIndex });
                         noteObj.isBreak = true
                         breakCounts++;
                         noteStr = noteStr.replace(/b/g, '');
                     };
                     if (noteStr.includes('$') && !slideMatch) {
-                        if (touchMatch) return pushWarn("Star flag '$' is not allowed in touch notes, skipping:", noteStr, splitParts[noteCommaIndex]);
-                        if (noteStr.includes('h')) return pushWarn("Star flag '$' is not allowed in hold notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                        if (touchMatch) return pushWarn("Star flag '$' is not allowed in touch notes, skipping:", { errpos: noteCommaIndex });
+                        if (noteStr.includes('h')) return pushWarn("Star flag '$' is not allowed in hold notes, skipping:", { errpos: noteCommaIndex });
                         noteObj.isStar = true
                         noteStr = noteStr.replace(/\$/g, '');
                     };
@@ -221,15 +237,19 @@ export function simaiDecode(data = "", baseOffset = true) {
                     };
                     if (noteStr.includes('f')) {
                         if (!slideMatch && touchMatch) {
-                            noteObj.isHanabi = true
+                            noteObj.isHanabi = true;
+                            if (noteStr.replace(/f/, '').includes('f')) {
+                                pushWarn("Multiple Hanabi flags 'f' detected, skipping:", { errpos: noteCommaIndex });
+                                return;
+                            }
                         } else {
-                            pushWarn("Hanabi flag 'f' is not allowed in other notes!, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            pushWarn("Hanabi flag 'f' is not allowed in other notes!, skipping:", { errpos: noteCommaIndex });
                             return;
                         }
                     }
                     if (noteStr.includes('h')) {
                         if (slideMatch) {
-                            pushWarn("Hold flag 'h' is not allowed in slide notes, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            pushWarn("Hold flag 'h' is not allowed in slide notes, skipping:", { errpos: noteCommaIndex });
                             return;
                         }
                         noteObj.isHold = true;
@@ -237,7 +257,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         const match = noteStr.match(/\[([^\[\]]*)\]/);
                         const residue = noteStr.replace(/\[([^\[\]]*)\]/, '').replace(/h/, '');
                         if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
-                            pushWarn("Invalid format in hold note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            pushWarn("Invalid format in hold note, skipping:", { errpos: noteCommaIndex });
                             return;
                         }
                         //noteObj.holdDuration = parseBeats("1280:1", nowBpm).time;
@@ -246,7 +266,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
                             if (duration < 0 || isNaN(duration) || duration === Infinity) {
-                                pushWarn("Invalid hold syntax in note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                                pushWarn("Invalid hold syntax in note, skipping:", { errpos: noteCommaIndex });
                                 return;
                             }
                             noteObj.holdDuration = duration;
@@ -274,13 +294,13 @@ export function simaiDecode(data = "", baseOffset = true) {
                         }
                         for (let i = 0; i < slideParts.length; i++) {
                             const slidePartMatch = slideParts[i].match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-                            if (!slidePartMatch) return pushWarn("Missing slide type in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                            if (!slidePartMatch) return pushWarn("Missing slide type in slide note, skipping:", { errpos: noteCommaIndex });
                             const timeMatches = slideParts[i].match(/\[([^\[\]]*)\]/g);
-                            if (!timeMatches) return pushWarn("Missing time format:", noteStr, splitParts[noteCommaIndex]);
+                            if (!timeMatches) return pushWarn("Missing time format:", { errpos: noteCommaIndex });
                             const timeValues = timeMatches.map(m => m.slice(1, -1));
                             const residue = slideParts[i].replace(/\[([^\[\]]*)\]/g, '');
                             if (residue.includes('[') || residue.includes(']')) {
-                                pushWarn("Invalid time format or empty in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                                pushWarn("Invalid time format or empty in slide note, skipping:", { errpos: noteCommaIndex });
                                 return;
                             }
                             noteObj.isStar = true;
@@ -307,7 +327,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const isSlideBreak = p.some(part => part.includes('b'));
                             if (isSlideBreak) {
                                 p.forEach((c, i) => {
-                                    if (c.startsWith('b')) pushWarn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", residue, splitParts[noteCommaIndex]);
+                                    if (c.startsWith('b')) pushWarn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", { errpos: noteCommaIndex });
                                     p[i] = p[i].replace(/b/g, '');
                                 });
                             }
@@ -318,7 +338,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 timeValues.forEach((t, i) => {
                                     const { time: duration, delay } = parseBeats(t, nowBpm, true);
                                     if (duration < 0 || isNaN(duration)) {
-                                        pushWarn("Invalid time format in slide note, skipping:", noteStr, splitParts[noteCommaIndex]);
+                                        pushWarn("Invalid time format in slide note, skipping:", { errpos: noteCommaIndex });
                                         error = true;
                                         return;
                                     }
@@ -340,8 +360,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 return { head, end, mid, type, path, len: path.totalLength };
                             });
 
-                            if (segments.includes(null)) return pushWarn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
-                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return pushWarn("Invalid slide positions:", residue, splitParts[noteCommaIndex]);
+                            if (segments.includes(null)) return pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
+                            if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
                             const totalLen = segments.reduce((sum, s) => sum + s.len, 0);
                             let currentDelay = dlay;
 
@@ -403,7 +423,8 @@ export function simaiDecode(data = "", baseOffset = true) {
         noteValue: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5),
         raw: splitParts,
         failed: decodeFailed,
-        warnings: warns
+        warnings: warns,
+        errpositions: warnpos,
     };
 }
 function getSlidePath(start, end, type, mid = null) {

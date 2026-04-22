@@ -16,8 +16,9 @@
     <!--<img src="./image copy.png" alt="refimg" class="a">-->
 
     <div id="canvasContainer">
-        <img src="./Skin/outline.png" alt="">
+        <img src="./Skin/outline.png" alt="outline" onerror="this.style.display = 'none'" id="canvasOutline">
         <canvas id="main"></canvas>
+        <img src="" alt="" onerror="this.style.display='none'" id="backgroundImage">
     </div>
     <div id="playControls">
         <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">

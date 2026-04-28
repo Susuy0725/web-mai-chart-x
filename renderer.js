@@ -8,7 +8,8 @@ import {
     getTintedImage,
     generatePath,
     touchPaths,
-    wSlideRatio
+    wSlideRatio,
+    clamp,
 } from './helper.js';
 
 export class SimaiRenderer {
@@ -33,6 +34,20 @@ export class SimaiRenderer {
         this._sensorShapeCache = null; // canvas for sensor shapes
         this._sensorTextCache = null;  // canvas for sensor labels
         this._sensorCacheParams = { w: 0, h: 0, scale: this.scale };
+
+        // 靜態背景與中間顯示快取
+        this._staticBackgroundCache = null;
+        this._staticBackgroundCacheParams = { w: 0, h: 0, scale: this.scale };
+        this._middleDisplayCache = null;
+        this._middleDisplayCacheParams = {
+            w: 0,
+            h: 0,
+            scale: this.scale,
+            middleDisplay: null,
+            play_combo: null,
+            play_score: null,
+            backgroundDarkness: null,
+        };
     }
 
 
@@ -124,23 +139,20 @@ export class SimaiRenderer {
 
     drawFrame(state) {
         const { ctx } = this;
-        const { globalTime, buckets, dt, showSensor, showSensorText } = state;
+        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore } = state;
         this.globalTime = globalTime;
+        this.playCombo = playCombo;
+        this.playScore = playScore;
 
         if (!this.images || this.images.length === 0) return;
 
-        // 1. 清除畫布
         {
             let { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
             ctx.clearRect(-hw, -hh, w, h);
         }
 
-        // 2. 基礎 UI
-        this.drawStaticBackground();
-        this.drawUI(dt, globalTime);
-
         // 3. 傳感器 (使用靜態快取繪製以提升效能)
-        if (showSensor || showSensorText) this.drawCachedSensors(showSensor, showSensorText);
+        if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
 
         this.drawMiddleDisplay();
 
@@ -152,6 +164,9 @@ export class SimaiRenderer {
             else this.drawTap(n);
         });
         buckets.touch.forEach(n => this.drawTouch(n));
+
+        this.drawStaticBackground();
+        this.drawUI(dt, globalTime);
     }
 
     drawUI(dt, globalTime) {
@@ -167,23 +182,95 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
+    ensureStaticBackgroundCache() {
+        const wPx = this.canvas.width;
+        const hPx = this.canvas.height;
+        const scale = this.scale;
+        if (!wPx || !hPx) return;
+
+        const params = this._staticBackgroundCacheParams;
+        if (this._staticBackgroundCache && params.w === wPx && params.h === hPx && params.scale === scale) {
+            return;
+        }
+
+        const cache = document.createElement('canvas');
+        cache.width = wPx;
+        cache.height = hPx;
+        const cctx = cache.getContext('2d');
+        const p = Math.min(wPx, hPx) / scaleBase * scale;
+        cctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+
+        cctx.save();
+        cctx.beginPath();
+        cctx.rect(scaleBase / -2, scaleBase / -2, scaleBase, scaleBase);
+        cctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
+        cctx.fill('evenodd');
+        cctx.restore();
+
+        this._staticBackgroundCache = cache;
+        this._staticBackgroundCacheParams = { w: wPx, h: hPx, scale };
+    }
+
     drawStaticBackground() {
+        this.ensureStaticBackgroundCache();
+        if (!this._staticBackgroundCache) return;
+
         const { ctx } = this;
         ctx.save();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.beginPath();
-        ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.strokeStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(this._staticBackgroundCache, 0, 0);
         ctx.restore();
     }
 
+    ensureMiddleDisplayCache() {
+        const wPx = this.canvas.width;
+        const hPx = this.canvas.height;
+        const scale = this.scale;
+        if (!wPx || !hPx) return;
+
+        const current = {
+            middleDisplay: this.settings.middleDisplay,
+            play_combo: this.playCombo,
+            play_score: Math.round(Math.max(this.playScore, 0)),
+            backgroundDarkness: this.settings.backgroundDarkness ?? 0,
+        };
+        const params = this._middleDisplayCacheParams;
+        if (this._middleDisplayCache
+            && params.w === wPx
+            && params.h === hPx
+            && params.scale === scale
+            && params.middleDisplay === current.middleDisplay
+            && params.play_combo === current.play_combo
+            && params.play_score === current.play_score
+            && params.backgroundDarkness === current.backgroundDarkness) {
+            return;
+        }
+
+        const cache = document.createElement('canvas');
+        cache.width = wPx;
+        cache.height = hPx;
+        const cctx = cache.getContext('2d');
+        const p = Math.min(wPx, hPx) / scaleBase * scale;
+        cctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+
+        this.renderMiddleDisplayToContext(cctx);
+
+        this._middleDisplayCache = cache;
+        this._middleDisplayCacheParams = { ...current, w: wPx, h: hPx, scale };
+    }
+
     drawMiddleDisplay() {
+        this.ensureMiddleDisplayCache();
+        if (!this._middleDisplayCache) return;
+
         const { ctx } = this;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(this._middleDisplayCache, 0, 0);
+        ctx.restore();
+    }
+
+    renderMiddleDisplayToContext(ctx) {
         ctx.save();
         function outlineText(text, x, y, fontSize, outlinePx = 2, {
             fillStyle = "#FFFFFF",
@@ -216,14 +303,14 @@ export class SimaiRenderer {
         }
         switch (this.settings.middleDisplay) {
             case 1:
-                if (this.settings.play_combo != 0) {
+                if (this.playCombo != 0) {
                     outlineText("COMBO", 0, -7, 4.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" });
-                    outlineText(`${this.settings.play_combo}`, 0, 0, 7.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: "0.5px" });
+                    outlineText(`${this.playCombo}`, 0, 0, 7.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: "0.5px" });
                 }
                 ctx.letterSpacing = "0px";
                 break;
             case 2:
-                const trueScore = Math.round(Math.max(this.settings.play_score, 0));
+                const trueScore = Math.round(Math.max(this.playScore, 0));
                 // use gamma correction for more natural progression
                 //ctx.fillStyle = adjustBrightness("#498BFF", (1 - this.settings.backgroundDarkness) ** 0.45);
                 if (trueScore > 800000) {
@@ -254,39 +341,6 @@ export class SimaiRenderer {
         }
         ctx.restore();
     }
-
-    drawSensors() {
-        const { ctx } = this;
-        ctx.save();
-        ctx.strokeStyle = '#ffffff80';
-        touchPaths.forEach(shape => {
-            if (shape.type === 'D' || shape.type === 'C1' || shape.type === 'C2') return; // 目前不繪製 D 區域和 A 區域
-            ctx.lineWidth = 0.3;
-            if (shape.type === 'A') { ctx.lineWidth = 0.4; ctx.setLineDash([0.2, 0.8]); }
-            else ctx.setLineDash([]);
-            ctx.stroke(shape.path);
-        });
-        ctx.restore();
-    }
-
-    drawSensorText() {
-        const { ctx } = this;
-        ctx.save();
-        ctx.fillStyle = '#ffffff40';
-        ctx.font = "bold 5px combo";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ['A', 'B', 'D', 'E'].forEach(type => {
-            const positions = touchRefPos[type];
-            for (let i = 0; i < 8; i++) {
-                const pos = positions[i];
-                ctx.fillText(`${type}${i + 1}`, pos.x, pos.y);
-            }
-        });
-        ctx.fillText("C", 0, 0);
-        ctx.restore();
-    }
-
     // 建立或確認靜態快取（在畫布尺寸或 scale 變動時會重建）
     ensureSensorCaches() {
         const wPx = this.canvas.width;
@@ -308,13 +362,20 @@ export class SimaiRenderer {
             const sctx = shapes.getContext('2d');
             sctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
             sctx.save();
+            sctx.fillStyle = '#80808025';
             sctx.strokeStyle = '#ffffff80';
             touchPaths.forEach(shape => {
                 if (shape.type === 'D' || shape.type === 'C1' || shape.type === 'C2') return;
                 sctx.lineWidth = 0.3;
-                if (shape.type === 'A') { sctx.lineWidth = 0.4; sctx.setLineDash([0.2, 0.8]); }
-                else sctx.setLineDash([]);
-                sctx.stroke(shape.path);
+                if (shape.type === 'A') {
+                    sctx.lineWidth = 0.4;
+                    sctx.setLineDash([0.2, 0.8]);
+                    sctx.stroke(shape.path);
+                } else {
+                    sctx.setLineDash([]);
+                    sctx.fill(shape.path);
+                    sctx.stroke(shape.path);
+                }
             });
             sctx.restore();
 
@@ -352,7 +413,7 @@ export class SimaiRenderer {
     }
 
     // 使用靜態快取繪製傳感器（會依 flag 決定畫 shapes / text）
-    drawCachedSensors(showSensor, showSensorText) {
+    drawSensors(showSensor, showSensorText) {
         this.ensureSensorCaches();
         if (!this._sensorShapeCache && !this._sensorTextCache) return;
 
@@ -620,7 +681,7 @@ export class SimaiRenderer {
 
         this.ctx.save();
         const isTaped = -noteT > 0;
-        this.ctx.globalAlpha = isTaped ? 1 : 0.6 * ((t - this.settings.middleDistance) / (1 - this.settings.middleDistance));
+        this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
         let slideProgress = 0;
         if (-noteT > slideDelay) {

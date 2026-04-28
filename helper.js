@@ -315,6 +315,7 @@ class AudioManager {
         this.bgmGainNode.gain.value = this.bgmVolume;
         this.bgmStartTime = 0; // 紀錄是在全域時間第幾秒按下播放的
         this.bgmOffset = 0;    // 紀錄是從歌曲的第幾秒開始播的
+        this.playbackRate = 1.0;
 
         this.sfxGainNode = this.ctx.createGain();
         this.sfxGainNode.connect(this.masterGain);
@@ -436,6 +437,18 @@ class AudioManager {
     }
 
     /**
+     * 設定背景音樂播放速率
+     * @param {number} rate - 播放速率（例如 1.0、1.5、0.75）
+     */
+    setPlaybackRate(rate) {
+        this.playbackRate = Math.max(0.1, Math.min(4, Number(rate) || 1));
+        if (this.bgmSource) {
+            // 使用 .setTargetAtTime 防止速率突變造成耳朵不適
+            this.bgmSource.playbackRate.setTargetAtTime(this.playbackRate, this.ctx.currentTime, 0.05);
+        }
+    }
+
+    /**
  * 播放背景音樂
  * @param {number} startTime - 從歌曲的第幾秒開始 (對應 globalTime)
  * @param {number} volume - 音量 (0.0 到 1.0)
@@ -447,6 +460,9 @@ class AudioManager {
         this.bgmSource = this.ctx.createBufferSource();
         this.bgmSource.buffer = this.bgmBuffer;
 
+        // --- 關鍵：套用當前速率 ---
+        this.bgmSource.playbackRate.value = this.playbackRate;
+
         const sourceGain = this.ctx.createGain();
         sourceGain.gain.value = typeof volume === 'number' ? Math.max(0, Math.min(1, volume)) : this.bgmVolume;
         this.bgmSource.connect(sourceGain);
@@ -454,10 +470,8 @@ class AudioManager {
 
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        // --- 關鍵修改：紀錄播放時間點 ---
         this.bgmStartTime = this.ctx.currentTime;
         this.bgmOffset = Math.max(0, startTime);
-        // ----------------------------
 
         this.bgmSource.start(0, this.bgmOffset);
     }
@@ -482,9 +496,9 @@ class AudioManager {
     getBGMTime() {
         if (!this.bgmSource || this.ctx.state === 'suspended') return null;
 
-        // 目前時間 = (全域時鐘 - 按下播放時的全域時間) + 起始偏移量
-        const playedDuration = this.ctx.currentTime - this.bgmStartTime;
-        return playedDuration + this.bgmOffset;
+        // 公式：((現在時間 - 開始時間) * 播放速率) + 起始偏移量
+        const elapsedContextTime = this.ctx.currentTime - this.bgmStartTime;
+        return (elapsedContextTime * this.playbackRate) + this.bgmOffset;
     }
 
     getBGMDuration() {
@@ -953,6 +967,7 @@ export function popupWindow({
     customContent = null,
     buttons = [],
     width = 340,
+    maxWidth = 600,
     unclosable = false,
     onOpen,
     onClose,
@@ -1028,7 +1043,8 @@ export function popupWindow({
         border: '1px solid #404040', borderRadius: '5px',
         maxWidth: 'calc(100% - 20px)', maxHeight: '95%',
         boxShadow: '0 0 15px rgba(0, 0, 0, 0.7)', overflow: 'hidden',
-        width: title ? popupWidth : 'fit-content', position: 'relative'
+        width: title ? popupWidth : 'fit-content', position: 'relative',
+        maxWidth: maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%' // 允許自定義最大寬度
     });
 
     // 3. 內部組件
@@ -1500,4 +1516,110 @@ export const wSlideRatio = [
 ];
 export function isObject(val) {
     return val instanceof Object;
+}
+export const contantRotate = (selected, direction) => {
+    if (typeof selected !== 'string' || selected.length === 0) return selected;
+
+    const bracketPairs = {
+        '[': ']',
+        '{': '}',
+        '(': ')'
+    };
+
+    const rotateDigit = (digit) => {
+        const base = parseInt(digit, 10);
+        if (Number.isNaN(base) || base < 1 || base > 8) return digit;
+        return String(((base - 1 + direction) % 8 + 8) % 8 + 1);
+    };
+
+    const extractEdgeTags = (token) => {
+        let prefix = '';
+        let current = token;
+        while (current.startsWith('<')) {
+            const closeIndex = current.indexOf('>');
+            if (closeIndex <= 0) break;
+            const inner = current.slice(1, closeIndex);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            prefix += current.slice(0, closeIndex + 1);
+            current = current.slice(closeIndex + 1);
+        }
+
+        let suffix = '';
+        while (current.endsWith('>')) {
+            const openIndex = current.lastIndexOf('<');
+            if (openIndex < 0) break;
+            const inner = current.slice(openIndex + 1, current.length - 1);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            suffix = current.slice(openIndex) + suffix;
+            current = current.slice(0, openIndex);
+        }
+
+        return { prefix, content: current, suffix };
+    };
+
+    const processContent = (content) => {
+        const stack = [];
+        let result = '';
+        let lastOldDigit = null;
+        let lastNewDigit = null;
+        let firstOldDigit = null;
+        let firstNewDigit = null;
+
+        for (let i = 0; i < content.length; i++) {
+            const ch = content[i];
+            if (bracketPairs[ch]) {
+                stack.push(bracketPairs[ch]);
+                result += ch;
+                continue;
+            }
+            if (stack.length > 0) {
+                if (ch === stack[stack.length - 1]) {
+                    stack.pop();
+                }
+                result += ch;
+                continue;
+            }
+            if (ch >= '1' && ch <= '8') {
+                const oldD = parseInt(ch, 10);
+                const rotated = rotateDigit(ch);
+                const newD = parseInt(rotated, 10);
+
+                lastOldDigit = oldD;
+                lastNewDigit = newD;
+                if (firstOldDigit === null) {
+                    firstOldDigit = oldD;
+                    firstNewDigit = newD;
+                }
+                result += rotated;
+            } else if (ch === '*') {
+                lastOldDigit = firstOldDigit;
+                lastNewDigit = firstNewDigit;
+                result += ch;
+            } else if (ch === '<' || ch === '>') {
+                if (lastOldDigit !== null && lastNewDigit !== null) {
+                    const oldFlip = (lastOldDigit >= 3 && lastOldDigit <= 6);
+                    const newFlip = (lastNewDigit >= 3 && lastNewDigit <= 6);
+                    if (oldFlip !== newFlip) {
+                        result += (ch === '<' ? '>' : '<');
+                    } else {
+                        result += ch;
+                    }
+                } else {
+                    result += ch;
+                }
+            } else {
+                result += ch;
+            }
+        }
+        return result;
+    };
+
+    return selected.split(/(\s*,\s*)/).map((part, index) => {
+        if (index % 2 === 1) return part;
+        const { prefix, content, suffix } = extractEdgeTags(part);
+        return prefix + processContent(content) + suffix;
+    }).join('');
+};
+export function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
 }

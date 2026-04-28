@@ -943,6 +943,82 @@ export class SimaiVisualEditor {
         this.ctx.restore();
     }
 
+    drawTag(tag) {
+        const { ctx } = this;
+        const w = this.settings.noteBaseSize * (tag.type == 'bpm' ? 6 : 4);
+        ctx.save();
+        ctx.lineWidth = 0.5;
+        if (tag.type == 'bpm') {
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#ffe865c0';
+            const beatPeriod = (tag.value && tag.value > 0) ? (240 / tag.value) : null;
+            if (beatPeriod) {
+                // 計算要渲染的 beat 索引範圍，確保覆蓋當前可見區間
+                const { height: H } = this.getCanvasWH();
+                const zoom = this.zoom || 1;
+                const delta = tag.time - this.globalTime;
+                const minI = Math.floor(Math.max(tag.time, (-H / zoom - delta) / beatPeriod));
+                const maxI = Math.ceil((H / zoom - delta) / beatPeriod);
+                const LIMIT = 5000;
+                const start = Math.max(-LIMIT, minI);
+                const end = Math.min(LIMIT, maxI);
+                for (let i = start; i <= end; i++) {
+                    const y = (tag.time - this.globalTime + (i * beatPeriod)) * -zoom;
+                    ctx.beginPath();
+                    ctx.moveTo(-w, y);
+                    ctx.lineTo(w, y);
+                    ctx.stroke();
+                }
+            }
+        } else {
+            ctx.setLineDash([0.7, 0.7]);
+            ctx.strokeStyle = '#ffffff';
+            const zoom = this.zoom || 1;
+            const { height: H } = this.getCanvasWH();
+            const V = H / (zoom || 1);
+
+            // 如果 renderTimes 是數字（表示要渲染的次數），使用 split 的 period 並做 culling
+            if (typeof tag.renderTimes === 'number' && tag.renderTimes > 0 && tag.bpm && tag.value) {
+                const period = (60 / tag.bpm) * (4 / tag.value); // 與 decode 中的時間增量一致
+                const count = Math.max(0, Math.floor(tag.renderTimes));
+                if (period > 0 && count > 0) {
+                    const delta = tag.time - this.globalTime;
+                    // 求可見索引範圍： i ∈ [ceil((-V - delta)/period), floor((V - delta)/period)]
+                    let minI = Math.ceil((-V - delta) / period);
+                    let maxI = Math.floor((V - delta) / period);
+                    if (minI < 0) minI = 0;
+                    if (maxI > count - 1) maxI = count - 1;
+                    let firstVisible = (tag.time - this.globalTime) > -V;
+                    for (let i = minI; i <= maxI; i++) {
+                        const t = tag.time + i * period;
+                        const y = (t - this.globalTime) * -zoom;
+                        if (firstVisible) {
+                            ctx.setLineDash([]); // 首個可見線為實線
+                            firstVisible = false;
+                        } else {
+                            ctx.setLineDash([0.7, 0.7]); // 其餘虛線
+                        }
+                        ctx.beginPath();
+                        ctx.moveTo(-w, y);
+                        ctx.lineTo(w, y);
+                        ctx.stroke();
+                    }
+                }
+            } else {
+                // fallback：單一時間點使用實線
+                ctx.setLineDash([]);
+                const y = (tag.time - this.globalTime) * -zoom;
+                if (Math.abs(tag.time - this.globalTime) <= V) {
+                    ctx.beginPath();
+                    ctx.moveTo(-w, y);
+                    ctx.lineTo(w, y);
+                    ctx.stroke();
+                }
+            }
+        }
+        ctx.restore();
+    }
+
     render(isVisualMode, ensureVisualEditorContext, state) {
         if (!isVisualMode() || this.canvas.style.display === 'none') return;
 
@@ -951,8 +1027,9 @@ export class SimaiVisualEditor {
 
         const { width: w, height: h } = this.getCanvasWH();
         if (w <= 0 || h <= 0) return;
-        const { globalTime, visualBuckets, audioBuffer, dt } = state;
+        const { globalTime, visualBuckets, audioBuffer, dt, tags } = state;
         this.globalTime = globalTime;
+        this.tags = tags;
 
         ctx.clearRect(-w, -h, w * 2, h * 2);
         ctx.save();
@@ -965,7 +1042,8 @@ export class SimaiVisualEditor {
             ctx.fillStyle = "gray";
             ctx.fillText(i + 1, visualNoteRefPos[i].x, h - 2);
         }
-        ctx.strokeStyle = '#ccc';
+        visualBuckets.tags.forEach(t => this.drawTag(t));
+        ctx.strokeStyle = '#ff0000ce';
         ctx.beginPath();
         ctx.moveTo(-w, 0);
         ctx.lineTo(w, 0);

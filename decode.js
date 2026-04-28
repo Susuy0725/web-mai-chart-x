@@ -32,6 +32,7 @@ export function simaiDecode(data = "", baseOffset = true) {
     }
     _sp = splitParts;
     const notes = [];
+    const tags = [];
     const tempNotes = [];
     let
         firstBpm = null,
@@ -43,6 +44,7 @@ export function simaiDecode(data = "", baseOffset = true) {
         noteCommaIndex = 0;
     let tapCounts = 0, holdCounts = 0, slideCounts = 0, touchCounts = 0, breakCounts = 0;
     let decodeFailed = false;
+    let lastBpmTag = -1, lastSplitTag = -1, lastSplitTagCommIndex = -1;
     //pushWarn = (...args) => Array.prototype.push.call(warns, args.map(formatWarnArg).join(' '));
     for (let e of splitParts) {
         if (e.includes('(')) {
@@ -52,6 +54,13 @@ export function simaiDecode(data = "", baseOffset = true) {
             if (nowTime == 0 && baseOffset) nowTime = 60 / nowBpm * 4; // 如果第一行就是 BPM 定义，则以此作为初始偏移
             if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
             e = result.residue;
+            tags.push({ type: 'bpm', value: nowBpm, time: nowTime });
+            if (lastBpmTag !== -1) {
+                let tg = tags[lastBpmTag];
+                tg.renderTimes = (nowTime - tg.time) / (240 / tg.value);
+            }
+            lastBpmTag = tags.length - 1;
+            console.log("Parsed BPM tag:", tags[tags.length - 1]);
         }
         if (e.includes('{')) {
             overrideSplitTime = null; // reset overrideSplit at the start of each new tag
@@ -63,6 +72,12 @@ export function simaiDecode(data = "", baseOffset = true) {
                 nowSplit = result.value;
             }
             e = result.residue;
+            tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime });
+            lastSplitTag = tags.length - 1;
+            lastSplitTagCommIndex = noteCommaIndex;
+        }
+        if (tags[tags.length - 1]?.type == 'split') {
+            tags[tags.length - 1].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
         }
         /*if (overrideSplitTime === null && (nowBpm === null || nowSplit === null)) {
             console.log("BPM or Split not defined before notes\n",(nowBpm === null || nowSplit === null));
@@ -414,10 +429,12 @@ export function simaiDecode(data = "", baseOffset = true) {
     console.group("Decoded Notes:");
     console.log("notes: ", notes);
     console.log("endTime: ", endTime);
+    console.log("tags: ", tags);
     console.groupEnd();
     return {
         notes,
         endTime,
+        tags,
         bpm: firstBpm,
         baseOffset,
         noteValue: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5),

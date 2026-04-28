@@ -1418,7 +1418,7 @@ function tintImage(img, r, g, b, amount = 0.5) {
     return canvas;
 }
 // 建議定義在全域或模組頂層
-const _tintCache = new WeakMap();
+let _tintCache = new WeakMap();
 
 /**
  * 取得染色後的圖片 (具備快取機制)

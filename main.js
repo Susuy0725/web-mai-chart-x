@@ -88,6 +88,7 @@ export const defaultSettings = {
     playbackSpeed: 1, // 播放速度，1 是正常速度
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
     SfxVolume: 1, // 音效音量，0 到 1 之間
+    visualZoom: 200, // 視覺模式下的縮放倍率
 };
 const settingsConfig = [
     {
@@ -159,6 +160,7 @@ let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持�
 let nowIndex = 0;
 let visualCtx = null;
 let warnings = [], warningPositions = [];
+let decodedTags = [];
 
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
@@ -177,7 +179,7 @@ const saveSettingsDebounce = debounce(() => {
 
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
-    slider.max = endTime - musicDelay;
+    slider.max = endTime + musicDelay;
 };
 
 manageResourcesButton.addEventListener('click', async () => {
@@ -802,6 +804,11 @@ function setDataEmpty() {
     slider.value = 0;
     offsetInput.value = 0;
     editorInput.value = '';
+    // 清除編輯歷史（新譜面應該重新開始）
+    undoStack = [];
+    redoStack = [];
+    historyMap = {};
+    lastEditorValue = '';
     audioManager.removeBackgroundMusic().catch(() => { });
     changeDifficulty.value = nowDifficulty;
     editorBackgroundImage.src = "";
@@ -838,6 +845,7 @@ const getres = ((simaiDataValue) => {
             simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
         } else {
             notes = result.notes;
+            decodedTags = result.tags || [];
             setEndtime(result.endTime);
             // chartBaseOffset = result.baseOffset;
             clockBpm = result.bpm;
@@ -864,7 +872,7 @@ warnEl.addEventListener('click', () => {
 });
 
 const offsetInputDebounce = debounce(() => {
-    slider.max = endTime - musicDelay;
+    slider.max = endTime + musicDelay;
     slider.value = realTime;
 
     globalTime = realTime - musicDelay;
@@ -1000,9 +1008,6 @@ const setEditorCss = (visible = null) => {
 
     if (visualVisible) {
         resizeVisualEditor();
-        /*visualEditorRenderer?.render(isVisualMode, ensureVisualEditorContext, {
-
-        });*/
     }
 
     animateCanvasWidth(visible);
@@ -1394,57 +1399,121 @@ readyBeatCheckbox.addEventListener('change', () => {
 });
 
 // --- Undo/Redo 系統 ---
-let undoStack = [];
+// --- Undo/Redo 系統 (使用差異 diff 儲存，避免完整字串複製) ---
+let undoStack = []; // stores change objects: { start, removed, inserted }
 let redoStack = [];
 const maxHistorySize = 100;
 
-const pushUndoState = (content) => {
-    // 移除掉 redoStack（因為做了新編輯）
+const computeChange = (oldStr, newStr) => {
+    if (oldStr === newStr) return null;
+    let start = 0;
+    const minLen = Math.min(oldStr.length, newStr.length);
+    while (start < minLen && oldStr[start] === newStr[start]) start++;
+
+    let endOld = oldStr.length - 1;
+    let endNew = newStr.length - 1;
+    while (endOld >= start && endNew >= start && oldStr[endOld] === newStr[endNew]) {
+        endOld--;
+        endNew--;
+    }
+
+    const removed = oldStr.slice(start, endOld + 1);
+    const inserted = newStr.slice(start, endNew + 1);
+    return { start, removed, inserted };
+};
+
+const applyChange = (text, change) => {
+    if (!change) return text;
+    const before = text.slice(0, change.start);
+    const after = text.slice(change.start + (change.removed ? change.removed.length : 0));
+    return before + (change.inserted || '') + after;
+};
+
+const invertChange = (change) => {
+    if (!change) return null;
+    return { start: change.start, removed: change.inserted, inserted: change.removed };
+};
+
+const pushUndoChange = (change) => {
+    if (!change) return;
+    // 新的使用者編輯會清空 redo
     redoStack = [];
-    
-    // 加入當前狀態到 undoStack
-    undoStack.push(content);
-    
-    // 限制歷史堆棧大小
-    if (undoStack.length > maxHistorySize) {
-        undoStack.shift();
+    undoStack.push(change);
+    if (undoStack.length > maxHistorySize) undoStack.shift();
+};
+
+const pushUndo = (change) => {
+    if (!change) return;
+    undoStack.push(change);
+    if (undoStack.length > maxHistorySize) undoStack.shift();
+};
+
+const pushRedo = (change) => {
+    if (!change) return;
+    redoStack.push(change);
+    if (redoStack.length > maxHistorySize) redoStack.shift();
+};
+
+// 歷史記錄按難度分隔存放
+let historyMap = {}; // { [difficulty]: { undo:[], redo:[], last: '' } }
+
+const saveHistoryForDifficulty = (diff) => {
+    // 將當前的 undo/redo 與 lastEditorValue 保存到 map
+    if (diff === undefined || diff === null) return;
+    historyMap[diff] = {
+        undo: undoStack.slice(),
+        redo: redoStack.slice(),
+        last: lastEditorValue
+    };
+};
+
+const loadHistoryForDifficulty = (diff) => {
+    const h = historyMap[diff];
+    if (h) {
+        undoStack = h.undo.slice();
+        redoStack = h.redo.slice();
+        lastEditorValue = (typeof h.last === 'string') ? h.last : editorInput.value || '';
+    } else {
+        undoStack = [];
+        redoStack = [];
+        lastEditorValue = editorInput.value || '';
     }
 };
 
 undoButton.addEventListener('click', () => {
     if (undoStack.length === 0) return;
-    
-    // 將當前內容推入 redoStack
-    redoStack.push(editorInput.value);
-    
-    // 從 undoStack 彈出並恢復
-    const prevContent = undoStack.pop();
-    editorInput.value = prevContent;
-    applyHighlight(prevContent);
-    getres(prevContent);
+    const change = undoStack.pop();
+    const inverse = invertChange(change);
+    const newContent = applyChange(editorInput.value, inverse);
+    // 將原始 change 推到 redo，供重做時套用
+    pushRedo(change);
+    editorInput.value = newContent;
+    applyHighlight(newContent);
+    getres(newContent);
     inputDebounce();
+    lastEditorValue = newContent;
 });
 
 redoButton.addEventListener('click', () => {
     if (redoStack.length === 0) return;
-    
-    // 將當前內容推入 undoStack
-    undoStack.push(editorInput.value);
-    
-    // 從 redoStack 彈出並恢復
-    const nextContent = redoStack.pop();
-    editorInput.value = nextContent;
-    applyHighlight(nextContent);
-    getres(nextContent);
+    const change = redoStack.pop();
+    const newContent = applyChange(editorInput.value, change);
+    pushUndo(change);
+    editorInput.value = newContent;
+    applyHighlight(newContent);
+    getres(newContent);
     inputDebounce();
+    lastEditorValue = newContent;
 });
 
-let lastEditorValue = '';
+let lastEditorValue = editorInput.value || '';
 const editorInputDebounce = debounce(() => {
-    // 只有當內容確實改變時才記錄歷史
     if (editorInput.value !== lastEditorValue) {
-        console.log("記錄歷史狀態，當前內容長度:", undoStack.length);
-        pushUndoState(lastEditorValue);
+        const change = computeChange(lastEditorValue, editorInput.value);
+        if (change) {
+            pushUndoChange(change);
+            console.log("記錄歷史狀態（diff）:", change);
+        }
         lastEditorValue = editorInput.value;
     }
 }, 500);
@@ -1520,6 +1589,11 @@ function maidataProcess(e) {
     }
     getres(editorInput.value);
     applyHighlight(editorInput.value);
+    // 載入譜面時，重置編輯歷史與 lastEditorValue
+    undoStack = [];
+    redoStack = [];
+    historyMap = {};
+    lastEditorValue = editorInput.value || '';
 }
 
 folderInput.addEventListener('click', (e) => {
@@ -1625,11 +1699,33 @@ const difficultyInputDebounce = debounce(() => {
 
 changeDifficulty.addEventListener('change', (e) => {
     console.log("難度變更為:", e.target.value);
+    const oldDiff = nowDifficulty;
     const nowEditorContent = editorInput.value;
-    maidata['inote_' + nowDifficulty] = nowEditorContent;
+
+    // 立即紀錄尚未 debounce 的變更
+    try {
+        const pendingChange = computeChange(lastEditorValue, nowEditorContent);
+        if (pendingChange) {
+            pushUndoChange(pendingChange);
+            lastEditorValue = nowEditorContent;
+        }
+    } catch (err) { /* ignore */ }
+
+    // 儲存目前難度的編輯內容
+    maidata['inote_' + oldDiff] = nowEditorContent;
+
+    // 保存當前難度的歷史狀態，並切換到新難度後載入對應歷史
+    saveHistoryForDifficulty(oldDiff);
+
     nowDifficulty = e.target.value;
-    editorInput.value = maidata['inote_' + nowDifficulty] ?? "";
+
+    const newContent = maidata['inote_' + nowDifficulty] ?? "";
+    editorInput.value = newContent;
     applyHighlight(editorInput.value);
+
+    // 載入新難度的歷史（若有）並同步 lastEditorValue
+    loadHistoryForDifficulty(nowDifficulty);
+
     inputDebounce();
     difficultyInputDebounce();
 });
@@ -1870,7 +1966,9 @@ visualEditor.addEventListener('wheel', (e) => {
         const maxZoom = 1000;
         const newZoom = Math.max(minZoom, Math.min(maxZoom, visualEditorRenderer.zoom * factor));
 
+        settings.visualZoom = newZoom;
         visualEditorRenderer.setZoom(newZoom);
+        saveSettingsDebounce();
         draw();
     } else {
         // 純滾輪 = 垂直移動時間軸
@@ -1917,11 +2015,11 @@ addMusicButton.addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'audio/*';
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
         const file = e.target.files[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            audioManager.setBackgroundMusic(url, file);
+            await audioManager.setBackgroundMusic(url, file);
             setEndtime(endTime);
             idbSet('simai_resource_bgm', file);
         }
@@ -1973,8 +2071,23 @@ downloadButton.addEventListener('click', () => {
 
                     if (audioManager.haveBGM()) {
                         const bgmFile = audioManager.bgmFile;
-                        const bgmFilename = (bgmFile && bgmFile.name) ? bgmFile.name : 'track.mp3';
-                        console.log('BGM file name:', bgmFilename, 'Type:', bgmFile?.type);
+                        const getBgmFilename = (file) => {
+                            const fallbackExt = 'mp3';
+                            if (file && typeof file.name === 'string') {
+                                const parts = file.name.split('.');
+                                if (parts.length > 1) {
+                                    return `track.${parts.pop()}`;
+                                }
+                            }
+                            const mime = file?.type || '';
+                            if (mime.includes('/')) {
+                                const ext = mime.split('/')[1].split(';')[0].trim();
+                                if (ext) return `track.${ext}`;
+                            }
+                            return `track.${fallbackExt}`;
+                        };
+                        const bgmFilename = getBgmFilename(bgmFile);
+                        console.log('BGM zip filename:', bgmFilename, 'Type:', bgmFile?.type);
 
                         // 確保傳遞給 JSZip 的是 Blob 或 File，不是 URL
                         if (bgmFile instanceof Blob) {
@@ -2529,7 +2642,8 @@ function draw(dt = 0) {
     const visualBuckets = {
         slide: [],
         tapnhold: [],
-        touch: []
+        touch: [],
+        tags: []
     };
 
     const playing = playButton.dataset.playing === 'true';
@@ -2550,6 +2664,7 @@ function draw(dt = 0) {
     }
     playCombo = 0;
     let slideOnScreenCount = 0;
+    const { height: visualHeight } = visualEditorRenderer.getCanvasWH();
     for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
         const noteT = (note.time - globalTime);
@@ -2633,6 +2748,10 @@ function draw(dt = 0) {
                 touchT >= -1 :
                 t >= -1))
             && -noteT <= skipT + settings.effectDecayTime * (note.isHanabi ? 2 : 1);
+        const V = visualHeight / settings.visualZoom;
+        const isVisualVisible = (noteT >= 0)
+            ? Math.abs(noteT) <= V             // 未到達：正常門檻
+            : (-noteT) <= (V + skipT);
 
         // --- 將可見音符丟進對應桶子 ---
         if (isVisible) {
@@ -2645,11 +2764,18 @@ function draw(dt = 0) {
             else if (note.type === 'tap') buckets.tapnhold.push(note);
             else if (note.type === 'touch') buckets.touch.push(note);
         }
-        {
+        if (isVisualVisible) {
             if (note.type === 'slide') visualBuckets.slide.push(note);
             else if (note.type === 'hold') visualBuckets.tapnhold.push(note);
             else if (note.type === 'tap') visualBuckets.tapnhold.push(note);
             else if (note.type === 'touch') visualBuckets.touch.push(note);
+        }
+    }
+    for (let i = 0; i < decodedTags.length; i++) {
+        visualBuckets.tags.push(decodedTags[i]);
+        const t = decodedTags[i];
+        const isVisualVisible = Math.abs(t.time - globalTime) <= (visualHeight / settings.visualZoom);
+        if (isVisualVisible) {
         }
     }
 
@@ -2737,9 +2863,15 @@ function _init() {
                 if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
                 if (savedMaiData) {
                     maidata = savedMaiData;
-                    editorInput.value = maidata["inote_" + nowDifficulty];
+                    editorInput.value = maidata["inote_" + nowDifficulty] || '';
                     getres(editorInput.value);
                     applyHighlight(editorInput.value);
+
+                    // 初始化時同步 lastEditorValue 並清空當前 session 歷史
+                    undoStack = [];
+                    redoStack = [];
+                    historyMap = {};
+                    lastEditorValue = editorInput.value || '';
 
                     musicDelay = parseFloat(maidata.first) || 0;
                     offsetInput.value = musicDelay;
@@ -2769,6 +2901,7 @@ function _init() {
                 visualEditorRenderer.setImages(images);
                 visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
                 audioManager.setPlaybackRate(settings.playbackSpeed);
+                visualEditorRenderer.setZoom(settings.visualZoom);
                 draw();
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();

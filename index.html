@@ -95,7 +95,7 @@
                         </div>
                     </div>
                     <div class="utilityButton utilityMenuTitle">
-                        <span>功能</span>
+                        <span>功能/工具</span>
                         <span class="utilityMenuArrow material-symbols-outlined">
                             chevron_right
                         </span>
@@ -105,6 +105,7 @@
                             <div class="utilityButton" data-buttonAction="editMusic">編輯音樂開頭</div>
                             <div class="utilityButton" data-buttonAction="tapBpm">Tap BPM</div>
                             <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
+                            <div class="utilityButton" data-buttonAction="fetchFromMainote">從Mainote抓取資料</div>
                             <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
                         </div>
                     </div>
@@ -148,31 +149,5 @@
 </body>
 <script type="module" src="indexDB.js"></script>
 <script type="module" src="main.js"></script>
-<!--<script>
-    const { createClient } = supabase; // 如果是 CDN 引入
-
-    // 1. 初始化用戶端
-    const supabaseUrl = "https://tntzyagdhlrdeswyrsjw.supabase.co";
-    const supabaseKey = "sb_publishable_eoR0itFK2HCrDAMd-6Jbxg_OYCkGWTJ";
-    const client = createClient(supabaseUrl, supabaseKey);
-
-    // 2. 抓取資料（模仿你之前貼出的程式碼邏輯）
-    async function getLevel14Charts() {
-        const { data, error } = await client
-            .from('charts')           // 指定表格：譜面
-            .select('*, songs(*)')    // 抓取譜面欄位，並關聯抓取歌曲資訊
-            .eq('level', '14')        // 篩選：等級 14
-            .order('id', { ascending: true });
-
-        if (error) {
-            console.error("抓取失敗：", error);
-            return;
-        }
-
-        console.log("高等級譜面清單：", data);
-    }
-
-    getLevel14Charts();
-</script>-->
 
 </html>

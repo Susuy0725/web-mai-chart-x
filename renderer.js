@@ -92,31 +92,44 @@ export class SimaiRenderer {
     simpleHitEffect(noteT) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
+        this.ctx.save();
         const decayAlpha = 1 - Math.max(0, -t);
         const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
 
         this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
+        this.ctx.globalCompositeOperation = 'lighter';
         this.ctx.beginPath();
         this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
         this.ctx.stroke();
+        this.ctx.restore();
     }
 
     simpleHanabi(noteT, isCenter) {
         const t = noteT / (2 * this.settings.effectDecayTime);
         if (t < -1) return;
+        this.ctx.save();
         const ease = (x) => 1 - Math.pow(1 - x, 2);
         const decayAlpha = 1 - Math.max(0, -t);
         const radius = (2 + isCenter * 2) * this.settings.noteBaseSize * ease(1 - decayAlpha);
+        const color = this.ctx.createLinearGradient(-radius, -radius, radius, radius);
+        color.addColorStop(0, "#00D5FF");
+        color.addColorStop(0.4, "#FF00FF");
+        color.addColorStop(0.8, "#FFD823");
+        color.addColorStop(1, "#FFD823");
 
-        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+        this.ctx.globalAlpha = decayAlpha;
+        this.ctx.globalCompositeOperation = 'lighter';
+        this.ctx.strokeStyle = color;
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
         this.ctx.beginPath();
         this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
         this.ctx.stroke();
+        this.ctx.restore();
     }
 
     simpleHoldEffect(noteT) {
+        this.ctx.save();
         const t = noteT * -2;
         const decayAlpha = 1 - Math.max(0, t % 1);
         const decayAlpha1 = 1 - Math.max(0, (t + 0.5) % 1);
@@ -125,6 +138,7 @@ export class SimaiRenderer {
 
         this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha})`;
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
+        this.ctx.globalCompositeOperation = 'lighter';
         this.ctx.beginPath();
         this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
         this.ctx.stroke();
@@ -133,6 +147,7 @@ export class SimaiRenderer {
         this.ctx.beginPath();
         this.ctx.arc(0, 0, radius1, 0, Math.PI * 2);
         this.ctx.stroke();
+        this.ctx.restore();
     }
 
     // --- 渲染流程 ---
@@ -740,7 +755,7 @@ export class SimaiVisualEditor {
 
         this.zoom = 200;
 
-        this.passOpacity = 0.5;
+        this.passOpacity = 0.7;
 
         this.exColor = {
             tap: '#D8A2C9',
@@ -842,14 +857,33 @@ export class SimaiVisualEditor {
             const size = this.settings.noteBaseSize * 0.6;
 
             this.ctx.translate(posInfo.x, t * -this.zoom);
-            this.ctx.globalAlpha = 0.3;
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, 0);
-            this.ctx.lineTo(0, holdDuration * -this.zoom);
-            this.ctx.closePath();
-            this.ctx.strokeStyle = "#FF0000";
-            this.ctx.lineWidth = size * 0.8;
-            this.ctx.stroke();
+            this.ctx.globalAlpha = 0.4;
+            this.ctx.lineWidth = size * 0.6;
+            this.ctx.globalCompositeOperation = "lighter";
+            let hp = (holdDuration / 4) * -this.zoom;
+            for (let i = 0; i < 4; i++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, hp * i);
+                this.ctx.lineTo(0, hp * (i + 1));
+                this.ctx.closePath();
+                switch (i) {
+                    case 0:
+                        this.ctx.strokeStyle = "#EC4402";
+                        break;
+                    case 1:
+                        this.ctx.strokeStyle = "#F6EE01";
+                        break;
+                    case 2:
+                        this.ctx.strokeStyle = "#0CA163";
+                        break;
+                    case 3:
+                        this.ctx.strokeStyle = "#0197F5";
+                        break;
+                }
+                this.ctx.stroke();
+            }
+            this.ctx.globalCompositeOperation = "source-over";
+            this.ctx.globalAlpha = 1;
             this.ctx.rotate(Math.PI * -0.75);
             if (t <= 0) {
                 this.ctx.globalAlpha = this.passOpacity;
@@ -1020,7 +1054,7 @@ export class SimaiVisualEditor {
     }
 
     render(isVisualMode, ensureVisualEditorContext, state) {
-        if (!isVisualMode() || this.canvas.style.display === 'none') return;
+        if (!isVisualMode || this.canvas.style.display === 'none') return;
 
         const ctx = this.ctx || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null);
         if (!ctx) return;

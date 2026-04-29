@@ -28,6 +28,19 @@ export function debounce(func, delay = 300) {
         }, delay);
     };
 }
+
+export function throttle(func, delay = 16) {
+    let lastCall = 0;
+
+    return function (...args) {
+        const now = Date.now();
+        if (now - lastCall >= delay) {
+            lastCall = now;
+            func.apply(this, args);
+        }
+    };
+}
+
 export function parseTag(str, open, close, specialCase = false) {
     const regex = new RegExp(`\\${open}([^\\${open}\\${close}]*)\\${close}`, 'g');
     const matches = [...str.matchAll(regex)];
@@ -1620,6 +1633,119 @@ export const contantRotate = (selected, direction) => {
         return prefix + processContent(content) + suffix;
     }).join('');
 };
+export function flipSelectedText(selected, deMap, transformDigit, swapPairs = {}) {
+    if (typeof selected !== 'string') return selected;
+
+    const bracketPairs = {
+        '[': ']',
+        '{': '}',
+        '(': ')'
+    };
+
+    const extractEdgeTags = (token) => {
+        let prefix = '';
+        let current = token;
+
+        while (current.startsWith('<')) {
+            const closeIndex = current.indexOf('>');
+            if (closeIndex <= 0) break;
+            const inner = current.slice(1, closeIndex);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            prefix += current.slice(0, closeIndex + 1);
+            current = current.slice(closeIndex + 1);
+        }
+
+        let suffix = '';
+        while (current.endsWith('>')) {
+            const openIndex = current.lastIndexOf('<');
+            if (openIndex < 0) break;
+            const inner = current.slice(openIndex + 1, current.length - 1);
+            if (inner.length === 1 && /^[0-9]$/.test(inner)) break;
+            suffix = current.slice(openIndex) + suffix;
+            current = current.slice(0, openIndex);
+        }
+
+        return { prefix, content: current, suffix };
+    };
+
+    const processContent = (content) => {
+        const stack = [];
+        let result = '';
+
+        for (let i = 0; i < content.length; i++) {
+            const ch = content[i];
+            if (bracketPairs[ch]) {
+                stack.push(bracketPairs[ch]);
+                result += ch;
+                continue;
+            }
+
+            if (stack.length > 0) {
+                if (ch === stack[stack.length - 1]) {
+                    stack.pop();
+                }
+                result += ch;
+                continue;
+            }
+
+            const up = ch.toUpperCase();
+            if (up === 'C') {
+                const next = content[i + 1];
+                if (next === '1') {
+                    result += ch + next;
+                    i++;
+                    continue;
+                }
+                result += ch;
+                continue;
+            }
+
+            if (up === 'D' || up === 'E') {
+                const next = content[i + 1];
+                if (next && /\d/.test(next)) {
+                    const d = parseInt(next, 10);
+                    if (d >= 1 && d <= 8) {
+                        const mapped = deMap[d];
+                        result += ch + mapped.toString();
+                        i++;
+                        continue;
+                    }
+                }
+                result += ch;
+                continue;
+            }
+
+            if (/\d/.test(ch)) {
+                result += transformDigit(ch);
+                continue;
+            }
+
+            if (ch === '>') {
+                result += '<';
+                continue;
+            }
+            if (ch === '<') {
+                result += '>';
+                continue;
+            }
+
+            if (swapPairs[ch]) {
+                result += swapPairs[ch];
+                continue;
+            }
+
+            result += ch;
+        }
+
+        return result;
+    };
+
+    return selected.split(/(\s*,\s*)/).map((part, index) => {
+        if (index % 2 === 1) return part;
+        const { prefix, content, suffix } = extractEdgeTags(part);
+        return prefix + processContent(content) + suffix;
+    }).join('');
+}
 export function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }

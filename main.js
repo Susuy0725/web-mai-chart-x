@@ -1,7 +1,7 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
 import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp } from './helper.js';
 import { simaiDecode } from './decode.js';
-import { SimaiRenderer, SimaiVisualEditor } from './renderer.js';
+import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 
 let
     images,
@@ -11,6 +11,7 @@ let
     backgroundImage,
     renderer,
     visualEditorRenderer,
+    previewRender,
     settings = {},
     isContextEdited = false,
     isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587;
@@ -24,6 +25,7 @@ const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
 const slider = document.getElementById('timeControl');
 const playButton = getButton("play/pause", "control");
+const hideButton = getButton("hide", "control");
 const stopButton = getButton("stop", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
@@ -57,6 +59,8 @@ const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
+const previewContainer = document.getElementById('miniPreviewContainer');
+const previewCanvas = document.getElementById('miniPreview');
 
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
@@ -178,6 +182,7 @@ let clockBpm = 60;
 let playCombo = 0, playScore = 0;
 
 const isVisualMode = () => settings.displayMode === 'visual';
+const previewVisible = () => (previewContainer.style.display !== 'none' && document.getElementById('playControls').style.display !== 'none');
 
 const saveSettingsDebounce = debounce(() => {
     idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
@@ -839,87 +844,154 @@ fetchFromMainoteButton.addEventListener('click', () => {
     const client = createClient(supabaseUrl, supabaseKey);
 
     async function getLevelCharts({
-        level = 0,
+        level = "",
         version = "",
         category = "",
         songTitle = "",
     } = {}) {
         try {
+            console.log(level, version, category, songTitle)
+            // 關鍵點 1：使用 !inner 確保過濾 songs 時，不符合的 charts 會直接被排除
             let query = client
                 .from('charts')
-                .select('*, songs(*)');
+                .select('*, songs!inner(*)');
 
-            if (level > 0) query = query.eq('level', level);
+            // 關鍵點 2：處理 Level
+            if (level) {
+                query = query.eq('level', level);
+            }
+
             if (version) query = query.eq('version', version);
             if (category) query = query.eq('category', category);
-            if (songTitle) query = query.ilike('songs.title', `%${songTitle}%`);
+
+            // 關鍵點 3：修正關聯表過濾語法
+            // 在 select 中用了 !inner 後，這裡的過濾才會真正生效
+            if (songTitle) {
+                query = query.ilike('songs.title', `%${songTitle}%`);
+            }
 
             const { data, error } = await query.order('id', { ascending: true });
 
-            if (error) {
-                simpleToast({ content: `抓取失敗：${error.message}`, type: 'error', timeout: 2000 });
-                return;
-            }
+            console.log(data)
+            if (error) throw error;
 
             simpleToast({ content: `找到 ${data.length} 個譜面`, type: 'success', timeout: 1500 });
-            console.log("譜面清單：", data);
             return data;
         } catch (err) {
+            console.error('查詢失敗:', err);
             simpleToast({ content: `錯誤：${err.message}`, type: 'error', timeout: 2000 });
         }
     }
 
-    // 建立過濾 UI
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;width:100%;';
+    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;width:100%;min-width:250px;';
 
-    const createInput = (label, type = 'text', placeholder = '') => {
+    // 輔助函式：建立輸入框
+    const createInput = (label, placeholder = '') => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
-
-        const labelEl = document.createElement('label');
-        labelEl.textContent = label;
-        labelEl.style.cssText = 'font-weight:500;color:#ddd;';
-        row.appendChild(labelEl);
-
+        row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
         const input = document.createElement('input');
-        input.type = type;
+        input.type = 'text';
         input.placeholder = placeholder;
         input.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;';
         row.appendChild(input);
-
         return { row, input };
     };
 
-    // Level 篩選
-    const { row: levelRow, input: levelInput } = createInput('難度等級', 'number', '留空或輸入 1-15');
-    container.appendChild(levelRow);
+    // 輔助函式：建立下拉選單
+    const createSelect = (label, options) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+        row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
+        const select = document.createElement('select');
+        select.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;cursor:pointer;';
 
-    // Song Title 篩選
-    const { row: songRow, input: songInput } = createInput('歌曲名稱', 'text', '模糊搜尋');
-    container.appendChild(songRow);
+        options.forEach(opt => {
+            const el = document.createElement('option');
+            el.value = opt.value;
+            el.textContent = opt.text;
+            select.appendChild(el);
+        });
 
-    // Version 篩選
-    const { row: versionRow, input: versionInput } = createInput('版本', 'text', '例如：maimai, deluxe');
-    container.appendChild(versionRow);
+        row.appendChild(select);
+        return { row, select };
+    };
 
-    // Category 篩選
-    const { row: categoryRow, input: categoryInput } = createInput('分類', 'text', '例如：POPS, ANIME');
-    container.appendChild(categoryRow);
+    // 定義選項清單
+    const levelOptions = [{ value: '0', text: '全部' }];
+    for (let i = 1; i <= 6; i++) levelOptions.push({ value: i.toString(), text: `Level ${i}` });
+    for (let i = 7; i <= 14; i++) {
+        levelOptions.push({ value: i.toString(), text: `Level ${i}` })
+        levelOptions.push({ value: i.toString() + '+', text: `Level ${i}+` })
+    };
+    levelOptions.push({ value: 15, text: `Level 15` });
+
+    const versionOptions = [
+        { value: '', text: '全部版本' },
+        { value: 'maimai', text: 'maimai' },
+        { value: 'maimai_plus', text: 'maimai PLUS' },
+        { value: 'green', text: 'GreeN' },
+        { value: 'green_plus', text: 'GreeN PLUS' }, // 建議補上 PLUS
+        { value: 'orange', text: 'ORANGE' },
+        { value: 'orange_plus', text: 'ORANGE PLUS' },
+        { value: 'pink', text: 'PiNK' },
+        { value: 'pink_plus', text: 'PiNK PLUS' },
+        { value: 'murasaki', text: 'MURASAKi' },
+        { value: 'murasaki_plus', text: 'MURASAKi PLUS' },
+        { value: 'milk', text: 'MiLK' },
+        { value: 'milk_plus', text: 'MiLK PLUS' },
+        { value: 'finale', text: 'FiNALE' },
+        { value: 'deluxe', text: 'でらっくす (DX)' },
+        { value: 'deluxe_plus', text: 'でらっくす PLUS' },
+        { value: 'splash', text: 'Splash' },
+        { value: 'splash_plus', text: 'Splash PLUS' },
+        { value: 'universe', text: 'UNiVERSE' },
+        { value: 'universe_plus', text: 'UNiVERSE PLUS' },
+        { value: 'festival', text: 'FESTiVAL' },
+        { value: 'festival_plus', text: 'FESTiVAL PLUS' },
+        { value: 'buddies', text: 'BUDDiES' },
+        { value: 'buddies_plus', text: 'BUDDiES PLUS' },
+        { value: 'prism', text: 'PRiSM' },
+        { value: 'prism_plus', text: 'PRiSM PLUS' },
+        { value: 'circle', text: 'CiRCLE' },
+        { value: 'circle_plus', text: 'CiRCLE PLUS' },
+    ];
+
+    const categoryOptions = [
+        { value: '', text: '全部分類' },
+        { value: 'POPS＆アニメ', text: 'POPS & ANIME' },
+        { value: 'niconico＆ボーカロイド', text: 'niconico & VOCALOID' },
+        { value: '東方Project', text: '東方Project' },
+        { value: 'ゲーム＆バラエティ', text: 'GAME & VARIETY' },
+        { value: 'maimai', text: 'maimai' },
+        { value: 'オンゲキ＆CHUNITHM', text: 'Ongeki & CHUNITHM' }
+    ];
+
+    // 建立 UI 元件
+    const { row: songRow, input: songInput } = createInput('歌曲名稱', '模糊搜尋...');
+    const { row: levelRow, select: levelSelect } = createSelect('難度等級', levelOptions);
+    const { row: versionRow, select: versionSelect } = createSelect('版本', versionOptions);
+    const { row: categoryRow, select: categorySelect } = createSelect('分類', categoryOptions);
+
+    container.append(songRow, levelRow, versionRow, categoryRow);
 
     // 搜尋按鈕
     const searchBtn = document.createElement('button');
     searchBtn.textContent = '🔍 搜尋';
-    searchBtn.style.cssText = 'padding:8px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:4px;';
+    searchBtn.style.cssText = 'padding:10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:8px;transition:background 0.2s;';
+    searchBtn.onmouseover = () => searchBtn.style.background = '#0052a3';
+    searchBtn.onmouseout = () => searchBtn.style.background = '#0066cc';
+
     searchBtn.addEventListener('click', async () => {
         searchBtn.disabled = true;
         searchBtn.textContent = '搜尋中...';
 
         const result = await getLevelCharts({
-            level: levelInput.value ? parseInt(levelInput.value) : 0,
+            level: levelSelect.value,
             songTitle: songInput.value,
-            version: versionInput.value,
-            category: categoryInput.value,
+            version: versionSelect.value,
+            category: categorySelect.value,
         });
 
         if (!result || result.length === 0) {
@@ -929,92 +1001,53 @@ fetchFromMainoteButton.addEventListener('click', () => {
             return;
         }
 
-        // 建立結果列表
+        // 建立結果列表 (此部分維持原樣)
         const resultContainer = document.createElement('div');
-        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;margin: 0 4px;';
+        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;padding-right:4px;';
 
         result.forEach((chart) => {
             const item = document.createElement('div');
-            item.style.cssText = `
-                padding:10px;
-                background:#2a2a2a;
-                border:1px solid #444;
-                border-radius:4px;
-                cursor:pointer;
-                transition:all 0.2s;
-                user-select:none;
-                overflow:hidden;
-                flex:0 0 auto;
-            `;
+            item.style.cssText = 'padding:10px;background:#2a2a2a;border:1px solid #444;border-radius:4px;cursor:pointer;transition:all 0.2s;';
 
             const songTitle = chart.songs?.title || '未知歌曲';
-            const difficulty = chart.difficulty || 'N/A';
-            const level = chart.level || 'N/A';
-            const noteCount = chart.notes_count || '-';
-
             item.innerHTML = `
                 <div style="font-weight:500;color:#fff;margin-bottom:4px;">${songTitle}</div>
                 <div style="font-size:12px;color:#bbb;">
-                    難度: <strong>${difficulty}</strong> | 等級: <strong>${level}</strong> | 音符: ${noteCount}
+                    難度: <strong>${chart.difficulty || 'N/A'}</strong> | 等級: <strong>${chart.level || 'N/A'}</strong>
                 </div>
             `;
 
-            // 懸停效果
-            item.addEventListener('mouseenter', () => {
-                item.style.background = '#3a3a3a';
-                item.style.borderColor = '#0066cc';
-            });
-            item.addEventListener('mouseleave', () => {
-                item.style.background = '#2a2a2a';
-                item.style.borderColor = '#444';
-            });
-
-            // 點擊事件：加載該譜面
-            item.addEventListener('click', async () => {
-                if (!confirm('是否要載入譜面？這將重置目前編輯內容。')) return;
+            item.onclick = () => {
+                if (!confirm(`是否載入譜面：${songTitle}？`)) return;
                 setDataEmpty();
-                // 這裡可以加入加載譜面數據的邏輯
                 editorInput.value = chart.chart_data;
                 saveMaidata();
                 inputDebounce();
-                simpleToast({ content: `已載入：${songTitle} (${difficulty})`, type: 'success', timeout: 2000 });
+                simpleToast({ content: `已載入：${songTitle}`, type: 'success' });
                 popupWindow.close();
-            });
+            };
 
+            item.onmouseenter = () => { item.style.borderColor = '#0066cc'; item.style.background = '#333'; };
+            item.onmouseleave = () => { item.style.borderColor = '#444'; item.style.background = '#2a2a2a'; };
             resultContainer.appendChild(item);
         });
 
-        // 顯示結果的 PopupWindow
         popupWindow({
-            title: `搜尋結果 (${result.length} 個)`,
+            title: `搜尋結果 (${result.length})`,
             customContent: resultContainer,
-            width: 'max-content',
-            buttons: [{
-                text: "關閉",
-                hideOnClick: true
-            }]
+            buttons: [{ text: "關閉", hideOnClick: true }]
         });
 
         searchBtn.disabled = false;
         searchBtn.textContent = '🔍 搜尋';
     });
-    container.appendChild(searchBtn);
 
-    // 說明文字
-    const hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:#999;margin-top:4px;line-height:1.5;';
-    hint.innerHTML = '留空表示不篩選該項目。<br>歌曲名稱支援模糊搜尋。';
-    container.appendChild(hint);
+    container.appendChild(searchBtn);
 
     popupWindow({
         title: "從 Mainote 抓取譜面",
         customContent: container,
-        buttons: [
-            {
-                text: "關閉",
-                hideOnClick: true
-            }
-        ]
+        buttons: [{ text: "關閉", hideOnClick: true }]
     });
 });
 
@@ -1151,6 +1184,14 @@ function resizeVisualEditor() {
     draw();
 }
 
+function resizePreviewCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = previewContainer.clientWidth * dpr;
+    const h = previewContainer.clientHeight * dpr;
+    previewCanvas.width = w;
+    previewCanvas.height = h;
+}
+
 playbackSpeedInput.addEventListener('change', () => {
     const speed = parseFloat(playbackSpeedInput.value);
     if (isNaN(speed) || speed <= 0) {
@@ -1202,7 +1243,12 @@ const setEditorCss = (visible = null) => {
     setElementDisplay(visualEditor, visualVisible);
 
     if (visualVisible) {
+        previewContainer.style.display = 'none';
+        document.documentElement.style.setProperty('--playControls-height', '60px');
         resizeVisualEditor();
+    } else {
+        previewContainer.style.display = 'block';
+        document.documentElement.style.setProperty('--playControls-height', '120px');
     }
 
     animateCanvasWidth(visible);
@@ -1948,6 +1994,8 @@ changeDifficulty.addEventListener('change', (e) => {
 
 changeDisplayMode.addEventListener('change', (e) => {
     settings.displayMode = e.target.value;
+    visualEditorRenderer.setZoom(settings.visualZoom);
+    previewRender.setZoom(settings.visualZoom);
     saveSettingsDebounce();
     setEditorCss(editorContainer.dataset.hidden !== 'true');
     draw();
@@ -2037,31 +2085,32 @@ editorInput.addEventListener('touchstart', () => {
     syncHighlightLayerScroll();
 });
 
-// --- 狀態管理物件 ---
+/**
+ * 1. 狀態管理
+ */
 const visualScroller = {
     isActive: false,
-    startY: 0,
+    startX: 0, startY: 0,
+    lastX: 0, lastY: 0,
     startTime: 0,
-    lastY: 0,
     lastTime: 0,
-    velocity: 0, // px/ms
+    velocity: 0,
+    axis: 'vertical',
     momentumFrame: null,
-    friction: 0.95, // 慣性摩擦力 (0.9 ~ 0.98)
+    friction: 0.95,
 
-    // 將像素位移轉換為秒數 (依據目前的 Zoom 等級)
-    // 假設 zoom 是 100 代表 1秒佔 100px
     pxToSec(px) {
         const zoom = visualEditorRenderer ? visualEditorRenderer.zoom : 100;
         return px / zoom;
     }
 };
 
-// --- 核心更新函式 ---
+/**
+ * 2. 核心更新與慣性邏輯
+ */
 const updateVisualTime = (newTime) => {
     const min = parseFloat(slider.min) || 0;
     const max = parseFloat(slider.max) || 0;
-
-    // 限制範圍
     const clampedTime = Math.max(min, Math.min(max, newTime));
 
     timeControlSliding = true;
@@ -2069,23 +2118,21 @@ const updateVisualTime = (newTime) => {
     realTime = clampedTime;
     globalTime = clampedTime - musicDelay;
 
-    // 音訊同步
     audioManager.stopAllLongSounds();
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime);
     } else {
         audioManager.stopBGM();
-        draw(); // 重繪畫布
+        draw();
     }
     slideInputDebounce();
 };
 
-// --- 慣性滾動引擎 ---
 const startMomentum = () => {
     cancelAnimationFrame(visualScroller.momentumFrame);
-
     let vel = visualScroller.velocity;
     let lastFrameTime = performance.now();
+    const directionMult = visualScroller.axis === 'vertical' ? 1 : -1;
 
     const step = (now) => {
         const dt = now - lastFrameTime;
@@ -2096,103 +2143,108 @@ const startMomentum = () => {
             return;
         }
 
-        // 根據速度計算這幀移動的秒數 (向上滑是正速度，時間要增加，所以是 -vel)
-        const deltaSec = visualScroller.pxToSec(vel * dt);
+        const deltaSec = visualScroller.pxToSec(vel * dt * directionMult);
         updateVisualTime(realTime + deltaSec);
 
-        // 摩擦力衰減
         vel *= visualScroller.friction;
         visualScroller.momentumFrame = requestAnimationFrame(step);
     };
-
     visualScroller.momentumFrame = requestAnimationFrame(step);
 };
 
-// --- 事件綁定 (使用 Pointer Events 統一滑鼠與觸控) ---
+/**
+ * 3. 通用拖拽處理器 (工廠函式)
+ */
+const bindScrollerEvents = (element, axis = 'vertical') => {
+    element.style.touchAction = 'none';
+    element.style.cursor = 'grab';
 
-visualEditor.style.touchAction = 'none'; // 完全由 JS 接手
-visualEditor.style.cursor = 'grab';
+    element.addEventListener('pointerdown', (e) => {
+        if (!visualEditorRenderer || e.button !== 0) return;
+        cancelAnimationFrame(visualScroller.momentumFrame);
 
-visualEditor.addEventListener('pointerdown', (e) => {
-    if (!visualEditorRenderer || e.button !== 0) return; // 僅限左鍵/單指
+        visualScroller.isActive = true;
+        visualScroller.axis = axis;
+        visualScroller.lastTime = performance.now();
+        visualScroller.startTime = realTime;
+        visualScroller.velocity = 0;
 
-    cancelAnimationFrame(visualScroller.momentumFrame);
-    visualScroller.isActive = true;
-    visualScroller.startY = e.clientY;
-    visualScroller.lastY = e.clientY;
-    visualScroller.lastTime = performance.now();
-    visualScroller.startTime = realTime;
-    visualScroller.velocity = 0;
+        if (axis === 'vertical') {
+            visualScroller.startY = e.clientY;
+            visualScroller.lastY = e.clientY;
+        } else {
+            visualScroller.startX = e.clientX;
+            visualScroller.lastX = e.clientX;
+        }
 
-    visualEditor.setPointerCapture(e.pointerId);
-    visualEditor.style.cursor = 'grabbing';
-});
+        element.setPointerCapture(e.pointerId);
+        element.style.cursor = 'grabbing';
+    });
 
-visualEditor.addEventListener('pointermove', (e) => {
-    if (!visualScroller.isActive) return;
+    element.addEventListener('pointermove', (e) => {
+        if (!visualScroller.isActive) return;
 
-    const now = performance.now();
-    const dt = now - visualScroller.lastTime;
-    const currentY = e.clientY;
+        const now = performance.now();
+        const dt = now - visualScroller.lastTime;
 
-    if (dt > 0) {
-        // 計算即時速度
-        const instantVel = (currentY - visualScroller.lastY) / dt;
-        // 平滑速度處理，避免突跳
-        visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
-    }
+        if (axis === 'vertical') {
+            const currentY = e.clientY;
+            if (dt > 0) {
+                const instantVel = (currentY - visualScroller.lastY) / dt;
+                visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
+            }
+            const deltaSec = visualScroller.pxToSec(visualScroller.startY - currentY);
+            updateVisualTime(visualScroller.startTime - deltaSec);
+            visualScroller.lastY = currentY;
+        } else {
+            const currentX = e.clientX;
+            if (dt > 0) {
+                const instantVel = (currentX - visualScroller.lastX) / dt;
+                visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
+            }
+            const deltaSec = visualScroller.pxToSec(visualScroller.startX - currentX);
+            updateVisualTime(visualScroller.startTime + deltaSec);
+            visualScroller.lastX = currentX;
+        }
+        visualScroller.lastTime = now;
+    });
 
-    const deltaY = visualScroller.startY - currentY;
-    const deltaSec = visualScroller.pxToSec(deltaY);
+    const handlePointerUp = (e) => {
+        if (!visualScroller.isActive) return;
+        visualScroller.isActive = false;
+        element.releasePointerCapture(e.pointerId);
+        element.style.cursor = 'grab';
+        if (Math.abs(visualScroller.velocity) > 0.1) startMomentum();
+    };
 
-    updateVisualTime(visualScroller.startTime - deltaSec);
+    element.addEventListener('pointerup', handlePointerUp);
+    element.addEventListener('pointercancel', handlePointerUp);
 
-    visualScroller.lastY = currentY;
-    visualScroller.lastTime = now;
-});
+    // 滾輪處理
+    element.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const renderer = axis === 'vertical' ? visualEditorRenderer : previewRender;
+        if (!renderer) return;
 
-visualEditor.addEventListener('pointerup', (e) => {
-    if (!visualScroller.isActive) return;
-    visualScroller.isActive = false;
-    visualEditor.releasePointerCapture(e.pointerId);
-    visualEditor.style.cursor = 'grab';
+        if (e.ctrlKey) {
+            const factor = e.deltaY > 0 ? (1 / 1.15) : 1.15;
+            const newZoom = Math.max(50, Math.min(1000, settings.visualZoom * factor));
+            settings.visualZoom = newZoom;
+            renderer.setZoom(newZoom);
+            saveSettingsDebounce();
+            draw();
+        } else {
+            const scrollDelta = visualScroller.pxToSec(e.deltaY * (e.deltaMode === 1 ? 20 : 1));
+            updateVisualTime(realTime + scrollDelta);
+        }
+    }, { passive: false });
+};
 
-    // 如果結束時速度夠快，啟動慣性
-    if (Math.abs(visualScroller.velocity) > 0.1) {
-        startMomentum();
-    }
-});
-
-visualEditor.addEventListener('pointercancel', () => {
-    visualScroller.isActive = false;
-    visualEditor.style.cursor = 'grab';
-});
-
-// --- 滾輪功能：縮放與捲動 ---
-visualEditor.addEventListener('wheel', (e) => {
-    if (!visualEditorRenderer) return;
-    e.preventDefault();
-
-    if (e.ctrlKey) {
-        // Ctrl + 滾輪 = 縮放
-        const zoomStep = 1.15; // 倍率縮放比線性加減更自然
-        const factor = e.deltaY > 0 ? (1 / zoomStep) : zoomStep;
-
-        const minZoom = 50;
-        const maxZoom = 1000;
-        const newZoom = Math.max(minZoom, Math.min(maxZoom, visualEditorRenderer.zoom * factor));
-
-        settings.visualZoom = newZoom;
-        visualEditorRenderer.setZoom(newZoom);
-        saveSettingsDebounce();
-        draw();
-    } else {
-        // 純滾輪 = 垂直移動時間軸
-        // 模擬一個較小的位移
-        const scrollDelta = visualScroller.pxToSec(e.deltaY);
-        updateVisualTime(realTime + scrollDelta);
-    }
-}, { passive: false });
+/**
+ * 4. 最終綁定
+ */
+bindScrollerEvents(visualEditor, 'vertical');
+bindScrollerEvents(previewCanvas, 'horizontal');
 
 const pairs = { '(': ')', '{': '}', '[': ']' };
 const closingChars = new Set(Object.values(pairs));
@@ -2244,97 +2296,97 @@ addMusicButton.addEventListener('click', () => {
 });
 
 downloadButton.addEventListener('click', () => {
+    // 1. 內部工具：提取檔案主名稱 (不含副檔名)
+    const getBaseName = (file) => {
+        if (!file || !file.name) return null;
+        return file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+    };
+
+    // 2. 計算預填名稱優先級：maidata.title > bgm filename > simai_package
+    const defaultName = (maidata && maidata.title)
+        || getBaseName(audioManager.bgmFile)
+        || 'simai_package';
+
+    const container = document.createElement('div');
+    const textEl = document.createElement('label');
+    textEl.textContent = "檔案名稱";
+    textEl.style.cssText = "display:block;margin-bottom:5px;font-size:12px;color: lightgray;";
+    container.appendChild(textEl);
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = '輸入檔案名稱';
+    nameInput.value = defaultName; // --- 這裡預填名稱 ---
+    nameInput.style.cssText = "width:calc(100% - 20px);padding:8px;font-size:12px;margin-bottom:10px;background:#151515;color:white;border:1px solid #444;border-radius:4px;";
+
+    // 選取文字以便使用者快速覆蓋
+    setTimeout(() => nameInput.select(), 100);
+    container.appendChild(nameInput);
+
+    // 3. 核心邏輯：最終取得的檔名 (處理使用者手動刪減為空的情況)[cite: 4]
+    const getFinalName = () => {
+        const val = nameInput.value.trim();
+        // 如果輸入框被刪到全空，則依照 bgm filename > simai_package 的順序 fallback
+        return val || getBaseName(audioManager.bgmFile) || 'simai_package';
+    };
+
+    const sanitize = (name) => name.replace(/[\\/:*?"<>|]/g, '_');
+
     popupWindow({
-        title: "下載譜面",
-        content: "",
+        title: "下載譜面套件",
+        customContent: container,
         buttons: [
             {
                 text: "下載 Maidata",
-                onClick: (ctx) => {
-                    // Implementation for downloading Maidata
-                    const blob = new Blob([getSimaiDataString(maidata)], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
+                onClick: () => {
+                    const content = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : "";
+                    const blob = new Blob([content], { type: 'text/plain' });
+                    const fileName = sanitize(getFinalName());
+
                     const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'maidata.txt';
-                    document.body.appendChild(a);
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${fileName}.txt`;
                     a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
                 }
             },
             {
-                text: "下載壓縮檔",
+                text: "打包 ZIP",
                 onClick: async (ctx) => {
-                    // Implementation for downloading ZIP
-                    let zip = JSZip();
-                    zip.file("maidata.txt", getSimaiDataString(maidata));
+                    ctx.setProgress(10);
+                    const zip = new JSZip();
+                    const fileName = sanitize(getFinalName());
 
-                    const getBackgroundFilename = (bg) => {
-                        if (!bg) return 'bg.png';
-                        const mime = bg.type || '';
-                        const fallback = 'png';
-                        if (!mime.includes('/')) return `bg.${fallback}`;
-                        const ext = mime.split('/')[1].split(';')[0].trim() || fallback;
-                        return `bg.${ext}`;
-                    };
+                    // 寫入檔案[cite: 4]
+                    zip.file("maidata.txt", typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : "");
 
                     if (backgroundImage) {
-                        const bgFilename = getBackgroundFilename(backgroundImage);
-                        console.log('Background image type:', backgroundImage.type, '->', bgFilename);
-                        zip.file(bgFilename, backgroundImage);
+                        const bgExt = backgroundImage.name?.split('.').pop() || 'png';
+                        zip.file(`bg.${bgExt}`, backgroundImage);
                     }
 
                     if (audioManager.haveBGM()) {
-                        const bgmFile = audioManager.bgmFile;
-                        const getBgmFilename = (file) => {
-                            const fallbackExt = 'mp3';
-                            if (file && typeof file.name === 'string') {
-                                const parts = file.name.split('.');
-                                if (parts.length > 1) {
-                                    return `track.${parts.pop()}`;
-                                }
-                            }
-                            const mime = file?.type || '';
-                            if (mime.includes('/')) {
-                                const ext = mime.split('/')[1].split(';')[0].trim();
-                                if (ext) return `track.${ext}`;
-                            }
-                            return `track.${fallbackExt}`;
-                        };
-                        const bgmFilename = getBgmFilename(bgmFile);
-                        console.log('BGM zip filename:', bgmFilename, 'Type:', bgmFile?.type);
-
-                        // 確保傳遞給 JSZip 的是 Blob 或 File，不是 URL
-                        if (bgmFile instanceof Blob) {
-                            zip.file(bgmFilename, bgmFile);
-                        } else if (typeof bgmFile === 'string') {
-                            // 如果是 URL/ObjectURL，需要先轉換為 Blob
+                        const bgm = audioManager.bgmFile;
+                        const bgmExt = bgm.name?.split('.').pop() || 'mp3';
+                        if (bgm instanceof Blob) {
+                            zip.file(`track.${bgmExt}`, bgm);
+                        } else if (typeof bgm === 'string') {
                             try {
-                                const response = await fetch(bgmFile);
-                                const blob = await response.blob();
-                                zip.file(bgmFilename, blob);
-                            } catch (e) {
-                                console.error('無法取得 BGM Blob:', e);
-                            }
+                                const resp = await fetch(bgm);
+                                zip.file(`track.${bgmExt}`, await resp.blob());
+                            } catch (e) { console.error("BGM 下載失敗", e); }
                         }
                     }
 
-                    try {
-                        const content = await zip.generateAsync({ type: "blob" });
-                        const url = URL.createObjectURL(content);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'simai_package.zip';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    } catch (e) {
-                        console.error('ZIP 生成失敗', e);
-                    }
+                    ctx.setProgress(40);
+                    const content = await zip.generateAsync({ type: "blob" }, (m) => ctx.setProgress(40 + m.percent * 0.6));
+
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(content);
+                    a.download = `${fileName}.zip`;
+                    a.click();
+                    ctx.close();
                 }
-            }
+            },
+            { text: "取消", hideOnClick: true }
         ]
     });
 });
@@ -2427,6 +2479,25 @@ stopButton.addEventListener('click', () => {
     notes.forEach(n => n._riserActive = false); // 強制重置標記
 
     draw(); // 立即更新畫布，反映停止狀態
+});
+
+hideButton.addEventListener('click', () => {
+    const visualVisible = visualEditor.style.display !== 'none';
+    const isHidden = hideButton.dataset.hidden === 'true';
+    if (!isHidden) {
+        hideButton.dataset.hidden = 'true';
+        document.documentElement.style.setProperty('--playControls-height', '0px');
+    } else {
+        hideButton.dataset.hidden = 'false';
+        if (visualVisible) {
+            previewContainer.style.display = 'none';
+            document.documentElement.style.setProperty('--playControls-height', '60px');
+        } else {
+            previewContainer.style.display = 'block';
+            document.documentElement.style.setProperty('--playControls-height', '120px');
+        }
+    }
+    resize();
 });
 
 getNowNoteIndex.addEventListener('click', () => {
@@ -2629,6 +2700,7 @@ function resize() {
     canvas.height = h;
     if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
     resizeVisualEditor();
+    resizePreviewCanvas();
     draw();
 }
 
@@ -2741,8 +2813,15 @@ function draw(dt = 0) {
 
     // 早期初始化：提取常用值避免重複計算
     const playing = playButton.dataset.playing === 'true';
+    const previewVisibleFlag = previewVisible();
     const isVisualModeFlag = isVisualMode();
-    const { height: visualHeight } = visualEditorRenderer.getCanvasWH();
+    const visualHeight = (() => {
+        if (!previewVisibleFlag) {
+            return visualEditorRenderer.getCanvasWH().height;
+        } else {
+            return previewRender.getCanvasWH().width / 2;
+        }
+    })();
     const V = visualHeight / settings.visualZoom;
     const effectDecayTime = settings.effectDecayTime;
     const maxSlideCount = settings.maxSlideCount;
@@ -2898,7 +2977,6 @@ function draw(dt = 0) {
     // 渲染和更新
     renderer.drawFrame({
         globalTime,
-        notes,
         buckets,
         dt,
         showSensor: settings.showSensor,
@@ -2907,14 +2985,22 @@ function draw(dt = 0) {
         playScore,
     });
 
+    if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {
+        previewRender.drawFrame({
+            globalTime,
+            visualBuckets,
+            audioBuffer: audioManager.bgmBuffer,
+            offset: musicDelay,
+        });
+    }
+
     audioManager.update(globalTime);
-    if (!isVisualModeFlag) return;
+    if (!isVisualModeFlag || editorContainer.style.display === 'none') return;
     visualEditorRenderer?.render(isVisualModeFlag, ensureVisualEditorContext, {
         globalTime,
-        notes,
         visualBuckets,
-        audioBuffer: audioManager.buffers,
-        dt
+        audioBuffer: audioManager.bgmBuffer,
+        offset: musicDelay,
     });
 }
 
@@ -2996,6 +3082,7 @@ function _init() {
                 }
                 if (savedBgm) {
                     step(95, "正在還原背景音樂...");
+                    console.log("嘗試還原背景音樂:", savedBgm);
                     await audioManager.setBackgroundMusic(savedBgm);
                     setEndtime(endTime);
                 }
@@ -3014,6 +3101,8 @@ function _init() {
                 audioManager.setPlaybackRate(settings.playbackSpeed);
                 audioManager.setBGMVolume(settings.musicVolume);
                 visualEditorRenderer.setZoom(settings.visualZoom);
+                previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
+                previewRender.setZoom(settings.visualZoom);
                 draw();
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();

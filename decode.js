@@ -57,10 +57,9 @@ export function simaiDecode(data = "", baseOffset = true) {
             tags.push({ type: 'bpm', value: nowBpm, time: nowTime });
             if (lastBpmTag !== -1) {
                 let tg = tags[lastBpmTag];
-                tg.renderTimes = (nowTime - tg.time) / (240 / tg.value);
+                tg.nextTime = nowTime;
             }
             lastBpmTag = tags.length - 1;
-            console.log("Parsed BPM tag:", tags[tags.length - 1]);
         }
         if (e.includes('{')) {
             overrideSplitTime = null; // reset overrideSplit at the start of each new tag
@@ -371,7 +370,11 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 if ([head, end].some(v => isNaN(v) || v < 1 || v > 8)) return null;
                                 if ((type === 'V' && mid === undefined) || (mid !== undefined && (isNaN(mid) || mid < 1 || mid > 8))) return null;
 
-                                const path = getSlidePath(head, end, type, mid);
+                                const res = getSlidePath(head, end, type, mid);
+                                const path = res.path;
+                                if (res.illegal) {
+                                    pushWarn(`Illegal slide ${head}${type}${mid ?? ''}${end}, skipping:`, { errpos: noteCommaIndex });
+                                };
                                 return { head, end, mid, type, path, len: path.totalLength };
                             });
 
@@ -448,18 +451,23 @@ function getSlidePath(start, end, type, mid = null) {
     const r = new PathRecorder();
     const startInfo = noteRefPos[start - 1];
     const endInfo = noteRefPos[end - 1];
+    let illegal = false;
 
     switch (type) {
         case '-':
             if ((end - start + 8) % 8 === 1 || (end - start + 8) % 8 === 7 || start === end) {
-                pushWarn(`Illegal slide: ${start}${type}${end}`);
+                illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case '^':
             if ((end - start + 8) % 8 === 4 || start === end) {
-                pushWarn(`Illegal slide: ${start}${type}${end}`);
+                illegal = true;
+            }
+            if (start === end) {
+                r.moveTo(startInfo.x, startInfo.y);
+                break;
             }
             r.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, (end - start + 8) % 8 > 4);
             break;
@@ -471,7 +479,7 @@ function getSlidePath(start, end, type, mid = null) {
             break;
         case 'v':
             if ((end - start + 8) % 8 === 4 || start === end) {
-                pushWarn(`Illegal slide: ${start}${type}${end}`);
+                illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(0, 0);
@@ -483,7 +491,7 @@ function getSlidePath(start, end, type, mid = null) {
                 (start - mid + 8) % 8 !== 2 && (start - mid + 8) % 8 !== 6 ||
                 start === end || mid === end || start === mid
             ) {
-                pushWarn(`Illegal slide: ${start}${type}${mid}${end}`);
+                illegal = true;
             }
             const midInfo = noteRefPos[mid - 1];
             r.moveTo(startInfo.x, startInfo.y);
@@ -560,7 +568,7 @@ function getSlidePath(start, end, type, mid = null) {
         }
         case 's':
             if ((end - start + 8) % 8 !== 4 || start === end) {
-                pushWarn(`Illegal slide: ${start}${type}${end}`);
+                illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
@@ -569,7 +577,7 @@ function getSlidePath(start, end, type, mid = null) {
             break;
         case 'z':
             if ((end - start + 8) % 8 !== 4 || start === end) {
-                pushWarn(`Illegal slide: ${start}${type}${end}`);
+                illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 2);
@@ -578,18 +586,21 @@ function getSlidePath(start, end, type, mid = null) {
             break;
         case 'w':
             if ((end - start + 8) % 8 !== 4 || start === end) {
-                pushWarn(`Illegal slide: ${start}${type}${end}`);
+                illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         default:
-            if (start === end) pushWarn("This slide will not be visible since start and end are the same!! :", `${start}${type}${end}`);
+            if (start === end) {
+                illegal = true;
+            }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             pushWarn("Not implemented slide type, defaulting to straight line:", type);
+            illegal = true;
             break;
     }
 
-    return r;
+    return { path: r, illegal };
 }

@@ -1,6 +1,6 @@
 :root {
     --utility-hidden-height: 16px;
-    --playControls-height: 60px;
+    --playControls-height: 120px;
     --editor-bg: #1F1F1F;
     --top-utility-bg: #181818;
     --top-utility-btn: #2B2B2B;
@@ -105,9 +105,45 @@ body {
     background: transparent;
 }
 
+#playControls #miniPreviewContainer {
+    position: relative;
+    width: 100%;
+    height: 60px;
+    z-index: 10;
+}
+
+#miniPreviewContainer #miniPreview {
+    position: absolute;
+    width: calc(100% - 4px);
+    height: 100%;
+    margin: 2px;
+    border: 1px solid var(--top-utility-btn);
+    box-sizing: border-box;
+    border-radius: 4px;
+}
+
+#playControls #miniPreviewContainer div {
+    position: absolute;
+    width: 50%;
+    height: 60px;
+    top: -60px;
+    left: 0;
+    background: white;
+    z-index: 10;
+}
+
+#playControls #playControlContainer {
+    position: relative;
+    width: 100%;
+    height: 60px;
+    bottom: 0;
+}
+
 #playControls .controlsContainer {
     display: flex;
+    gap: 20px;
     align-items: center;
+    justify-content: center;
 }
 
 .controlsContainer .controlButton {
@@ -119,7 +155,6 @@ body {
     border-radius: 5px;
     color: white;
     font-size: 14px;
-    margin-right: 20px;
     cursor: pointer;
     align-items: center;
     justify-content: center;

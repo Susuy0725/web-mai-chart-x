@@ -297,7 +297,7 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
 });
 export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
     return {
-        x: (i - 3.5) * innerCirleBase / 4,
+        x: (3.5 - i) * innerCirleBase / 4,
     };
 });
 class AudioManager {
@@ -1302,7 +1302,6 @@ export function simpleToast({
     };
 }
 const baseURL = './Skin/', baseImageKeys = [
-    'sensor',
     'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc',
     'hold', 'hold_break', 'hold_each', 'hold_ex',
@@ -1322,8 +1321,16 @@ export async function loadAllImages(onProgress) {
     const images = {};
     const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_'];
 
-    // 計算總數：基礎圖片數 + (3種前綴 * 11張)
-    const total = baseImageKeys.length + (wifiPrefixes.length * 11);
+    // 1. 先把所有要載入的 Key 整理成一個陣列
+    const allKeys = [...baseImageKeys];
+    wifiPrefixes.forEach(prefix => {
+        for (let i = 0; i < 11; i++) {
+            allKeys.push(prefix + i);
+        }
+    });
+
+    // 2. 直接用陣列長度當總數，絕對不會算錯
+    const total = allKeys.length;
     let loaded = 0;
 
     const report = (key) => {
@@ -1331,29 +1338,18 @@ export async function loadAllImages(onProgress) {
         if (onProgress) onProgress((loaded / total) * 100, key);
     };
 
-    const loadQueue = [];
-
-    // 處理基礎圖片
-    baseImageKeys.forEach(key => {
+    // 3. 使用 map 建立任務隊列，確保每一個 key 都會回報進度
+    const loadQueue = allKeys.map(key => {
         const url = `${baseURL}${key}.png`;
-        const task = getImgWithCache(url, key).then(img => {
-            if (img) images[key] = img;
-        }).finally(() => report(key));
-        loadQueue.push(task);
-    });
-
-    // 處理 WiFi 扇形圖片
-    wifiPrefixes.forEach(prefix => {
-        for (let i = 0; i < 11; i++) {
-            const key = prefix + i;
-            const url = `${baseURL}${key}.png`;
-            const task = getImgWithCache(url, key).then(img => {
+        return getImgWithCache(url, key)
+            .then(img => {
                 if (img) images[key] = img;
-            }).catch(() => {
-                // WiFi 圖片容許部分失敗
-            }).finally(() => report(key));
-            loadQueue.push(task);
-        }
+            })
+            .catch(err => {
+                // 如果是那個忘記刪的舊 Key，這裡會抓到錯誤但不會卡住
+                console.warn(`[資源缺失] 無法載入 ${key}:`, err);
+            })
+            .finally(() => report(key)); // 無論成功失敗都必須 report
     });
 
     await Promise.all(loadQueue);

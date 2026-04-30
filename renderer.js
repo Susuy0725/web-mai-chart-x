@@ -458,7 +458,7 @@ export class SimaiRenderer {
         const posInfo = noteRefPos[pos - 1];
         this.ctx.save();
 
-        if (t >= 1) {
+        if (t > 1) {
             this.ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
         } else {
@@ -502,7 +502,7 @@ export class SimaiRenderer {
         const posInfo = noteRefPos[pos - 1];
         this.ctx.save();
 
-        if (t >= 1) {
+        if (t > 1) {
             this.ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
         } else {
@@ -536,7 +536,7 @@ export class SimaiRenderer {
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167));
         const posInfo = noteRefPos[pos - 1];
 
-        if (-noteT >= holdDuration) {
+        if (-noteT > holdDuration) {
             this.ctx.save();
             this.ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(holdDuration + noteT);
@@ -615,7 +615,7 @@ export class SimaiRenderer {
             const touchBorder = this.images.touchhold_border;
 
             this.ctx.save();
-            if (-noteT >= holdDuration) {
+            if (-noteT > holdDuration) {
                 this.ctx.translate(posInfo.x, posInfo.y);
                 this.simpleHitEffect(holdDuration + noteT);
                 if (s.isHanabi) this.simpleHanabi(holdDuration + noteT, s.touchPos === "C");
@@ -653,7 +653,7 @@ export class SimaiRenderer {
         //if (imgNotExists(img)) return;
 
         this.ctx.save();
-        if (t >= 1) {
+        if (t > 1) {
             this.ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
             if (s.isHanabi) this.simpleHanabi(noteT, s.touchPos === "C");
@@ -753,6 +753,7 @@ export class SimaiVisualEditor {
         this.images = null;
         this.globalTime = 0;
 
+        this.audioWaveformWidthRatio = 0.3;
         this.zoom = 200;
 
         this.passOpacity = 0.7;
@@ -979,76 +980,173 @@ export class SimaiVisualEditor {
 
     drawTag(tag) {
         const { ctx } = this;
-        const w = this.settings.noteBaseSize * (tag.type == 'bpm' ? 6 : 4);
+        const { width: w, height: h } = this.getCanvasWH();
+        const zoom = this.zoom || 1;
+        const bs = this.settings.noteBaseSize;
+        const lineWidth = bs * (tag.type === 'bpm' ? 6 : 4);
+
         ctx.save();
         ctx.lineWidth = 0.5;
-        if (tag.type == 'bpm') {
-            ctx.setLineDash([]);
-            ctx.strokeStyle = '#ffe865c0';
-            const beatPeriod = (tag.value && tag.value > 0) ? (240 / tag.value) : null;
-            if (beatPeriod) {
-                // 計算要渲染的 beat 索引範圍，確保覆蓋當前可見區間
-                const { height: H } = this.getCanvasWH();
-                const zoom = this.zoom || 1;
-                const delta = tag.time - this.globalTime;
-                const minI = Math.floor(Math.max(tag.time, (-H / zoom - delta) / beatPeriod));
-                const maxI = Math.ceil((H / zoom - delta) / beatPeriod);
-                const LIMIT = 5000;
-                const start = Math.max(-LIMIT, minI);
-                const end = Math.min(LIMIT, maxI);
-                for (let i = start; i <= end; i++) {
-                    const y = (tag.time - this.globalTime + (i * beatPeriod)) * -zoom;
-                    ctx.beginPath();
-                    ctx.moveTo(-w, y);
-                    ctx.lineTo(w, y);
-                    ctx.stroke();
-                }
-            }
-        } else {
-            ctx.setLineDash([0.7, 0.7]);
-            ctx.strokeStyle = '#ffffff';
-            const zoom = this.zoom || 1;
-            const { height: H } = this.getCanvasWH();
-            const V = H / (zoom || 1);
 
-            // 如果 renderTimes 是數字（表示要渲染的次數），使用 split 的 period 並做 culling
-            if (typeof tag.renderTimes === 'number' && tag.renderTimes > 0 && tag.bpm && tag.value) {
-                const period = (60 / tag.bpm) * (4 / tag.value); // 與 decode 中的時間增量一致
-                const count = Math.max(0, Math.floor(tag.renderTimes));
-                if (period > 0 && count > 0) {
-                    const delta = tag.time - this.globalTime;
-                    // 求可見索引範圍： i ∈ [ceil((-V - delta)/period), floor((V - delta)/period)]
-                    let minI = Math.ceil((-V - delta) / period);
-                    let maxI = Math.floor((V - delta) / period);
-                    if (minI < 0) minI = 0;
-                    if (maxI > count - 1) maxI = count - 1;
-                    let firstVisible = (tag.time - this.globalTime) > -V;
-                    for (let i = minI; i <= maxI; i++) {
-                        const t = tag.time + i * period;
-                        const y = (t - this.globalTime) * -zoom;
-                        if (firstVisible) {
-                            ctx.setLineDash([]); // 首個可見線為實線
-                            firstVisible = false;
-                        } else {
-                            ctx.setLineDash([0.7, 0.7]); // 其餘虛線
-                        }
-                        ctx.beginPath();
-                        ctx.moveTo(-w, y);
-                        ctx.lineTo(w, y);
-                        ctx.stroke();
-                    }
+        // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
+        const period = (tag.type === 'bpm') ? (240 / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        const delta = tag.time - this.globalTime;
+
+        if (period > 0) {
+            // 1. 計算螢幕範圍內的索引
+            let minI = Math.ceil((-h / zoom - delta) / period);
+            let maxI = Math.floor((h / zoom - delta) / period);
+
+            // 2. 邏輯約束：起點永遠從 0 開始
+            minI = Math.max(0, minI);
+
+            // 3. 【關鍵修復】：限制 BPM 的渲染終點
+            if (tag.type === 'bpm') {
+                // 如果你有計算 nextTime (下一個 BPM 變化的時間)
+                if (tag.nextTime) {
+                    const duration = tag.nextTime - tag.time;
+                    // 算出在下一個標籤前，最多能畫幾條線 (減去極小值防止壓線重疊)
+                    const maxLines = Math.floor((duration - 0.001) / period);
+                    maxI = Math.min(maxI, maxLines);
                 }
             } else {
-                // fallback：單一時間點使用實線
-                ctx.setLineDash([]);
-                const y = (tag.time - this.globalTime) * -zoom;
-                if (Math.abs(tag.time - this.globalTime) <= V) {
-                    ctx.beginPath();
-                    ctx.moveTo(-w, y);
-                    ctx.lineTo(w, y);
-                    ctx.stroke();
-                }
+                // Split 等標籤本來的邏輯
+                maxI = Math.min(Math.floor(tag.renderTimes || 1) - 1, maxI);
             }
+
+            for (let i = minI; i <= maxI; i++) {
+                const y = (delta + i * period) * -zoom;
+
+                if (tag.type === 'bpm') {
+                    ctx.strokeStyle = '#ffe865c0';
+                    ctx.setLineDash([]); // 樣式設定移到迴圈外，效能更好
+
+                    // 僅在節拍線起點繪製文字
+                    if (i === 0) {
+                        ctx.save(); // 保存當前狀態
+                        ctx.fillStyle = '#bdaa40';
+                        ctx.font = "5px Arial";
+                        ctx.textAlign = "left";
+
+                        // 移動到繪製點並旋轉
+                        ctx.translate(bs * -4 - 1.5, y - 1);
+                        ctx.rotate(-Math.PI / 2);
+
+                        ctx.fillText(tag.value.toString(), 0, 0);
+                        ctx.restore(); // 自動還原所有 translate 與 rotate
+                    }
+                } else {
+                    ctx.strokeStyle = '#ffffff';
+                    if (i === 0) {
+                        ctx.globalAlpha = 1; // 起點的線條保持不透明
+                        ctx.save(); // 保存當前狀態
+                        ctx.fillStyle = '#9c9c9c';
+                        ctx.font = "5px Arial";
+                        ctx.textAlign = "right";
+
+                        // 移動到繪製點並旋轉
+                        ctx.translate(bs * 4 + 1.5, y - 1);
+                        ctx.rotate(Math.PI / 2);
+
+                        ctx.fillText(tag.value.toString(), 0, 0);
+                        ctx.restore(); // 自動還原所有 translate 與 rotate
+                    } else {
+                        ctx.globalAlpha = 0.4; // 非起點的線條降低透明度
+                    }
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(-lineWidth, y);
+                ctx.lineTo(lineWidth, y);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
+    drawAudioWaveform(audioBuffer, offset = 0) {
+        if (!audioBuffer) return;
+        const ctx = this.ctx;
+        const { width: w, height: h } = this.getCanvasWH();
+        if (!ctx || w <= 0 || h <= 0) return;
+
+        // 取得資料與參數
+        const channelData = audioBuffer.getChannelData ? audioBuffer.getChannelData(0) :
+            (audioBuffer.data || audioBuffer);
+        const sampleRate = audioBuffer.sampleRate || 44100;
+        if (!channelData || channelData.length === 0) return;
+
+        const gt = this.globalTime + offset;
+        const zoom = this.zoom || 1;
+        const waveHalfWidth = w * this.audioWaveformWidthRatio; // 左右預留一點空間
+        const totalSamples = channelData.length;
+
+        ctx.save();
+
+        // 樣式設定
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#888';
+        ctx.globalAlpha = 0.8;
+
+        /**
+         * 【關鍵優化 1】：以像素行 (Pixel Row) 為基準循環
+         * 這樣可以確保每一幀繪製的線條都完美落在螢幕像素上，不會有 0.5px 的位移
+         */
+        for (let y = 0; y < h * 2; y++) {
+            // 將畫布的 y 座標轉換回相對於中心點 (gt) 的時間偏移
+            // 假設 y=h/2 是 gt，則上方是過去，下方是未來（或反之，取決於你的 zoom 正負）
+            const relativeY = y - h;
+            const t = gt - (relativeY / zoom); // 算出這行像素代表的時間點
+
+            // 算出這行像素涵蓋的時間窗 (1 像素代表多少秒)
+            const timeWindow = 1 / zoom;
+
+            let startIdx = Math.floor((t - timeWindow / 2) * sampleRate);
+            let endIdx = Math.floor((t + timeWindow / 2) * sampleRate);
+
+            // 範圍檢查
+            if (endIdx <= 0 || startIdx >= totalSamples) continue;
+            startIdx = Math.max(0, startIdx);
+            endIdx = Math.min(totalSamples, endIdx);
+
+            // 【關鍵優化 2】：穩定的 Peak 偵測
+            // 如果這個像素窗內有很多 samples，取最大值
+            let peak = 0;
+            for (let i = startIdx; i < endIdx; i++) {
+                const v = Math.abs(channelData[i]);
+                if (v > peak) peak = v;
+            }
+
+            // 如果該像素窗太小（Zoom 極大），則直接取單一取樣點
+            if (startIdx === endIdx && startIdx < totalSamples) {
+                peak = Math.abs(channelData[startIdx]);
+            }
+
+            const amp = Math.min(1, peak * (this.audioAmp || 1));
+            const pxW = amp * waveHalfWidth;
+
+            const drawY = (y - h);
+
+            ctx.beginPath();
+            ctx.moveTo(-pxW, drawY);
+            ctx.lineTo(pxW, drawY);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    drawBackground(w, h) {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "4px Arial";
+        for (let i = 0; i < 8; i++) {
+            ctx.fillStyle = i % 2 === 0 ? '#555' : '#333';
+            ctx.fillRect(visualNoteRefPos[i].x - this.settings.noteBaseSize / 2, -h, this.settings.noteBaseSize, h * 2);
+            ctx.fillStyle = "gray";
+            ctx.fillText(i + 1, visualNoteRefPos[i].x, h - 2);
         }
         ctx.restore();
     }
@@ -1061,21 +1159,13 @@ export class SimaiVisualEditor {
 
         const { width: w, height: h } = this.getCanvasWH();
         if (w <= 0 || h <= 0) return;
-        const { globalTime, visualBuckets, audioBuffer, dt, tags } = state;
+        const { globalTime, visualBuckets, audioBuffer, tags, offset } = state;
         this.globalTime = globalTime;
         this.tags = tags;
 
         ctx.clearRect(-w, -h, w * 2, h * 2);
-        ctx.save();
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = "4px Arial";
-        for (let i = 0; i < 8; i++) {
-            ctx.fillStyle = i % 2 === 0 ? '#555' : '#333';
-            ctx.fillRect(visualNoteRefPos[i].x - this.settings.noteBaseSize / 2, -h, this.settings.noteBaseSize, h * 2);
-            ctx.fillStyle = "gray";
-            ctx.fillText(i + 1, visualNoteRefPos[i].x, h - 2);
-        }
+        this.drawBackground(w, h);
+        this.drawAudioWaveform(audioBuffer, offset);
         visualBuckets.tags.forEach(t => this.drawTag(t));
         ctx.strokeStyle = '#ff0000ce';
         ctx.beginPath();
@@ -1092,3 +1182,331 @@ export class SimaiVisualEditor {
     }
 }
 
+export class SimaiPreviewRenderer {
+    constructor(canvas, settings) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.settings = settings;
+        this.globalTime = 0;
+
+        this.zoom = 200;
+
+        this.noteBaseSize = 0.1;
+
+        this.color = {
+            tap: '#EE5393',
+            star: '#00B9F7',
+            double: '#FFDF00',
+            break: '#FF640D',
+            slide: '#00FBFC',
+        };
+        this.RENDER_LIMET = 1000;
+    }
+
+    setZoom(zoom) {
+        this.zoom = zoom;
+    }
+
+    getCanvasWH() {
+        const w = this.canvas.width || 0;
+        const h = this.canvas.height || 0;
+        return {
+            width: w,
+            height: h,
+            halfWidth: w * 0.5,
+            halfHeight: h * 0.5,
+        };
+    }
+
+    drawLine(x1, y1, x2, y2, color = '#fff', width = 1) {
+        this.ctx.save();
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = width;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.stroke();
+        this.ctx.restore();
+    }
+
+    drawTag(tag) {
+        const { ctx } = this;
+        const { width: w, height: h, halfWidth: hw } = this.getCanvasWH();
+        const zoom = this.zoom || 1;
+        const bs = this.settings.noteBaseSize;
+        //const lineWidth = bs * (tag.type === 'bpm' ? 6 : 4);
+
+        ctx.save();
+
+        // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
+        const period = (tag.type === 'bpm') ? (240 / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        const delta = tag.time - this.globalTime;
+
+        if (period > 0) {
+            // 1. 計算螢幕範圍內的索引
+            let minI = Math.ceil((-hw / zoom - delta) / period);
+            let maxI = Math.floor((hw / zoom - delta) / period);
+
+            // 2. 邏輯約束：起點永遠從 0 開始
+            minI = Math.max(0, minI);
+
+            // 3. 【關鍵修復】：限制 BPM 的渲染終點
+            if (tag.type === 'bpm') {
+                // 如果你有計算 nextTime (下一個 BPM 變化的時間)
+                if (tag.nextTime) {
+                    const duration = tag.nextTime - tag.time;
+                    // 算出在下一個標籤前，最多能畫幾條線 (減去極小值防止壓線重疊)
+                    const maxLines = Math.floor((duration - 0.001) / period);
+                    maxI = Math.min(maxI, maxLines);
+                }
+            } else {
+                // Split 等標籤本來的邏輯
+                maxI = Math.min(Math.floor(tag.renderTimes || 1) - 1, maxI);
+            }
+            maxI = minI + Math.min(maxI - minI, this.RENDER_LIMET);
+
+            for (let i = minI; i <= maxI; i++) {
+                const posx = (delta + i * period) * zoom + hw;
+
+                if (tag.type === 'bpm') {
+                    ctx.strokeStyle = 'rgb(255, 217, 0)';
+                    ctx.lineWidth = 2;
+                } else {
+                    ctx.lineWidth = 1;
+                    if (i === 0) {
+                        ctx.strokeStyle = '#ffffff';
+                    } else {
+                        ctx.strokeStyle = 'rgb(128, 128, 128)';
+                    }
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(posx, 0);
+                ctx.lineTo(posx, h);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
+    drawTap(s) {
+        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const t = (noteTime - this.globalTime);
+        const ctx = this.ctx;
+
+        const size = this.noteBaseSize * this.h;
+        const y = (pos - 0.5) / 8 * this.h;
+
+        ctx.save();
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
+        ctx.translate(this.hw + t * this.zoom, y);
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    drawStar(s) {
+        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const t = (noteTime - this.globalTime);
+        const ctx = this.ctx;
+
+        const size = this.noteBaseSize * this.h * 0.9;
+        const y = (pos - 0.5) / 8 * this.h;
+
+        ctx.save();
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star);
+        ctx.translate(this.hw + t * this.zoom, y);
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+            const angle = (i * Math.PI) / 5 - Math.PI / 2;
+            // 外徑 R 與 內徑 r
+            const r = (i % 2 === 0) ? size : size * 0.4;
+
+            const px = Math.cos(angle) * r;
+            const py = Math.sin(angle) * r;
+
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    drawHold(s) {
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+        const ctx = this.ctx;
+        const { height: h } = this.getCanvasWH(); // h 為中心到邊緣的距離
+        const t = (noteTime - this.globalTime);
+
+        const drawX = Math.round(this.hw + t * this.zoom); // 依照你的結構使用 hw 位移
+
+        const size = this.settings.noteBaseSize;
+        const y = (pos - 0.5) / 8 * this.h;
+
+        ctx.save();
+
+        // 3. 樣式設定
+        ctx.lineWidth = size * 0.3;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
+
+        ctx.translate(drawX, y);
+
+        // 4. 繪製正六角形
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            // i * (Math.PI / 3) 產生六個頂點
+            // 加上 Math.PI / 6 的偏移可以讓「平邊」朝上，視覺上更像 maimai 的 Hold 頭
+            const angle = i * (Math.PI / 3);
+
+            const of = !(i < 5 && i > 1) ? holdDuration : 0;
+
+            const px = Math.cos(angle) * size * 0.5 + of * this.zoom;
+            const py = Math.sin(angle) * size * 0.5;
+
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    drawSlide(s) {
+        const { time: noteTime, pos, isBreak, isDouble, slideDelay, slideDuration } = s;
+        const t = (noteTime + slideDelay - this.globalTime);
+        const ctx = this.ctx;
+
+        const size = this.noteBaseSize * this.h;
+        const y = (pos - 0.5) / 8 * this.h;
+
+        ctx.save();
+        ctx.lineWidth = size;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.slide);
+        ctx.setLineDash([size * 0.4, size * 0.3]);
+        ctx.translate(this.hw + t * this.zoom, y);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(slideDuration * this.zoom, 0);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    drawTouch(s) {
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration, isHanabi } = s;
+        const t = (noteTime - this.globalTime);
+        const ctx = this.ctx;
+
+        const size = this.noteBaseSize * this.h;
+        const y = touchPos === "C" ? this.hh : ((pos - 0.5 * !(touchPos === "E" || touchPos === "D")) / 8 * this.h);
+
+        ctx.save();
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isDouble ? this.color.double : this.color.star;
+        ctx.translate(this.hw + t * this.zoom, y);
+        ctx.beginPath();
+        if (holdDuration) {
+            const hp = (holdDuration * this.zoom) / 4;
+            ctx.lineWidth = size * 0.8;
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = 0.8;
+            for (let i = 0; i < 4; i++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(hp * i, 0);
+                this.ctx.lineTo(hp * (i + 1), 0);
+                this.ctx.closePath();
+                switch (i) {
+                    case 0:
+                        this.ctx.strokeStyle = "#EC4402";
+                        break;
+                    case 1:
+                        this.ctx.strokeStyle = "#F6EE01";
+                        break;
+                    case 2:
+                        this.ctx.strokeStyle = "#0CA163";
+                        break;
+                    case 3:
+                        this.ctx.strokeStyle = "#0197F5";
+                        break;
+                }
+                this.ctx.stroke();
+            }
+            if (isHanabi) {
+                const color = this.ctx.createLinearGradient((holdDuration * this.zoom), -y, (holdDuration * this.zoom) + size * 4, this.h - y);
+                color.addColorStop(0, "#00D5FF");
+                color.addColorStop(0.4, "#FF00FF");
+                color.addColorStop(0.8, "#FFD823");
+                color.addColorStop(1, "#FFD823");
+
+                const width = Math.round(size * 4);
+                const height = this.h + y;
+
+                this.ctx.save();
+                this.ctx.fillStyle = color;
+
+                for (let x = 0; x < width; x += 4) {
+                    // 從左到右透明度由 1.0 降至 0.0
+                    this.ctx.globalAlpha = 1 - (x / width);
+                    // 繪製 1px 寬的垂直色條
+                    this.ctx.fillRect((holdDuration * this.zoom) + x, -y, 4, height);
+                }
+
+                this.ctx.restore();
+            }
+        } else {
+            if (isHanabi) {
+                ctx.globalCompositeOperation = "lighter";
+                // 沿用你原本定義的垂直/斜向漸層
+                const color = this.ctx.createLinearGradient(0, -y, size * 4, this.h - y);
+                color.addColorStop(0, "#00D5FF");
+                color.addColorStop(0.4, "#FF00FF");
+                color.addColorStop(0.8, "#FFD823");
+                color.addColorStop(1, "#FFD823");
+
+                const width = Math.round(size * 4);
+                const height = this.h + y; // 確保延伸到底部
+
+                this.ctx.save();
+                this.ctx.fillStyle = color;
+
+                for (let x = 0; x < width; x += 4) {
+                    // 從左到右透明度由 1.0 降至 0.0
+                    this.ctx.globalAlpha = 1 - (x / width);
+                    // 繪製 1px 寬的垂直色條
+                    this.ctx.fillRect(x, -y, 4, height);
+                }
+
+                this.ctx.restore();
+            }
+            ctx.strokeRect(-size * 0.5, -size * 0.5, size, size);
+        }
+        ctx.restore();
+    }
+
+    drawFrame(state) {
+        const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
+        this.w = w;
+        this.h = h;
+        this.hw = hw;
+        this.hh = hh;
+
+        this.ctx.clearRect(0, 0, w, h);
+        this.ctx.lineJoin = 'bevel';
+
+        const { globalTime, visualBuckets, audioBuffer, offset } = state;
+        this.globalTime = globalTime;
+
+        visualBuckets.tags.forEach(t => this.drawTag(t));
+        visualBuckets.slide.forEach(n => this.drawSlide(n));
+        visualBuckets.touch.forEach(n => this.drawTouch(n));
+        visualBuckets.tapnhold.forEach(n => {
+            if (n.type === "hold") this.drawHold(n);
+            else if (n.isStar) this.drawStar(n);
+            else this.drawTap(n);
+        });
+        this.drawLine(hw, 0, hw, h, '#ff0000ce', 1);
+    }
+}

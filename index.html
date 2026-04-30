@@ -27,22 +27,27 @@
         <img src="" alt="" onerror="this.style.display='none'" id="backgroundImage">
     </div>
     <div id="playControls">
-        <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">
-        <div class="controlsContainer">
-            <div class="controlButton" data-buttonAction="stop">
-                <span class="material-symbols-outlined">
-                    skip_previous
-                </span>
-            </div>
-            <div class="controlButton" data-buttonAction="play/pause" data-playing="false">
-                <span class="material-symbols-outlined">
-                    play_arrow
-                </span>
-            </div>
-            <div class="controlButton" data-buttonAction="hide" data-playing="false">
-                <span class="material-symbols-outlined">
-                    keyboard_arrow_down
-                </span>
+        <div id="miniPreviewContainer">
+            <canvas id="miniPreview"></canvas>
+        </div>
+        <div id="playControlContainer">
+            <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">
+            <div class="controlsContainer">
+                <div class="controlButton" data-buttonAction="stop">
+                    <span class="material-symbols-outlined">
+                        skip_previous
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="play/pause" data-playing="false">
+                    <span class="material-symbols-outlined">
+                        play_arrow
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="hide" data-playing="false">
+                    <span class="material-symbols-outlined">
+                        keyboard_arrow_down
+                    </span>
+                </div>
             </div>
         </div>
     </div>

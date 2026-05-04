@@ -28,6 +28,10 @@
     </div>
     <div id="playControls">
         <div id="miniPreviewContainer">
+            <div class="zoomContainer">
+                <div id="mpzoomIn">+</div>
+                <div id="mpzoomOut">-</div>
+            </div>
             <canvas id="miniPreview"></canvas>
         </div>
         <div id="playControlContainer">
@@ -107,6 +111,7 @@
                         <div class="utilitySubmenu">
                             <div class="utilityButton" data-buttonAction="getNowNoteIndex">游標移至播放頭</div>
                             <div class="utilityButton" data-buttonAction="getCursorNoteIndex">播放頭移至游標</div>
+                            <!-- <div class="utilityButton" data-buttonAction="recordVideo">錄製影片</div> -->
                             <div class="utilityButton" data-buttonAction="editMusic">編輯音樂開頭</div>
                             <div class="utilityButton" data-buttonAction="tapBpm">Tap BPM</div>
                             <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
@@ -126,7 +131,7 @@
             <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty">難度切換
                 <select name="d">
                     <option value="7">ORIGINAL</option>
-                    <option value="6">RE:MASTER</option>
+                    <option value="6">Re:MASTER</option>
                     <option value="5" selected>MASTER</option>
                     <option value="4">EXPERT</option>
                     <option value="3">ADVANCED</option>

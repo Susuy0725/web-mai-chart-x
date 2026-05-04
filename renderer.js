@@ -22,6 +22,8 @@ export class SimaiRenderer {
 
         this.scale = 0.98;
 
+        this._tintCache = new Map();
+
         // EX 顏色定義
         this.exColor = {
             tap: '#D8A2C9',
@@ -58,8 +60,37 @@ export class SimaiRenderer {
         return { width: w * invP, height: h * invP, halfWidth: w * invP * 0.5, halfHeight: h * invP * 0.5 };
     }
 
+    /**
+     * 預算座標縮放比例，減少重複計算
+     */
+    updateCanvasMetrics() {
+        const { width: w, height: h } = this.canvas;
+        this._p = Math.min(w, h) / scaleBase * this.scale;
+        this._invP = scaleBase / (Math.min(w, h) * this.scale);
+        this._hw = w * this._invP * 0.5;
+        this._hh = h * this._invP * 0.5;
+    }
+
     setImages(images) {
         this.images = images;
+    }
+
+    /**
+     * 優化染色圖片取得方式
+     */
+    getMemoizedTintedImage(imgKey, opacity, config) {
+        if (!this.images[imgKey]) return null;
+        const cacheKey = `${imgKey}_${opacity.toFixed(2)}_${config.colorCode}`;
+
+        if (this._tintCache.has(cacheKey)) {
+            return this._tintCache.get(cacheKey);
+        }
+
+        const tinted = getTintedImage(this.images[imgKey], opacity, config);
+        // 限制快取大小，防止記憶體溢出
+        if (this._tintCache.size > 200) this._tintCache.clear();
+        this._tintCache.set(cacheKey, tinted);
+        return tinted;
     }
 
     setContext(ctx) {
@@ -150,35 +181,53 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
+    getNoteTransform(noteT, speedMult = 1) {
+        const progress = noteT * (this.settings.speed * 0.8833 + 0.8167) * speedMult;
+        const t = 1 - this.timeFunction(progress);
+        const displayT = Math.max(this.settings.middleDistance, t);
+        const currentScale = t < this.settings.middleDistance
+            ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance))
+            : 1;
+        return { t, displayT, currentScale };
+    }
+
     // --- 渲染流程 ---
 
     drawFrame(state) {
         const { ctx } = this;
-        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore } = state;
+        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore, skipClear } = state;
+
         this.globalTime = globalTime;
         this.playCombo = playCombo;
         this.playScore = playScore;
 
-        if (!this.images || this.images.length === 0) return;
+        if (!this.images) return;
 
-        {
-            let { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
+        // 1. 更新座標指標
+        this.updateCanvasMetrics();
+        const { _hw: hw, _hh: hh, canvas: { width: w, height: h } } = this;
+
+        // 2. 清除畫面 (座標系已經 transform 過的話，注意清除範圍)
+        if (!state.skipClear) {
             ctx.clearRect(-hw, -hh, w, h);
         }
 
-        // 3. 傳感器 (使用靜態快取繪製以提升效能)
+        // 3. 繪製順序優化
         if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
 
+        // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
         this.drawMiddleDisplay();
 
-        // 4. 桶子繪製 (順序由下而上)
-        buckets.slide.forEach(n => this.drawSlide(n));
-        buckets.tapnhold.forEach(n => {
+        // 4. 使用 for...of 代替 forEach (在某些瀏覽器中效能更好)
+        for (const n of buckets.slide) this.drawSlide(n);
+
+        for (const n of buckets.tapnhold) {
             if (n.type === "hold") this.drawHold(n);
             else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
-        });
-        buckets.touch.forEach(n => this.drawTouch(n));
+        }
+
+        for (const n of buckets.touch) this.drawTouch(n);
 
         this.drawStaticBackground();
         this.drawUI(dt, globalTime);
@@ -377,14 +426,18 @@ export class SimaiRenderer {
             const sctx = shapes.getContext('2d');
             sctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
             sctx.save();
+            sctx.beginPath();
+            sctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
+            sctx.closePath();
+            sctx.clip();
             sctx.fillStyle = '#80808025';
             sctx.strokeStyle = '#ffffff80';
             touchPaths.forEach(shape => {
                 if (shape.type === 'D' || shape.type === 'C1' || shape.type === 'C2') return;
                 sctx.lineWidth = 0.3;
                 if (shape.type === 'A') {
-                    sctx.lineWidth = 0.4;
-                    sctx.setLineDash([0.2, 0.8]);
+                    sctx.lineWidth = 0.3;
+                    sctx.setLineDash([0.2, 0.6]);
                     sctx.stroke(shape.path);
                 } else {
                     sctx.setLineDash([]);
@@ -392,6 +445,7 @@ export class SimaiRenderer {
                     sctx.stroke(shape.path);
                 }
             });
+
             sctx.restore();
 
             // 建立文字快取
@@ -446,88 +500,103 @@ export class SimaiRenderer {
 
     drawTap(s) {
         const { time: noteTime, pos, isBreak, isDouble } = s;
-        const noteT = (noteTime - this.globalTime);
-        const progress = noteT * (this.settings.speed * 0.8833 + 0.8167);
-        const t = 1 - this.timeFunction(progress);
-        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const img = isBreak ? getTintedImage(this.images["tap_break"], br, {
-            colorCode: "#fff8a6"
-        }) : (isDouble ? this.images["tap_each"] : this.images["tap"]);
-        //if (imgNotExists(img)) return;
+        const noteT = noteTime - this.globalTime;
+        const { t, displayT, currentScale } = this.getNoteTransform(noteT);
 
         const posInfo = noteRefPos[pos - 1];
-        this.ctx.save();
+        const ctx = this.ctx;
 
         if (t > 1) {
-            this.ctx.translate(posInfo.x, posInfo.y);
+            ctx.save();
+            ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
-        } else {
-            const displayT = Math.max(this.settings.middleDistance, t);
-            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
-            const size = this.settings.noteBaseSize * currentScale;
-
-            const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
-            this.ctx.save();
-            this.ctx.rotate(posInfo.rot);
-            this.ctx.globalAlpha = currentScale;
-            this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-            this.ctx.restore();
-
-            this.ctx.save();
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.ctx.rotate(posInfo.rot);
-            this.drawImgAtcenter(img, size);
-            if (s.isEx) {
-                const ex = getTintedImage(this.images["tap_ex"], 0.6, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
-                this.drawImgAtcenter(ex, size);
-            }
-            this.ctx.restore();
+            ctx.restore();
+            return;
         }
-        this.ctx.restore();
+
+        const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const imgKey = isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap");
+        const img = isBreak
+            ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
+            : this.images[imgKey];
+
+        const size = this.settings.noteBaseSize * currentScale;
+
+        // 合併繪製，減少 save/restore
+        ctx.save();
+
+        // 繪製 Arc
+        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        ctx.save();
+        ctx.rotate(posInfo.rot);
+        ctx.globalAlpha = currentScale;
+        this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
+        ctx.restore();
+
+        // 繪製 Note 本體
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        ctx.rotate(posInfo.rot);
+        this.drawImgAtcenter(img, size);
+
+        if (s.isEx) {
+            const exImg = this.getMemoizedTintedImage("tap_ex", 0.6, {
+                colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")]
+            });
+            this.drawImgAtcenter(exImg, size);
+        }
+
+        ctx.restore();
     }
 
     drawStar(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
-        const noteT = (noteTime - this.globalTime);
-        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167));
-
-        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const img = getTintedImage(this.images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
-            : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
-        ], br, {
-            colorCode: "#fff8a6"
-        });
-        //if (imgNotExists(img)) return;
+        const noteT = noteTime - this.globalTime;
+        const { t, displayT, currentScale } = this.getNoteTransform(noteT);
 
         const posInfo = noteRefPos[pos - 1];
-        this.ctx.save();
+        const ctx = this.ctx;
 
         if (t > 1) {
-            this.ctx.translate(posInfo.x, posInfo.y);
+            ctx.save();
+            ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
-        } else {
-            const displayT = Math.max(this.settings.middleDistance, t);
-            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
-            const size = this.settings.noteBaseSize * currentScale;
-
-            this.ctx.save();
-            const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
-            this.ctx.rotate(posInfo.rot);
-            this.ctx.globalAlpha = currentScale;
-            this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-            this.ctx.restore();
-
-            this.ctx.save();
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.ctx.rotate(posInfo.rot);
-            this.drawImgAtcenter(img, size);
-            if (s.isEx) {
-                const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.6, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
-                this.drawImgAtcenter(ex, size * 0.95);
-            }
-            this.ctx.restore();
+            ctx.restore();
+            return;
         }
-        this.ctx.restore();
+
+        const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const imgKey = isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+            : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"));
+        const img = isBreak
+            ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
+            : this.images[imgKey];
+
+        const size = this.settings.noteBaseSize * currentScale;
+
+        // 合併繪製，減少 save/restore
+        ctx.save();
+
+        // 繪製 Arc
+        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
+        ctx.save();
+        ctx.rotate(posInfo.rot);
+        ctx.globalAlpha = currentScale;
+        this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
+        ctx.restore();
+
+        // 繪製 Note 本體
+        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        ctx.rotate(posInfo.rot);
+        this.drawImgAtcenter(img, size);
+
+        if (s.isEx) {
+            const exImg = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.6, {
+                colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")]
+            });
+            this.drawImgAtcenter(exImg, size);
+        }
+
+        ctx.restore();
     }
 
     drawHold(s) {
@@ -1070,62 +1139,61 @@ export class SimaiVisualEditor {
         const { width: w, height: h } = this.getCanvasWH();
         if (!ctx || w <= 0 || h <= 0) return;
 
-        // 取得資料與參數
-        const channelData = audioBuffer.getChannelData ? audioBuffer.getChannelData(0) :
-            (audioBuffer.data || audioBuffer);
+        const channelData = audioBuffer.getChannelData ? audioBuffer.getChannelData(0) : (audioBuffer.data || audioBuffer);
         const sampleRate = audioBuffer.sampleRate || 44100;
         if (!channelData || channelData.length === 0) return;
 
-        const gt = this.globalTime + offset;
         const zoom = this.zoom || 1;
-        const waveHalfWidth = w * this.audioWaveformWidthRatio; // 左右預留一點空間
+        const gt = this.globalTime + offset;
+        const waveHalfWidth = w * this.audioWaveformWidthRatio;
         const totalSamples = channelData.length;
 
         ctx.save();
 
-        // 樣式設定
+        // 樣式
         ctx.lineWidth = 1;
         ctx.strokeStyle = '#888';
         ctx.globalAlpha = 0.8;
 
         /**
-         * 【關鍵優化 1】：以像素行 (Pixel Row) 為基準循環
-         * 這樣可以確保每一幀繪製的線條都完美落在螢幕像素上，不會有 0.5px 的位移
+         * 【關鍵修正 1】：對齊絕對時間基準
+         * 計算螢幕最上方像素對應的「絕對時間」，並進行「格點化」
          */
-        for (let y = 0; y < h * 2; y++) {
-            // 將畫布的 y 座標轉換回相對於中心點 (gt) 的時間偏移
-            // 假設 y=h/2 是 gt，則上方是過去，下方是未來（或反之，取決於你的 zoom 正負）
-            const relativeY = y - h;
-            const t = gt - (relativeY / zoom); // 算出這行像素代表的時間點
+        const timePerPixel = 1 / zoom;
+        const topTime = gt - (h / zoom); // 畫布中心的 y=0 (hh) 對應 gt，回推 y=0 的時間
 
-            // 算出這行像素涵蓋的時間窗 (1 像素代表多少秒)
-            const timeWindow = 1 / zoom;
+        // 算出第一個像素格點的偏移量（子像素位移），用來消除滑動時的抖動
+        const subPixelOffset = (topTime % timePerPixel) * zoom;
 
-            let startIdx = Math.floor((t - timeWindow / 2) * sampleRate);
-            let endIdx = Math.floor((t + timeWindow / 2) * sampleRate);
+        // 為了涵蓋裁剪邊緣，多畫 2 像素
+        for (let y = -1; y < h * 2 + 1; y++) {
+            // 【關鍵修正 2】：計算絕對的取樣區間，不受當前 gt 的浮點數微動影響
+            // 使用絕對格點時間 t = (格點編號 * 時間步進) + 基準時間
+            const pixelTime = Math.floor(topTime / timePerPixel) * timePerPixel + (y * timePerPixel);
 
-            // 範圍檢查
+            let startIdx = Math.floor(pixelTime * sampleRate);
+            let endIdx = Math.floor((pixelTime + timePerPixel) * sampleRate);
+
             if (endIdx <= 0 || startIdx >= totalSamples) continue;
             startIdx = Math.max(0, startIdx);
             endIdx = Math.min(totalSamples, endIdx);
 
-            // 【關鍵優化 2】：穩定的 Peak 偵測
-            // 如果這個像素窗內有很多 samples，取最大值
+            // 穩定 Peak 偵測
             let peak = 0;
-            for (let i = startIdx; i < endIdx; i++) {
-                const v = Math.abs(channelData[i]);
-                if (v > peak) peak = v;
-            }
-
-            // 如果該像素窗太小（Zoom 極大），則直接取單一取樣點
-            if (startIdx === endIdx && startIdx < totalSamples) {
-                peak = Math.abs(channelData[startIdx]);
+            if (endIdx - startIdx <= 1) {
+                peak = Math.abs(channelData[startIdx] || 0);
+            } else {
+                for (let i = startIdx; i < endIdx; i++) {
+                    const v = Math.abs(channelData[i]);
+                    if (v > peak) peak = v;
+                }
             }
 
             const amp = Math.min(1, peak * (this.audioAmp || 1));
             const pxW = amp * waveHalfWidth;
 
-            const drawY = (y - h);
+            // 繪製座標補上 subPixelOffset 修正
+            const drawY = h - Math.round(y - subPixelOffset);
 
             ctx.beginPath();
             ctx.moveTo(-pxW, drawY);
@@ -1342,18 +1410,16 @@ export class SimaiPreviewRenderer {
         const { height: h } = this.getCanvasWH(); // h 為中心到邊緣的距離
         const t = (noteTime - this.globalTime);
 
-        const drawX = Math.round(this.hw + t * this.zoom); // 依照你的結構使用 hw 位移
-
-        const size = this.settings.noteBaseSize;
+        const size = this.settings.noteBaseSize * this.h * 0.01;
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
 
         // 3. 樣式設定
-        ctx.lineWidth = size * 0.3;
+        ctx.lineWidth = size * 0.4;
         ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
 
-        ctx.translate(drawX, y);
+        ctx.translate(this.hw + t * this.zoom, y);
 
         // 4. 繪製正六角形
         ctx.beginPath();
@@ -1486,6 +1552,83 @@ export class SimaiPreviewRenderer {
         ctx.restore();
     }
 
+    drawAudioWaveform(audioBuffer, offset = 0) {
+        if (!audioBuffer) return;
+        const ctx = this.ctx;
+        const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
+        if (!ctx || w <= 0 || h <= 0) return;
+
+        // 取得音訊資料
+        const channelData = audioBuffer.getChannelData ? audioBuffer.getChannelData(0) : (audioBuffer.data || audioBuffer);
+        const sampleRate = audioBuffer.sampleRate || 44100;
+        if (!channelData || channelData.length === 0) return;
+
+        const zoom = this.zoom || 200;
+        const gt = this.globalTime + offset;
+        const totalSamples = channelData.length;
+
+        // 參數設定：波形高度佔畫布的比例與增益
+        const waveMaxHeight = h * (this.settings.audioWaveformHeightRatio || 0.4);
+        const audioAmp = this.settings.audioAmp || 1.0;
+
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(136, 136, 136, 0.2)'; // 灰色波形
+
+        /**
+         * 【防止跳動關鍵 1】：格點化時間步進
+         * 1 像素代表的時間長度
+         */
+        const timePerPixel = 1 / zoom;
+        // 算出畫布最左側 (x=0) 對應的絕對時間
+        const leftTime = gt - (hw / zoom);
+
+        // 子像素位移：消除當 gt 變化時造成的物理位移抖動
+        const subPixelOffset = (leftTime % timePerPixel) * zoom;
+
+        /**
+         * 【防止跳動關鍵 2】：以像素格點為基準循環
+         * 為了覆蓋邊緣，從 -1 畫到 w + 1
+         */
+        for (let x = -1; x <= w + 1; x++) {
+            // 計算這行像素對應的穩定絕對時間點
+            const pixelTime = Math.floor(leftTime / timePerPixel) * timePerPixel + (x * timePerPixel);
+
+            let startIdx = Math.floor(pixelTime * sampleRate);
+            let endIdx = Math.floor((pixelTime + timePerPixel) * sampleRate);
+
+            // 範圍檢查
+            if (endIdx <= 0 || startIdx >= totalSamples) continue;
+            startIdx = Math.max(0, startIdx);
+            endIdx = Math.min(totalSamples, endIdx);
+
+            // 穩定 Peak 偵測：取區間內最大振幅
+            let peak = 0;
+            if (endIdx - startIdx <= 1) {
+                peak = Math.abs(channelData[startIdx] || 0);
+            } else {
+                for (let i = startIdx; i < endIdx; i++) {
+                    const v = Math.abs(channelData[i]);
+                    if (v > peak) peak = v;
+                }
+            }
+
+            const amp = Math.min(1, peak * audioAmp);
+            const pxH = amp * waveMaxHeight;
+
+            // 計算最終繪製的 X 座標 (扣除子像素位移)
+            const drawX = x - subPixelOffset;
+
+            // 在中心線 hh 上下繪製垂直線
+            ctx.beginPath();
+            ctx.moveTo(drawX, hh - pxH);
+            ctx.lineTo(drawX, hh + pxH);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
     drawFrame(state) {
         const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
         this.w = w;
@@ -1498,7 +1641,7 @@ export class SimaiPreviewRenderer {
 
         const { globalTime, visualBuckets, audioBuffer, offset } = state;
         this.globalTime = globalTime;
-
+        this.drawAudioWaveform(audioBuffer, offset);
         visualBuckets.tags.forEach(t => this.drawTag(t));
         visualBuckets.slide.forEach(n => this.drawSlide(n));
         visualBuckets.touch.forEach(n => this.drawTouch(n));

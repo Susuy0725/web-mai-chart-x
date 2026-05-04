@@ -1,7 +1,7 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
 import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp } from './helper.js';
-import { simaiDecode } from './decode.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
+import { simaiDecode } from './decode.js';
 
 let
     images,
@@ -12,6 +12,7 @@ let
     renderer,
     visualEditorRenderer,
     previewRender,
+    recorder,
     settings = {},
     isContextEdited = false,
     isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587;
@@ -58,10 +59,12 @@ const manageResourcesButton = getButton("manageResources", "utility");
 const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
+const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
 const previewCanvas = document.getElementById('miniPreview');
-
+const previewZoomInButton = document.getElementById('mpzoomIn');
+const previewZoomOutButton = document.getElementById('mpzoomOut');
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
@@ -70,6 +73,10 @@ let notes = [], endTime = 1, musicDelay = 0, rawData = [];
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
+const
+    MAX_ZOOM = 1000,
+    MIN_ZOOM = 15,
+    ZOOM_STEP = 10;
 
 export const defaultSettings = {
     // Game
@@ -115,6 +122,12 @@ const settingsConfig = [
                 step: 0.1, min: -1, max: 0,
                 def: defaultSettings.moviebrightness || 0,
                 apply: (val) => { if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * val})`; }
+            },
+            {
+                id: 'showSensor',
+                type: 'checkbox',
+                label: '顯示感應器',
+                def: defaultSettings.showSensor
             },
             {
                 id: 'showSensorTextWhenPaused',
@@ -846,37 +859,42 @@ fetchFromMainoteButton.addEventListener('click', () => {
     async function getLevelCharts({
         level = "",
         version = "",
+        difficulty = "",
         category = "",
         songTitle = "",
     } = {}) {
         try {
-            console.log(level, version, category, songTitle)
-            // 關鍵點 1：使用 !inner 確保過濾 songs 時，不符合的 charts 會直接被排除
+            // 使用 !inner 確保過濾 songs 時，不符合的 charts 會直接被排除
             let query = client
                 .from('charts')
-                .select('*, songs!inner(*)');
+                .select('*, songs!inner(*)') // 保持 !inner
 
-            // 關鍵點 2：處理 Level
-            if (level) {
-                query = query.eq('level', level);
-            }
-
+            // 篩選條件
+            if (level) query = query.eq('level', level);
+            if (difficulty) query = query.eq('difficulty', difficulty);
             if (version) query = query.eq('version', version);
             if (category) query = query.eq('category', category);
 
-            // 關鍵點 3：修正關聯表過濾語法
-            // 在 select 中用了 !inner 後，這裡的過濾才會真正生效
             if (songTitle) {
-                query = query.ilike('songs.title', `%${songTitle}%`);
+                // 建議：將關鍵字切開做多重模糊搜尋，手感會更好
+                const words = songTitle.trim().split(/\s+/);
+                words.forEach(word => {
+                    query = query.ilike('songs.title', `%${word}%`);
+                });
             }
 
-            const { data, error } = await query.order('id', { ascending: true });
+            // --- 修正解構錯誤：一定要用 { data, error } ---
+            const { data, error } = await query
+                .order('level', { ascending: false });
 
-            console.log(data)
+            console.log('Supabase 查詢結果:', data, '錯誤訊息:', error);
+
             if (error) throw error;
 
+            // 因為用了 !inner，data 裡面的東西一定都帶有符合條件的 songs
             simpleToast({ content: `找到 ${data.length} 個譜面`, type: 'success', timeout: 1500 });
             return data;
+
         } catch (err) {
             console.error('查詢失敗:', err);
             simpleToast({ content: `錯誤：${err.message}`, type: 'error', timeout: 2000 });
@@ -927,6 +945,16 @@ fetchFromMainoteButton.addEventListener('click', () => {
     };
     levelOptions.push({ value: 15, text: `Level 15` });
 
+    const difficultyOptions = [
+        { value: '', text: '全部難度' },
+        { value: 'Re:MASTER', text: 'Re:MASTER' },
+        { value: 'MASTER', text: 'MASTER' },
+        { value: 'EXPERT', text: 'EXPERT' },
+        { value: 'ADVANCED', text: 'ADVANCED' },
+        { value: 'BASIC', text: 'BASIC' },
+        { value: 'EASY', text: 'EASY' },
+    ];
+
     const versionOptions = [
         { value: '', text: '全部版本' },
         { value: 'maimai', text: 'maimai' },
@@ -971,10 +999,11 @@ fetchFromMainoteButton.addEventListener('click', () => {
     // 建立 UI 元件
     const { row: songRow, input: songInput } = createInput('歌曲名稱', '模糊搜尋...');
     const { row: levelRow, select: levelSelect } = createSelect('難度等級', levelOptions);
+    const { row: difficultyRow, select: difficultySelect } = createSelect('難度', difficultyOptions);
     const { row: versionRow, select: versionSelect } = createSelect('版本', versionOptions);
     const { row: categoryRow, select: categorySelect } = createSelect('分類', categoryOptions);
 
-    container.append(songRow, levelRow, versionRow, categoryRow);
+    container.append(songRow, levelRow, difficultyRow, versionRow, categoryRow);
 
     // 搜尋按鈕
     const searchBtn = document.createElement('button');
@@ -992,6 +1021,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
             songTitle: songInput.value,
             version: versionSelect.value,
             category: categorySelect.value,
+            difficulty: difficultySelect.value
         });
 
         if (!result || result.length === 0) {
@@ -2001,6 +2031,22 @@ changeDisplayMode.addEventListener('change', (e) => {
     draw();
 });
 
+previewZoomInButton.addEventListener('click', () => {
+    settings.visualZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom + ZOOM_STEP));
+    visualEditorRenderer.setZoom(settings.visualZoom);
+    previewRender.setZoom(settings.visualZoom);
+    saveSettingsDebounce();
+    draw();
+});
+
+previewZoomOutButton.addEventListener('click', () => {
+    settings.visualZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom - ZOOM_STEP));
+    visualEditorRenderer.setZoom(settings.visualZoom);
+    previewRender.setZoom(settings.visualZoom);
+    saveSettingsDebounce();
+    draw();
+});
+
 hideUtilityButton.addEventListener('click', () => {
     const utilityBtns = document.getElementById('topUtilityBtns');
     const utilityContainer = document.getElementById('utilityContainer');
@@ -2228,7 +2274,7 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
 
         if (e.ctrlKey) {
             const factor = e.deltaY > 0 ? (1 / 1.15) : 1.15;
-            const newZoom = Math.max(50, Math.min(1000, settings.visualZoom * factor));
+            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom * factor));
             settings.visualZoom = newZoom;
             renderer.setZoom(newZoom);
             saveSettingsDebounce();
@@ -2785,6 +2831,11 @@ function openSecondWindow() {
     draw(); // 重新繪製到第二個 Canvas
 }
 
+// TODO
+/*recordVideoButton.addEventListener('click', async () => {
+
+});*/
+
 window.addEventListener('resize', resize);
 
 window.addEventListener('keydown', (e) => {
@@ -3015,16 +3066,17 @@ function _init() {
                 const step = (p, msg) => (ctx.setProgress(p), ctx.setContent(msg));
                 await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
 
-                images = await loadAllImages((pct, key) => step(40 + pct * 0.5, `正在載入素材: ${key} (${Math.round(pct)}%)`));
+                images = await loadAllImages((pct, key) => step(40 + pct * 0.4, `正在載入素材: ${key} (${Math.round(pct)}%)`));
                 readyBeat = await idbGet('simai_ready_beat') === 'true';
 
-                step(90, "正在恢復上次的編輯狀態...");
+                step(80, "正在恢復上次的編輯狀態...");
                 const [
                     savedTimeControl,
                     savedBgm,
                     savedMaiData,
                     savedDifficulty,
                     bg,
+                    bgVideo,
                     hideEditor,
                     savedSettings,
                 ] = await Promise.all([
@@ -3033,6 +3085,7 @@ function _init() {
                     idbGet('simai_maidata'),
                     idbGet('simai_now_difficulty'),
                     idbGet('simai_background_image'),
+                    idbGet('simai_background_video'),
                     idbGet('simai_hide_editor'),
                     idbGet('simai_settings'),
                 ]);
@@ -3040,6 +3093,7 @@ function _init() {
                     realTime = savedTimeControl; slider.value = realTime; globalTime = realTime - musicDelay; update();
                 }
                 if (savedSettings) {
+                    step(84, "還原設定...");
                     settings = JSON.parse(savedSettings);
                     let isMissingSettings = false;
                     for (const key in defaultSettings) {
@@ -3059,6 +3113,7 @@ function _init() {
                 };
                 if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
                 if (savedMaiData) {
+                    step(88, "還原編輯內容...");
                     maidata = savedMaiData;
                     editorInput.value = maidata["inote_" + nowDifficulty] || '';
                     getres(editorInput.value);
@@ -3074,7 +3129,14 @@ function _init() {
                     offsetInput.value = musicDelay;
                     offsetInputDebounce();
                 };
+                // TODO
+                // 取得頁面上的 video 元素（若存在）並安全地設定來源為已儲存的 Blob
+                const videoEl = document.getElementById('bgaVideo');
+                if (bgVideo && videoEl) {
+                    videoEl.src = URL.createObjectURL(bgVideo);
+                }
                 if (bg) {
+                    // 保留原本的 Blob，並同時將畫面上的 <img> 元素設為該來源
                     backgroundImage = bg;
                     editorBackgroundImage.src = URL.createObjectURL(bg);
                     editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
@@ -3082,7 +3144,6 @@ function _init() {
                 }
                 if (savedBgm) {
                     step(95, "正在還原背景音樂...");
-                    console.log("嘗試還原背景音樂:", savedBgm);
                     await audioManager.setBackgroundMusic(savedBgm);
                     setEndtime(endTime);
                 }
@@ -3103,6 +3164,7 @@ function _init() {
                 visualEditorRenderer.setZoom(settings.visualZoom);
                 previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
                 previewRender.setZoom(settings.visualZoom);
+
                 draw();
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();

@@ -1745,3 +1745,31 @@ export function flipSelectedText(selected, deMap, transformDigit, swapPairs = {}
 export function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
+
+// 確保 .backgroundContainer 永遠為父容器內最大的正方形
+function updateBackgroundSquare(canvasContainerEl) {
+    if (!canvasContainerEl) return;
+    const bg = canvasContainerEl.querySelector('.backgroundContainer');
+    if (!bg) return;
+    const rect = canvasContainerEl.getBoundingClientRect();
+    const side = Math.max(0, Math.min(rect.width, rect.height));
+    bg.style.width = side + 'px';
+    bg.style.height = side + 'px';
+    // keep centered
+    bg.style.left = '50%';
+    bg.style.top = '50%';
+    bg.style.transform = 'translate(-50%, -50%)';
+}
+const _cEl = document.getElementById('canvasContainer');
+// 監聽容器尺寸變化（ResizeObserver 優先），並在視窗 resize 時也更新
+try {
+    if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => updateBackgroundSquare(_cEl));
+        ro.observe(_cEl);
+    }
+} catch (e) {
+    // ignore
+}
+window.addEventListener('resize', () => updateBackgroundSquare(_cEl));
+// 初次更新
+setTimeout(() => updateBackgroundSquare(_cEl), 0);

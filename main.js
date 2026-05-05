@@ -9,6 +9,7 @@ let
     maidata = {},
     nowDifficulty = 5,
     backgroundImage,
+    backgroundVideo,
     renderer,
     visualEditorRenderer,
     previewRender,
@@ -36,6 +37,7 @@ const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
 const readMaidataButton = getButton("readMaidata", "utility");
+const readZipButton = getButton("readZip", "utility");
 const chartInfoButton = getButton("chartInfo", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
@@ -54,6 +56,7 @@ const r180Button = getButton("rotate180", "utility");
 const fVerticalButton = getButton("flipVertical", "utility");
 const fHorizontalButton = getButton("flipHorizontal", "utility");
 const editorBackgroundImage = document.getElementById('backgroundImage');
+const editorBackgroundVideo = document.getElementById('backgroundVideo');
 const tapBpmButton = getButton("tapBpm", "utility");
 const manageResourcesButton = getButton("manageResources", "utility");
 const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
@@ -84,11 +87,11 @@ export const defaultSettings = {
     touchSpeed: 7,
     slideSpeed: 0,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
-    moviebrightness: -1,
+    moviebrightness: -4,
     showSensor: true,
     pinkStars: false,
     rotateStars: false,
-
+    // Misc
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
     effectDecayTime: 0.4,
@@ -97,11 +100,12 @@ export const defaultSettings = {
     inputDebounceTime: 800, // ms
     showSensorTextWhenPaused: true,
     hideBackgroundWhenPaused: false,
-
+    disableVideo: false, // 關閉影片背景（如果有的話）
+    visualZoom: 200, // 視覺模式下的縮放倍率
+    // Sound & Playback
     playbackSpeed: 1, // 播放速度，1 是正常速度
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
     SfxVolume: 1, // 音效音量，0 到 1 之間
-    visualZoom: 200, // 視覺模式下的縮放倍率
 };
 const settingsConfig = [
     {
@@ -119,9 +123,12 @@ const settingsConfig = [
                 id: 'moviebrightness',
                 type: 'number',
                 label: '背景暗度',
-                step: 0.1, min: -1, max: 0,
+                step: 1, min: -4, max: 0,
                 def: defaultSettings.moviebrightness || 0,
-                apply: (val) => { if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * val})`; }
+                apply: (val) => {
+                    if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * val})`;
+                    if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
+                },
             },
             {
                 id: 'showSensor',
@@ -189,6 +196,11 @@ let decodedTags = [];
 
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
+
+// 上次對影片進行 seek 的時間（秒），用來避免頻繁設定 currentTime
+let lastVideoSeekTime = 0;
+const VIDEO_MIN_SEEK_INTERVAL = 0.8; // 最短 seek 間隔（秒）
+const VIDEO_SEEK_THRESHOLD = 0.3; // 當差距超過此值才執行 seek（秒）
 
 let clockBpm = 60;
 
@@ -822,6 +834,7 @@ function setDataEmpty() {
     maidata = {};
     nowDifficulty = 5;
     backgroundImage = null;
+    backgroundVideo = null;
     applyHighlight('');
     musicDelay = 0;
     realTime = 0;
@@ -839,11 +852,15 @@ function setDataEmpty() {
     changeDifficulty.value = nowDifficulty;
     editorBackgroundImage.src = "";
     editorBackgroundImage.style.display = 'none';
-    editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
+    editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+    editorBackgroundVideo.src = "";
+    editorBackgroundVideo.style.display = 'none';
+    editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
     inputDebounce();
     saveMaidata();
 
     idbSet('simai_background_image', null).catch(() => { });
+    idbSet('simai_background_video', null).catch(() => { });
     idbSet('simai_now_difficulty', nowDifficulty).catch(() => { });
     idbSet('simai_resource_bgm', null).catch(() => { });
     idbSet('simai_timeControl', 0).catch(() => { });
@@ -852,9 +869,11 @@ function setDataEmpty() {
 fetchFromMainoteButton.addEventListener('click', () => {
     const { createClient } = supabase;
 
-    const supabaseUrl = "https://tntzyagdhlrdeswyrsjw.supabase.co";
-    const supabaseKey = "sb_publishable_eoR0itFK2HCrDAMd-6Jbxg_OYCkGWTJ";
-    const client = createClient(supabaseUrl, supabaseKey);
+    const SUPABASE_CONFIG = {
+        url: "https://tntzyagdhlrdeswyrsjw.supabase.co",
+        key: "sb_publishable_eoR0itFK2HCrDAMd-6Jbxg_OYCkGWTJ"
+    }
+    const client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
 
     async function getLevelCharts({
         level = "",
@@ -1241,6 +1260,9 @@ function setPlaybackSpeed(speed) {
     if (playing) {
         audioManager.playBGM(realTime);
     }
+    if (editorBackgroundVideo.src) {
+        editorBackgroundVideo.playbackRate = speed;
+    }
     saveSettingsDebounce();
 }
 
@@ -1514,7 +1536,7 @@ chartInfoButton.addEventListener('click', () => {
                     backgroundImage = file;
                     editorBackgroundImage.src = objectUrl;
                     editorBackgroundImage.style.display = 'block';
-                    editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
+                    editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
                     idbSet('simai_background_image', file).catch((error) => {
                         console.error("儲存背景圖片到 IndexedDB 失敗:", error);
                     });
@@ -1848,8 +1870,6 @@ function maidataProcess(e) {
     });
     changeDifficulty.value = nowDifficulty;
     if (content["inote_5"]) {
-        console.log("成功讀取 inote_5，已載入編輯器");
-        console.log("inote_5 內容預覽：", content["inote_5"].slice(0, 100) + (content["inote_5"].length > 100 ? "..." : ""));
         editorInput.value = content["inote_5"] || "";
     } else {
         console.warn("maidata 中未找到 inote_5，編輯器將保持空白");
@@ -1878,22 +1898,16 @@ folderInput.addEventListener('click', (e) => {
         return false;
     })();
     if (maidataHaveContext) {
-        console.log("maidata exists, showing confirm");
         const confirmReset = confirm("載入新的資料夾將會覆蓋目前的編輯內容，是否繼續？");
-        console.log("confirm result:", confirmReset);
         if (!confirmReset) {
-            console.log("user cancelled, returning");
             return;
         }
     }
-    input.value = ''; // 重置 input 值，確保即使選相同檔案也會觸發 change
-    console.log("calling input.click()");
+    input.value = '';
     input.click();
 });
 
-// 防止 input.click() 觸發的 click 事件冒泡回到 folderInput
 folderInput.children[0].addEventListener('click', (e) => {
-    console.log("input click event - stopping propagation");
     e.stopPropagation();
 });
 
@@ -1905,20 +1919,63 @@ folderInput.children[0].onchange = async (event) => {
         return;
     }
     setDataEmpty(); // 先清空現有資料，避免讀取失敗時殘留舊資料干擾
-    for (var i = 0; i < files.length; i++) {
-        let file = files.item(i);
-        if (file.name.startsWith('track.')) {
+    await handleFolderInput(files);
+    setEndtime(endTime);
+};
+
+async function handleFolderInput(files) {
+    // Normalize input into an array of File-like objects (supports FileList, Array, or JSZip.files mapping)
+    const entries = [];
+    if (files && typeof files.length === 'number' && typeof files.item === 'function') {
+        for (let i = 0; i < files.length; i++) {
+            const f = files.item(i);
+            if (f) entries.push(f);
+        }
+    } else if (Array.isArray(files)) {
+        for (let i = 0; i < files.length; i++) if (files[i]) entries.push(files[i]);
+    } else if (files && typeof files === 'object') {
+        // Assume JSZip.files mapping
+        for (const name in files) {
+            if (!Object.prototype.hasOwnProperty.call(files, name)) continue;
+            const zf = files[name];
+            if (zf.dir) continue; // skip directories
+            if (typeof zf.async === 'function') {
+                try {
+                    const blob = await zf.async('blob');
+                    const baseName = name.replace(/\\/g, '/').split('/').pop();
+                    entries.push(new File([blob], baseName, { type: blob.type || '' }));
+                } catch (e) {
+                    console.warn('從 zip 讀取檔案失敗', name, e);
+                }
+            }
+        }
+    } else {
+        console.warn('handleFolderInput：未知的 files 參數型別', files);
+        return;
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+        const file = entries[i];
+        const baseName = (file.name || '').replace(/.*[\\/]/, '');
+        const lowerName = baseName.toLowerCase();
+        const ext = (baseName.split('.').pop() || '').toLowerCase();
+
+        // Fallback to extension check when file.type is missing (common for zip blobs)
+        const isVideo = ((file.type || '').startsWith('video/')) || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
+        const isImage = ((file.type || '').startsWith('image/')) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext);
+
+        if (lowerName.startsWith('track.')) {
             // 音樂檔
             const url = URL.createObjectURL(file);
             await audioManager.setBackgroundMusic(url, file);
             setEndtime(endTime);
             idbSet('simai_resource_bgm', file).then(() => {
-                console.log("已儲存音樂檔到 IndexedDB");
+                console.log('已儲存音樂檔到 IndexedDB');
             }).catch((error) => {
-                console.error("儲存音樂檔到 IndexedDB 失敗:", error);
+                console.error('儲存音樂檔到 IndexedDB 失敗:', error);
             });
         }
-        if (file.name.startsWith('maidata.')) {
+        if (lowerName.startsWith('maidata.')) {
             // 譜面檔
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -1927,23 +1984,48 @@ folderInput.children[0].onchange = async (event) => {
             };
             reader.readAsText(file);
         }
-        if (file.name.startsWith('bg.')) {
-            if (!file.type.startsWith('image/')) {
-                console.warn("選擇的背景檔案不是圖片類型，已跳過：", file.name);
+        if (lowerName.startsWith('bg.')) {
+            if (isVideo) {
+                console.log('載入背景影片:', file.name);
+                backgroundVideo = file;
+                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+                editorBackgroundVideo.style.display = 'none';
+                editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+                idbSet('simai_background_video', file).catch((error) => {
+                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
+                });
                 continue;
             }
-            // 背景圖
-            backgroundImage = file;
-            editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
-            editorBackgroundImage.style.display = 'block';
-            editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
-            idbSet('simai_background_image', file).catch((error) => {
-                console.error("儲存背景圖到 IndexedDB 失敗:", error);
-            });
+            if (isImage) {
+                // 背景圖
+                backgroundImage = file;
+                editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
+                editorBackgroundImage.style.display = 'block';
+                editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+                idbSet('simai_background_image', file).catch((error) => {
+                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
+                });
+                continue;
+
+            }
+            console.warn('選擇的背景檔案不是圖片類型：', file.name);
+        }
+        if (lowerName.startsWith('pv.')) {
+            if (isVideo) {
+                console.log('載入背景影片:', file.name);
+                backgroundVideo = file;
+                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+                editorBackgroundVideo.style.display = 'none';
+                editorBackgroundVideo.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
+                idbSet('simai_background_video', file).catch((error) => {
+                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
+                });
+                continue;
+            }
+            console.warn('選擇的背景影片檔案不是影片類型：', file.name);
         }
     }
-    setEndtime(endTime);
-};
+}
 
 readMaidataButton.addEventListener('click', () => {
     const input = document.createElement('input');
@@ -1953,6 +2035,7 @@ readMaidataButton.addEventListener('click', () => {
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
+                setDataEmpty();
                 maidataProcess(e.target.result);
                 resize();
             };
@@ -1961,6 +2044,27 @@ readMaidataButton.addEventListener('click', () => {
     };
     input.click();
 });
+
+readZipButton.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setDataEmpty();
+                JSZip.loadAsync(file).then(async (zip) => {
+                    await handleFolderInput(zip.files);
+                });
+                resize();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    };
+    input.click();
+})
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
@@ -2143,7 +2247,7 @@ const visualScroller = {
     velocity: 0,
     axis: 'vertical',
     momentumFrame: null,
-    friction: 0.95,
+    friction: 0.9,
 
     pxToSec(px) {
         const zoom = visualEditorRenderer ? visualEditorRenderer.zoom : 100;
@@ -2206,6 +2310,9 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
     element.style.cursor = 'grab';
 
     element.addEventListener('pointerdown', (e) => {
+        if (playButton.dataset.playing === 'true') {
+            editorBackgroundVideo.pause();
+        }
         if (!visualEditorRenderer || e.button !== 0) return;
         cancelAnimationFrame(visualScroller.momentumFrame);
 
@@ -2422,6 +2529,11 @@ downloadButton.addEventListener('click', () => {
                         }
                     }
 
+                    if (backgroundVideo) {
+                        const videoExt = backgroundVideo.name?.split('.').pop() || 'mp4';
+                        zip.file(`pv.${videoExt}`, backgroundVideo);
+                    }
+
                     ctx.setProgress(40);
                     const content = await zip.generateAsync({ type: "blob" }, (m) => ctx.setProgress(40 + m.percent * 0.6));
 
@@ -2449,12 +2561,43 @@ function applyHighlight(text) {
 
 const slideInputDebounce = debounce(() => {
     timeControlSliding = false;
-    idbSet('simai_timeControl', realTime).then(() => {
-        //console.log("已儲存時間控制值到 IndexedDB:", realTime);
-    }).catch((error) => {
+    // 嘗試將背景影片定位到播放時間並播放；若尚未載入則在可播放時再嘗試
+    if (editorBackgroundVideo && editorBackgroundVideo.src) {
+        const setTimeAndTryPlay = () => {
+            try {
+                editorBackgroundVideo.currentTime = realTime;
+            } catch (e) {
+                // 在某些瀏覽器於 metadata 尚未就緒前 set currentTime 會拋錯，忽略並等待 canplay
+                console.warn('設定背景影片時間失敗，將在 canplay 時重試', e);
+            }
+
+            const p = editorBackgroundVideo.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch((err) => {
+                    // play 失敗時，等候 canplay 再重試一次
+                    const onCanPlay = () => {
+                        editorBackgroundVideo.removeEventListener('canplay', onCanPlay);
+                        editorBackgroundVideo.play().catch(() => { });
+                    };
+                    editorBackgroundVideo.addEventListener('canplay', onCanPlay, { once: true });
+                });
+            }
+        };
+
+        if (playButton.dataset.playing === 'true') {
+            if (editorBackgroundVideo.readyState >= 1) {
+                // metadata 已就緒，可以立刻設定時間並嘗試播放
+                setTimeAndTryPlay();
+            } else {
+                // 等待 metadata/canplay
+                editorBackgroundVideo.addEventListener('loadedmetadata', setTimeAndTryPlay, { once: true });
+            }
+        }
+    }
+    idbSet('simai_timeControl', realTime).catch((error) => {
         console.error("儲存時間控制值到 IndexedDB 失敗:", error);
     });
-}, 100);
+}, 500);
 
 slider.addEventListener('input', () => {
     timeControlSliding = true;
@@ -2464,6 +2607,7 @@ slider.addEventListener('input', () => {
     audioManager.stopAllLongSounds();
 
     if (playButton.dataset.playing === 'true') {
+        editorBackgroundVideo.pause();
         // 2. 播放中拖動：音樂即時同步跳轉 (Seek)
         // 注意：Web Audio API 重建 Source Node 很快，但極速拖動可能會有噴麥音
         audioManager.playBGM(realTime);
@@ -2482,7 +2626,12 @@ if (keepRenderingWhilePause) requestAnimationFrame(update);
 playButton.addEventListener('click', () => {
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
-        editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
+        editorBackgroundImage.style.display =
+            settings.hideBackgroundWhenPaused ? 'none' :
+                ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
+        editorBackgroundVideo.style.display = 'none';
+        editorBackgroundVideo.pause();
+
         playButton.dataset.playing = 'false';
         playButton.children[0].innerText = "play_arrow";
         lastTimestamp = null;
@@ -2496,6 +2645,10 @@ playButton.addEventListener('click', () => {
         draw(); // 立即更新畫布，反映暫停狀態
     } else {
         editorBackgroundImage.style.display = (editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none';
+        editorBackgroundVideo.style.display =
+            ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
+        editorBackgroundVideo.currentTime = realTime;
+        editorBackgroundVideo.play();
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
         lastTimestamp = performance.now();
@@ -2510,6 +2663,7 @@ playButton.addEventListener('click', () => {
 
 stopButton.addEventListener('click', () => {
     editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
+    editorBackgroundVideo.style.display = 'none';
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;
@@ -2706,8 +2860,21 @@ function update(timestamp) {
                 realTime = bgmTime;
                 globalTime = realTime - musicDelay;
             }
+            if (editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 2) {
+                const nowSec = performance.now() / 1000;
+                const diff = Math.abs(editorBackgroundVideo.currentTime - realTime);
+                if (diff > VIDEO_SEEK_THRESHOLD && (nowSec - lastVideoSeekTime) >= VIDEO_MIN_SEEK_INTERVAL) {
+                    try {
+                        editorBackgroundVideo.currentTime = realTime;
+                        lastVideoSeekTime = nowSec;
+                    } catch (e) {
+                        console.warn('背景影片 seek 失敗', e);
+                    }
+                }
+            }
             bgmUpdateTimer = 0;
         }
+
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
         slider.value = realTime;
         draw(dt);
@@ -3129,18 +3296,18 @@ function _init() {
                     offsetInput.value = musicDelay;
                     offsetInputDebounce();
                 };
-                // TODO
-                // 取得頁面上的 video 元素（若存在）並安全地設定來源為已儲存的 Blob
-                const videoEl = document.getElementById('bgaVideo');
-                if (bgVideo && videoEl) {
-                    videoEl.src = URL.createObjectURL(bgVideo);
+                if (bgVideo) {
+                    backgroundVideo = bgVideo;
+                    editorBackgroundVideo.src = URL.createObjectURL(bgVideo);
+                    editorBackgroundVideo.style.display = 'none';
+                    editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
                 }
                 if (bg) {
                     // 保留原本的 Blob，並同時將畫面上的 <img> 元素設為該來源
                     backgroundImage = bg;
                     editorBackgroundImage.src = URL.createObjectURL(bg);
                     editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
-                    editorBackgroundImage.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
+                    editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
                 }
                 if (savedBgm) {
                     step(95, "正在還原背景音樂...");
@@ -3159,12 +3326,11 @@ function _init() {
                 visualEditorRenderer = new SimaiVisualEditor(visualEditor, settings);
                 visualEditorRenderer.setImages(images);
                 visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
-                audioManager.setPlaybackRate(settings.playbackSpeed);
                 audioManager.setBGMVolume(settings.musicVolume);
                 visualEditorRenderer.setZoom(settings.visualZoom);
                 previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
                 previewRender.setZoom(settings.visualZoom);
-
+                setPlaybackSpeed(settings.playbackSpeed);
                 draw();
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();

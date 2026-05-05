@@ -24,7 +24,10 @@
     <div id="canvasContainer">
         <img src="./Skin/outline.png" alt="outline" onerror="this.style.display = 'none'" id="canvasOutline">
         <canvas id="main"></canvas>
-        <img src="" alt="" onerror="this.style.display='none'" id="backgroundImage">
+        <div class="backgroundContainer">
+            <img src="" alt="" onerror="this.style.display='none'" id="backgroundImage">
+            <video src="" alt="video" onerror="this.style.display = 'none'" id="backgroundVideo" muted></video>
+        </div>
     </div>
     <div id="playControls">
         <div id="miniPreviewContainer">
@@ -85,6 +88,7 @@
                             </div>
                             <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div>
                             <div class="utilityButton" data-buttonAction="readMaidata">讀取maidata</div>
+                            <div class="utilityButton" data-buttonAction="readZip">讀取壓縮檔</div>
                             <div class="utilityButton" data-buttonAction="download">下載</div>
                         </div>
                     </div>

@@ -15,11 +15,15 @@
     <link rel="stylesheet" href="main.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="jszip.min.js"></script>
+    <script src="mediabunny.cjs"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"
+        integrity="sha512-YsR46MmyChktsyMMou+Bs74oCa/CDdwft7rJ5wlnmDzMj1mzqncsfJamEEf99Nk7IB0JpTMo5hS8rxB49FUktQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
 
 <body>
-    <!--<img src="./image copy.png" alt="refimg" class="a">-->
+    <!-- <img src="./image.png" alt="refimg" class="a"> -->
 
     <div id="canvasContainer">
         <img src="./Skin/outline.png" alt="outline" onerror="this.style.display = 'none'" id="canvasOutline">
@@ -41,17 +45,17 @@
             <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">
             <div class="controlsContainer">
                 <div class="controlButton" data-buttonAction="stop">
-                    <span class="material-symbols-outlined">
+                    <span class="material-symbols-outlined" translate="no">
                         skip_previous
                     </span>
                 </div>
                 <div class="controlButton" data-buttonAction="play/pause" data-playing="false">
-                    <span class="material-symbols-outlined">
+                    <span class="material-symbols-outlined" translate="no">
                         play_arrow
                     </span>
                 </div>
                 <div class="controlButton" data-buttonAction="hide" data-playing="false">
-                    <span class="material-symbols-outlined">
+                    <span class="material-symbols-outlined" translate="no">
                         keyboard_arrow_down
                     </span>
                 </div>
@@ -66,19 +70,19 @@
     </div>
     <div id="utilityContainer">
         <div id="topUtilityBtns">
-            <div class="utilityButton miniButton" data-buttonAction="hideEditor"><span
-                    class="material-symbols-outlined">
+            <div class="utilityButton miniButton" data-buttonAction="hideEditor"><span class="material-symbols-outlined"
+                    translate="no">
                     right_panel_close
                 </span></div>
 
             <div class="utilityDropdown">
                 <div class="utilityDropdown-btn utilityButton miniButton">
-                    <span class="material-symbols-outlined">menu</span>
+                    <span class="material-symbols-outlined" translate="no">menu</span>
                 </div>
                 <div class="utilityDropdown-content">
                     <div class="utilityButton utilityMenuTitle">
                         <span>檔案</span>
-                        <span class="utilityMenuArrow material-symbols-outlined">
+                        <span class="utilityMenuArrow material-symbols-outlined" translate="no">
                             chevron_right
                         </span>
                         <div class="utilitySubmenu">
@@ -94,7 +98,7 @@
                     </div>
                     <div class="utilityButton utilityMenuTitle">
                         <span>編輯</span>
-                        <span class="utilityMenuArrow material-symbols-outlined">
+                        <span class="utilityMenuArrow material-symbols-outlined" translate="no">
                             chevron_right
                         </span>
                         <div class="utilitySubmenu">
@@ -109,13 +113,13 @@
                     </div>
                     <div class="utilityButton utilityMenuTitle">
                         <span>功能/工具</span>
-                        <span class="utilityMenuArrow material-symbols-outlined">
+                        <span class="utilityMenuArrow material-symbols-outlined" translate="no">
                             chevron_right
                         </span>
                         <div class="utilitySubmenu">
                             <div class="utilityButton" data-buttonAction="getNowNoteIndex">游標移至播放頭</div>
                             <div class="utilityButton" data-buttonAction="getCursorNoteIndex">播放頭移至游標</div>
-                            <!-- <div class="utilityButton" data-buttonAction="recordVideo">錄製影片</div> -->
+                            <div class="utilityButton" data-buttonAction="recordVideo">錄製影片</div>
                             <div class="utilityButton" data-buttonAction="editMusic">編輯音樂開頭</div>
                             <div class="utilityButton" data-buttonAction="tapBpm">Tap BPM</div>
                             <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
@@ -157,7 +161,8 @@
             </div>
         </div>
         <div class="closeBtn" data-hidden="false">▲</div>
-        <div class="warnbtn"><span class="material-symbols-outlined">warning</span><span class="warnCount">0</span>
+        <div class="warnbtn"><span class="material-symbols-outlined" translate="no">warning</span><span
+                class="warnCount">0</span>
         </div>
     </div>
 </body>

@@ -20,7 +20,7 @@ const formatWarnArg = (arg) => {
 let _sp = []
 export function simaiDecode(data = "", baseOffset = true) {
     warns = [];
-    warnpos = []
+    warnpos = [];
     const raw = data.replace(/\|\|.*$/gm, "")/* remove comments */.replace(/\s+/g, '');
     if (raw === '') return { notes: [], endTime: 0 };
     /*if (!(raw.endsWith(',') || raw.endsWith('E') || raw.endsWith(')') || raw.endsWith('}'))) {
@@ -41,7 +41,8 @@ export function simaiDecode(data = "", baseOffset = true) {
         nowBpm = 60,
         nowSplit = 4,
         overrideSplitTime = null,
-        noteCommaIndex = 0;
+        noteCommaIndex = 0,
+        indexToTime = [];
     let tapCounts = 0, holdCounts = 0, slideCounts = 0, touchCounts = 0, breakCounts = 0;
     let decodeFailed = false;
     let lastBpmTag = -1, lastSplitTag = -1, lastSplitTagCommIndex = -1;
@@ -90,6 +91,7 @@ export function simaiDecode(data = "", baseOffset = true) {
             // 清除 noteStr 中的標籤，避免影響後續解析 (例如 1<PROP:"RED">b -> 1b)
             e = e.replace(/^<([^>]*)>$/, '');
         }
+        indexToTime[noteCommaIndex] = nowTime;
         if (!e || e === '') {
             noteCommaIndex++;
             nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
@@ -170,6 +172,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         };
                         tempNotes.push(noteObj);
                     }
+                    tapCounts += 2;
                     return;
                 }
                 const parts = splitr.filter(p => p !== '');
@@ -187,6 +190,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                 });
                 doubleSlide = doubleSlide > 1 || doubleSlide === true;
                 parts.forEach(noteStr => {
+                    let tempCheck = noteStr; // 用來檢查殘餘字元的複本
                     // 這裡處理音符與 Flags (例如 "1b", "2h")
                     const posMatch = noteStr.match(/^\d+/); // 抓取開頭的數字
                     const touchMatch = noteStr.match(/^([ABCDE])(\d+)|C/); // 抓取 touch 數值
@@ -195,6 +199,27 @@ export function simaiDecode(data = "", baseOffset = true) {
                         return;
                     };
                     const slideMatch = noteStr.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+                    // 從檢查字串中扣除位置部份
+                    tempCheck = tempCheck.replace(/^([ABCDE]\d+|C|\d+)/, '');
+
+                    const slidePattern = /((?:pp)|(?:qq)|[-<>^vpqszVw\*])\d*/g;
+                    tempCheck = tempCheck.replace(slidePattern, '');
+
+                    // 3. 處理時間括號 [...]
+                    // 移除所有中括號內容
+                    tempCheck = tempCheck.replace(/\[[^\]]*\]/g, '');
+
+                    // 4. 處理單一字元的 Flags
+                    // b(break), $(star), x(EX), f(hanabi), h(hold), @(無星滑), ?(無頭), !(隱頭)
+                    const validFlags = /[bx\$fh@?!]/g;
+                    tempCheck = tempCheck.replace(validFlags, '');
+
+                    // 🔥 關鍵檢查：如果現在 tempCheck 還剩下任何字元，代表有非法輸入！
+                    if (tempCheck.length > 0) {
+                        pushWarn(`Invalid character(s) "${tempCheck}" detected in note "${noteStr}", skipping:`, { errpos: noteCommaIndex });
+                        return; // 跳過這個音符，不進入後續邏輯
+                    }
+
                     const noteObj = (() => {
                         let pos, touchPos, type = 'tap';
                         if (touchMatch) {
@@ -237,9 +262,11 @@ export function simaiDecode(data = "", baseOffset = true) {
                         if (touchMatch) return pushWarn("Break flag 'b' is not allowed in touch notes, skipping:", { errpos: noteCommaIndex });
                         noteObj.isBreak = true
                         breakCounts++;
+                        tapCounts--;
                         noteStr = noteStr.replace(/b/g, '');
                     };
-                    if (noteStr.includes('$') && !slideMatch) {
+                    if (noteStr.includes('$')) {
+                        if (slideMatch) pushWarn("Slide already have a star! This is unnecessary,", { errpos: noteCommaIndex });
                         if (touchMatch) return pushWarn("Star flag '$' is not allowed in touch notes, skipping:", { errpos: noteCommaIndex });
                         if (noteStr.includes('h')) return pushWarn("Star flag '$' is not allowed in hold notes, skipping:", { errpos: noteCommaIndex });
                         noteObj.isStar = true
@@ -286,8 +313,26 @@ export function simaiDecode(data = "", baseOffset = true) {
                             noteObj.holdDuration = duration;
                             if (duration + noteObj.time > endTime) endTime = duration + noteObj.time;
                         }
-                        holdCounts++;
-                        tapCounts--; // 因為 hold 會被同時算作 tap，所以這裡要扣掉之前加的 tap 計數
+                        if (noteObj.isBreak) {
+
+                        } else {
+                            holdCounts++;
+                            if (noteObj.type === 'touch') {
+                                touchCounts--;
+                            } else {
+                                tapCounts--;
+                            }
+                        }
+
+                    }
+                    if (noteStr.includes('@') && !slideMatch) {
+                        return pushWarn("Star flag '@' is not allowed in other notes, skipping:", { errpos: noteCommaIndex });
+                    }
+                    if (noteStr.includes('!') && !slideMatch) {
+                        return pushWarn("Star flag '!' is not allowed in other notes, skipping:", { errpos: noteCommaIndex });
+                    }
+                    if (noteStr.includes('?') && !slideMatch) {
+                        return pushWarn("Star flag '?' is not allowed in other notes, skipping:", { errpos: noteCommaIndex });
                     }
                     let noHeadSlide = false, hideHeadSlide = false;
                     if (slideMatch && !noteStr.includes('h')) {
@@ -324,17 +369,27 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 noteObj.isBreak = true;
                                 p[0] = p[0].replace(/b/g, '');
                                 breakCounts++;
+                                tapCounts--;
                             }
                             if (p[0].includes('@')) {
                                 noteObj.isStar = false;
                                 p[0] = p[0].replace(/@/g, '');
                             }
                             if (p[0].includes('?')) {
+                                if (!noteObj.isStar) {
+                                    return pushWarn("Star flag '@' at here is not allowed, skipping:", { errpos: noteCommaIndex });
+                                }
                                 noHeadSlide = true;
                                 p[0] = p[0].replace(/\?/g, '');
                                 tapCounts--;
                             }
                             if (p[0].includes('!')) {
+                                if (!noteObj.isStar) {
+                                    return pushWarn("Star flag '@' at here is not allowed, skipping:", { errpos: noteCommaIndex });
+                                }
+                                if (noHeadSlide) {
+                                    pushWarn("Using '!' and '?' at the same time is contradictory, skipping:", { errpos: noteCommaIndex });
+                                }
                                 hideHeadSlide = true;
                                 p[0] = p[0].replace(/!/g, '');
                             }
@@ -375,7 +430,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 if (res.illegal) {
                                     pushWarn(`Illegal slide ${head}${type}${mid ?? ''}${end}, skipping:`, { errpos: noteCommaIndex });
                                 };
-                                return { head, end, mid, type, path, len: path.totalLength };
+                                return { head, end, mid, type, path, len: path.totalLength, illegal: res.illegal };
                             });
 
                             if (segments.includes(null)) return pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
@@ -402,21 +457,26 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     path: seg.path,
                                     time: noteObj.time,
                                     slideDelay: currentDelay,
-                                    slideDuration: segmentDuration
+                                    slideDuration: segmentDuration,
+                                    isIllegal: seg.illegal,
                                 });
+                                if (index === segments.length - 1) {
+                                    if (isSlideBreak) { breakCounts++ } else { slideCounts++ }
+                                };
                                 if (noteObj.time + currentDelay + segmentDuration > endTime) endTime = noteObj.time + currentDelay + segmentDuration;
                                 currentDelay += segmentDuration;
                             });
                         }
 
                     }
-                    if (!noHeadSlide) tempNotes.push(noteObj);
+                    if (!(noHeadSlide || hideHeadSlide)) tempNotes.push(noteObj);
                 });
             });
         }
         noteCommaIndex++;
         nowTime += overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
     }
+    indexToTime[noteCommaIndex] = nowTime;
     if (nowTime > endTime) endTime = nowTime;
     for (const n of tempNotes) {
         notes.push({
@@ -432,7 +492,13 @@ export function simaiDecode(data = "", baseOffset = true) {
     console.group("Decoded Notes:");
     console.log("notes: ", notes);
     console.log("endTime: ", endTime);
-    console.log("tags: ", tags);
+    console.log(
+        `tap: ${tapCounts},
+hold: ${holdCounts},
+slide: ${slideCounts},
+touch: ${touchCounts},
+break: ${breakCounts}`
+    )
     console.groupEnd();
     return {
         notes,
@@ -440,11 +506,18 @@ export function simaiDecode(data = "", baseOffset = true) {
         tags,
         bpm: firstBpm,
         baseOffset,
-        noteValue: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5),
-        raw: splitParts,
+        notesConts: {
+            tap: tapCounts,
+            hold: holdCounts,
+            slide: slideCounts,
+            touch: touchCounts,
+            break: breakCounts,
+        },
+        score: (tapCounts + touchCounts + holdCounts * 2 + slideCounts * 3 + breakCounts * 5) || 0,
         failed: decodeFailed,
         warnings: warns,
         errpositions: warnpos,
+        indexToTime,
     };
 }
 function getSlidePath(start, end, type, mid = null) {
@@ -452,20 +525,22 @@ function getSlidePath(start, end, type, mid = null) {
     const startInfo = noteRefPos[start - 1];
     const endInfo = noteRefPos[end - 1];
     let illegal = false;
+    const c = (end - start + 8) % 8;
+    const e = start === end;
 
     switch (type) {
         case '-':
-            if ((end - start + 8) % 8 === 1 || (end - start + 8) % 8 === 7 || start === end) {
+            if (c === 1 || c === 7 || e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case '^':
-            if ((end - start + 8) % 8 === 4 || start === end) {
+            if (c === 4 || e) {
                 illegal = true;
             }
-            if (start === end) {
+            if (e) {
                 r.moveTo(startInfo.x, startInfo.y);
                 break;
             }
@@ -478,7 +553,7 @@ function getSlidePath(start, end, type, mid = null) {
             r.arc(0, 0, innerCirleBase, startInfo.rot - Math.PI / 2, endInfo.rot - Math.PI / 2, !(start >= 3 && start <= 6));
             break;
         case 'v':
-            if ((end - start + 8) % 8 === 4 || start === end) {
+            if (c === 4 || e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
@@ -486,10 +561,13 @@ function getSlidePath(start, end, type, mid = null) {
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case 'V': {
-            console.log((start - mid + 8) % 8);
+            const s = (start - mid + 8) % 8;
+            const m = (mid - end + 8) % 8;
             if (
-                (start - mid + 8) % 8 !== 2 && (start - mid + 8) % 8 !== 6 ||
-                start === end || mid === end || start === mid
+                s !== 2 && s !== 6 || e
+                || mid === end || start === mid || (mid === start) ||
+                s === 2 && !(m >= 2 && m <= 5) ||
+                s === 6 && !(m >= 3 && m <= 6)
             ) {
                 illegal = true;
             }
@@ -538,16 +616,17 @@ function getSlidePath(start, end, type, mid = null) {
             r.lineToArc(cir.x, cir.y, innerCirleBase * 0.472, startInfo.rot - Math.PI);
             r.arc(cir.x, cir.y, innerCirleBase * 0.466, startInfo.rot - Math.PI, endInfo.rot +
                 Math.PI * (
-                    ((end - start + 8) % 8 == 0) * -0.3 +
-                    ((end - start + 8) % 8 == 1) * -0.35 +
-                    ((end - start + 8) % 8 == 2) * -0.2 +
-                    ((end - start + 8) % 8 == 6) * -0.15 +
-                    ((end - start + 8) % 8 == 7) * -0.2
+                    (c == 0) * -0.3 +
+                    (c == 1) * -0.35 +
+                    (c == 2) * -0.2 +
+                    (c == 6) * -0.15 +
+                    (c == 7) * -0.2
                 ), true, (end > start) && (end - start + 8) % 8 >= 3 || start > end && (end - start + 8) % 8 == 3);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         }
         case 'qq': {
+            const c = (start - end + 8) % 8;
             const cir = {
                 x: Math.cos((start - 4.028) * Math.PI / 4) * innerCirleBase * 0.456,
                 y: Math.sin((start - 4.028) * Math.PI / 4) * innerCirleBase * 0.456,
@@ -557,17 +636,17 @@ function getSlidePath(start, end, type, mid = null) {
             r.arc(cir.x, cir.y, innerCirleBase * 0.466, startInfo.rot, endInfo.rot +
                 Math.PI * (
                     -1 +
-                    ((start - end + 8) % 8 == 0) * 0.3 +
-                    ((start - end + 8) % 8 == 1) * 0.35 +
-                    ((start - end + 8) % 8 == 2) * 0.2 +
-                    ((start - end + 8) % 8 == 6) * 0.15 +
-                    ((start - end + 8) % 8 == 7) * 0.2
+                    (c == 0) * 0.3 +
+                    (c == 1) * 0.35 +
+                    (c == 2) * 0.2 +
+                    (c == 6) * 0.15 +
+                    (c == 7) * 0.2
                 ), false, (start > end) && (start - end + 8) % 8 >= 3 || end > start && (start - end + 8) % 8 == 3);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         }
         case 's':
-            if ((end - start + 8) % 8 !== 4 || start === end) {
+            if (c !== 4 || e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
@@ -576,7 +655,7 @@ function getSlidePath(start, end, type, mid = null) {
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case 'z':
-            if ((end - start + 8) % 8 !== 4 || start === end) {
+            if (c !== 4 || e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
@@ -585,14 +664,14 @@ function getSlidePath(start, end, type, mid = null) {
             r.lineTo(endInfo.x, endInfo.y);
             break;
         case 'w':
-            if ((end - start + 8) % 8 !== 4 || start === end) {
+            if (c !== 4 || e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
         default:
-            if (start === end) {
+            if (e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);

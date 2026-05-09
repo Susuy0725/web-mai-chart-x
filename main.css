@@ -205,11 +205,11 @@ body {
     position: absolute;
     width: 100%;
     height: 100%;
-    top: 0px;
-    left: 0px;
+    top: -2px;
+    left: -27px;
     object-fit: contain;
-    opacity: 0.8;
-    scale: 0.98;
+    opacity: 0.5;
+    scale: 1.02;
 }
 
 #utilityContainer {
@@ -276,6 +276,11 @@ body {
 .warnbtn span {
     font-size: 10px;
     line-height: 16px;
+}
+
+.warnbtn span.material-symbols-outlined {
+    font-size: 12px;
+    color: #FE8D59;
 }
 
 #topUtilityBtns {

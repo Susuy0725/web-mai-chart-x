@@ -4,3 +4,4 @@ visual editor
 vertical mode
 粉紅色星星
 星星旋轉
+修復自動補全

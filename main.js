@@ -1,5 +1,5 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp } from './helper.js';
+import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput, createLabeledInput1 } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 
@@ -72,7 +72,7 @@ const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 
-let notes = [], endTime = 1, musicDelay = 0, rawData = [];
+let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 
 let ctx = canvas.getContext('2d');
 const scale = 0.98;
@@ -95,6 +95,7 @@ export const defaultSettings = {
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
     effectDecayTime: 0.4,
+    hanabiEffectDecayTime: 0.8,
     noteBaseSize: 11,
     maxSlideCount: 500, // on screen,
     inputDebounceTime: 800, // ms
@@ -102,10 +103,16 @@ export const defaultSettings = {
     hideBackgroundWhenPaused: false,
     disableVideo: false, // 關閉影片背景（如果有的話）
     visualZoom: 200, // 視覺模式下的縮放倍率
+    slideIllegalRed: false,
+    showUI: false,
     // Sound & Playback
     playbackSpeed: 1, // 播放速度，1 是正常速度
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
     SfxVolume: 1, // 音效音量，0 到 1 之間
+
+    restoreDefaults: function () {
+        settings = { ...defaultSettings };
+    }
 };
 const settingsConfig = [
     {
@@ -113,12 +120,8 @@ const settingsConfig = [
         items: [
             { id: 'speed', type: 'number', label: ' Tap/Hold 速度', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: ' Slide 速度', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
-            { id: 'touchSpeed', type: 'number', label: ' Touch 速度', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed }
-        ]
-    },
-    {
-        label: '顯示',
-        items: [
+            { id: 'touchSpeed', type: 'number', label: ' Touch 速度', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
+            { id: 'middleDisplay', type: 'dropdown', label: '中間顯示', options: [{ value: 0, label: '關閉' }, { value: 1, label: 'COMBO' }, { value: 2, label: '分數' }], def: defaultSettings.middleDisplay },
             {
                 id: 'moviebrightness',
                 type: 'number',
@@ -130,6 +133,11 @@ const settingsConfig = [
                     if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
                 },
             },
+        ]
+    },
+    {
+        label: '顯示',
+        items: [
             {
                 id: 'showSensor',
                 type: 'checkbox',
@@ -178,7 +186,15 @@ const settingsConfig = [
     {
         label: '其他',
         items: [
-
+            {
+                id: 'maxSlideCount', type: 'number', label: '螢幕上最大滑星顯示數量', min: 1, max: 100, step: 1, def: defaultSettings.maxSlideCount
+            },
+            {
+                id: 'inputDebounceTime', type: 'number', label: '編輯器刷新時間 (ms)', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
+            },
+            {
+                id: 'showUI', type: 'checkbox', label: '顯示FPS介面', def: defaultSettings.showUI
+            }
         ]
     }
 ];
@@ -193,6 +209,7 @@ let nowIndex = 0;
 let visualCtx = null;
 let warnings = [], warningPositions = [];
 let decodedTags = [];
+let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
 
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
@@ -1115,18 +1132,69 @@ const getres = ((simaiDataValue) => {
             return null;
         }
     })();
-
     if (result) {
         if (result.failed) {
             simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
         } else {
             notes = result.notes;
             decodedTags = result.tags || [];
+
             setEndtime(result.endTime);
-            // chartBaseOffset = result.baseOffset;
             clockBpm = result.bpm;
-            rawData = simaiDataValue.split(',');
-            draw();
+            // 以逗號切分，但忽略落在以 '||' 開頭的單行註解內的逗號（同時保留註解文字）
+            const splitRespectingLineComments = (text) => {
+                const out = [];
+                let cur = '';
+                for (let i = 0; i < text.length;) {
+                    const a = text[i];
+                    const b = text[i + 1];
+
+                    // 若遇到單行註解開頭 '||'，將註解整行當成一般文字加入（註解內的逗號不分割）
+                    if (a === '|' && b === '|') {
+                        cur += '||';
+                        i += 2;
+                        while (i < text.length && text[i] !== '\n' && text[i] !== '\r') {
+                            cur += text[i++];
+                        }
+                        // 保留換行符（支援 CRLF 與 LF）
+                        if (i < text.length && text[i] === '\r') {
+                            cur += '\r';
+                            i++;
+                            if (i < text.length && text[i] === '\n') { cur += '\n'; i++; }
+                        } else if (i < text.length && text[i] === '\n') {
+                            cur += '\n';
+                            i++;
+                        }
+                        continue;
+                    }
+
+                    // 正常逗號：作為分隔符
+                    if (a === ',') {
+                        out.push(cur);
+                        cur = '';
+                        i++;
+                        continue;
+                    }
+
+                    // 其他字元
+                    cur += a;
+                    i++;
+                }
+                out.push(cur);
+                // 移除因尾端逗號或連續逗號產生的空字串項
+                return out;
+            };
+            dataIndexToTime = result.indexToTime || [];
+            console.log(dataIndexToTime)
+
+            playScoreRes = {
+                ...result.notesConts,
+                score: result.score,
+            };
+            playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
+            playScoreRes.invScore = 1 / playScoreRes.score;
+            rawData = splitRespectingLineComments(simaiDataValue);
+
             warnings = result.warnings || [];
             warningPositions = result.errpositions || [];
             if (result.warnings && result.warnings.length > 0) {
@@ -1136,6 +1204,7 @@ const getres = ((simaiDataValue) => {
             } else {
                 warnEl.style.visibility = 'hidden';
             }
+            draw();
         }
     }
 });
@@ -1376,7 +1445,7 @@ settingsButton.addEventListener('click', () => {
         label.textContent = labelText;
         label.style.cssText = 'flex:1; color:#ddd; font-size: 15px;';
 
-        element.style.cssText = 'width:100px; flex:0 0 auto; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#222; color:#fff; font-size:14px; text-align: left; transition: border-color 0.2s;';
+        element.style.cssText = 'width:100px; flex:0 0 auto; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#222; color:#fff; font-size:14px; text-align: left; transition: border-color 0.2s; box-sizing: border-box;';
         row.appendChild(label);
         row.appendChild(element);
         return row;
@@ -1401,6 +1470,19 @@ settingsButton.addEventListener('click', () => {
         return input;
     };
 
+    const createDropdown = (value, options = []) => {
+        const select = document.createElement('select');
+        options.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            if (opt.value == value) o.selected = true;
+            select.appendChild(o);
+        });
+        select.style.cursor = 'pointer';
+        return select;
+    };
+
     const inputRefs = {};
 
     // --- 根據設定檔生成 UI ---
@@ -1414,28 +1496,36 @@ settingsButton.addEventListener('click', () => {
         (category.items || []).forEach(item => {
             const targetRef = item.ref || settings;
             const targetKey = item.key || item.id;
-
-            // 自動取得當前數值，優先權：自訂 get() > targetRef[targetKey] > def
             const currentVal = item.get ? item.get() : (targetRef[targetKey] ?? item.def);
 
             let el;
             if (item.type === 'checkbox') {
                 el = createCheckbox(currentVal, `settings-${item.id}`);
-                // 監聽變更以便偵錯與即時更新
                 el.addEventListener('change', (e) => {
-                    try {
-                        console.log(`settings.checkbox.${item.id} ->`, e.target.checked);
-                        // 立刻寫回 ref（不會儲存到 IndexedDB，除非按下 儲存）
-                        targetRef[targetKey] = e.target.checked;
-                    } catch (err) { /* ignore */ }
+                    try { targetRef[targetKey] = e.target.checked; } catch (err) { }
                 });
-                // 如果上層有攔截 click，盡量阻止上層冒泡影響
                 el.addEventListener('click', (e) => e.stopPropagation());
-            } else {
+            }
+            // --- 新增 Dropdown 分支 ---
+            else if (item.type === 'dropdown') {
+                el = createDropdown(currentVal, item.options);
+                el.addEventListener('change', (e) => {
+                    try { targetRef[targetKey] = e.target.value; } catch (err) { }
+                });
+            }
+            // -----------------------
+            else {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
             }
 
-            inputRefs[item.id] = { el, def: item.def, type: item.type, apply: item.apply, ref: targetRef, key: targetKey };
+            inputRefs[item.id] = {
+                el,
+                def: item.def,
+                type: item.type,
+                apply: item.apply,
+                ref: targetRef,
+                key: targetKey
+            };
             section.appendChild(createRow(item.label, el));
         });
     });
@@ -1446,25 +1536,25 @@ settingsButton.addEventListener('click', () => {
     const applySettings = () => {
         const values = {};
 
-        // 1. 統一取值 & 自動回寫物件
         Object.keys(inputRefs).forEach(id => {
             const config = inputRefs[id];
-            const rawVal = config.type === 'checkbox' ? config.el.checked : parseFloat(config.el.value);
-            const finalVal = config.type === 'checkbox'
-                ? rawVal
-                : (isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max)));
+            let finalVal;
+
+            if (config.type === 'checkbox') {
+                finalVal = config.el.checked;
+            } else if (config.type === 'dropdown') {
+                // 如果你的下拉選單值應該是數字，可以在這裡加 parseFloat，否則維持字串
+                finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
+            } else {
+                const rawVal = parseFloat(config.el.value);
+                finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
+            }
 
             values[id] = finalVal;
-            config.ref[config.key] = finalVal; // 自動指定到 ref[key]
+            config.ref[config.key] = finalVal;
         });
 
-        // 2. 觸發需要額外執行的副作用邏輯
-        Object.keys(inputRefs).forEach(id => {
-            if (inputRefs[id].apply) {
-                inputRefs[id].apply(values[id], values);
-            }
-        });
-
+        // 後續副作用與儲存邏輯不變...
         saveSettingsDebounce();
         draw();
         simpleToast({ content: '設定已儲存', type: 'success', timeout: 1500 });
@@ -1494,7 +1584,7 @@ settingsButton.addEventListener('click', () => {
                 hideOnClick: true
             },
             {
-                text: '重置設定',
+                text: '重置數值',
                 onClick: (ctx) => {
                     Object.values(inputRefs).forEach(ref => {
                         if (ref.type === 'checkbox') {
@@ -1503,28 +1593,88 @@ settingsButton.addEventListener('click', () => {
                             ref.el.value = ref.def;
                         }
                     });
-                    simpleToast({ content: '數值已還原（尚未儲存）', type: 'info', timeout: 1500 });
+                    simpleToast({ content: '數值已還原（未儲存）', type: 'info', timeout: 1500 });
                 }
             },
-
         ]
     });
 });
 
 chartInfoButton.addEventListener('click', () => {
     const tempData = { ...(maidata || {}) };
+    const inputRefs = {};
+
+    /**
+     * 核心邏輯：處理音訊 Metadata 並更新 tempData 與 UI
+     * @param {File} file 音訊檔案
+     */
+    const processAudioMetadata = (file) => {
+        if (!file) {
+            simpleToast({ content: "找不到音訊檔案", type: "error" });
+            return;
+        }
+
+        const applyData = (title, artist) => {
+            if (title) {
+                tempData.title = title;
+                if (inputRefs.title) inputRefs.title.value = title;
+            }
+            if (artist) {
+                tempData.artist = artist;
+                if (inputRefs.artist) inputRefs.artist.value = artist;
+            }
+        };
+
+        // 1. 優先嘗試使用 jsmediatags 讀取 ID3 標籤
+        if (window.jsmediatags) {
+            window.jsmediatags.read(file, {
+                onSuccess: (tag) => {
+                    const { title, artist } = tag.tags;
+                    applyData(title, artist);
+                    simpleToast({ content: `成功讀取標籤：${title || '無標題'}`, type: "success" });
+                },
+                onError: (error) => {
+                    console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
+                    fallbackToFileName(file);
+                }
+            });
+        } else {
+            fallbackToFileName(file);
+        }
+
+        // 2. 備案：從檔名解析 (格式預期為 "作者 - 標題")
+        function fallbackToFileName(f) {
+            const fileName = f.name.replace(/\.[^/.]+$/, ""); // 去除副檔名
+            if (fileName.includes(" - ")) {
+                const parts = fileName.split(" - ");
+                applyData(parts.slice(1).join(" - ").trim(), parts[0].trim());
+            } else {
+                applyData(fileName, null);
+            }
+            simpleToast({ content: "已從檔名解析資訊", type: "info" });
+        }
+    };
 
     const createPopupContent = () => {
         const container = document.createElement('div');
-        container.style.cssText = "display:flex;";
+        container.style.cssText = "display:flex; gap: 10px;";
 
+        // 左側：圖片更換
         const imgContainer = document.createElement('div');
         const img = document.createElement('img');
         img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['star'].src;
-        img.style.cssText = "width:100%;height:100%;display:block;";
-        imgContainer.appendChild(img);
-        imgContainer.style.cssText = "width:40%;height:100%;overflow:hidden;border:1px solid #ccc;border-radius:8px;object-fit:contain;";
-        imgContainer.addEventListener('click', () => {
+        img.style.cssText = "width:100%; height:100%; display:block; object-fit:contain;";
+
+        const imgWrapper = document.createElement('div');
+        imgWrapper.style.cssText = "width:40%; aspect-ratio:1/1; overflow:hidden; border:1px solid #333; border-radius:8px; cursor:pointer; position:relative; background:#000;";
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = "position:absolute; bottom:0; width:100%; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; text-align:center; padding:4px 0;";
+        overlay.textContent = "點擊更換圖片";
+
+        imgWrapper.appendChild(img);
+        imgWrapper.appendChild(overlay);
+        imgWrapper.addEventListener('click', () => {
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.accept = 'image/*';
@@ -1536,102 +1686,67 @@ chartInfoButton.addEventListener('click', () => {
                     backgroundImage = file;
                     editorBackgroundImage.src = objectUrl;
                     editorBackgroundImage.style.display = 'block';
-                    editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                    idbSet('simai_background_image', file).catch((error) => {
-                        console.error("儲存背景圖片到 IndexedDB 失敗:", error);
-                    });
+                    idbSet('simai_background_image', file);
                 }
             };
             fileInput.click();
         });
 
+        // 右側：輸入欄位
         const diffContainer = document.createElement('div');
-        diffContainer.style.cssText = "width:60%;box-sizing:border-box;display:flex;flex-direction:column;padding:0 0 0 10px;";
+        diffContainer.style.cssText = "width:60%; display:flex; flex-direction:column;";
 
-        const createLabeledInput = (value, labelText, assign, isTextarea) => {
-            const wrapper = document.createElement('div');
-            wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
+        // 建立主要欄位並存入 inputRefs (使用 createLabeledInput1)
+        const titleField = createLabeledInput1({ value: tempData.title, labelText: "標題", type: 'text', assign: "title", data: tempData, ref: inputRefs });
+        const artistField = createLabeledInput1({ value: tempData.artist, labelText: "作者", type: 'text', assign: "artist", data: tempData, ref: inputRefs });
+        const descField = createLabeledInput1({ value: tempData.des, labelText: "譜面設計", type: 'text', assign: "des", data: tempData, ref: inputRefs });
 
-            const label = document.createElement('label');
-            label.textContent = labelText;
-            label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
+        diffContainer.append(titleField.wrapper, artistField.wrapper, descField.wrapper);
 
-            const input = isTextarea ? document.createElement('textarea') : document.createElement('input');
-            if (!isTextarea) {
-                input.type = 'text';
-            }
-            input.value = value ?? '';
-            input.title = labelText;
-            input.placeholder = labelText;
-            input.style.cssText = "padding:4px;border:1px solid #ccc;border-radius:4px;";
-
-            input.addEventListener('input', () => {
-                const newValue = input.value;
-                if (assign) {
-                    tempData[assign] = newValue;
-                }
-            });
-
-            wrapper.appendChild(label);
-            wrapper.appendChild(input);
-            return { wrapper, input };
-        };
-
-        const { wrapper: titleWrapper } = createLabeledInput(tempData.title, "標題", "title");
-        const { wrapper: artistWrapper } = createLabeledInput(tempData.artist, "作者", "artist");
-        const { wrapper: descWrapper } = createLabeledInput(tempData.des, "譜面設計", "des");
-
-        const dropdown = document.createElement('select');
-        dropdown.name = "difficulty";
-        dropdown.style.cssText = "width:100%;padding:3px;font-size:12px;margin-bottom:4px;";
-        dropdown.innerHTML = `
-                <option value="7">ORIGINAL</option>
-                <option value="6">RE:MASTER</option>
-                <option value="5">MASTER</option>
-                <option value="4">EXPERT</option>
-                <option value="3">ADVANCED</option>
-                <option value="2">BASIC</option>
-                <option value="1">EASY</option>
-            `;
-        dropdown.value = nowDifficulty || "5"; // 預設選擇 MASTER
-        dropdown.addEventListener('change', (e) => {
-            const diff = e.target.value;
-            tempData.difficulty = diff;
-
-            infoText.innerHTML = "";
-            const { wrapper: lvWrapper } = createLabeledInput(tempData[`lv_${diff}`], "等級", `lv_${diff}`);
-            const { wrapper: desWrapper } = createLabeledInput(tempData[`des_${diff}`], "難度設計", `des_${diff}`);
-            infoText.appendChild(lvWrapper);
-            infoText.appendChild(desWrapper);
+        // 難度選擇與等級 (使用 createLabeledInput1 的 select)
+        const dropdownField = createLabeledInput1({
+            value: nowDifficulty || "5",
+            labelText: "難度",
+            type: 'select',
+            assign: 'difficulty',
+            data: tempData,
+            ref: inputRefs,
+            options: [
+                { value: "7", label: "ORIGINAL" }, { value: "6", label: "RE:MASTER" },
+                { value: "5", label: "MASTER" }, { value: "4", label: "EXPERT" },
+                { value: "3", label: "ADVANCED" }, { value: "2", label: "BASIC" }, { value: "1", label: "EASY" }
+            ]
         });
-
-        diffContainer.appendChild(titleWrapper);
-        diffContainer.appendChild(artistWrapper);
-        diffContainer.appendChild(descWrapper);
-        diffContainer.appendChild(dropdown);
+        const dropdown = dropdownField.input;
+        dropdown.style.cssText = "width:100%; padding:4px; background:#111; color:#fff; border:1px solid #333; font-size:12px; margin-bottom:8px;";
 
         const infoText = document.createElement('div');
-        infoText.style.cssText = "font-size:14px;white-space:pre-wrap;";
+        const updateDiffFields = (diff) => {
+            infoText.innerHTML = "";
+            const lv = createLabeledInput1({ value: tempData[`lv_${diff}`], labelText: "等級", type: 'text', assign: `lv_${diff}`, data: tempData, ref: inputRefs });
+            const des = createLabeledInput1({ value: tempData[`des_${diff}`], labelText: "難度設計", type: 'text', assign: `des_${diff}`, data: tempData, ref: inputRefs });
+            infoText.append(lv.wrapper, des.wrapper);
+        };
+
+        dropdown.addEventListener('change', (e) => {
+            tempData.difficulty = e.target.value;
+            updateDiffFields(e.target.value);
+        });
+
+        diffContainer.appendChild(dropdown);
         diffContainer.appendChild(infoText);
+        updateDiffFields(dropdown.value);
 
-        const currentDifficulty = nowDifficulty || "5";
-        infoText.appendChild(createLabeledInput(tempData[`lv_${currentDifficulty}`], "等級", `lv_${currentDifficulty}`).wrapper);
-        infoText.appendChild(createLabeledInput(tempData[`des_${currentDifficulty}`], "難度設計", `des_${currentDifficulty}`).wrapper);
-
-        const excludedKeys = new Set(["title", "artist", "des", "first"]);
-        for (let i = 1; i <= 7; i++) {
-            excludedKeys.add(`des_${i}`);
-            excludedKeys.add(`lv_${i}`);
-            excludedKeys.add(`inote_${i}`);
-        }
+        // 自訂指令[cite: 1]
+        const excludedKeys = new Set(["title", "artist", "des", "first", "difficulty"]);
         const insVal = Object.keys(tempData)
-            .filter(key => !excludedKeys.has(key))
+            .filter(key => !excludedKeys.has(key) && !key.startsWith('lv_') && !key.startsWith('des_') && !key.startsWith('inote_'))
             .map(key => `&${key} = ${tempData[key]}`)
             .join("\n");
-        const { wrapper: customInstruction } = createLabeledInput(insVal, "自訂指令", "custom", true);
-        diffContainer.appendChild(customInstruction);
+        const customIns = createLabeledInput1({ value: insVal, labelText: "自訂指令", type: 'textarea', assign: "custom", data: tempData, ref: inputRefs });
+        diffContainer.appendChild(customIns.wrapper);
 
-        container.appendChild(imgContainer);
+        container.appendChild(imgWrapper);
         container.appendChild(diffContainer);
         return container;
     };
@@ -1641,41 +1756,44 @@ chartInfoButton.addEventListener('click', () => {
         customContent: createPopupContent(),
         buttons: [
             {
+                text: "從目前 Track 讀取",
+                onClick: () => processAudioMetadata(audioManager.bgmFile)
+            },
+            {
+                text: "讀取其他音訊 Metadata",
+                onClick: () => {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = 'audio/*';
+                    fileInput.onchange = (e) => processAudioMetadata(e.target.files[0]);
+                    fileInput.click();
+                }
+            },
+            {
                 text: "確定",
                 onClick: (closePopup) => {
-                    if (!maidata) {
-                        maidata = {};
-                    }
-                    Object.keys(tempData).forEach(key => {
-                        if (key === 'custom') return;
-                        maidata[key] = tempData[key];
-                    });
+                    if (!maidata) maidata = {};
+                    // 將 tempData 寫回 maidata
+                    Object.assign(maidata, tempData);
 
+                    // 處理自訂指令解析
                     if (typeof tempData.custom === 'string') {
-                        tempData.custom.split(/\r?\n/).forEach(line => {
-                            const trimmed = line.trim();
-                            if (!trimmed) return;
-                            const normalized = trimmed.startsWith('&') ? trimmed.slice(1) : trimmed;
-                            const [key, ...rest] = normalized.split('=');
-                            if (!key) return;
-                            const value = rest.join('=');
-                            maidata[key] = value;
+                        tempData.custom.split(/\n/).forEach(line => {
+                            const match = line.trim().match(/^&?([^=]+)=(.*)$/);
+                            if (match) maidata[match[1].trim()] = match[2].trim();
                         });
                     }
 
                     if (tempData.difficulty) {
                         nowDifficulty = tempData.difficulty;
-                        changeDifficulty.value = nowDifficulty;
+                        if (typeof changeDifficulty !== 'undefined') changeDifficulty.value = nowDifficulty;
                     }
                     saveMaidata();
                     closePopup();
                 },
                 hideOnClick: true
             },
-            {
-                text: "取消",
-                hideOnClick: true
-            }
+            { text: "取消", hideOnClick: true }
         ]
     });
 });
@@ -1811,6 +1929,16 @@ const editorInputDebounce = debounce(() => {
     }
 }, 500);
 
+let cursorLastIndexTime = 0;
+document.addEventListener('selectionchange', () => {
+    // 確保只有在編輯器獲得焦點時才執行邏輯
+    if (document.activeElement === editorInput) {
+        const point = editorInput.selectionStart;
+        cursorLastIndexTime = dataIndexToTime[indexFromCursor(editorInput.value, point)] ?? 0;
+        console.log("對應的時間:", cursorLastIndexTime);
+    }
+});
+
 editorInput.addEventListener('input', () => {
     const value = editorInput.value;
     isContextEdited = true;
@@ -1921,6 +2049,7 @@ folderInput.children[0].onchange = async (event) => {
     setDataEmpty(); // 先清空現有資料，避免讀取失敗時殘留舊資料干擾
     await handleFolderInput(files);
     setEndtime(endTime);
+    draw();
 };
 
 async function handleFolderInput(files) {
@@ -2272,6 +2401,7 @@ const updateVisualTime = (newTime) => {
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime);
     } else {
+        audioManager.clearSoundQueue();
         audioManager.stopBGM();
         draw();
     }
@@ -2648,7 +2778,9 @@ playButton.addEventListener('click', () => {
         editorBackgroundVideo.style.display =
             ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
         editorBackgroundVideo.currentTime = realTime;
-        editorBackgroundVideo.play();
+        if (editorBackgroundVideo.paused && editorBackgroundVideo.readyState >= 1) {
+            editorBackgroundVideo.play();
+        }
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
         lastTimestamp = performance.now();
@@ -2656,7 +2788,7 @@ playButton.addEventListener('click', () => {
         // --- 從當前的 realTime 同步啟動 BGM ---
         audioManager.playBGM(realTime);
 
-        if (!keepRenderingWhilePause) requestAnimationFrame(update);
+        update(lastTimestamp);
     }
     slideInputDebounce();
 });
@@ -2708,39 +2840,29 @@ getNowNoteIndex.addEventListener('click', () => {
     editorInput.focus();
 });
 
-function indexFromCursor(point) {
-    if (!rawData || rawData.length === 0) return 0;
-    let cum = 0;
-    for (let i = 0; i < rawData.length; i++) {
-        cum += rawData[i].length;
-        if (point <= cum) return i; // 若游標在該項內容內或緊接其後（不含逗號），回傳 i
-        cum += 1; // 加上分隔用的逗號長度
-    }
-    return rawData.length - 1; // 超出則回傳最後一項
+function indexFromCursor(text, point) {
+    const textBefore = text.substring(0, point);
+    const cleanedText = textBefore.replace(/\|\|.*$/gm, "");
+    return (cleanedText.match(/,/g) || []).length;
 }
 
 getCursorNoteIndex.addEventListener('click', () => {
     const point = editorInput.selectionStart;
-    nowIndex = indexFromCursor(point);
-    for (let i = 0; i < notes.length; i++) {
-        if (notes[i].index === nowIndex) {
-            const value = notes[i].time + musicDelay;
-            globalTime = value - musicDelay;
-            realTime = value;
-            slider.value = realTime;
-            slideInputDebounce();
-            audioManager.stopAllLongSounds();
+    const targetTime = dataIndexToTime[indexFromCursor(editorInput.value, point)];
+    const value = targetTime + musicDelay;
+    globalTime = value - musicDelay;
+    realTime = value;
+    slider.value = realTime;
+    slideInputDebounce();
+    audioManager.stopAllLongSounds();
 
-            if (playButton.dataset.playing === 'true') {
-                audioManager.playBGM(realTime);
-            } else {
-                draw();
-            }
-
-            editorInput.focus();
-            break;
-        }
+    if (playButton.dataset.playing === 'true') {
+        audioManager.playBGM(realTime);
+    } else {
+        draw();
     }
+
+    editorInput.focus();
 });
 
 const applySelectedRotation = (direction) => {
@@ -2846,20 +2968,28 @@ fHorizontalButton.addEventListener('click', () => {
 });
 
 function update(timestamp) {
+    // 1. 基本時間計算
     const bp = settings.playbackSpeed || 1;
     if (lastTimestamp === null) lastTimestamp = timestamp;
     const dt = (timestamp - lastTimestamp) / 1000; // 秒
     lastTimestamp = timestamp;
-    if (playButton.dataset.playing === 'true') {
+
+    const isPlaying = playButton.dataset.playing === 'true';
+
+    // 2. 邏輯更新區塊：僅在播放狀態下推進時間
+    if (isPlaying) {
         realTime += dt * bp;
         globalTime = realTime - musicDelay;
+
+        // BGM 與影片同步邏輯（每秒檢查一次）
         if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
-            //audioManager.playBGM(realTime);
             const bgmTime = audioManager.haveBGM() ? audioManager.getBGMTime() : null;
             if (bgmTime !== null && Math.abs(bgmTime - realTime) > 0.03) {
                 realTime = bgmTime;
                 globalTime = realTime - musicDelay;
             }
+
+            // 背景影片同步邏輯[cite: 2]
             if (editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 2) {
                 const nowSec = performance.now() / 1000;
                 const diff = Math.abs(editorBackgroundVideo.currentTime - realTime);
@@ -2877,20 +3007,28 @@ function update(timestamp) {
 
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
         slider.value = realTime;
-        draw(dt);
+
+        // 結束播放判定[cite: 2]
         if (globalTime >= endTime) {
             playButton.dataset.playing = 'false';
             playButton.children[0].innerText = "play_arrow";
             globalTime = endTime;
-            slider.value = realTime; // 保持 slider 值與 realTime 一致
-        } else {
-            if (!keepRenderingWhilePause) requestAnimationFrame(update);
+            slider.value = realTime;
         }
     }
-    if (keepRenderingWhilePause) {
-        requestAnimationFrame(update);
+
+    // 3. 渲染與循環區塊：解決重複渲染的核心
+    // 只要處於「播放中」或者「暫停但需持續渲染（如：顯示感應器或動畫）」的狀態
+    if (isPlaying || keepRenderingWhilePause) {
+        // 確保一幀只呼叫一次渲染
         draw(dt);
-    };
+
+        // 確保一個循環只請求一次下一幀[cite: 2]
+        requestAnimationFrame(update);
+    } else {
+        // 暫停且不需持續渲染時，重置 timestamp 以免下次啟動時 dt 過大[cite: 2]
+        lastTimestamp = null;
+    }
 }
 
 function resize() {
@@ -2976,6 +3114,8 @@ function openSecondWindow() {
         // 你可以在這裡重置主視窗的某些狀態
         secondCtx = null;
         ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
+        renderer.setContext(ctx); // 告訴 renderer 使用第二個 Canvas 的上下文
+        draw(); // 重新繪製到主 Canvas
     });
 
     const syncResize = () => {
@@ -2998,10 +3138,616 @@ function openSecondWindow() {
     draw(); // 重新繪製到第二個 Canvas
 }
 
-// TODO
-/*recordVideoButton.addEventListener('click', async () => {
+// 逐幀渲染並輸出（使用 Mediabunny）
+recordVideoButton.addEventListener('click', async () => {
+    if (!window.Mediabunny) {
+        simpleToast({ content: 'Mediabunny 未載入，無法錄製', type: 'error' });
+        return;
+    }
 
-});*/
+    const {
+        Output,
+        BufferTarget,
+        WebMOutputFormat,
+        CanvasSource,
+        AudioBufferSource,
+        QUALITY_HIGH
+    } = window.Mediabunny;
+
+    // UI: 使用 createLabeledInput 建立欄位（保留音訊 checkbox）
+    const container = document.createElement('div');
+    container.style.cssText = 'display:flex;flex-direction:column;gap:8px;font-size:13px;';
+
+    const inputRefs = {};
+    const startDefault = String(Math.max(0, realTime || 0).toFixed(2));
+    const endDefault = (typeof audioManager?.getBGMDuration === 'function') ? String(Math.min(endTime || 0, audioManager.getBGMDuration() || endTime || 0).toFixed(2)) : String((endTime || 0).toFixed(2));
+    const fpsDefault = '30';
+
+    const startField = createLabeledInput1({ value: startDefault, labelText: '開始時間 (s):', type: 'text', assign: 'record_start', ref: inputRefs });
+    const endField = createLabeledInput1({ value: endDefault, labelText: '結束時間 (s):', type: 'text', assign: 'record_end', ref: inputRefs });
+    const fpsField = createLabeledInput1({ value: fpsDefault, labelText: 'FPS:', type: 'text', assign: 'record_fps', ref: inputRefs });
+    const widthField = createLabeledInput1({ value: 1080, labelText: '寬度:', type: 'text', assign: 'record_width', ref: inputRefs });
+    const heightField = createLabeledInput1({ value: 720, labelText: '高度:', type: 'text', assign: 'record_height', ref: inputRefs });
+    const bgmVolField = createLabeledInput1({ value: settings.musicVolume, labelText: 'BGM 音量:', type: 'text', assign: 'record_bgm_vol', ref: inputRefs });
+    const sfxVolField = createLabeledInput1({ value: settings.SfxVolume, labelText: 'SFX 音量:', type: 'text', assign: 'record_sfx_vol', ref: inputRefs });
+
+    // 將輸入欄改為 number 類型以方便限制
+    if (inputRefs.record_start) { inputRefs.record_start.type = 'number'; inputRefs.record_start.step = '0.01'; inputRefs.record_start.min = '0'; }
+    if (inputRefs.record_end) { inputRefs.record_end.type = 'number'; inputRefs.record_end.step = '0.01'; inputRefs.record_end.min = '0'; }
+    if (inputRefs.record_fps) { inputRefs.record_fps.type = 'number'; inputRefs.record_fps.step = '1'; inputRefs.record_fps.min = '1'; }
+    if (inputRefs.record_width) { inputRefs.record_width.type = 'number'; inputRefs.record_width.step = '1'; inputRefs.record_width.min = '1'; }
+    if (inputRefs.record_height) { inputRefs.record_height.type = 'number'; inputRefs.record_height.step = '1'; inputRefs.record_height.min = '1'; }
+    if (inputRefs.record_bgm_vol) { inputRefs.record_bgm_vol.type = 'number'; inputRefs.record_bgm_vol.step = '0.1'; inputRefs.record_bgm_vol.min = '0'; }
+    if (inputRefs.record_sfx_vol) { inputRefs.record_sfx_vol.type = 'number'; inputRefs.record_sfx_vol.step = '0.1'; inputRefs.record_sfx_vol.min = '0'; }
+    // 包含音訊 checkbox（獨立處理）
+    const audioLabel = document.createElement('label');
+    audioLabel.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const audioSpan = document.createElement('span'); audioSpan.textContent = '包含音訊:'; audioSpan.style.cssText = 'width:110px;color:#ddd;';
+    const audioChk = document.createElement('input'); audioChk.type = 'checkbox'; audioChk.checked = !!audioManager?.bgmBuffer;
+    audioLabel.appendChild(audioSpan); audioLabel.appendChild(audioChk);
+    // 包含打擊音效（單獨選項）
+    const sfxLabel = document.createElement('label');
+    sfxLabel.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const sfxSpan = document.createElement('span'); sfxSpan.textContent = '包含打擊音效:'; sfxSpan.style.cssText = 'width:110px;color:#ddd;';
+    const sfxChk = document.createElement('input'); sfxChk.type = 'checkbox'; sfxChk.checked = true;
+    sfxLabel.appendChild(sfxSpan); sfxLabel.appendChild(sfxChk);
+
+    container.appendChild(startField.wrapper);
+    container.appendChild(endField.wrapper);
+    container.appendChild(fpsField.wrapper);
+    container.appendChild(widthField.wrapper);
+    container.appendChild(heightField.wrapper);
+    container.appendChild(bgmVolField.wrapper);
+    container.appendChild(sfxVolField.wrapper);
+    container.appendChild(audioLabel);
+    container.appendChild(sfxLabel);
+
+    popupWindow({
+        title: '逐幀渲染錄製',
+        customContent: container,
+        width: '420px',
+        buttons: [
+            {
+                text: '開始',
+                onClick: async (pwCtx) => {
+                    const outlineImage = await (async () => {
+                        try {
+                            const response = await fetch('./Skin/outline.png');
+                            if (!response.ok) throw new Error('fetch failed: ' + response.status);
+                            const blob = await response.blob();
+                            // 先嘗試建立 ImageBitmap（效能較好），失敗則回退到 HTMLImageElement
+                            try {
+                                if (window.createImageBitmap) {
+                                    return await createImageBitmap(blob);
+                                }
+                            } catch (e) {
+                                console.warn('createImageBitmap 失敗，改用 Image element', e);
+                            }
+                            return await new Promise((res, rej) => {
+                                const img = new Image();
+                                img.crossOrigin = 'anonymous';
+                                img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
+                                img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
+                                img.src = URL.createObjectURL(blob);
+                            });
+                        } catch (e) {
+                            console.error(`外框圖片載入失敗`, e);
+                            return null;
+                        }
+                    })();
+                    let start = parseFloat(inputRefs.record_start?.value) || 0;
+                    let end = parseFloat(inputRefs.record_end?.value) || endTime || (audioManager?.getBGMDuration ? audioManager.getBGMDuration() : endTime || 0);
+                    const fps = Math.max(1, parseInt(inputRefs.record_fps?.value || '30', 10));
+                    const width = Math.max(1, parseInt(inputRefs.record_width?.value || '1080', 10));
+                    const height = Math.max(1, parseInt(inputRefs.record_height?.value || '720', 10));
+                    const bgmVolume = parseFloat(inputRefs.record_bgm_vol?.value) ?? settings.musicVolume ?? 1.0;
+                    const sfxVolume = parseFloat(inputRefs.record_sfx_vol?.value) ?? settings.sfxVolume ?? 1.0;
+                    const includeAudio = audioChk.checked && !!audioManager?.bgmBuffer;
+
+                    if (end <= start) {
+                        simpleToast({ content: '結束時間需大於開始時間', type: 'error' });
+                        return;
+                    }
+
+                    try {
+                        pwCtx.setButtons([{ text: '取消', hideOnClick: true }]);
+                        pwCtx.setProgress(0);
+                        pwCtx.setContent('準備中...');
+
+                        // 建立 offscreen canvas（不加入 DOM）
+                        const off = document.createElement('canvas');
+                        off.width = width;
+                        off.height = height;
+                        const offCtx = off.getContext('2d');
+
+                        const dpr = window.devicePixelRatio || 1;
+
+                        const scaleValue = renderer?.scale ?? scale;
+                        const p = Math.min(width, height) / scaleBase * scaleValue;
+                        offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
+
+                        // Mediabunny 輸出設定
+                        const target = new BufferTarget();
+                        const format = new WebMOutputFormat();
+                        const output = new Output({ format, target });
+
+                        const encodingConfig = {
+                            codec: 'vp8',
+                            bitrate: QUALITY_HIGH,
+                            keyFrameInterval: 0.5,
+                            latencyMode: 'quality'
+                        };
+
+                        const videoSource = new CanvasSource(off, encodingConfig);
+                        output.addVideoTrack(videoSource, { frameRate: fps });
+
+                        // 準備匯出的背景來源：優先背景影片，其次背景圖片，否則使用純色
+                        let exportVideo = null;
+                        let exportVideoReady = false;
+                        if (editorBackgroundVideo && editorBackgroundVideo.src) {
+                            try {
+                                exportVideo = document.createElement('video');
+                                exportVideo.src = editorBackgroundVideo.src;
+                                exportVideo.muted = true;
+                                exportVideo.crossOrigin = 'anonymous';
+                                exportVideo.preload = 'auto';
+                                // 等待 metadata（或短 timeout）以取得 duration/尺寸
+                                await new Promise((res) => {
+                                    let done = false;
+                                    const onloaded = () => { if (done) return; done = true; exportVideo.removeEventListener('loadedmetadata', onloaded); res(); };
+                                    exportVideo.addEventListener('loadedmetadata', onloaded);
+                                    setTimeout(() => { if (done) return; done = true; exportVideo.removeEventListener('loadedmetadata', onloaded); res(); }, 1500);
+                                });
+                                exportVideoReady = true;
+                            } catch (e) {
+                                console.warn('建立匯出用背景影片失敗', e);
+                                exportVideo = null;
+                                exportVideoReady = false;
+                            }
+                        }
+
+                        // 預先建立 audioSource 與切片，但不要在 start 前 add 到 encoder
+                        let audioSource = null;
+                        let slicedAudio = null;
+                        if (includeAudio) {
+                            audioSource = new AudioBufferSource({ codec: 'opus', bitrate: QUALITY_HIGH });
+                            output.addAudioTrack(audioSource);
+                            // slice AudioBuffer
+                            const sliceAudioBuffer = (buf, s, e) => {
+                                const sr = buf.sampleRate;
+                                const startSample = Math.max(0, Math.floor(s * sr));
+                                const endSample = Math.min(buf.length, Math.floor(e * sr));
+                                const len = Math.max(0, endSample - startSample);
+                                const nb = new AudioBuffer({ length: len, numberOfChannels: buf.numberOfChannels, sampleRate: sr });
+                                for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+                                    const data = buf.getChannelData(ch).subarray(startSample, endSample);
+                                    nb.getChannelData(ch).set(data);
+                                }
+                                return nb;
+                            };
+
+                            const bgmBuf = audioManager.bgmBuffer;
+                            slicedAudio = bgmBuf ? sliceAudioBuffer(bgmBuf, start, end) : null;
+
+                            // 若使用者勾選包含打擊音效，合成 SFX 到切片上
+                            const includeSfx = sfxChk.checked;
+                            if (includeSfx) {
+                                const sfxEvents = [];
+                                const longSoundEvents = []; // 新增：用於收集需要長按迴圈的音效
+
+                                for (let ni = 0; ni < notes.length; ni++) {
+                                    const note = notes[ni];
+                                    const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+                                    const startT = note.time + musicDelay;
+                                    const endT = note.time + skipT + musicDelay;
+
+                                    // 收集常規短音效 (包含 Mono 屬性與音量)
+                                    if (startT >= start && startT <= end) {
+                                        note._startEffectPlayed = false;
+                                        const evs = audioManager.getSfxEventsForNote(note, startT);
+                                        for (const ev of evs) {
+                                            sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
+                                        }
+                                    }
+                                    if (endT >= start && endT <= end) {
+                                        note._startEffectPlayed = true;
+                                        const evsEnd = audioManager.getSfxEventsForNote(note, endT);
+                                        for (const ev of evsEnd) {
+                                            sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
+                                        }
+                                    }
+
+                                    // 收集長按音效 (Touch Hold Riser)
+                                    if (note.type === 'touch' && note.holdDuration > 0) {
+                                        // 只要這段長按的時間區間有與錄製區間 [start, end] 重疊就記錄
+                                        if (startT < end && endT > start) {
+                                            longSoundEvents.push({
+                                                key: 'touchHold_riser',
+                                                startSec: startT,
+                                                endSec: endT
+                                            });
+                                        }
+                                    }
+                                }
+
+                                // 依據時間排序，這是為了後續能正確尋找 Mono 音效的下一次觸發時間
+                                sfxEvents.sort((a, b) => a.time - b.time);
+
+                                // 核心音訊合成函數
+                                const mixSfxInto = (baseBuf, events, longEvents, s, e) => {
+                                    const sr = baseBuf ? baseBuf.sampleRate : (audioManager.ctx.sampleRate || 48000);
+                                    const outLen = Math.max(1, Math.ceil((e - s) * sr));
+                                    const bgmChannels = baseBuf ? baseBuf.numberOfChannels : 0;
+
+                                    let sfxMaxCh = 1;
+                                    for (const [k, b] of audioManager.bufferMap.entries()) {
+                                        if (b && b.numberOfChannels > sfxMaxCh) sfxMaxCh = b.numberOfChannels;
+                                    }
+                                    const outCh = Math.max(bgmChannels || 0, sfxMaxCh || 1);
+                                    const out = new AudioBuffer({ length: outLen, numberOfChannels: outCh, sampleRate: sr });
+
+                                    // 1. 處理 BGM 拷貝與音量
+                                    if (baseBuf) {
+                                        for (let ch = 0; ch < outCh; ch++) {
+                                            const dst = out.getChannelData(ch);
+                                            const src = baseBuf.getChannelData(ch < baseBuf.numberOfChannels ? ch : 0);
+                                            const copyLen = Math.min(src.length, outLen);
+
+                                            if (bgmVolume === 1.0) {
+                                                dst.set(src.subarray(0, copyLen));
+                                            } else {
+                                                for (let i = 0; i < copyLen; i++) {
+                                                    dst[i] = src[i] * bgmVolume;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 2. 處理長按音效 (Riser) 及其迴圈邏輯
+                                    const addLoopingBufferAt = (key, eventStartSec, eventEndSec) => {
+                                        const sfxBuf = audioManager.bufferMap.get(key);
+                                        if (!sfxBuf) return;
+                                        const loop = audioManager.loopPoints[key];
+
+                                        // 依據 AudioManager，長音有獨立 Gain (預設 0.5)，再加上全局 SFX 音量
+                                        const finalVol = 0.5 * sfxVolume;
+
+                                        const sfxRate = sfxBuf.sampleRate || sr;
+                                        // 該音效在錄影區段內實際可聽見的區間
+                                        const audibleStartSec = Math.max(s, eventStartSec);
+                                        const audibleEndSec = Math.min(e, eventEndSec);
+                                        if (audibleStartSec >= audibleEndSec) return;
+
+                                        const startIdx = Math.floor((audibleStartSec - s) * sr);
+                                        const endIdx = Math.floor((audibleEndSec - s) * sr);
+
+                                        for (let ch = 0; ch < sfxBuf.numberOfChannels; ch++) {
+                                            const src = sfxBuf.getChannelData(ch);
+                                            const dst = out.getChannelData(ch < outCh ? ch : 0);
+
+                                            for (let idx = startIdx; idx < endIdx; idx++) {
+                                                if (idx < 0 || idx >= outLen) continue;
+
+                                                // 計算當前取樣點相對於音效發聲起點經過了多少秒
+                                                const timeSinceEventStart = (s + idx / sr) - eventStartSec;
+                                                let sampleSec = timeSinceEventStart;
+
+                                                // 迴圈點折返邏輯
+                                                if (loop) {
+                                                    if (sampleSec >= loop.end) {
+                                                        const loopDuration = loop.end - loop.start;
+                                                        const timeInsideLoop = (sampleSec - loop.end) % loopDuration;
+                                                        sampleSec = loop.start + timeInsideLoop;
+                                                    }
+                                                } else if (sampleSec >= sfxBuf.length / sfxRate) {
+                                                    continue;
+                                                }
+
+                                                const srcIdx = Math.floor(sampleSec * sfxRate);
+                                                if (srcIdx >= 0 && srcIdx < src.length) {
+                                                    dst[idx] += src[srcIdx] * finalVol;
+                                                }
+                                            }
+                                        }
+                                    };
+
+                                    // 將收集到的長按音效渲染進 Buffer
+                                    for (const lev of longEvents) {
+                                        addLoopingBufferAt(lev.key, lev.startSec, lev.endSec);
+                                    }
+
+                                    // 3. 處理短音效與 Mono 切斷邏輯
+                                    const addBufferAt = (sfxBuf, atSec, baseVol, isMono, cutoffSec) => {
+                                        if (!sfxBuf) return;
+                                        const finalVol = (baseVol ?? 1) * sfxVolume;
+                                        const offsetIdx = Math.floor((atSec - s) * sr);
+                                        const sfxRate = sfxBuf.sampleRate || sr;
+                                        const ratio = sr / sfxRate;
+
+                                        // 計算最大可播放時間 (遇到截斷點則提早結束)
+                                        let maxDurationSec = sfxBuf.length / sfxRate;
+                                        if (isMono && cutoffSec !== undefined) {
+                                            maxDurationSec = Math.min(maxDurationSec, cutoffSec - atSec);
+                                        }
+                                        const maxSamples = Math.floor(maxDurationSec * sfxRate);
+
+                                        for (let ch = 0; ch < sfxBuf.numberOfChannels; ch++) {
+                                            const src = sfxBuf.getChannelData(ch);
+                                            const dst = out.getChannelData(ch < outCh ? ch : 0);
+                                            for (let i = 0; i < maxSamples && i < src.length; i++) {
+                                                const idx = offsetIdx + Math.floor(i * ratio);
+                                                if (idx < 0) continue;
+                                                if (idx >= outLen) break;
+                                                dst[idx] += src[i] * finalVol;
+                                            }
+                                        }
+                                    };
+
+                                    // apply all short events
+                                    for (let i = 0; i < events.length; i++) {
+                                        const ev = events[i];
+                                        const sfxBuf = audioManager.bufferMap.get(ev.key);
+                                        if (!sfxBuf) continue;
+
+                                        // 如果是 Mono 音效，往後尋找同一個 key 的下一次發聲時間作為截斷點
+                                        let cutoffSec = undefined;
+                                        if (ev.isMono) {
+                                            for (let j = i + 1; j < events.length; j++) {
+                                                if (events[j].key === ev.key && events[j].isMono) {
+                                                    cutoffSec = events[j].time;
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        addBufferAt(sfxBuf, ev.time, ev.volume, ev.isMono, cutoffSec);
+                                    }
+
+                                    // 4. Clamp (防止破音)
+                                    for (let ch = 0; ch < outCh; ch++) {
+                                        const d = out.getChannelData(ch);
+                                        for (let i = 0; i < d.length; i++) {
+                                            if (d[i] > 1) d[i] = 1;
+                                            else if (d[i] < -1) d[i] = -1;
+                                        }
+                                    }
+
+                                    return out;
+                                };
+
+                                // 執行合成
+                                slicedAudio = mixSfxInto(slicedAudio, sfxEvents, longSoundEvents, start, end);
+                            }
+                        }
+
+                        // 啟動輸出（start 必須在加入音訊資料前呼叫）
+                        await output.start();
+
+                        // 若有切好的音訊，現在再送入 encoder
+                        if (includeAudio && audioSource && slicedAudio) {
+                            await audioSource.add(slicedAudio);
+                        }
+
+                        // 暫存並切換 renderer context 到 offscreen
+                        const mainCtx = canvas.getContext('2d');
+                        renderer.setContext(offCtx);
+
+                        // faster seek helper to reduce per-frame seek latency
+                        const seekVideoTo = async (video, time) => {
+                            if (!video) return;
+                            const cur = video.currentTime || 0;
+                            if (Math.abs(cur - time) <= VIDEO_SEEK_THRESHOLD) return;
+
+                            // Try fastSeek when supported
+                            if (typeof video.fastSeek === 'function') {
+                                try { video.fastSeek(time); } catch (e) { try { video.currentTime = time; } catch (e2) { video.currentTime = time; } }
+                                await new Promise((res) => {
+                                    let done = false;
+                                    const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
+                                    video.addEventListener('seeked', onseek);
+                                    setTimeout(() => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); }, 200);
+                                });
+                                return;
+                            }
+
+                            // Use requestVideoFrameCallback when available (often faster)
+                            if (typeof video.requestVideoFrameCallback === 'function') {
+                                try { video.currentTime = time; } catch (e) { video.currentTime = time; }
+                                await new Promise((res) => {
+                                    let done = false;
+                                    const cb = () => { if (done) return; done = true; res(); };
+                                    try { video.requestVideoFrameCallback(cb); } catch (e) { /* ignore */ }
+                                    setTimeout(() => { if (done) return; done = true; res(); }, 200);
+                                });
+                                return;
+                            }
+
+                            // Fallback to seeked event with a shorter timeout
+                            await new Promise((res) => {
+                                let done = false;
+                                const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
+                                video.addEventListener('seeked', onseek);
+                                try { video.currentTime = time; } catch (e) { video.currentTime = time; }
+                                setTimeout(() => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); }, 300);
+                            });
+                        };
+
+                        // offline render loop
+                        const total = end - start;
+                        const frameCount = Math.max(1, Math.ceil(total * fps));
+                        const step = 1 / fps;
+
+                        pwCtx.setContent(`開始逐幀渲染：${frameCount} 幀`);
+                        for (let i = 0; i < frameCount; i++) {
+                            const t = start + i * step; // 真實時間 (s)
+                            const globalT = t - (musicDelay || 0);
+
+                            // 準備 buckets（複製自 draw 的分類邏輯，但不包含副作用）
+                            const playingFlag = false;
+                            const speedCoeff = settings.speed * 0.8833 + 0.8167;
+                            const touchSpeedCoeff = settings.touchSpeed * 0.8833 + 0.8167;
+
+                            const buckets = { slide: [], tapnhold: [], touch: [] };
+                            const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
+
+                            let playComboLocal = 0;
+                            let playScoreLocal = 0;
+                            let slideOnScreenCount = 0;
+                            let nowIndexLocal = 0;
+
+                            for (let j = notes.length - 1; j >= 0; j--) {
+                                const note = notes[j];
+                                const noteT = note.time - globalT;
+                                const noteType = note.type;
+                                const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+
+                                if (noteT < 0) {
+                                    const shouldCountCombo =
+                                        (noteType === 'slide' ? (note.lastSlide && skipT + noteT < 0) :
+                                            noteType === 'hold' ? (skipT + noteT < 0) :
+                                                noteType === 'touch' && note.holdDuration !== undefined ? (skipT + noteT < 0) :
+                                                    noteType !== 'slide');
+                                    if (shouldCountCombo) {
+                                        playComboLocal++;
+                                        playScoreLocal += ((note.isBreak ? 5 :
+                                            (noteType === "slide" ? 3 :
+                                                note.holdDuration !== undefined ? 2 : 1)
+                                        ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
+                                    }
+                                }
+
+                                const tval = 1 - renderer.timeFunction(noteT * speedCoeff);
+                                const touchT = 1 - renderer.timeFunction(noteT * touchSpeedCoeff);
+
+                                const isVisible =
+                                    (noteType === 'slide' ? (tval >= (settings.middleDistance || 0.25)) :
+                                        noteType === 'touch' ? (touchT >= -1) :
+                                            tval >= -1)
+                                    && -noteT <= skipT + (note.isHanabi ? (settings.hanabiEffectDecayTime || 0.8) : (settings.effectDecayTime || 0.4));
+
+                                if (isVisible) {
+                                    if (noteType === 'slide') {
+                                        if (slideOnScreenCount < (settings.maxSlideCount || 500)) {
+                                            buckets.slide.push(note);
+                                            slideOnScreenCount++;
+                                        }
+                                    } else if (noteType === 'hold' || noteType === 'tap') {
+                                        buckets.tapnhold.push(note);
+                                    } else if (noteType === 'touch') {
+                                        buckets.touch.push(note);
+                                    }
+                                }
+                            }
+
+                            // 每幀先把背景畫到 offscreen（優先影片 > 圖片 > 純色），再讓 renderer 在上層繪製
+                            try {
+                                offCtx.save();
+                                // 切回像素座標以方便 drawImage
+                                offCtx.setTransform(1, 0, 0, 1, 0, 0);
+                                // 先以背景色填滿整張離線畫布
+                                offCtx.fillStyle = settings.backgroundColor || '#000';
+                                offCtx.fillRect(0, 0, off.width, off.height);
+                                const rs = renderer.scale || scale;
+
+                                // 計算中央方框 (backgroundContainer 行為：以畫布最小邊為方框)
+                                const boxSize = Math.min(off.width, off.height);
+                                const boxX = Math.round((off.width - boxSize) / 2);
+                                const boxY = Math.round((off.height - boxSize) / 2);
+                                const boxW = boxSize, boxH = boxSize;
+
+                                // helper: draw image/video with object-fit: contain into dest rect
+                                const drawContain = (srcW, srcH, drawFn) => {
+                                    if (!srcW || !srcH) return drawFn(0, 0, srcW, srcH, boxX, boxY, boxW, boxH);
+                                    const scale = Math.min(boxW / srcW, boxH / srcH) * rs;
+                                    const dw = Math.round(srcW * scale);
+                                    const dh = Math.round(srcH * scale);
+                                    const dx = Math.round(boxX + (boxW - dw) / 2);
+                                    const dy = Math.round(boxY + (boxH - dh) / 2);
+                                    return drawFn(0, 0, srcW, srcH, dx, dy, dw, dh);
+                                };
+
+                                if (exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
+                                    // 以實際時間 t 為基準 seek
+                                    const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
+                                    if (Math.abs((exportVideo.currentTime || 0) - bgTarget) > VIDEO_SEEK_THRESHOLD) {
+                                        await seekVideoTo(exportVideo, bgTarget);
+                                    }
+                                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                                    const vw = exportVideo.videoWidth || exportVideo.width || boxW;
+                                    const vh = exportVideo.videoHeight || exportVideo.height || boxH;
+                                    drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(exportVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh));
+                                    offCtx.filter = 'none';
+                                } else if (editorBackgroundImage && editorBackgroundImage.src && editorBackgroundImage.complete) {
+                                    const img = editorBackgroundImage;
+                                    const iw = img.naturalWidth || img.width || boxW;
+                                    const ih = img.naturalHeight || img.height || boxH;
+                                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                                    drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(img, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh));
+                                    offCtx.filter = 'none';
+                                } else {
+                                    // 已用背景色塗滿
+                                }
+                                if (outlineImage) {
+                                    offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
+                                    offCtx.drawImage(
+                                        outlineImage,
+                                        scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9,
+                                        scaleBase * 0.9, scaleBase * 0.9,
+                                    );
+                                }
+                            } finally {
+                                offCtx.restore();
+                            }
+
+                            // 呼叫 renderer 繪製於背景之上（不清除畫面）
+                            renderer.drawFrame({
+                                globalTime: globalT,
+                                buckets,
+                                dt: step,
+                                showSensor: settings.showSensor,
+                                showSensorText: (settings.showSensorTextWhenPaused && false),
+                                playCombo: playComboLocal,
+                                playScore: playScoreLocal,
+                                nowIndex: nowIndexLocal,
+                                skipClear: true
+                            });
+
+                            // 將當前 offscreen canvas 狀態加入 video source（時間從 0 開始）
+                            const tsRelative = i * step;
+                            await videoSource.add(tsRelative, step);
+
+                            pwCtx.setProgress(((i + 1) / frameCount) * 100);
+                            pwCtx.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀`);
+                        }
+
+                        // 完成並產生檔案
+                        await output.finalize();
+                        const mime = await output.getMimeType();
+                        const ext = output.format?.fileExtension || '.webm';
+                        const buf = target.buffer;
+                        if (!buf) throw new Error('未取得輸出 buffer');
+                        const blob = new Blob([buf], { type: mime });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = `simai_render${ext}`; document.body.appendChild(a); a.click(); a.remove();
+
+                        simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
+
+                        // 還原 renderer context
+                        renderer.setContext(mainCtx);
+                        pwCtx.setProgress(100);
+                        pwCtx.setContent('完成');
+                    } catch (err) {
+                        console.error('逐幀渲染失敗', err);
+                        simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
+                        try { pwCtx.setContent('錯誤：' + String(err)); } catch (e) { }
+                        try { renderer.setContext(canvas.getContext('2d')); } catch (e) { }
+                    }
+                },
+            },
+            { text: '取消', hideOnClick: true }
+        ]
+    });
+});
 
 window.addEventListener('resize', resize);
 
@@ -3042,6 +3788,7 @@ function draw(dt = 0) {
     })();
     const V = visualHeight / settings.visualZoom;
     const effectDecayTime = settings.effectDecayTime;
+    const hanabiEffectDecayTime = settings.hanabiEffectDecayTime;
     const maxSlideCount = settings.maxSlideCount;
     const middleDistance = settings.middleDistance;
     const speedCoeff = settings.speed * 0.8833 + 0.8167;
@@ -3072,6 +3819,7 @@ function draw(dt = 0) {
     }
 
     playCombo = 0;
+    playScore = 0;
     let slideOnScreenCount = 0;
     let foundIndexForThisFrame = false;
 
@@ -3095,7 +3843,13 @@ function draw(dt = 0) {
                     noteType === "hold" ? (skipT + noteT < 0) :
                         noteType === "touch" && note.holdDuration !== undefined ? (skipT + noteT < 0) :
                             noteType !== "slide");
-            if (shouldCountCombo) playCombo++;
+            if (shouldCountCombo) {
+                playCombo++;
+                playScore += ((note.isBreak ? 5 :
+                    (noteType === "slide" ? 3 :
+                        note.holdDuration !== undefined ? 2 : 1)
+                ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
+            }
         }
 
         // 音效和狀態管理
@@ -3151,7 +3905,7 @@ function draw(dt = 0) {
             (noteType === "slide" ? t >= middleDistance :
                 noteType === "touch" ? touchT >= -1 :
                     t >= -1)
-            && -noteT <= skipT + effectDecayTime * (note.isHanabi ? 2 : 1);
+            && -noteT <= skipT + (note.isHanabi ? hanabiEffectDecayTime : effectDecayTime);
 
         const isVisualVisible = noteT >= 0
             ? Math.abs(noteT) <= V
@@ -3201,6 +3955,7 @@ function draw(dt = 0) {
         showSensorText: (settings.showSensorTextWhenPaused && !playing),
         playCombo,
         playScore,
+        nowIndex
     });
 
     if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {
@@ -3209,6 +3964,8 @@ function draw(dt = 0) {
             visualBuckets,
             audioBuffer: audioManager.bgmBuffer,
             offset: musicDelay,
+            indexTime: dataIndexToTime[nowIndex],
+            cursorIndexTime: cursorLastIndexTime,
         });
     }
 

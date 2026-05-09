@@ -94,6 +94,7 @@ export class SimaiRenderer {
     }
 
     setContext(ctx) {
+        this.canvas = ctx.canvas;
         this.ctx = ctx;
     }
 
@@ -137,25 +138,38 @@ export class SimaiRenderer {
     }
 
     simpleHanabi(noteT, isCenter) {
-        const t = noteT / (2 * this.settings.effectDecayTime);
+        const t = noteT / this.settings.hanabiEffectDecayTime;
         if (t < -1) return;
         this.ctx.save();
         const ease = (x) => 1 - Math.pow(1 - x, 2);
         const decayAlpha = 1 - Math.max(0, -t);
-        const radius = (2 + isCenter * 2) * this.settings.noteBaseSize * ease(1 - decayAlpha);
+        const radius = (3 + isCenter * 1) * this.settings.noteBaseSize * ease(1 - decayAlpha);
         const color = this.ctx.createLinearGradient(-radius, -radius, radius, radius);
         color.addColorStop(0, "#00D5FF");
         color.addColorStop(0.4, "#FF00FF");
         color.addColorStop(0.8, "#FFD823");
         color.addColorStop(1, "#FFD823");
+        const white = this.ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.3);
+        white.addColorStop(0, "#ffffff00");
+        white.addColorStop(0.4, "#ffffff00");
+        white.addColorStop(0.8, "#ffffff8b");
+        white.addColorStop(1, "#ffffff00");
 
         this.ctx.globalAlpha = decayAlpha;
         this.ctx.globalCompositeOperation = 'lighter';
-        this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
+        this.ctx.fillStyle = white;
+        this.ctx.globalAlpha = decayAlpha * 0.8;
         this.ctx.beginPath();
+        this.ctx.arc(0, 0, radius * 1.3, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.beginPath();
+        this.ctx.lineWidth = 1.4 * decayAlpha * this.settings.noteBaseSize * (1 - ease(Math.max(0, -t)));
+        this.ctx.strokeStyle = color;
         this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
         this.ctx.stroke();
+        this.ctx.fillStyle = color;
+        this.ctx.globalAlpha = decayAlpha * 0.5;
+        this.ctx.fill();
         this.ctx.restore();
     }
 
@@ -195,7 +209,7 @@ export class SimaiRenderer {
 
     drawFrame(state) {
         const { ctx } = this;
-        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore, skipClear } = state;
+        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore, skipClear, nowIndex } = state;
 
         this.globalTime = globalTime;
         this.playCombo = playCombo;
@@ -230,19 +244,19 @@ export class SimaiRenderer {
         for (const n of buckets.touch) this.drawTouch(n);
 
         this.drawStaticBackground();
-        this.drawUI(dt, globalTime);
+        if (this.settings.showUI) this.drawUI(dt, globalTime, nowIndex);
     }
 
-    drawUI(dt, globalTime) {
+    drawUI(dt, globalTime, nowIndex) {
         const { ctx } = this;
         const { width: w, height: h } = this.getCanvasWH();
         ctx.save();
-        ctx.font = "3px Arial";
+        ctx.font = "3px Google Sans";
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.fillText(`FPS: ${dt === 0 ? 'N/A' : (1 / dt).toFixed(2)}`, -w / 2 + 2, -h / 2 + 2);
-        ctx.fillText(`Time: ${globalTime.toFixed(2)}s`, -w / 2 + 2, -h / 2 + 6);
+        ctx.fillText(`Time: ${Math.floor(globalTime / 60)}:${(globalTime % 60).toFixed(2)}`, -w / 2 + 2, -h / 2 + 6);
         ctx.restore();
     }
 
@@ -266,7 +280,7 @@ export class SimaiRenderer {
 
         cctx.save();
         cctx.beginPath();
-        cctx.rect(scaleBase / -2, scaleBase / -2, scaleBase, scaleBase);
+        cctx.rect(-wPx, -hPx, wPx * 2, hPx * 2);
         cctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
         cctx.fill('evenodd');
         cctx.restore();
@@ -287,6 +301,7 @@ export class SimaiRenderer {
     }
 
     ensureMiddleDisplayCache() {
+        //const {width: wPx, height: hPx} = this.getCanvasWH();
         const wPx = this.canvas.width;
         const hPx = this.canvas.height;
         const scale = this.scale;
@@ -295,7 +310,7 @@ export class SimaiRenderer {
         const current = {
             middleDisplay: this.settings.middleDisplay,
             play_combo: this.playCombo,
-            play_score: Math.round(Math.max(this.playScore, 0)),
+            play_score: Math.max(this.playScore, 0),
             backgroundDarkness: this.settings.backgroundDarkness ?? 0,
         };
         const params = this._middleDisplayCacheParams;
@@ -336,6 +351,25 @@ export class SimaiRenderer {
 
     renderMiddleDisplayToContext(ctx) {
         ctx.save();
+        function textMonospace(text, x, y, cellWidth, mode = 'stroke') {
+            ctx.textAlign = 'left';
+            const chars = text.split('');
+
+            chars.forEach((char, i) => {
+                // 測量單一字元的實際寬度
+                const charWidth = ctx.measureText(char).width;
+
+                // 計算置中偏移量，讓字元在格子內置中
+                const offsetX = (cellWidth - charWidth) / 2;
+
+                // 繪製
+                if (mode === 'stroke') {
+                    ctx.strokeText(char, x + (i * cellWidth) + offsetX, y);
+                } else {
+                    ctx.fillText(char, x + (i * cellWidth) + offsetX, y);
+                }
+            });
+        }
         function outlineText(text, x, y, fontSize, outlinePx = 2, {
             fillStyle = "#FFFFFF",
             strokeStyle = "#000000",
@@ -346,59 +380,52 @@ export class SimaiRenderer {
             textBaseline = "middle",
             letterSpacing = "0px",
             shadowHeight = 0.3,
+            cellWidth = fontSize * 0.8,
         } = {}) {
+            cellWidth += letterSpacing ? fontSize * parseFloat(letterSpacing) : 0;
+            cellWidth = Math.max(cellWidth, 0);
+            let calX = x;
+            if (textAlign === "center") {
+                calX = x - ((text.length * cellWidth) / 2);
+            }
+            if (textAlign === "right") {
+                calX = x - (text.length * cellWidth);
+            }
             ctx.save();
             ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-            ctx.textAlign = textAlign;
             ctx.textBaseline = textBaseline;
-            if ('letterSpacing' in ctx) {
-                ctx.letterSpacing = letterSpacing;
-            }
             ctx.fillStyle = fillStyle;
             ctx.lineWidth = strokeWidth;
             if (strokeWidth > 0) {
                 ctx.strokeStyle = "#000";
-                ctx.strokeText(text, x, y + shadowHeight);
+                textMonospace(text, calX, y + shadowHeight, cellWidth);
                 ctx.strokeStyle = strokeStyle;
-                ctx.strokeText(text, x, y);
+                textMonospace(text, calX, y, cellWidth);
             }
-            ctx.fillText(text, x, y);
+            textMonospace(text, calX, y, cellWidth, 'fill');
             ctx.restore();
         }
         switch (this.settings.middleDisplay) {
             case 1:
                 if (this.playCombo != 0) {
                     outlineText("COMBO", 0, -7, 4.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" });
-                    outlineText(`${this.playCombo}`, 0, 0, 7.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: "0.5px" });
+                    outlineText(`${this.playCombo}`, 0, 0, 7.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: -0.1 });
                 }
-                ctx.letterSpacing = "0px";
                 break;
             case 2:
-                const trueScore = Math.round(Math.max(this.playScore, 0));
-                // use gamma correction for more natural progression
-                //ctx.fillStyle = adjustBrightness("#498BFF", (1 - this.settings.backgroundDarkness) ** 0.45);
-                if (trueScore > 800000) {
-                    //ctx.fillStyle = adjustBrightness("#FF6353", (1 - this.settings.backgroundDarkness) ** 0.45);
+                const trueScore = Math.max(this.playScore, 0).toFixed(4);
+                const sp = trueScore.split(".");
+                let scoreColor = "#4061A8";
+                if (trueScore > 80) {
+                    scoreColor = "#9E3D2E";
                 }
-                if (trueScore > 1000000) {
-                    //ctx.fillStyle = adjustBrightness("#FFD559", (1 - this.settings.backgroundDarkness) ** 0.45);
+                if (trueScore > 100) {
+                    scoreColor = "#99853A";
                 }
-                //ctx.strokeStyle = "white";
-                //ctx.lineWidth = Math.floor(hbw * 0.015);
-                //ctx.textAlign = "left";
-                //ctx.letterSpacing = "0px";
-                //ctx.font = "bold " + Math.floor(hbw * 0.13) + "px combo"
-                //ctx.strokeText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.085, hh + hbw * 0.06);
-                //ctx.fillText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.085, hh + hbw * 0.06);
-                //const lastScoreL = ctx.measureText(`${((trueScore / 10000) % 1).toFixed(4).slice(2, 6)}`).width;
-                //ctx.font = "bold " + Math.floor(hbw * 0.1) + "px combo"
-                //ctx.strokeText(`%`, hw - hbw * 0.045 + lastScoreL, hh + hbw * 0.06);
-                //ctx.fillText(`%`, hw - hbw * 0.045 + lastScoreL, hh + hbw * 0.06);
-                //ctx.textAlign = "right";
-                //ctx.letterSpacing = Math.floor(hbw * 0.01) + "px";
-                //ctx.font = "bold " + Math.floor(hbw * 0.18) + "px combo"
-                //ctx.strokeText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.075, hh + hbw * 0.06);
-                //ctx.fillText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.075, hh + hbw * 0.06);
+                outlineText(`${sp[0]}`, -1.8, 0, 7.4, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.1, textAlign: "right" });
+                outlineText(".", -2.3, 0.6, 5, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" });
+                outlineText(`${sp[1]}`, 0, 0.5, 5, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" });
+                outlineText("%", 14.4, 1.2, 3, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" });
                 break;
             default:
                 break;
@@ -743,8 +770,8 @@ export class SimaiRenderer {
     }
 
     drawSlide(s) {
-        const prefix = s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_");
-        const standardKey = s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide");
+        const prefix = (s.isIllegal && this.settings.slideIllegalRed) ? "wifi_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_"));
+        const standardKey = (s.isIllegal && this.settings.slideIllegalRed) ? "slide" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"));
 
         const imgs = [];
         if (s.slideType === "w") {
@@ -771,8 +798,8 @@ export class SimaiRenderer {
         if (-noteT > slideDelay) {
             slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
-        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br);
+        let br = (s.isBreak && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && slideProgress < 1) {
@@ -790,14 +817,14 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawPathWithArrows(recorder, starProgress, imgs, typew, br, config = { spacing: 4.36 }) {
+    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, config = { spacing: 4.36 }) {
         const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / config.spacing);
         const spacing = typew ? 7 : config.spacing;
         this.ctx.save();
         for (let i = arrowCount; i > Math.floor(starProgress * arrowCount); i--) {
             const imgIndex = Math.min(i - 1, imgs.length - 1);
-            const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], br, {
-                colorCode: "#fff8a6"
+            const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {
+                colorCode: isIllegal ? "#ff3838" : "#fff8a6"
             });
             const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
             const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
@@ -833,6 +860,25 @@ export class SimaiVisualEditor {
             double: '#DCDA6B',
             break: '#EBBA63',
         };
+        // marker state: 方塊表示現在游標位置（綠色），按下時變紅
+        this.markerPressed = false;
+        this.markerColors = { normal: '#00FF00', pressed: '#FF0000' };
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.markerX = 0;
+
+        // 綁定滑鼠事件以切換方塊顏色並更新位置
+        if (this.canvas && this.canvas.addEventListener) {
+            this._onPointerDown = this._onPointerDown.bind(this);
+            this._onPointerUp = this._onPointerUp.bind(this);
+            this._onPointerMove = this._onPointerMove.bind(this);
+            // use capture to ensure marker events are detected before other handlers
+            this.canvas.addEventListener('pointerdown', this._onPointerDown, { capture: true, passive: false });
+            this.canvas.addEventListener('pointerup', this._onPointerUp, { capture: true });
+            this.canvas.addEventListener('pointercancel', this._onPointerUp, { capture: true });
+            this.canvas.addEventListener('pointerleave', this._onPointerUp, { capture: true });
+            this.canvas.addEventListener('pointermove', this._onPointerMove, { capture: true, passive: false });
+        }
     }
 
     getCanvasWH() {
@@ -1221,13 +1267,15 @@ export class SimaiVisualEditor {
 
     render(isVisualMode, ensureVisualEditorContext, state) {
         if (!isVisualMode || this.canvas.style.display === 'none') return;
+        console.log("rendered");
 
-        const ctx = this.ctx || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null);
+        const ctx = this.ctx/* || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null)*/;
         if (!ctx) return;
 
         const { width: w, height: h } = this.getCanvasWH();
         if (w <= 0 || h <= 0) return;
-        const { globalTime, visualBuckets, audioBuffer, tags, offset } = state;
+        this._state = state;
+        const { globalTime, visualBuckets, audioBuffer, tags, offset } = this._state;
         this.globalTime = globalTime;
         this.tags = tags;
 
@@ -1247,6 +1295,98 @@ export class SimaiVisualEditor {
             else this.drawTap(n);
         });
         visualBuckets.touch.forEach(n => this.drawTouch(n));
+        // this._drawMarker();
+    }
+
+    _upd() {
+        this.render(true, null, this._state);
+    }
+
+    _updMousePos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+
+        // 1. 取得相對於畫布左上角的「物理像素」座標
+        const physicalX = (e.clientX - rect.left) * dpr;
+        const physicalY = (e.clientY - rect.top) * dpr;
+
+        // 2. 取得畫布目前的物理寬高
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        // 3. 計算與渲染器一致的縮放比例 p[cite: 2, 3]
+        // 渲染器使用的是：p = Math.min(w, h) / scaleBase
+        const p = Math.min(w, h) / scaleBase;
+
+        // 4. 逆向轉換：(物理座標 - 畫布中心) / 縮放比例
+        this.mouseX = (physicalX - w / 2) / p;
+        this.mouseY = (physicalY - h / 2) / p;
+    }
+
+    _drawMarker() {
+        const ctx = this.ctx;
+        // 使用 settings 中的 noteBaseSize 作為方塊大小[cite: 2]
+        const size = this.settings.noteBaseSize;
+
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        // 根據按下狀態切換顏色
+        ctx.fillStyle = this.markerPressed ? this.markerColors.pressed : this.markerColors.normal;
+
+        ctx.translate(this.mouseX, this.mouseY);
+        // 繪製中心對齊的方塊
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+
+        // 加入邊框增加辨識度
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(-size / 2, -size / 2, size, size);
+        ctx.restore();
+    }
+
+    _onPointerDown(e) {
+        if (e.button !== 0) return;
+        this.markerPressed = true;
+        this._updMousePos(e);
+
+        // 只有在循環沒有執行時才手動重繪
+        if (!this._isLoopActive()) {
+            this._upd();
+        }
+    }
+
+    _onPointerUp() {
+        this.markerPressed = false;
+
+        if (!this._isLoopActive()) {
+            this._upd();
+        }
+    }
+
+    _onPointerMove(e) {
+        // 1. 永遠更新座標，以便下一幀渲染時使用新位置
+        this._updMousePos(e);
+        this.markerX = this.mouseX;
+
+        // 2. 判斷是否需要手動觸發渲染
+        // 如果主循環 (Playing 或 KeepRendering) 正在跑，我們就不手動呼叫 render
+        if (!this._isLoopActive()) {
+            this._upd();
+        }
+    }
+
+    /**
+     * 輔助方法：檢查 main_4.js 的渲染循環是否正在執行
+     */
+    _isLoopActive() {
+        // 檢查播放按鈕狀態
+        const playButton = document.querySelector('[data-buttonAction="play/pause"]');
+        const isPlaying = playButton && playButton.dataset.playing === 'true';
+
+        // 檢查是否開啟了暫停時持續渲染 (假設此變數在 window 或 settings 中)
+        const isKeepRendering = window.keepRenderingWhilePause || false;
+
+        return isPlaying || isKeepRendering;
     }
 }
 
@@ -1629,6 +1769,22 @@ export class SimaiPreviewRenderer {
         ctx.restore();
     }
 
+    drawTriangle(x0, y0, x1, y1, x2, y2, color = '#fff', width = 1) {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.lineWidth = width;
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
     drawFrame(state) {
         const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
         this.w = w;
@@ -1639,8 +1795,9 @@ export class SimaiPreviewRenderer {
         this.ctx.clearRect(0, 0, w, h);
         this.ctx.lineJoin = 'bevel';
 
-        const { globalTime, visualBuckets, audioBuffer, offset } = state;
+        const { globalTime, visualBuckets, audioBuffer, offset, indexTime, cursorIndexTime } = state;
         this.globalTime = globalTime;
+        this.indexTime = indexTime ?? 0;
         this.drawAudioWaveform(audioBuffer, offset);
         visualBuckets.tags.forEach(t => this.drawTag(t));
         visualBuckets.slide.forEach(n => this.drawSlide(n));
@@ -1650,6 +1807,19 @@ export class SimaiPreviewRenderer {
             else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
         });
+        console.log(this.indexTime);
+        const ct = hw + (cursorIndexTime - globalTime) * this.zoom;
+        this.drawTriangle(
+            ct - h * 0.1, 0,
+            ct, h * 0.1,
+            ct + h * 0.1, 0,
+            '#ffd11b', 1);
+        const t = hw + (this.indexTime - globalTime) * this.zoom;
+        this.drawTriangle(
+            t - h * 0.1, 0,
+            t, h * 0.1,
+            t + h * 0.1, 0,
+            '#ff0000ce', 1);
         this.drawLine(hw, 0, hw, h, '#ff0000ce', 1);
     }
 }

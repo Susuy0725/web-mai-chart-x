@@ -579,77 +579,90 @@ class AudioManager {
     queueSound(note, targetTime) {
         const now = performance.now();
 
-        // --- 攔截 A: 防止同一個物件在短時間內重複進入 (50ms 內) ---
-        if (note._lastQueued && (now - note._lastQueued < 15)) return;
+        // --- 攔截 A: 防止同一個物件在短時間內重複進入 ---
+        if (note._lastQueued && (now - note._lastQueued < this.MIN_INTERVAL)) return;
         note._lastQueued = now;
 
-        let key = "judge";
+        // 透過 helper 產生事件清單，之後透過 _checkAndPush 實際 push
+        const events = this.getSfxEventsForNote(note, targetTime);
+        for (const ev of events) {
+            this._checkAndPush(ev.key, ev.time, ev.isMono, ev.volume);
+        }
+    }
+
+    /**
+     * 產生單一 note 在指定時間應該觸發的 SFX 事件（不會直接推入佇列）
+     * 回傳陣列：{ key, time, isMono, volume }
+     */
+    getSfxEventsForNote(note, targetTime) {
+        const events = [];
+        let key = 'judge';
         let isMono = true;
 
-        // 根據 Note 類型決定音效
         switch (note.type) {
-            case "tap":
-                if (note.isEx) {
-                    key = "judge_ex";
-                }
+            case 'tap':
+                if (note.isEx) key = 'judge_ex';
                 if (note.isBreak) {
-                    key = "judge_break"
-                    this._checkAndPush("break", targetTime, true, this.sfxVolumes["break"]);
-                };
-                this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
+                    key = 'judge_break';
+                    events.push({ key: 'break', time: targetTime, isMono: true, volume: this.sfxVolumes['break'] });
+                }
+                events.push({ key: 'answer', time: targetTime, isMono: false, volume: this.sfxVolumes['answer'] });
                 break;
-            case "hold":
-                this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
+            case 'hold':
+                events.push({ key: 'answer', time: targetTime, isMono: false, volume: this.sfxVolumes['answer'] });
                 if (!note._startEffectPlayed) {
-                    if (note.isEx) {
-                        key = "judge_ex";
-                    }
+                    if (note.isEx) key = 'judge_ex';
                     if (note.isBreak) {
-                        key = "judge_break";
-                        this._checkAndPush("break", targetTime, true, this.sfxVolumes["break"]);
+                        key = 'judge_break';
+                        events.push({ key: 'break', time: targetTime, isMono: true, volume: this.sfxVolumes['break'] });
                     } else {
-                        key = "judge";
+                        key = 'judge';
                     }
                     isMono = false;
+                } else {
+                    return events;
                 }
-                else return;
                 break;
-            case "touch":
-                key = "touch";
+            case 'touch':
+                key = 'touch';
                 isMono = false;
-                this._checkAndPush("answer", targetTime, false, this.sfxVolumes["answer"]);
+                events.push({ key: 'answer', time: targetTime, isMono: false, volume: this.sfxVolumes['answer'] });
                 if (note.isHanabi) {
                     if (note.holdDuration >= 0) {
                         if (note._startEffectPlayed) {
-                            key = "hanabi"
+                            key = 'hanabi';
                             isMono = true;
-                        } else return;
+                        } else {
+                            return events;
+                        }
                     } else {
-                        key = "hanabi"
+                        key = 'hanabi';
                         isMono = true;
                     }
                 }
-                if (note._startEffectPlayed && !note.isHanabi) return;
+                if (note._startEffectPlayed && !note.isHanabi) return events;
                 break;
-            case "slide":
+            case 'slide':
                 if (!note._startEffectPlayed && note.isBreak) {
-                    this._checkAndPush("break_slide", targetTime, true, this.sfxVolumes["break_slide"]);
-                    key = "break_slide_start";
+                    events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: this.sfxVolumes['break_slide'] });
+                    key = 'break_slide_start';
                     isMono = false;
                 } else {
                     if (note.isBreak) {
-                        key = "judge_break_slide";
+                        key = 'judge_break_slide';
                         isMono = false;
                     } else {
-                        key = "slide";
+                        key = 'slide';
                         isMono = false;
                     }
                 }
                 break;
-            default: return;
+            default:
+                return events;
         }
 
-        this._checkAndPush(key, targetTime, isMono, this.sfxVolumes[key]);
+        events.push({ key, time: targetTime, isMono, volume: this.sfxVolumes[key] });
+        return events;
     }
 
     /**
@@ -775,6 +788,10 @@ class AudioManager {
         for (const id of this.activeLongSounds.keys()) {
             this.stopLongSound(id);
         }
+    }
+
+    clearSoundQueue() {
+        this.soundQueue = [];
     }
 }
 
@@ -1241,6 +1258,9 @@ export function simpleToast({
 
     // 核心樣式：預設設定一個足夠大的 max-height 以便動畫計算
     popup.style.cssText = `
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
         background: #202020;
         color: white;
         padding: 10px 15px;
@@ -1253,7 +1273,7 @@ export function simpleToast({
         max-width: 300px;
         margin-bottom: 10px; /* 改用 margin 代替 gap，方便縮減空間 */
         overflow: hidden;
-        height: 30px; 
+        height: 20px; 
         max-height: 100px; 
         flex-shrink: 0;
         opacity: 1;
@@ -1773,3 +1793,109 @@ try {
 window.addEventListener('resize', () => updateBackgroundSquare(_cEl));
 // 初次更新
 setTimeout(() => updateBackgroundSquare(_cEl), 0);
+
+export const createLabeledInput = (value, labelText, assign, isTextarea, inputRefs) => {
+    console.log(`Creating input for ${labelText} with initial value:`, value, "inputrefs:", inputRefs);
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
+
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
+
+    const input = isTextarea ? document.createElement('textarea') : document.createElement('input');
+    if (!isTextarea) {
+        input.type = 'text';
+    }
+    input.value = value ?? '';
+    input.title = labelText;
+    input.placeholder = labelText;
+    input.style.cssText = "padding:4px;border:1px solid #333;border-radius:4px;background:#111;color:#fff;font-size:12px;resize:vertical;padding:8px;";
+
+    input.addEventListener('input', () => {
+        const newValue = input.value;
+        if (assign) {
+            tempData[assign] = newValue;
+        }
+    });
+
+    if (assign) inputRefs[assign] = input;
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    return { wrapper, input };
+};
+
+export const createLabeledInput1 = ({
+    value,
+    labelText,
+    type = 'text', // 'text' | 'textarea' | 'select'
+    assign,
+    data = {},
+    ref = {},
+    options = [] // for select: array of strings, array of {value,label}, or object map {value:label}
+} = {}) => {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
+
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
+
+    let input;
+    if (type === 'textarea') {
+        input = document.createElement('textarea');
+    } else if (type === 'select') {
+        input = document.createElement('select');
+        // populate options
+        if (Array.isArray(options)) {
+            options.forEach(opt => {
+                const optionEl = document.createElement('option');
+                if (opt && typeof opt === 'object' && ('value' in opt || 'label' in opt)) {
+                    optionEl.value = opt.value != null ? String(opt.value) : String(opt.label ?? '');
+                    optionEl.textContent = opt.label != null ? String(opt.label) : String(opt.value ?? opt);
+                } else {
+                    optionEl.value = optionEl.textContent = String(opt);
+                }
+                input.appendChild(optionEl);
+            });
+        } else if (options && typeof options === 'object') {
+            Object.keys(options).forEach(k => {
+                const optionEl = document.createElement('option');
+                optionEl.value = k;
+                optionEl.textContent = options[k];
+                input.appendChild(optionEl);
+            });
+        }
+    } else {
+        input = document.createElement('input');
+        input.type = 'text';
+    }
+
+    if (type !== 'select') {
+        input.value = value ?? '';
+    } else {
+        if (value != null) input.value = String(value);
+    }
+
+    input.title = labelText;
+    if (type !== 'select') input.placeholder = labelText;
+    input.style.cssText = "padding:4px;border:1px solid #333;border-radius:4px;background:#111;color:#fff;font-size:12px;resize:vertical;padding:8px;";
+
+    const handleChange = () => {
+        const newValue = input.value;
+        if (assign) data[assign] = newValue;
+    };
+
+    if (type === 'select') {
+        input.addEventListener('change', handleChange);
+    } else {
+        input.addEventListener('input', handleChange);
+    }
+
+    if (assign) ref[assign] = input;
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    return { wrapper, input };
+};

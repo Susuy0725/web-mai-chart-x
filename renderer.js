@@ -257,6 +257,7 @@ export class SimaiRenderer {
         ctx.textBaseline = "top";
         ctx.fillText(`FPS: ${dt === 0 ? 'N/A' : (1 / dt).toFixed(2)}`, -w / 2 + 2, -h / 2 + 2);
         ctx.fillText(`Time: ${Math.floor(globalTime / 60)}:${(globalTime % 60).toFixed(2)}`, -w / 2 + 2, -h / 2 + 6);
+        ctx.fillText(`Index: ${nowIndex}`, -w / 2 + 2, -h / 2 + 10);
         ctx.restore();
     }
 
@@ -483,11 +484,15 @@ export class SimaiRenderer {
             tctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
             tctx.save();
             tctx.fillStyle = '#ffffff30';
-            tctx.font = "5px combo";
             tctx.textAlign = "center";
             tctx.textBaseline = "middle";
             ['A', 'B', 'D', 'E'].forEach(type => {
                 const positions = touchRefPos[type];
+                if (type === 'A') {
+                    tctx.font = "bold 5px combo";
+                } else {
+                    tctx.font = "4px combo";
+                }
                 for (let i = 0; i < positions.length; i++) {
                     const pos = positions[i];
                     tctx.fillText(`${type}${i + 1}`, pos.x, pos.y);
@@ -795,6 +800,7 @@ export class SimaiRenderer {
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
         let slideProgress = 0;
+        let slideProgressChecked = 0;
         if (-noteT > slideDelay) {
             slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
@@ -802,24 +808,22 @@ export class SimaiRenderer {
         this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
-        if (noteT <= 0 && slideProgress < 1) {
-            if (!s.hideHead || sz >= 1) {
-                const { x, y, rot } = p.getPointAt(slideProgress);
-                this.ctx.save();
-                this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
-                this.ctx.translate(x, y);
-                this.ctx.rotate(rot + Math.PI * 0.5);
-                const starImg = this.images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
-                this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
-                this.ctx.restore();
-            }
+        if (noteT <= 0 && slideProgress < 1 && (!s.hideHead || sz >= 1)) {
+            const { x, y, rot } = p.getPointAt(slideProgress);
+            this.ctx.save();
+            this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
+            this.ctx.translate(x, y);
+            this.ctx.rotate(rot + Math.PI * 0.5);
+            const starImg = this.images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
+            this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
+            this.ctx.restore();
         }
         this.ctx.restore();
     }
 
-    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, config = { spacing: 4.36 }) {
-        const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / config.spacing);
-        const spacing = typew ? 7 : config.spacing;
+    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, { spacing = 4.36 } = {}) {
+        const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
+        spacing = typew ? 7 : spacing;
         this.ctx.save();
         for (let i = arrowCount; i > Math.floor(starProgress * arrowCount); i--) {
             const imgIndex = Math.min(i - 1, imgs.length - 1);
@@ -1807,7 +1811,6 @@ export class SimaiPreviewRenderer {
             else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
         });
-        console.log(this.indexTime);
         const ct = hw + (cursorIndexTime - globalTime) * this.zoom;
         this.drawTriangle(
             ct - h * 0.1, 0,

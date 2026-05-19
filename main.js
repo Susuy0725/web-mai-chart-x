@@ -1,7 +1,17 @@
 import { openDB, idbGet, idbSet } from './indexDB.js';
-import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput, createLabeledInput1 } from './helper.js';
+import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput, createLabeledInput1, createCustomSlider } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
+// Register service worker (works when served over http(s) or localhost)
+if ('serviceWorker' in navigator && false) {
+    navigator.serviceWorker.register('./sw.js')
+        .then((reg) => {
+            console.log('Service worker registered:', reg);
+        })
+        .catch((err) => {
+            console.warn('Service worker registration failed:', err);
+        });
+}
 
 let
     images,
@@ -22,6 +32,8 @@ window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
 
 _init();
+
+
 
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
@@ -235,6 +247,14 @@ const saveSettingsDebounce = debounce(() => {
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
     slider.max = endTime + musicDelay;
+};
+
+const updateSlider = (time) => {
+    const min = parseFloat(slider.min) || 0;
+    const max = parseFloat(slider.max) || 100;
+    const progressPercent = ((time - min) / (max - min)) * 100;
+    slider.value = time;
+    slider.style.background = `linear-gradient(90deg, #962d2d 0%, #962d2d ${progressPercent}%, #222 ${progressPercent}%, #222 100%)`;
 };
 
 manageResourcesButton.addEventListener('click', async () => {
@@ -858,6 +878,7 @@ function setDataEmpty() {
     globalTime = 0;
     slider.max = 1;
     slider.value = 0;
+    updateSlider(0);
     offsetInput.value = 0;
     editorInput.value = '';
     // 清除編輯歷史（新譜面應該重新開始）
@@ -1185,7 +1206,6 @@ const getres = ((simaiDataValue) => {
                 return out;
             };
             dataIndexToTime = result.indexToTime || [];
-            console.log(dataIndexToTime)
 
             playScoreRes = {
                 ...result.notesConts,
@@ -1218,7 +1238,7 @@ warnEl.addEventListener('click', () => {
 
 const offsetInputDebounce = debounce(() => {
     slider.max = endTime + musicDelay;
-    slider.value = realTime;
+    updateSlider(realTime);
 
     globalTime = realTime - musicDelay;
 
@@ -1365,11 +1385,11 @@ const setEditorCss = (visible = null) => {
 
     if (visualVisible) {
         previewContainer.style.display = 'none';
-        document.documentElement.style.setProperty('--playControls-height', '60px');
+        document.documentElement.style.setProperty('--playControls-height', '70px');
         resizeVisualEditor();
     } else {
         previewContainer.style.display = 'block';
-        document.documentElement.style.setProperty('--playControls-height', '120px');
+        document.documentElement.style.setProperty('--playControls-height', '130px');
     }
 
     animateCanvasWidth(visible);
@@ -1424,7 +1444,7 @@ settingsButton.addEventListener('click', () => {
 
     const createRow = (labelText, element) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom: 4px;';
+        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom: 4px; height: 30px;';
 
         if (element.type === 'checkbox') {
             const wrapper = document.createElement('label');
@@ -1435,6 +1455,20 @@ settingsButton.addEventListener('click', () => {
             text.style.cssText = 'flex:1;';
 
             element.style.cssText = 'width:20px; height:20px; flex:0 0 auto; cursor:pointer; margin: 0;';
+            wrapper.appendChild(text);
+            wrapper.appendChild(element);
+            row.appendChild(wrapper);
+            return row;
+        }
+        if (element.type === 'range') {
+            const wrapper = document.createElement('label');
+            wrapper.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; cursor:pointer; color:#ddd; font-size:15px;';
+
+            const text = document.createElement('span');
+            text.textContent = labelText;
+            text.style.cssText = 'flex:1;';
+
+            element.style.width = '120px';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -1506,14 +1540,20 @@ settingsButton.addEventListener('click', () => {
                 });
                 el.addEventListener('click', (e) => e.stopPropagation());
             }
-            // --- 新增 Dropdown 分支 ---
             else if (item.type === 'dropdown') {
                 el = createDropdown(currentVal, item.options);
                 el.addEventListener('change', (e) => {
                     try { targetRef[targetKey] = e.target.value; } catch (err) { }
                 });
             }
-            // -----------------------
+            else if (item.type === 'range') {
+                el = createCustomSlider(currentVal, item.min, item.max, item.step, (val) => {
+                    try {
+                        targetRef[targetKey] = val; // 即時改記憶體
+                        if (item.apply) item.apply(val); // 即時改音量
+                    } catch (err) { }
+                });
+            }
             else {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
             }
@@ -1530,7 +1570,6 @@ settingsButton.addEventListener('click', () => {
         });
     });
 
-    // 預設選擇第一個分頁
     switchTab(0);
 
     const applySettings = () => {
@@ -1543,9 +1582,9 @@ settingsButton.addEventListener('click', () => {
             if (config.type === 'checkbox') {
                 finalVal = config.el.checked;
             } else if (config.type === 'dropdown') {
-                // 如果你的下拉選單值應該是數字，可以在這裡加 parseFloat，否則維持字串
                 finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
             } else {
+                // range 與 number 統一使用 parseFloat 處理
                 const rawVal = parseFloat(config.el.value);
                 finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
             }
@@ -1554,7 +1593,12 @@ settingsButton.addEventListener('click', () => {
             config.ref[config.key] = finalVal;
         });
 
-        // 後續副作用與儲存邏輯不變...
+        Object.keys(inputRefs).forEach(id => {
+            if (inputRefs[id].apply) {
+                inputRefs[id].apply(values[id], values);
+            }
+        });
+
         saveSettingsDebounce();
         draw();
         simpleToast({ content: '設定已儲存', type: 'success', timeout: 1500 });
@@ -1568,16 +1612,12 @@ settingsButton.addEventListener('click', () => {
         buttons: [
             {
                 text: '儲存',
-                onClick: (ctx) => {
-                    applySettings();
-                },
+                onClick: (ctx) => { applySettings(); },
                 hideOnClick: true
             },
             {
                 text: '套用',
-                onClick: (ctx) => {
-                    applySettings();
-                }
+                onClick: (ctx) => { applySettings(); }
             },
             {
                 text: '取消',
@@ -1591,6 +1631,9 @@ settingsButton.addEventListener('click', () => {
                             ref.el.checked = ref.def;
                         } else {
                             ref.el.value = ref.def;
+                            // 🔥 新增：重置時更新 range 的百分比文字與即時副作用
+                            if (ref.el._updateDisplay) ref.el._updateDisplay();
+                            if (ref.apply) ref.apply(ref.def);
                         }
                     });
                     simpleToast({ content: '數值已還原（未儲存）', type: 'info', timeout: 1500 });
@@ -1658,15 +1701,24 @@ chartInfoButton.addEventListener('click', () => {
     const createPopupContent = () => {
         const container = document.createElement('div');
         container.style.cssText = "display:flex; gap: 10px;";
-
+        const createButton = (text, eventHandler) => {
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            btn.style.cssText = "padding:8px 12px; background:rgb(32, 32, 32); color:#fff; border:1px solid rgb(64, 64, 64); border-radius:5px; cursor:pointer; font-size:12px; width:100%;";
+            if (eventHandler) {
+                btn.addEventListener('click', eventHandler);
+            }
+            return btn;
+        }
         // 左側：圖片更換
         const imgContainer = document.createElement('div');
+        imgContainer.style.cssText = "width:50%; display:flex; align-items: flex-start;flex-wrap: wrap;flex-direction: column;align-items: center;justify-content: flex-start;gap: 10px;";
         const img = document.createElement('img');
         img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['star'].src;
         img.style.cssText = "width:100%; height:100%; display:block; object-fit:contain;";
 
         const imgWrapper = document.createElement('div');
-        imgWrapper.style.cssText = "width:40%; aspect-ratio:1/1; overflow:hidden; border:1px solid #333; border-radius:8px; cursor:pointer; position:relative; background:#000;";
+        imgWrapper.style.cssText = "width:100%; aspect-ratio:1/1; overflow:hidden; border:1px solid #333; border-radius:8px; cursor:pointer; position:relative; background:#000;";
 
         const overlay = document.createElement('div');
         overlay.style.cssText = "position:absolute; bottom:0; width:100%; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; text-align:center; padding:4px 0;";
@@ -1691,6 +1743,17 @@ chartInfoButton.addEventListener('click', () => {
             };
             fileInput.click();
         });
+        imgContainer.appendChild(imgWrapper);
+        imgContainer.appendChild(createButton("從目前 Track 讀取", () => {
+            processAudioMetadata(audioManager.bgmFile);
+        }));
+        imgContainer.appendChild(createButton("讀取其他音訊 Metadata", () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'audio/*';
+            fileInput.onchange = (e) => processAudioMetadata(e.target.files[0]);
+            fileInput.click();
+        }));
 
         // 右側：輸入欄位
         const diffContainer = document.createElement('div');
@@ -1746,7 +1809,7 @@ chartInfoButton.addEventListener('click', () => {
         const customIns = createLabeledInput1({ value: insVal, labelText: "自訂指令", type: 'textarea', assign: "custom", data: tempData, ref: inputRefs });
         diffContainer.appendChild(customIns.wrapper);
 
-        container.appendChild(imgWrapper);
+        container.appendChild(imgContainer);
         container.appendChild(diffContainer);
         return container;
     };
@@ -1755,20 +1818,6 @@ chartInfoButton.addEventListener('click', () => {
         title: "譜面資訊",
         customContent: createPopupContent(),
         buttons: [
-            {
-                text: "從目前 Track 讀取",
-                onClick: () => processAudioMetadata(audioManager.bgmFile)
-            },
-            {
-                text: "讀取其他音訊 Metadata",
-                onClick: () => {
-                    const fileInput = document.createElement('input');
-                    fileInput.type = 'file';
-                    fileInput.accept = 'audio/*';
-                    fileInput.onchange = (e) => processAudioMetadata(e.target.files[0]);
-                    fileInput.click();
-                }
-            },
             {
                 text: "確定",
                 onClick: (closePopup) => {
@@ -1935,7 +1984,61 @@ document.addEventListener('selectionchange', () => {
     if (document.activeElement === editorInput) {
         const point = editorInput.selectionStart;
         cursorLastIndexTime = dataIndexToTime[indexFromCursor(editorInput.value, point)] ?? 0;
-        console.log("對應的時間:", cursorLastIndexTime);
+
+        const playing = playButton.dataset.playing === 'true';
+        const previewVisibleFlag = previewVisible();
+        const isVisualModeFlag = isVisualMode();
+        const visualHeight = (() => {
+            if (!previewVisibleFlag) {
+                return visualEditorRenderer.getCanvasWH().height;
+            } else {
+                return previewRender.getCanvasWH().width / 2;
+            }
+        })();
+        const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
+        const V = visualHeight / settings.visualZoom;
+
+        for (let i = notes.length - 1; i >= 0; i--) {
+            const note = notes[i];
+            const noteT = note.time - globalTime;
+            const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+
+            const isVisualVisible = noteT >= 0
+                ? Math.abs(noteT) <= V
+                : -noteT <= V + skipT;
+
+            if (isVisualVisible) {
+                const noteType = note.type;
+                if (noteType === 'slide') {
+                    visualBuckets.slide.push(note);
+                } else if (noteType === 'hold' || noteType === 'tap') {
+                    visualBuckets.tapnhold.push(note);
+                } else if (noteType === 'touch') {
+                    visualBuckets.touch.push(note);
+                }
+            }
+        }
+
+        // 標籤分類
+        const tagsLength = decodedTags.length;
+        for (let i = 0; i < tagsLength; i++) {
+            const tag = decodedTags[i];
+            visualBuckets.tags.push(tag);
+            if (Math.abs(tag.time - globalTime) <= V) {
+                // 標籤邏輯保留（如果需要額外處理）
+            }
+        }
+
+        if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag && !playing) {
+            previewRender.drawFrame({
+                globalTime,
+                visualBuckets,
+                audioBuffer: audioManager.bgmBuffer,
+                offset: musicDelay,
+                indexTime: dataIndexToTime[nowIndex],
+                cursorIndexTime: cursorLastIndexTime,
+            });
+        }
     }
 });
 
@@ -2393,7 +2496,7 @@ const updateVisualTime = (newTime) => {
     const clampedTime = Math.max(min, Math.min(max, newTime));
 
     timeControlSliding = true;
-    slider.value = clampedTime;
+    updateSlider(clampedTime);
     realTime = clampedTime;
     globalTime = clampedTime - musicDelay;
 
@@ -2746,6 +2849,7 @@ slider.addEventListener('input', () => {
         audioManager.stopBGM();
         draw();
     }
+    updateSlider(realTime);
     slideInputDebounce();
 });
 
@@ -2802,7 +2906,7 @@ stopButton.addEventListener('click', () => {
     lastTimestamp = null;
     realTime = 0;
     globalTime = realTime - musicDelay;
-    slider.value = realTime;
+    updateSlider(realTime);
 
     // --- 停止音效與 BGM ---
     audioManager.stopAllLongSounds();
@@ -2823,10 +2927,10 @@ hideButton.addEventListener('click', () => {
         hideButton.dataset.hidden = 'false';
         if (visualVisible) {
             previewContainer.style.display = 'none';
-            document.documentElement.style.setProperty('--playControls-height', '60px');
+            document.documentElement.style.setProperty('--playControls-height', '70px');
         } else {
             previewContainer.style.display = 'block';
-            document.documentElement.style.setProperty('--playControls-height', '120px');
+            document.documentElement.style.setProperty('--playControls-height', '130px');
         }
     }
     resize();
@@ -2852,7 +2956,7 @@ getCursorNoteIndex.addEventListener('click', () => {
     const value = targetTime + musicDelay;
     globalTime = value - musicDelay;
     realTime = value;
-    slider.value = realTime;
+    updateSlider(realTime);
     slideInputDebounce();
     audioManager.stopAllLongSounds();
 
@@ -3006,14 +3110,14 @@ function update(timestamp) {
         }
 
         bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
-        slider.value = realTime;
+        updateSlider(realTime);
 
         // 結束播放判定[cite: 2]
         if (globalTime >= endTime) {
             playButton.dataset.playing = 'false';
             playButton.children[0].innerText = "play_arrow";
             globalTime = endTime;
-            slider.value = realTime;
+            updateSlider(endTime);
         }
     }
 
@@ -3831,7 +3935,7 @@ function draw(dt = 0) {
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
 
         // 索引追蹤（早期完成以減少迴圈計算）
-        if (!foundIndexForThisFrame && realTime >= note.time && noteType !== "slide") {
+        if (!foundIndexForThisFrame && realTime >= (note.time + musicDelay) && noteType !== "slide") {
             nowIndex = note.index ?? nowIndex;
             foundIndexForThisFrame = true;
         }
@@ -4014,7 +4118,7 @@ function _init() {
                     idbGet('simai_settings'),
                 ]);
                 if (savedTimeControl && !isNaN(savedTimeControl)) {
-                    realTime = savedTimeControl; slider.value = realTime; globalTime = realTime - musicDelay; update();
+                    realTime = savedTimeControl; updateSlider(realTime); globalTime = realTime - musicDelay; update();
                 }
                 if (savedSettings) {
                     step(84, "還原設定...");

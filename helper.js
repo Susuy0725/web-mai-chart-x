@@ -1899,3 +1899,183 @@ export const createLabeledInput1 = ({
     wrapper.appendChild(input);
     return { wrapper, input };
 };
+
+export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, onInputCallback) => {
+    const thumbSize = 24;
+    const animation = "ease 0.3s";
+
+    // 1. 主容器 (模擬 input 元素，讓外部可以讀取 .value)
+    const container = document.createElement('div');
+    container.type = 'range'; // 欺騙 createRow 的判斷
+    container.value = initialValue;
+    container.min = min;
+    container.max = max;
+    container.step = step;
+    container.style.cssText = `
+        height: 24px;
+        display: flex;
+        align-items: center;
+        position: relative;
+        cursor: pointer;
+        user-select: none;
+        touch-action: none;
+        border: 2px solid #fff;
+        border-radius: 999px;
+    `;
+
+    // 2. 底層軌道 (Track)
+    const track = document.createElement('div');
+    track.style.cssText = `
+        right: 0;
+        width: 100%;
+        height: 100%;
+        background: #222;
+        border-radius: 999px;
+        position: relative;
+    `;
+
+    // 3. 已填滿進度條 (Fill)
+    const fill = document.createElement('div');
+    fill.style.cssText = `
+        height: 100%;
+        background: #4a90e2;
+        border-radius: 40px 0 0 40px;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0%;
+        transition: width ${animation};
+    `;
+
+    // 4. 滑鈕 (Thumb)
+    const thumb = document.createElement('div');
+    thumb.style.cssText = `
+        width: ${thumbSize}px;
+        height: ${thumbSize}px;
+        background: #4a90e2;
+        border-radius: 20px;
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        transition: left ${animation}, background 0.2s, transform 0.2s;
+        user-select: none;
+        box-sizing: border-box;
+    `;
+
+    const text = document.createElement('div');
+    text.style.cssText = `
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: ${thumbSize}px;
+        height: ${thumbSize}px;
+        position: absolute;
+        top: 50%;
+        left: 10px;
+        transform: translateY(-50%);
+        transition: left ${animation}, background 0.2s, transform 0.2s, box-shadow 0.2s;
+        user-select: none;
+        text-align: center;
+        font-size: 12px;
+        text-shadow: 0px 1px 2px black;
+    `;
+    text.textContent = initialValue.toFixed(2);
+
+    track.appendChild(fill);
+    track.appendChild(thumb);
+    track.appendChild(text);
+    container.appendChild(track);
+
+    // 內部更新視覺與數值的函式
+    const updateVisuals = (val) => {
+        // 限制範圍 (Clamp)
+        val = Math.max(min, Math.min(max, val));
+
+        // 四捨五入到最接近的 step
+        const percent = (val - min) / (max - min);
+
+        // 更新這群 div 的樣式
+        /*if (!triggerAnimate) {
+            fill.style.transition = 'none';
+            thumb.style.transition = 'none';
+        } else {
+            fill.style.transition = 'width ease 0.15s';
+            thumb.style.transition = 'left ease 0.15s, background 0.2s, transform 0.2s';
+        }*/
+        // 🟢 這裡同步調整：Fill 寬度可以稍微扣除滑鈕半寬，看起來會更貼合滑鈕中心
+        fill.style.width = `calc(${percent * 100}% - ${(percent - 0.5) * thumbSize}px)`;
+
+        // 🔴 核心修正：利用神奇公式，讓滑鈕永遠不超出邊界
+        thumb.style.left = `calc(${percent * 100}% - ${percent * thumbSize}px)`;
+
+        text.textContent = val.toFixed(2); // 顯示數值，保留兩位小數
+
+        container.value = val; // 寫回主容器
+    };
+
+    // 處理拖曳/點擊邏輯
+    let isDragging = false;
+
+    const handlePointerMove = (e) => {
+        const rect = track.getBoundingClientRect();
+
+        // 🔴 修正：扣除滑鈕本身的寬度影響，算出正確的點擊/拖曳比例
+        let clickX = e.clientX - rect.left;
+        let availableWidth = rect.width;
+
+        let pct = clickX / availableWidth;
+        pct = Math.max(0, Math.min(1, pct));
+
+        let rawVal = min + pct * (max - min);
+        let steppedVal = Math.round(rawVal / step) * step;
+
+        steppedVal = parseFloat(steppedVal.toFixed(4));
+        steppedVal = Math.max(min, Math.min(max, steppedVal));
+
+        updateVisuals(steppedVal, !isDragging);
+        if (onInputCallback) onInputCallback(steppedVal);
+    };
+
+    container.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        container.setPointerCapture(e.pointerId);
+        thumb.style.transform = 'translateY(-50%) scale(1.2)'; // 🔴 只縮放，不改 X 軸
+        thumb.style.background = '#5ca0f2';
+        thumb.style.boxShadow = '0 0 4px rgba(0,0,0,0.5)';
+        handlePointerMove(e);
+    });
+
+    container.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        handlePointerMove(e);
+    });
+
+    const stopDrag = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        thumb.style.transform = 'translateY(-50%) scale(1)'; // 🔴 還原
+        thumb.style.background = '#4a90e2';
+        thumb.style.boxShadow = 'none';
+    };
+
+    container.addEventListener('pointerup', stopDrag);
+    container.addEventListener('pointercancel', stopDrag);
+
+    // 懸停動畫效果
+    container.addEventListener('mouseenter', () => {
+        if (!isDragging) thumb.style.transform = 'translateY(-50%) scale(1.1)';
+    });
+    container.addEventListener('mouseleave', () => {
+        if (!isDragging) thumb.style.transform = 'translateY(-50%) scale(1)';
+    });
+
+    // 初始化數值視覺
+    updateVisuals(initialValue);
+
+    // 外掛一個外部重置更新介面
+    container._updateDisplay = () => {
+        updateVisuals(container.value);
+    };
+
+    return container;
+};

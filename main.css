@@ -1,6 +1,6 @@
 :root {
     --utility-hidden-height: 16px;
-    --playControls-height: 120px;
+    --playControls-height: 130px;
     --editor-bg: #1F1F1F;
     --top-utility-bg: #181818;
     --top-utility-btn: #2B2B2B;
@@ -117,9 +117,35 @@ body {
 }
 
 #playControls #timeControl {
+    -webkit-appearance: none;
     width: 100%;
-    margin: 0;
-    background: transparent;
+    height: 10px;
+    background: linear-gradient(90deg, #962d2d 50%, #222 50%);
+    margin: 4px 0;
+    border-radius: 5px;
+    border: none;
+    outline: none;
+    transition: background 0.3s ease;
+}
+
+#timeControl::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 8px;
+    height: 15px;
+    background: #962d2d;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+#timeControl::-moz-range-thumb {
+    -webkit-appearance: none;
+    width: 8px;
+    height: 15px;
+    background: #962d2d;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+    cursor: pointer;
 }
 
 #playControls #miniPreviewContainer {

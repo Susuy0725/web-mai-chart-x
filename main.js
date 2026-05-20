@@ -119,8 +119,23 @@ export const defaultSettings = {
     showUI: false,
     // Sound & Playback
     playbackSpeed: 1, // 播放速度，1 是正常速度
+    globalVolume: 0.65, // 全局音量，0 到 1 之間
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
     SfxVolume: 1, // 音效音量，0 到 1 之間
+    sfxVolumes: {
+        'clock': 0.8,
+        'answer': 1,
+        'judge': 0.4,
+        'judge_ex': 0.4,
+        'judge_break': 0.4,
+        'judge_break_slide': 0.4,
+        'break': 0.4,
+        'slide': 0.4,
+        'break_slide_start': 0.4,
+        'touch': 0.4,
+        'hanabi': 0.6,
+    },
+    autoPauseOnScroll: true, // 滾動時自動暫停
 
     restoreDefaults: function () {
         settings = { ...defaultSettings };
@@ -186,12 +201,20 @@ const settingsConfig = [
         label: '音效',
         items: [
             {
+                id: 'globalVolume', type: 'range', label: '全局音量', min: 0, max: 1, step: 0.1, def: defaultSettings.globalVolume,
+                apply: (val) => { audioManager.setGlobalVolume(val); }
+            },
+            {
                 id: 'musicVolume', type: 'range', label: '音樂音量', min: 0, max: 1, step: 0.1, def: defaultSettings.musicVolume,
                 apply: (val) => { audioManager.setBGMVolume(val); }
             },
             {
                 id: 'SfxVolume', type: 'range', label: '音效音量', min: 0, max: 1, step: 0.1, def: defaultSettings.SfxVolume,
                 apply: (val) => { audioManager.setSFXVolume(val); }
+            },
+            {
+                id: 'sfxVolumes', type: 'object', label: '個別音效音量', def: defaultSettings.sfxVolumes,
+                apply: (val) => { audioManager.setSFXVolumes(val); }
             }
         ]
     },
@@ -206,6 +229,9 @@ const settingsConfig = [
             },
             {
                 id: 'showUI', type: 'checkbox', label: '顯示FPS介面', def: defaultSettings.showUI
+            },
+            {
+                id: 'autoPauseOnScroll', type: 'checkbox', label: '滾動時自動暫停', def: defaultSettings.autoPauseOnScroll
             }
         ]
     }
@@ -1342,9 +1368,13 @@ playbackSpeedInput.addEventListener('change', () => {
 });
 
 function setPlaybackSpeed(speed) {
+    typeof speed === 'string' && (speed = parseFloat(speed));
+    speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
     const playing = playButton.dataset.playing === 'true';
 
     settings.playbackSpeed = speed;
+    playbackSpeedInput.value = speed.toFixed(2);
+
     audioManager.setPlaybackRate(speed);
     if (playing) {
         audioManager.playBGM(realTime);
@@ -1444,45 +1474,107 @@ settingsButton.addEventListener('click', () => {
 
     const createRow = (labelText, element) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom: 4px; height: 30px;';
+        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom: 4px; min-height: 30px;';
 
+        // 1. Checkbox
         if (element.type === 'checkbox') {
             const wrapper = document.createElement('label');
             wrapper.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; cursor:pointer; color:#ddd; font-size:15px;';
-
             const text = document.createElement('span');
             text.textContent = labelText;
             text.style.cssText = 'flex:1;';
-
             element.style.cssText = 'width:20px; height:20px; flex:0 0 auto; cursor:pointer; margin: 0;';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
             return row;
         }
+
+        // 2. Range (自訂 div 滑桿主容器)
         if (element.type === 'range') {
             const wrapper = document.createElement('label');
             wrapper.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; cursor:pointer; color:#ddd; font-size:15px;';
-
             const text = document.createElement('span');
             text.textContent = labelText;
             text.style.cssText = 'flex:1;';
 
-            element.style.width = '120px';
+            element.style.width = '140px'; // 調寬一點排版更好看
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
             return row;
         }
 
+        // 3. Object (子屬性折疊選單)
+        if (element.dataset && element.dataset.type === 'object-container') {
+            row.style.cssText = 'display:flex; flex-direction:column; align-items:stretch; gap:5px; margin-bottom: 8px; width: 100%;';
+
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; cursor:pointer; color:#ddd; font-size:15px; padding: 4px 0; user-select:none;';
+            header.innerHTML = `<span>${labelText}</span><span class="arrow-icon" style="transition:transform 0.2s; transform: rotate(0deg); font-size:12px;">▼</span>`;
+
+            const subBody = element;
+            subBody.style.cssText = 'display:none; flex-direction:column; gap:6px; padding-left: 12px; border-left: 2px solid #444; margin-top: 4px;';
+
+            header.addEventListener('click', () => {
+                const isHidden = subBody.style.display === 'none';
+                subBody.style.display = isHidden ? 'flex' : 'none';
+                header.querySelector('.arrow-icon').style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+            });
+
+            row.appendChild(header);
+            row.appendChild(subBody);
+            return row;
+        }
+
+        // 4. 一般 Number / Dropdown
         const label = document.createElement('label');
         label.textContent = labelText;
         label.style.cssText = 'flex:1; color:#ddd; font-size: 15px;';
-
         element.style.cssText = 'width:100px; flex:0 0 auto; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#222; color:#fff; font-size:14px; text-align: left; transition: border-color 0.2s; box-sizing: border-box;';
         row.appendChild(label);
         row.appendChild(element);
         return row;
+    };
+
+    const applySettings = () => {
+        const values = {};
+
+        Object.keys(inputRefs).forEach(id => {
+            const config = inputRefs[id];
+            let finalVal;
+
+            if (config.type === 'checkbox') {
+                finalVal = config.el.checked;
+            } else if (config.type === 'dropdown') {
+                finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
+            } else if (config.type === 'object') {
+                // 🔥 直接複製子選單同步完的物件結果
+                finalVal = { ...config.el.value };
+            } else {
+                const rawVal = parseFloat(config.el.value);
+                finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
+            }
+
+            values[id] = finalVal;
+
+            // 核心修正：深度指派物件結構，避免直接蓋掉引用
+            if (config.type === 'object') {
+                Object.assign(config.ref[config.key], finalVal);
+            } else {
+                config.ref[config.key] = finalVal;
+            }
+        });
+
+        Object.keys(inputRefs).forEach(id => {
+            if (inputRefs[id].apply) {
+                inputRefs[id].apply(values[id], values);
+            }
+        });
+
+        saveSettingsDebounce();
+        draw();
+        simpleToast({ content: '設定已儲存', type: 'success', timeout: 1500 });
     };
 
     const createNumberInput = (value, step = 0.1, min = -999, max = 9999) => {
@@ -1519,7 +1611,7 @@ settingsButton.addEventListener('click', () => {
 
     const inputRefs = {};
 
-    // --- 根據設定檔生成 UI ---
+    // 重構原本的生成迴圈段落
     settingsConfig.forEach((category) => {
         const section = addTab(category.label);
 
@@ -1533,6 +1625,8 @@ settingsButton.addEventListener('click', () => {
             const currentVal = item.get ? item.get() : (targetRef[targetKey] ?? item.def);
 
             let el;
+
+            // --- A. 處理 Checkbox ---
             if (item.type === 'checkbox') {
                 el = createCheckbox(currentVal, `settings-${item.id}`);
                 el.addEventListener('change', (e) => {
@@ -1540,20 +1634,60 @@ settingsButton.addEventListener('click', () => {
                 });
                 el.addEventListener('click', (e) => e.stopPropagation());
             }
+            // --- B. 處理 Dropdown ---
             else if (item.type === 'dropdown') {
                 el = createDropdown(currentVal, item.options);
                 el.addEventListener('change', (e) => {
                     try { targetRef[targetKey] = e.target.value; } catch (err) { }
                 });
             }
+            // --- C. 處理 Range ---
             else if (item.type === 'range') {
                 el = createCustomSlider(currentVal, item.min, item.max, item.step, (val) => {
                     try {
-                        targetRef[targetKey] = val; // 即時改記憶體
-                        if (item.apply) item.apply(val); // 即時改音量
+                        targetRef[targetKey] = val;
+                        if (item.apply) item.apply(val);
                     } catch (err) { }
                 });
             }
+            // --- D. 🔥 新增：深度處理 Object (如 sfxVolumes) ---
+            else if (item.type === 'object') {
+                el = document.createElement('div');
+                el.dataset.type = 'object-container';
+                el.value = { ...currentVal }; // 初始化當前快照
+
+                // 建立一個子引用表，方便 applySettings 與重置時對準各別滑桿
+                el._subRefs = {};
+
+                Object.keys(item.def).forEach((subKey, index) => {
+                    const subDefault = item.def[subKey];
+                    const subCurrent = currentVal[subKey] ?? subDefault;
+
+                    // 為每一個音效建立專屬的客製化滑桿
+                    const subSlider = createCustomSlider(subCurrent, 0, 1, 0.05, (subVal) => {
+                        try {
+                            el.value[subKey] = subVal;
+                            targetRef[targetKey][subKey] = subVal; // 即時同步寫入記憶體
+                            if (item.apply) item.apply(targetRef[targetKey]); // 觸發試聽
+                        } catch (e) { }
+                    });
+
+                    el._subRefs[subKey] = subSlider;
+
+                    // 將每個子滑桿組件包裝進 row 塞入容器中
+                    const subRow = createRow(subKey, subSlider);
+                    el.appendChild(subRow);
+                });
+
+                // 實作 Object 的面板更新與重置映射
+                el._updateDisplay = () => {
+                    Object.keys(el._subRefs).forEach(subKey => {
+                        el._subRefs[subKey].value = targetRef[targetKey][subKey] ?? item.def[subKey];
+                        if (el._subRefs[subKey]._updateDisplay) el._subRefs[subKey]._updateDisplay();
+                    });
+                };
+            }
+            // --- E. 一般 Number ---
             else {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
             }
@@ -1571,38 +1705,6 @@ settingsButton.addEventListener('click', () => {
     });
 
     switchTab(0);
-
-    const applySettings = () => {
-        const values = {};
-
-        Object.keys(inputRefs).forEach(id => {
-            const config = inputRefs[id];
-            let finalVal;
-
-            if (config.type === 'checkbox') {
-                finalVal = config.el.checked;
-            } else if (config.type === 'dropdown') {
-                finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
-            } else {
-                // range 與 number 統一使用 parseFloat 處理
-                const rawVal = parseFloat(config.el.value);
-                finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
-            }
-
-            values[id] = finalVal;
-            config.ref[config.key] = finalVal;
-        });
-
-        Object.keys(inputRefs).forEach(id => {
-            if (inputRefs[id].apply) {
-                inputRefs[id].apply(values[id], values);
-            }
-        });
-
-        saveSettingsDebounce();
-        draw();
-        simpleToast({ content: '設定已儲存', type: 'success', timeout: 1500 });
-    };
 
     popupWindow({
         title: '設定',
@@ -1629,14 +1731,32 @@ settingsButton.addEventListener('click', () => {
                     Object.values(inputRefs).forEach(ref => {
                         if (ref.type === 'checkbox') {
                             ref.el.checked = ref.def;
+                            ref.ref[ref.key] = ref.def; // 🟢 同步寫回記憶體
+                        } else if (ref.type === 'object') {
+                            // 🔴 關鍵修正 1：快照完全恢復成預設值
+                            ref.el.value = { ...ref.def };
+
+                            // 🔴 關鍵修正 2：深度將記憶體 settings[key] 中的子屬性全數洗回預設值
+                            // 不能直接 ref.ref[ref.key] = ref.def，會斷開引用，必須用 Object.assign
+                            Object.assign(ref.ref[ref.key], ref.def);
+
+                            // 🔴 關鍵修正 3：先改完記憶體，再叫子滑桿們去讀取新數值並重繪背景
+                            if (ref.el._updateDisplay) ref.el._updateDisplay();
+
+                            // 觸發音效管理器的即時即刻同步
+                            if (ref.apply) ref.apply(ref.ref[ref.key]);
                         } else {
                             ref.el.value = ref.def;
-                            // 🔥 新增：重置時更新 range 的百分比文字與即時副作用
+                            ref.ref[ref.key] = ref.def; // 🟢 同步寫回記憶體
+
                             if (ref.el._updateDisplay) ref.el._updateDisplay();
                             if (ref.apply) ref.apply(ref.def);
                         }
                     });
-                    simpleToast({ content: '數值已還原（未儲存）', type: 'info', timeout: 1500 });
+
+                    // 🟢 關鍵修正 4：重置後強制重新重繪畫布，讓畫面上的感應器、速度即時校正
+                    draw();
+                    simpleToast({ content: '數值已還原（尚未儲存）', type: 'info', timeout: 1500 });
                 }
             },
         ]
@@ -2476,13 +2596,17 @@ const visualScroller = {
     lastX: 0, lastY: 0,
     startTime: 0,
     lastTime: 0,
-    velocity: 0,
+    velocity: 0, // 🔴 修正定義：現在定義為「每毫秒移動的像素量 (px/ms)」
     axis: 'vertical',
     momentumFrame: null,
-    friction: 0.9,
+    // 🔴 修正：改用指數衰減係數 (Exponential Decay Coefficient)
+    // 數值愈大衰減愈快。0.005 相當於在 60Hz 下約 0.92 的摩擦力
+    frictionCoeff: 0.005,
 
     pxToSec(px) {
-        const zoom = visualEditorRenderer ? visualEditorRenderer.zoom : 100;
+        // 確保相容主 Scroller 或 PreviewScroller 的縮放基準
+        const currentRenderer = this.axis === 'vertical' ? visualEditorRenderer : previewRender;
+        const zoom = currentRenderer ? currentRenderer.zoom : 100;
         return px / zoom;
     }
 };
@@ -2521,15 +2645,24 @@ const startMomentum = () => {
         const dt = now - lastFrameTime;
         lastFrameTime = now;
 
-        if (Math.abs(vel) < 0.01 || !timeControlSliding) {
+        // 🔴 關鍵修正 1：防止背景分頁或短暫卡頓導致 dt 暴增，限制單幀最大時差為 100ms
+        const clampedDt = Math.min(100, dt);
+
+        // 速度過小，或是外部觸發了其他時間滑動則停止
+        if (Math.abs(vel) < 0.001 || !timeControlSliding) {
             visualScroller.momentumFrame = null;
             return;
         }
 
-        const deltaSec = visualScroller.pxToSec(vel * dt * directionMult);
+        // 🔴 關鍵修正 2：使用微積分位移公式：位移 = 速度 * 時間
+        const deltaPx = vel * clampedDt * directionMult;
+        const deltaSec = visualScroller.pxToSec(deltaPx);
         updateVisualTime(realTime + deltaSec);
 
-        vel *= visualScroller.friction;
+        // 🔴 關鍵修正 3：不限幀率的指數衰減公式 (Exponential Decay)
+        // vel = vel * e^(-k * dt)
+        vel *= Math.exp(-visualScroller.frictionCoeff * clampedDt);
+
         visualScroller.momentumFrame = requestAnimationFrame(step);
     };
     visualScroller.momentumFrame = requestAnimationFrame(step);
@@ -2543,10 +2676,11 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
     element.style.cursor = 'grab';
 
     element.addEventListener('pointerdown', (e) => {
-        if (playButton.dataset.playing === 'true') {
-            editorBackgroundVideo.pause();
+        // 如果正在播放則暫停
+        if (playButton.dataset.playing === 'true' && settings.autoPauseOnScroll) {
+            playButton.click(); // 觸發全域暫停邏輯，確保狀態同步
         }
-        if (!visualEditorRenderer || e.button !== 0) return;
+        if (e.button !== 0) return;
         cancelAnimationFrame(visualScroller.momentumFrame);
 
         visualScroller.isActive = true;
@@ -2576,7 +2710,9 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
         if (axis === 'vertical') {
             const currentY = e.clientY;
             if (dt > 0) {
+                // 🔴 關鍵修正 4：計算物理定義的速度 (px / ms)
                 const instantVel = (currentY - visualScroller.lastY) / dt;
+                // 低通濾波器保持平滑，但兩側皆基於時間，不會受高刷滑鼠干擾
                 visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
             }
             const deltaSec = visualScroller.pxToSec(visualScroller.startY - currentY);
@@ -2600,7 +2736,9 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
         visualScroller.isActive = false;
         element.releasePointerCapture(e.pointerId);
         element.style.cursor = 'grab';
-        if (Math.abs(visualScroller.velocity) > 0.1) startMomentum();
+
+        // 🔴 修正：由於單位改為 px/ms，閾值調低為 0.05
+        if (Math.abs(visualScroller.velocity) > 0.05) startMomentum();
     };
 
     element.addEventListener('pointerup', handlePointerUp);
@@ -2620,6 +2758,7 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
             saveSettingsDebounce();
             draw();
         } else {
+            // 滾輪原本就是單次脈衝，維持原樣，但對齊正確的 renderer 縮放比
             const scrollDelta = visualScroller.pxToSec(e.deltaY * (e.deltaMode === 1 ? 20 : 1));
             updateVisualTime(realTime + scrollDelta);
         }
@@ -3856,13 +3995,45 @@ recordVideoButton.addEventListener('click', async () => {
 window.addEventListener('resize', resize);
 
 window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    if ((e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        isContextEdited = false;
+        switch (e.key.toLowerCase()) {
+            case 's':
+                isContextEdited = false;
 
-        simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
-        maidata['inote_' + nowDifficulty] = editorInput.value;
-        saveMaidata();
+                simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
+                maidata['inote_' + nowDifficulty] = editorInput.value;
+                saveMaidata();
+                break;
+            case 'o': {
+                let sp = settings.playbackSpeed - 0.25;
+                if (sp <= 0.25) {
+                    sp = 0.25;
+                }
+                setPlaybackSpeed(sp);
+                simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
+                break;
+            }
+            case 'p': {
+                let sp = settings.playbackSpeed + 0.25;
+                if (sp >= 2.0) {
+                    sp = 2.0;
+                }
+                setPlaybackSpeed(sp);
+                simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
+                break;
+            }
+            case 'z':{
+                undoButton.click();
+                simpleToast({ content: '復原', type: 'info', timeout: 1200 });
+                break;
+            }
+            case 'y':{
+                redoButton.click();
+                simpleToast({ content: '重作', type: 'info', timeout: 1200 });
+                break;
+            }
+        }
     }
 });
 

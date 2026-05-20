@@ -533,6 +533,14 @@ class AudioManager {
         this.sfxGainNode.gain.setTargetAtTime(this.sfxMasterVolume, this.ctx.currentTime, 0.05);
     }
 
+    setSFXVolumes(volumes) {
+        for (const [key, vol] of Object.entries(volumes)) {
+            if (this.sfxVolumes[key] !== undefined) {
+                this.sfxVolumes[key] = Math.max(0, Math.min(1, vol));
+            }
+        }
+    }
+
     /**
      * 初始化並預載入所有音效，支援進度回報
      * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)
@@ -931,13 +939,13 @@ export function getHighlight(text, errpos = []) {
                 return `<span style="color: #7EBAF0;">${slide}</span>`;
             }
             if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
-            if (bpm) return `<span style="color: #F7CC6F; font-weight: bold;">${bpm}</span>`;
+            if (bpm) return `<span style="color: #ffbf5f; font-weight: bold;">${bpm}</span>`;
             if (split) return `<span style="color: #ce9178;">${split}</span>`;
             if (time) return `<span style="color: #b5cea8;">${time}</span>`;
-            if (bk) return `<span style="color: #e19748;">${bk}</span>`;
-            if (ex) return `<span style="color: #ff9f9f;">${ex}</span>`;
+            if (bk) return `<span style="color: #FF9707;">${bk}</span>`;
+            if (ex) return `<span style="color: #d1c70f;">${ex}</span>`;
             if (hold) return `<span style="color: #9DC284;">${hold}</span>`;
-            if (f) return `<span style="color: #f495ff;">${f}</span>`;
+            if (f) return `<span style="color: #d092ef;">${f}</span>`;
             if (comm) return `<span style="color: #7f888a;">${comm}</span>`;
             return match;
         });
@@ -1226,14 +1234,13 @@ export function popupWindow({
 
     return ctx;
 }
-/**
- * 簡易提示小標籤 (支援自動堆疊)
- */
 export function simpleToast({
     content = "",
     timeout = 2000,
     type = "info"
 } = {}) {
+    const MAX_TOASTS = 3; // 🔴 這裡設定畫面上最多同時存在的數量
+
     let container = document.getElementById('hint-container');
     if (!container) {
         container = document.createElement('div');
@@ -1253,10 +1260,22 @@ export function simpleToast({
         document.body.appendChild(container);
     }
 
+    // 🔴 關鍵修正：堆疊高度限制邏輯
+    // 如果目前的子節點數量大於或等於上限，就剔除最舊的
+    while (container.childNodes.length >= MAX_TOASTS) {
+        const oldestPopup = container.firstChild;
+        if (oldestPopup && typeof oldestPopup._triggerRemove === 'function') {
+            // 呼叫原本包裝好的絲滑消失動畫
+            oldestPopup._triggerRemove();
+        } else if (oldestPopup) {
+            // 備案：如果還沒綁定完成，直接硬拔防止卡死
+            container.removeChild(oldestPopup);
+        }
+    }
+
     const popup = document.createElement('div');
     const color = { info: '#00bbff', error: '#ff4444', success: '#00ffcc', warning: '#ffcc00' }[type] || '#404040';
 
-    // 核心樣式：預設設定一個足夠大的 max-height 以便動畫計算
     popup.style.cssText = `
         display: flex;
         align-items: center;
@@ -1271,13 +1290,13 @@ export function simpleToast({
         pointer-events: auto;
         width: fit-content;
         max-width: 300px;
-        margin-bottom: 10px; /* 改用 margin 代替 gap，方便縮減空間 */
+        margin-bottom: 10px;
         overflow: hidden;
         height: 20px; 
         max-height: 100px; 
         flex-shrink: 0;
         opacity: 1;
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 平滑過渡 */
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     `;
     popup.innerHTML = content;
     container.appendChild(popup);
@@ -1293,9 +1312,8 @@ export function simpleToast({
     const removePopup = () => {
         if (isRemoving) return;
         isRemoving = true;
+        clearTimeout(timer); // 🟢 安全起見，觸發時清除計時器
 
-        // 【關鍵】同時將物理尺寸縮減至 0
-        // 這樣 transition 就會接手讓下方的元素慢慢滑上來
         popup.style.maxHeight = '0px';
         popup.style.marginTop = '0px';
         popup.style.marginBottom = '0px';
@@ -1306,7 +1324,6 @@ export function simpleToast({
         popup.style.pointerEvents = 'none';
         popup.style.zIndex -= 1;
 
-        // 等 transition 結束後再真正移除 DOM
         popup.addEventListener('transitionend', () => {
             if (container.contains(popup)) container.removeChild(popup);
             if (container.childNodes.length === 0 && document.body.contains(container)) {
@@ -1315,11 +1332,11 @@ export function simpleToast({
         }, { once: true });
     };
 
+    // 🔴 關鍵：把移除函式掛在 DOM 節點上，好讓頂部的 while 迴圈可以跨範疇呼叫它
+    popup._triggerRemove = removePopup;
+
     const timer = setTimeout(removePopup, timeout);
-    popup.onclick = () => {
-        clearTimeout(timer);
-        removePopup();
-    };
+    popup.onclick = removePopup;
 }
 const baseURL = './Skin/', baseImageKeys = [
     'tap', 'tap_break', 'tap_each', 'tap_ex',

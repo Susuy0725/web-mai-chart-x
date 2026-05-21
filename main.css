@@ -1,5 +1,7 @@
 :root {
     --utility-hidden-height: 16px;
+    --const-max-playControls-height: 130px;
+    --const-collapsed-playControls-height: 70px;
     --playControls-height: 130px;
     --editor-bg: #1F1F1F;
     --top-utility-bg: #181818;
@@ -117,6 +119,7 @@ body {
 }
 
 #playControls #timeControl {
+    appearance: none;
     -webkit-appearance: none;
     width: 100%;
     height: 10px;
@@ -139,6 +142,7 @@ body {
 }
 
 #timeControl::-moz-range-thumb {
+    appearance: none;
     -webkit-appearance: none;
     width: 8px;
     height: 15px;
@@ -153,6 +157,31 @@ body {
     width: 100%;
     height: 60px;
     z-index: 10;
+}
+
+#playControls #showPlayControlsBtn {
+    background-color: var(--top-utility-bg);
+    overflow: hidden;
+    width: 30%;
+    position: absolute;
+    bottom: 0;
+    left: 25%;
+    transform: translateX(-50%);
+    height: 16px;
+    color: white;
+    font-size: 10px;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    cursor: pointer;
+    box-sizing: border-box;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+    border-radius: 10px 10px 0 0;
+    transition: background-color 100ms ease;
+}
+
+#playControls #showPlayControlsBtn:hover {
+    background-color: var(--top-utility-btn);
 }
 
 #miniPreviewContainer #miniPreview {
@@ -320,6 +349,7 @@ body {
     gap: 5px;
     scrollbar-width: none;
     box-sizing: border-box;
+    font-family: "Google Sans", sans-serif;
 }
 
 .utilityButton {
@@ -372,6 +402,7 @@ body {
     box-sizing: border-box;
     color: white;
     text-align: center;
+    font-family: "Google Sans", sans-serif;
 }
 
 .utilityButton input[type="checkbox"] {
@@ -393,6 +424,7 @@ body {
     box-sizing: border-box;
     color: white;
     text-align: center;
+    font-family: "Google Sans", sans-serif;
 }
 
 .utilityButton select option {

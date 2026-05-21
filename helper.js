@@ -10,6 +10,21 @@ export function imgNotExists(image) {
     }
     return false;
 }
+export const exColor = {
+    tap: '#D8A2C9',
+    star: '#00DBF4',
+    double: '#DCDA6B',
+    break: '#EBBA63',
+};
+export function drawImgAtcenter(ctx, img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
+    ctx.drawImage(
+        img,
+        -size / 2 * imgWidthMul + offsetX,
+        -size / 2 * imgHeightMul + offsetY,
+        size * imgWidthMul,
+        size * imgHeightMul
+    );
+}
 export function getButton(action, type = "control") {
     return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#topUtilityBtns .utilityButton"}[data-buttonAction="${action}"]`);
 }
@@ -1339,6 +1354,7 @@ export function simpleToast({
     popup.onclick = removePopup;
 }
 const baseURL = './Skin/', baseImageKeys = [
+    'no_image',
     'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc',
     'hold', 'hold_break', 'hold_each', 'hold_ex',
@@ -2095,4 +2111,52 @@ export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, o
     };
 
     return container;
+};
+export const defaultSettings = {
+    // Game
+    speed: 6.5,
+    touchSpeed: 7,
+    slideSpeed: 0,
+    middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
+    moviebrightness: -4,
+    showSensor: true,
+    pinkStars: false,
+    rotateStars: false,
+    // Misc
+    displayMode: 'simai', // simai 或 visual
+    middleDistance: 0.25,
+    effectDecayTime: 0.4,
+    hanabiEffectDecayTime: 0.8,
+    noteBaseSize: 11,
+    maxSlideCount: 500, // on screen,
+    inputDebounceTime: 800, // ms
+    showSensorTextWhenPaused: true,
+    hideBackgroundWhenPaused: false,
+    disableVideo: false, // 關閉影片背景（如果有的話）
+    visualZoom: 200, // 視覺模式下的縮放倍率
+    slideIllegalRed: false,
+    showUI: false,
+    // Sound & Playback
+    playbackSpeed: 1, // 播放速度，1 是正常速度
+    globalVolume: 0.65, // 全局音量，0 到 1 之間
+    musicVolume: 0.8, // 音樂音量，0 到 1 之間
+    SfxVolume: 1, // 音效音量，0 到 1 之間
+    sfxVolumes: {
+        'clock': 0.8,
+        'answer': 1,
+        'judge': 0.4,
+        'judge_ex': 0.4,
+        'judge_break': 0.4,
+        'judge_break_slide': 0.4,
+        'break': 0.4,
+        'slide': 0.4,
+        'break_slide_start': 0.4,
+        'touch': 0.4,
+        'hanabi': 0.6,
+    },
+    autoPauseOnScroll: true, // 滾動時自動暫停
+
+    restoreDefaults: function () {
+        settings = { ...defaultSettings };
+    }
 };

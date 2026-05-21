@@ -3,7 +3,7 @@ import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, p
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 // Register service worker (works when served over http(s) or localhost)
-if ('serviceWorker' in navigator && false) {
+if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js')
         .then((reg) => {
             console.log('Service worker registered:', reg);
@@ -33,14 +33,14 @@ window.simpleToast = simpleToast;
 
 _init();
 
-
-
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
 const slider = document.getElementById('timeControl');
+const keyboardButton = getButton("keyboard", "control");
 const playButton = getButton("play/pause", "control");
 const hideButton = getButton("hide", "control");
 const stopButton = getButton("stop", "control");
+const resetButton = getButton("reset", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
 const hideUtilityButton = document.querySelector("#utilityContainer .closeBtn");
@@ -74,6 +74,7 @@ const manageResourcesButton = getButton("manageResources", "utility");
 const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
+const helpButton = getButton("help", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
@@ -83,6 +84,7 @@ const previewZoomOutButton = document.getElementById('mpzoomOut');
 const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
+const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 
@@ -136,7 +138,7 @@ export const defaultSettings = {
         'hanabi': 0.6,
     },
     autoPauseOnScroll: true, // 滾動時自動暫停
-
+    cursorFollow: true, // 游標跟隨
     restoreDefaults: function () {
         settings = { ...defaultSettings };
     }
@@ -273,6 +275,7 @@ const saveSettingsDebounce = debounce(() => {
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
     slider.max = endTime + musicDelay;
+    updateSlider(globalTime);
 };
 
 const updateSlider = (time) => {
@@ -447,12 +450,147 @@ manageResourcesButton.addEventListener('click', async () => {
     });
 });
 
+/**
+ * 1. 音訊緩衝區管理器（負責音訊運算、備份與復原）
+ */
+class BgmEditorBufferManager {
+    constructor(audioManager) {
+        this.audioManager = audioManager;
+        // 💾 核心儲存：保留最原始的音訊備份
+        this.originalBuffer = audioManager.bgmBuffer;
+        // 當前編輯中的緩衝區
+        this.currentBuffer = audioManager.bgmBuffer;
+    }
+
+    get buffer() { return this.currentBuffer; }
+    get duration() { return this.currentBuffer.duration; }
+    get sampleRate() { return this.currentBuffer.sampleRate; }
+
+    /** 🟢 復原功能：還原至最原始匯入的狀態 */
+    restoreOriginal() {
+        this.currentBuffer = this.originalBuffer;
+        this.audioManager.bgmBuffer = this.originalBuffer;
+    }
+
+    /** 🛠️ 核心：建立新的 AudioBuffer 並複製資料 */
+    createNewBuffer(newLength, copyCallback) {
+        const ctx = this.audioManager.ctx;
+        const oldBuf = this.currentBuffer;
+        const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLength, oldBuf.sampleRate);
+
+        for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
+            const oldData = oldBuf.getChannelData(ch);
+            const newData = newBuffer.getChannelData(ch);
+            copyCallback(oldData, newData);
+        }
+
+        this.currentBuffer = newBuffer;
+        this.audioManager.bgmBuffer = newBuffer;
+        return newBuffer;
+    }
+
+    /** ✂️ 裁切音訊：刪除起點前或指定長度的音訊 */
+    cropStart(offsetTime) {
+        const startSample = Math.floor(offsetTime * this.sampleRate);
+        const newLen = this.currentBuffer.length - startSample;
+        if (newLen <= 0) return false;
+
+        this.createNewBuffer(newLen, (oldData, newData) => {
+            newData.set(oldData.subarray(startSample));
+        });
+        return true;
+    }
+
+    /** ➕ 補白音訊：在開頭插入指定秒數的靜音 */
+    padStart(seconds) {
+        const padSamples = Math.floor(seconds * this.sampleRate);
+        const newLen = this.currentBuffer.length + padSamples;
+
+        this.createNewBuffer(newLen, (oldData, newData) => {
+            newData.set(oldData, padSamples); // 前面自動補 0 靜音
+        });
+    }
+}
+
+/**
+ * 2. 波形畫布管理器（負責視覺波形渲染計算）
+ */
+class BgmEditorWaveformCanvas {
+    constructor(canvas, bufferManager) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.bm = bufferManager;
+    }
+
+    /** 🎨 繪製渲染核心 */
+    draw(offsetTime, visualOffset, zoomValue) {
+        const bgmBuffer = this.bm.buffer;
+        const duration = this.bm.duration;
+        const data = bgmBuffer.getChannelData(0);
+
+        const zoom = Math.max(1, parseFloat(zoomValue) || 1);
+        const viewLength = Math.max(0.1, duration / zoom);
+        const viewCenter = Math.min(duration, Math.max(0, offsetTime + visualOffset));
+
+        let viewStart = viewCenter - viewLength / 2;
+        if (viewStart < 0) viewStart = 0;
+        if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
+        const viewEnd = viewStart + viewLength;
+
+        const startSample = Math.floor(viewStart * this.bm.sampleRate);
+        const endSample = Math.min(data.length, Math.ceil(viewEnd * this.bm.sampleRate));
+        const viewSamples = Math.max(1, endSample - startSample);
+        const step = Math.ceil(viewSamples / this.canvas.width);
+
+        // 畫布清理與背景
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // 1. 繪製藍色音訊波形
+        this.ctx.fillStyle = '#1e90ff';
+        for (let i = 0; i < this.canvas.width; i++) {
+            let min = 1.0, max = -1.0;
+            const sampleBase = startSample + Math.floor((i / this.canvas.width) * viewSamples);
+            for (let j = 0; j < step; j++) {
+                const idx = sampleBase + j;
+                if (idx >= endSample) break;
+                const datum = data[idx];
+                if (datum < min) min = datum;
+                if (datum > max) max = datum;
+            }
+            const y = (1 - max) * this.canvas.height / 2;
+            const h = Math.max(1, (max - min) * this.canvas.height / 2);
+            this.ctx.fillRect(i, y, 1, h);
+        }
+
+        // 2. 繪製紅色播放頭
+        const x = ((offsetTime - viewStart) / viewLength) * this.canvas.width;
+        this.ctx.strokeStyle = '#ff3333';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(Math.max(0, Math.min(this.canvas.width, x)), 0);
+        this.ctx.lineTo(Math.max(0, Math.min(this.canvas.width, x)), this.canvas.height);
+        this.ctx.stroke();
+    }
+}
+
+/**
+ * 3. 主要事件監聽觸發入口
+ */
 editMusicButton.addEventListener('click', () => {
     if (!audioManager.bgmBuffer) {
         simpleToast({ content: '請先匯入音樂', type: 'warning' });
         return;
     }
 
+    // 初始化音訊管理器與畫布管理器
+    const bufferManager = new BgmEditorBufferManager(audioManager);
+
+    let offsetTime = musicDelay;
+    let visualOffset = 0;
+    let isPreviewing = false;
+    let previewInterval;
+
+    // 建立 UI 容器與元素
     const container = document.createElement('div');
     container.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;width:min(90vw,600px);';
 
@@ -462,14 +600,16 @@ editMusicButton.addEventListener('click', () => {
     canvas.style.cssText = 'width:100%;height:120px;background:#111;border:1px solid #555;border-radius:4px;cursor:crosshair;';
     container.appendChild(canvas);
 
+    const wfCanvas = new BgmEditorWaveformCanvas(canvas, bufferManager);
+
     const controls = document.createElement('div');
     controls.style.cssText = 'display:flex;gap:15px;align-items:center;flex-wrap:wrap;';
     controls.innerHTML = `
         <label style="display:flex;align-items:center;gap:5px;">
-            BPM: <input type="number" id="editBpmInput" value="${clockBpm}" step="1" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
+            BPM: <input type="number" id="editBpmInput" value="${clockBpm}" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
         </label>
         <label style="display:flex;align-items:center;gap:5px;">
-            第一拍偏移(s): <input type="number" id="editOffsetInput" value="${musicDelay}" step="0.001" style="width:80px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
+            第一拍偏移(s): <input type="number" id="editOffsetInput" value="${musicDelay.toFixed(3)}" step="0.001" style="width:80px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
         </label>
         <label style="display:flex;align-items:center;gap:5px;">
             縮放: <input type="number" id="editZoomInput" value="1" min="1" max="20" step="0.1" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">x
@@ -483,11 +623,14 @@ editMusicButton.addEventListener('click', () => {
     `;
     container.appendChild(controls);
 
+    // 快捷 DOM 查詢
+    const bpmInput = controls.querySelector('#editBpmInput');
+    const offsetInputNode = controls.querySelector('#editOffsetInput');
     const zoomInput = controls.querySelector('#editZoomInput');
-    zoomInput.addEventListener('change', () => {
-        drawWaveform();
-    });
+    const bgmVolumeInput = controls.querySelector('#editBgmVolumeInput');
     const shiftInput = controls.querySelector('#editShiftInput');
+
+    // 建立視覺偏移 Slider
     const visualOffsetSlider = document.createElement('input');
     visualOffsetSlider.type = 'range';
     visualOffsetSlider.min = -5;
@@ -495,10 +638,9 @@ editMusicButton.addEventListener('click', () => {
     visualOffsetSlider.step = 0.01;
     visualOffsetSlider.value = 0;
     visualOffsetSlider.style.cssText = 'width:100%;';
-    const bgmVolumeInput = controls.querySelector('#editBgmVolumeInput');
 
     const visualOffsetLabel = document.createElement('div');
-    visualOffsetLabel.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:#ccc;';
+    visualOffsetLabel.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#ccc;';
     visualOffsetLabel.innerHTML = `<span>視覺偏移: </span><strong id="visualOffsetValue">0.00s</strong>`;
 
     const offsetControl = document.createElement('div');
@@ -507,98 +649,16 @@ editMusicButton.addEventListener('click', () => {
     offsetControl.appendChild(visualOffsetSlider);
     container.appendChild(offsetControl);
 
-    const actionBox = document.createElement('div');
-    actionBox.style.cssText = 'display:flex;gap:10px;margin-top:5px;flex-wrap:wrap;';
-
-    let offsetTime = musicDelay;
-    let visualOffset = 0;
-    const ctxCanvas = canvas.getContext('2d');
-    let bgmBuffer = audioManager.bgmBuffer;
-    let duration = bgmBuffer.duration;
-
-    const drawWaveform = () => {
-        bgmBuffer = audioManager.bgmBuffer;
-        duration = bgmBuffer.duration;
-        const data = bgmBuffer.getChannelData(0);
-        const zoom = Math.max(1, parseFloat(zoomInput.value) || 1);
-        const viewLength = Math.max(0.1, duration / zoom);
-        const viewCenter = Math.min(duration, Math.max(0, offsetTime + visualOffset));
-        let viewStart = viewCenter - viewLength / 2;
-        if (viewStart < 0) viewStart = 0;
-        if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
-        const viewEnd = viewStart + viewLength;
-        const startSample = Math.floor(viewStart * bgmBuffer.sampleRate);
-        const endSample = Math.min(data.length, Math.ceil(viewEnd * bgmBuffer.sampleRate));
-        const viewSamples = Math.max(1, endSample - startSample);
-        const step = Math.ceil(viewSamples / canvas.width);
-
-        ctxCanvas.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctxCanvas.fillStyle = '#1e90ff';
-        for (let i = 0; i < canvas.width; i++) {
-            let min = 1.0;
-            let max = -1.0;
-            const sampleBase = startSample + Math.floor((i / canvas.width) * viewSamples);
-            for (let j = 0; j < step; j++) {
-                const idx = sampleBase + j;
-                if (idx >= endSample) break;
-                const datum = data[idx];
-                if (datum < min) min = datum;
-                if (datum > max) max = datum;
-            }
-            const y = (1 - max) * canvas.height / 2;
-            const h = Math.max(1, (max - min) * canvas.height / 2);
-            ctxCanvas.fillRect(i, y, 1, h);
-        }
-
-        // Draw Playhead
-        const x = ((offsetTime - viewStart) / viewLength) * canvas.width;
-        ctxCanvas.strokeStyle = '#ff3333';
-        ctxCanvas.lineWidth = 2;
-        ctxCanvas.beginPath();
-        ctxCanvas.moveTo(Math.max(0, Math.min(canvas.width, x)), 0);
-        ctxCanvas.lineTo(Math.max(0, Math.min(canvas.width, x)), canvas.height);
-        ctxCanvas.stroke();
-
-        // Draw playing Playhead
-        //const x = Math.max(0, Math.min((offsetTime / duration) * canvas.width, canvas.width));
-        /*ctxCanvas.strokeStyle = '#ff3333';
-        ctxCanvas.lineWidth = 2;
-        ctxCanvas.beginPath();
-        ctxCanvas.moveTo(x, 0);
-        ctxCanvas.lineTo(x, canvas.height);
-        ctxCanvas.stroke();*/
+    // 封裝重繪快取方法
+    const triggerRedraw = () => {
+        wfCanvas.draw(offsetTime, visualOffset, parseFloat(zoomInput.value));
     };
 
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        offsetTime = Math.max(0, (x / rect.width) * duration / zoomInput.value - visualOffset);
-        container.querySelector('#editOffsetInput').value = offsetTime.toFixed(3);
-        drawWaveform();
-        if (isPreviewing) {
-            audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
-        }
-    });
-
-    visualOffsetSlider.addEventListener('input', () => {
-        visualOffset = parseFloat(visualOffsetSlider.value) || 0;
-        container.querySelector('#visualOffsetValue').innerText = `${visualOffset.toFixed(2)}s`;
-        drawWaveform();
-    });
-
-    controls.querySelector('#editOffsetInput').addEventListener('change', (e) => {
-        offsetTime = parseFloat(e.target.value) || 0;
-        drawWaveform();
-    });
-
+    // 節拍器與控制功能
     const playClockBtn = document.createElement('button');
     playClockBtn.innerText = '節拍器預覽 (從播放頭)';
     playClockBtn.style.cssText = 'padding:4px 10px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
     controls.appendChild(playClockBtn);
-
-    let isPreviewing = false;
-    let previewInterval;
 
     const stopPreview = () => {
         if (isPreviewing) {
@@ -609,22 +669,44 @@ editMusicButton.addEventListener('click', () => {
         }
     };
 
+    // --- UI 事件監聽綁定 ---
+    zoomInput.addEventListener('change', triggerRedraw);
+    offsetInputNode.addEventListener('change', (e) => {
+        offsetTime = parseFloat(e.target.value) || 0;
+        triggerRedraw();
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const zoom = parseFloat(zoomInput.value) || 1;
+        offsetTime = Math.max(0, (x / rect.width) * bufferManager.duration / zoom - visualOffset);
+        offsetInputNode.value = offsetTime.toFixed(3);
+        triggerRedraw();
+        if (isPreviewing) {
+            audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
+        }
+    });
+
+    visualOffsetSlider.addEventListener('input', () => {
+        visualOffset = parseFloat(visualOffsetSlider.value) || 0;
+        container.querySelector('#visualOffsetValue').innerText = `${visualOffset.toFixed(2)}s`;
+        triggerRedraw();
+    });
+
     playClockBtn.addEventListener('click', () => {
         if (isPreviewing) {
             stopPreview();
         } else {
-            const bpm = parseFloat(container.querySelector('#editBpmInput').value) || clockBpm;
+            const bpm = parseFloat(bpmInput.value) || clockBpm;
             const msPerBeat = 60000 / bpm;
-
             audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
 
-            // 使用 setTimeout 模擬基本的節拍器
             let expectedTickTime = performance.now() + msPerBeat;
             previewInterval = setInterval(() => {
                 const now = performance.now();
                 if (now >= expectedTickTime) {
-                    console.log('Tick!');
-                    audioManager.play('clock')
+                    audioManager.play('clock');
                     expectedTickTime += msPerBeat;
                 }
             }, 10);
@@ -634,122 +716,92 @@ editMusicButton.addEventListener('click', () => {
         }
     });
 
-    // 裁切與補白功能
-    const modifyBgmBufferButton = document.createElement('button');
-    modifyBgmBufferButton.innerText = '裁去播放頭前所有音訊';
-    modifyBgmBufferButton.style.cssText = 'padding:4px 8px;background:#8b0000;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    // --- 功能性按鈕箱配置 ---
+    const actionBox = document.createElement('div');
+    actionBox.style.cssText = 'display:flex;gap:10px;margin-top:5px;flex-wrap:wrap;';
 
-    modifyBgmBufferButton.addEventListener('click', () => {
+    // 按鈕 1：裁切
+    const cropBtn = document.createElement('button');
+    cropBtn.innerText = '裁去播放頭前所有音訊';
+    cropBtn.style.cssText = 'padding:4px 8px;background:#8b0000;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    cropBtn.addEventListener('click', () => {
         if (offsetTime <= 0) return;
-        if (!confirm('確定要從播放頭處裁切掉前面的音樂嗎？此操作會重新建立音訊緩衝。')) return;
+        if (!confirm('確定要從播放頭處裁切掉前面的音樂嗎？')) return;
 
         stopPreview();
-        const ctx = audioManager.ctx;
-        const oldBuf = audioManager.bgmBuffer;
-        const startOffset = Math.floor(offsetTime * oldBuf.sampleRate);
-        const newLen = oldBuf.length - startOffset;
-
-        if (newLen <= 0) return;
-
-        const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, oldBuf.sampleRate);
-        for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
-            const oldData = oldBuf.getChannelData(ch);
-            const newData = newBuffer.getChannelData(ch);
-            newData.set(oldData.subarray(startOffset));
+        if (bufferManager.cropStart(offsetTime)) {
+            offsetTime = 0;
+            offsetInputNode.value = "0.000";
+            triggerRedraw();
+            simpleToast({ content: '音訊已自播放頭裁剪', type: 'success' });
         }
-
-        audioManager.bgmBuffer = newBuffer;
-        offsetTime = 0; // 裁掉後，前面就沒了，播放頭歸零
-        container.querySelector('#editOffsetInput').value = 0;
-        musicDelay = 0;
-        offsetInput.value = 0;
-        drawWaveform();
-        simpleToast({ content: '音訊已自播放頭裁剪', type: 'success' });
     });
 
-    const padBgmBufferButton = document.createElement('button');
-    padBgmBufferButton.innerText = '在開頭補白 1 拍 (依 BPM)';
-    padBgmBufferButton.style.cssText = 'padding:4px 8px;background:#006400;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
-
-    padBgmBufferButton.addEventListener('click', () => {
+    // 按鈕 2：依 BPM 補白
+    const padBtn = document.createElement('button');
+    padBtn.innerText = '在開頭補白 1 拍';
+    padBtn.style.cssText = 'padding:4px 8px;background:#006400;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    padBtn.addEventListener('click', () => {
         stopPreview();
-        const bpm = parseFloat(container.querySelector('#editBpmInput').value) || clockBpm;
+        const bpm = parseFloat(bpmInput.value) || clockBpm;
         const secPerBeat = 60 / bpm;
 
-        const ctx = audioManager.ctx;
-        const oldBuf = audioManager.bgmBuffer;
-        const padSamples = Math.floor(secPerBeat * oldBuf.sampleRate);
-        const newLen = oldBuf.length + padSamples;
-
-        const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, oldBuf.sampleRate);
-        for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
-            const oldData = oldBuf.getChannelData(ch);
-            const newData = newBuffer.getChannelData(ch);
-            newData.set(oldData, padSamples); // 前面的會是預設的 0 (靜音)
-        }
-
-        audioManager.bgmBuffer = newBuffer;
-        offsetTime += secPerBeat; // 補白後，播放頭向後延伸
-        container.querySelector('#editOffsetInput').value = offsetTime.toFixed(3);
-        drawWaveform();
+        bufferManager.padStart(secPerBeat);
+        offsetTime += secPerBeat;
+        offsetInputNode.value = offsetTime.toFixed(3);
+        triggerRedraw();
         simpleToast({ content: '已在音訊開頭補白', type: 'success' });
     });
 
-    const applyShiftButton = document.createElement('button');
-    applyShiftButton.innerText = '套用音訊偏移';
-    applyShiftButton.style.cssText = 'padding:4px 8px;background:#004a75;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
-    applyShiftButton.addEventListener('click', () => {
+    // 按鈕 3：精準自訂偏移（支援正負值）
+    const shiftBtn = document.createElement('button');
+    shiftBtn.innerText = '套用音訊偏移';
+    shiftBtn.style.cssText = 'padding:4px 8px;background:#004a75;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    shiftBtn.addEventListener('click', () => {
         const shiftSeconds = parseFloat(shiftInput.value) || 0;
-        if (shiftSeconds === 0) {
-            simpleToast({ content: '請填寫非零的音訊偏移值。', type: 'warning' });
-            return;
-        }
+        if (shiftSeconds === 0) return;
 
         stopPreview();
-        const ctx = audioManager.ctx;
-        const oldBuf = audioManager.bgmBuffer;
-        const sampleRate = oldBuf.sampleRate;
-        const shiftSamples = Math.round(Math.abs(shiftSeconds) * sampleRate);
-
         if (shiftSeconds > 0) {
-            const newLen = oldBuf.length + shiftSamples;
-            const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, sampleRate);
-            for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
-                const oldData = oldBuf.getChannelData(ch);
-                const newData = newBuffer.getChannelData(ch);
-                newData.set(oldData, shiftSamples);
-            }
-            audioManager.bgmBuffer = newBuffer;
+            bufferManager.padStart(shiftSeconds);
             offsetTime += shiftSeconds;
-            simpleToast({ content: `已補 ${shiftSeconds.toFixed(3)}s 靜音於音訊開頭。`, type: 'success' });
+            simpleToast({ content: `已補白 ${shiftSeconds.toFixed(3)}s。`, type: 'success' });
         } else {
-            if (shiftSamples >= oldBuf.length) {
-                simpleToast({ content: '裁剪長度超過音訊總長度，請縮小數值。', type: 'error' });
+            if (Math.abs(shiftSeconds) >= bufferManager.duration) {
+                simpleToast({ content: '裁剪長度超過總長。', type: 'error' });
                 return;
             }
-            const newLen = oldBuf.length - shiftSamples;
-            const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLen, sampleRate);
-            for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
-                const oldData = oldBuf.getChannelData(ch);
-                const newData = newBuffer.getChannelData(ch);
-                newData.set(oldData.subarray(shiftSamples));
-            }
-            audioManager.bgmBuffer = newBuffer;
+            bufferManager.cropStart(Math.abs(shiftSeconds));
             offsetTime = Math.max(0, offsetTime + shiftSeconds);
-            simpleToast({ content: `已裁剪音訊開頭 ${Math.abs(shiftSeconds).toFixed(3)}s。`, type: 'success' });
         }
-
-        container.querySelector('#editOffsetInput').value = offsetTime.toFixed(3);
-        drawWaveform();
+        offsetInputNode.value = offsetTime.toFixed(3);
+        triggerRedraw();
     });
 
-    actionBox.appendChild(modifyBgmBufferButton);
-    actionBox.appendChild(padBgmBufferButton);
-    actionBox.appendChild(applyShiftButton);
+    // ✨ 新增按鈕 4：緊急安全備份還原
+    const restoreBtn = document.createElement('button');
+    restoreBtn.innerText = '還原原始音訊';
+    restoreBtn.style.cssText = 'padding:4px 8px;background:#444;color:#aaa;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    restoreBtn.addEventListener('click', () => {
+        if (!confirm('確定要放棄本次視窗內的所有裁切/補白修改，還原成剛載入的音樂嗎？')) return;
+        stopPreview();
+        bufferManager.restoreOriginal();
+        offsetTime = musicDelay;
+        offsetInputNode.value = offsetTime.toFixed(3);
+        triggerRedraw();
+        simpleToast({ content: '已還原至最原始音訊狀態', type: 'info' });
+    });
+
+    actionBox.appendChild(cropBtn);
+    actionBox.appendChild(padBtn);
+    actionBox.appendChild(shiftBtn);
+    actionBox.appendChild(restoreBtn); // 塞入還原按鈕
     container.appendChild(actionBox);
 
-    setTimeout(drawWaveform, 100);
+    // 初始化第一次繪製
+    setTimeout(triggerRedraw, 100);
 
+    // 彈出視窗配置
     popupWindow({
         title: '編輯音樂與第一拍 offset',
         customContent: container,
@@ -758,13 +810,17 @@ editMusicButton.addEventListener('click', () => {
             {
                 text: '套用',
                 onClick: (ctx) => {
-                    const bpm = parseFloat(container.querySelector('#editBpmInput').value) || clockBpm;
+                    const bpm = parseFloat(bpmInput.value) || clockBpm;
                     musicDelay = offsetTime;
-                    offsetInput.value = musicDelay;
+
+                    // 連動更新外部編輯器控制項數值
+                    if (typeof offsetInput !== 'undefined') offsetInput.value = musicDelay;
                     editorInput.value += `\n(${bpm})`;
-                    applyHighlight(editorInput.value);
-                    inputDebounce();
-                    offsetInputDebounce();
+
+                    if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
+                    if (typeof inputDebounce === 'function') inputDebounce();
+                    if (typeof offsetInputDebounce === 'function') offsetInputDebounce();
+
                     stopPreview();
                     ctx.close();
                 }
@@ -774,6 +830,8 @@ editMusicButton.addEventListener('click', () => {
                 hideOnClick: true,
                 onClick: () => {
                     stopPreview();
+                    // 💥 使用者點取消，直接自動還原成點開前的狀態，不污染原始資料
+                    bufferManager.restoreOriginal();
                 }
             }
         ],
@@ -1407,20 +1465,14 @@ const setEditorCss = (visible = null) => {
     const visualMode = isVisualMode();
     const editorVisible = visible && !visualMode;
     const visualVisible = visible && visualMode;
+    const isHidden = hideButton.dataset.hidden === 'true';
 
     setElementDisplay(editorContainer, visible);
     setElementDisplay(editorInput, editorVisible);
     setElementDisplay(highlightLayer, editorVisible);
     setElementDisplay(visualEditor, visualVisible);
 
-    if (visualVisible) {
-        previewContainer.style.display = 'none';
-        document.documentElement.style.setProperty('--playControls-height', '70px');
-        resizeVisualEditor();
-    } else {
-        previewContainer.style.display = 'block';
-        document.documentElement.style.setProperty('--playControls-height', '130px');
-    }
+    updatePlaycontrol(visualVisible, !isHidden);
 
     animateCanvasWidth(visible);
 };
@@ -1834,7 +1886,7 @@ chartInfoButton.addEventListener('click', () => {
         const imgContainer = document.createElement('div');
         imgContainer.style.cssText = "width:50%; display:flex; align-items: flex-start;flex-wrap: wrap;flex-direction: column;align-items: center;justify-content: flex-start;gap: 10px;";
         const img = document.createElement('img');
-        img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['star'].src;
+        img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['no_image'].src;
         img.style.cssText = "width:100%; height:100%; display:block; object-fit:contain;";
 
         const imgWrapper = document.createElement('div');
@@ -2086,6 +2138,19 @@ redoButton.addEventListener('click', () => {
     lastEditorValue = newContent;
 });
 
+helpButton.addEventListener('click', () => {
+    const content = `
+    <h2>Simai譜面編輯器使用說明</h2>
+    <p>(wip)</p>`
+    popupWindow({
+        title: "幫助",
+        customContent: content,
+        buttons: [
+            { text: "關閉", hideOnClick: true }
+        ]
+    });
+});
+
 let lastEditorValue = editorInput.value || '';
 const editorInputDebounce = debounce(() => {
     if (editorInput.value !== lastEditorValue) {
@@ -2211,6 +2276,7 @@ function maidataProcess(e) {
             }
             return val;
         })();
+        offsetInput.value = musicDelay;
         offsetInputDebounce();
     }
     nowDifficulty = 5; // 預設讀取 inote_5，實際可依需求調整
@@ -2631,6 +2697,12 @@ const updateVisualTime = (newTime) => {
         audioManager.clearSoundQueue();
         audioManager.stopBGM();
         draw();
+        if (settings.cursorFollow) {
+            const point = rawData.slice(0, nowIndex + 1).join(',').length;
+            editorInput.selectionStart = point;
+            editorInput.selectionEnd = point;
+            cursorLastIndexTime = dataIndexToTime[nowIndex] ?? 0;
+        }
     }
     slideInputDebounce();
 };
@@ -2988,6 +3060,13 @@ slider.addEventListener('input', () => {
         audioManager.stopBGM();
         draw();
     }
+
+    if (settings.cursorFollow) {
+        const point = rawData.slice(0, nowIndex + 1).join(',').length;
+        editorInput.selectionStart = point;
+        editorInput.selectionEnd = point;
+    }
+
     updateSlider(realTime);
     slideInputDebounce();
 });
@@ -2995,6 +3074,8 @@ slider.addEventListener('input', () => {
 let bgmUpdateTimer = null;
 
 if (keepRenderingWhilePause) requestAnimationFrame(update);
+
+let lastStartTime = 0;
 
 playButton.addEventListener('click', () => {
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
@@ -3017,6 +3098,7 @@ playButton.addEventListener('click', () => {
 
         draw(); // 立即更新畫布，反映暫停狀態
     } else {
+        lastStartTime = realTime; // 記錄開始播放的時間點
         editorBackgroundImage.style.display = (editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none';
         editorBackgroundVideo.style.display =
             ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
@@ -3036,7 +3118,7 @@ playButton.addEventListener('click', () => {
     slideInputDebounce();
 });
 
-stopButton.addEventListener('click', () => {
+resetButton.addEventListener('click', () => {
     editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
     editorBackgroundVideo.style.display = 'none';
     playButton.dataset.playing = 'false';
@@ -3056,22 +3138,67 @@ stopButton.addEventListener('click', () => {
     draw(); // 立即更新畫布，反映停止狀態
 });
 
+stopButton.addEventListener('click', () => {
+    editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
+    editorBackgroundVideo.style.display = 'none';
+    playButton.dataset.playing = 'false';
+    playButton.children[0].innerText = "play_arrow";
+    bgmUpdateTimer = null;
+    lastTimestamp = null;
+    realTime = lastStartTime || 0;
+    globalTime = realTime - musicDelay;
+    updateSlider(realTime);
+
+    // --- 停止音效與 BGM ---
+    audioManager.stopAllLongSounds();
+    audioManager.stopBGM();
+
+    notes.forEach(n => n._riserActive = false); // 強制重置標記
+
+    draw(); // 立即更新畫布，反映停止狀態
+});
+
+keyboardButton.addEventListener('click', () => {
+    editorInput.focus();
+});
+
+function updatePlaycontrol(visualVisible = false, isHidden = false) {
+    const c = window.getComputedStyle(document.documentElement);
+    const cC = document.querySelector('#playControlContainer .controlsContainer');
+    const d = document.documentElement.style;
+
+    const maxPlayControlsHeight = c.getPropertyValue('--const-max-playControls-height');
+    const collapsedPlayControlsHeight = c.getPropertyValue('--const-collapsed-playControls-height');
+    if (!isHidden) {
+        slider.style.display = 'none';
+        cC.style.display = 'none';
+        hideButton.dataset.hidden = 'true';
+        d.setProperty('--playControls-height', '0px');
+        showPlayControlsBtn.style.display = 'block';
+    } else {
+        showPlayControlsBtn.style.display = 'none';
+        hideButton.dataset.hidden = 'false';
+        slider.style.display = 'block';
+        cC.style.display = 'flex';
+        if (visualVisible) {
+            previewContainer.style.display = 'none';
+            d.setProperty('--playControls-height', collapsedPlayControlsHeight);
+        } else {
+            previewContainer.style.display = 'block';
+            d.setProperty('--playControls-height', maxPlayControlsHeight);
+        }
+    }
+}
+
+showPlayControlsBtn.addEventListener('click', () => {
+    hideButton.click();
+});
+
 hideButton.addEventListener('click', () => {
     const visualVisible = visualEditor.style.display !== 'none';
     const isHidden = hideButton.dataset.hidden === 'true';
-    if (!isHidden) {
-        hideButton.dataset.hidden = 'true';
-        document.documentElement.style.setProperty('--playControls-height', '0px');
-    } else {
-        hideButton.dataset.hidden = 'false';
-        if (visualVisible) {
-            previewContainer.style.display = 'none';
-            document.documentElement.style.setProperty('--playControls-height', '70px');
-        } else {
-            previewContainer.style.display = 'block';
-            document.documentElement.style.setProperty('--playControls-height', '130px');
-        }
-    }
+
+    updatePlaycontrol(visualVisible, isHidden);
     resize();
 });
 
@@ -3223,6 +3350,13 @@ function update(timestamp) {
     if (isPlaying) {
         realTime += dt * bp;
         globalTime = realTime - musicDelay;
+        if (settings.cursorFollow) {
+            cursorLastIndexTime = dataIndexToTime[nowIndex] || 0; // 更新游標對應的時間
+            const point = rawData.slice(0, nowIndex + 1).join(',').length;
+            // 2. 設定游標位置
+            editorInput.selectionStart = point;
+            editorInput.selectionEnd = point;
+        }
 
         // BGM 與影片同步邏輯（每秒檢查一次）
         if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
@@ -3995,42 +4129,55 @@ recordVideoButton.addEventListener('click', async () => {
 window.addEventListener('resize', resize);
 
 window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+        // 🔴 修正：拿掉外面的 e.preventDefault()，改在需要攔截的 case 內個別加上
+
         switch (e.key.toLowerCase()) {
             case 's':
+                e.preventDefault(); // 🟢 攔截瀏覽器預設的網頁另存新檔
                 isContextEdited = false;
 
                 simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
                 maidata['inote_' + nowDifficulty] = editorInput.value;
                 saveMaidata();
                 break;
+
             case 'o': {
+                e.preventDefault(); // 🟢 攔截瀏覽器預設的開啟檔案
                 let sp = settings.playbackSpeed - 0.25;
-                if (sp <= 0.25) {
-                    sp = 0.25;
-                }
+                if (sp <= 0.25) sp = 0.25;
                 setPlaybackSpeed(sp);
                 simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
                 break;
             }
+
             case 'p': {
+                e.preventDefault(); // 🟢 攔截瀏覽器預設的列印網頁
                 let sp = settings.playbackSpeed + 0.25;
-                if (sp >= 2.0) {
-                    sp = 2.0;
-                }
+                if (sp >= 2.0) sp = 2.0;
                 setPlaybackSpeed(sp);
                 simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
                 break;
             }
-            case 'z':{
-                undoButton.click();
-                simpleToast({ content: '復原', type: 'info', timeout: 1200 });
+
+            case 'z': {
+                // 🟢 關鍵優化：只有當焦點不在編輯器輸入框內時，才觸發譜面架構的 Undo
+                // 這樣使用者在打字時，Ctrl+Z 依然能正常撤銷他剛剛打錯的字！
+                if (document.activeElement !== editorInput) {
+                    e.preventDefault();
+                    undoButton.click();
+                    simpleToast({ content: '復原譜面變更', type: 'info', timeout: 1200 });
+                }
                 break;
             }
-            case 'y':{
-                redoButton.click();
-                simpleToast({ content: '重作', type: 'info', timeout: 1200 });
+
+            case 'y': {
+                // 🟢 同理優化重作邏輯
+                if (document.activeElement !== editorInput) {
+                    e.preventDefault();
+                    redoButton.click();
+                    simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
+                }
                 break;
             }
         }
@@ -4239,7 +4386,7 @@ function draw(dt = 0) {
             visualBuckets,
             audioBuffer: audioManager.bgmBuffer,
             offset: musicDelay,
-            indexTime: dataIndexToTime[nowIndex],
+            indexTime: (lastStartTime ?? 0) - musicDelay,
             cursorIndexTime: cursorLastIndexTime,
         });
     }
@@ -4289,7 +4436,7 @@ function _init() {
                     idbGet('simai_settings'),
                 ]);
                 if (savedTimeControl && !isNaN(savedTimeControl)) {
-                    realTime = savedTimeControl; updateSlider(realTime); globalTime = realTime - musicDelay; update();
+                    realTime = savedTimeControl; globalTime = realTime - musicDelay; update();
                 }
                 if (savedSettings) {
                     step(84, "還原設定...");
@@ -4364,6 +4511,7 @@ function _init() {
                 previewRender.setZoom(settings.visualZoom);
                 setPlaybackSpeed(settings.playbackSpeed);
                 draw();
+                updateSlider(realTime);
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();
             } catch (e) {

@@ -10,6 +10,8 @@ import {
     touchPaths,
     wSlideRatio,
     clamp,
+    drawImgAtcenter,
+    exColor,
 } from './helper.js';
 
 export class SimaiRenderer {
@@ -24,13 +26,8 @@ export class SimaiRenderer {
 
         this._tintCache = new Map();
 
-        // EX 顏色定義
-        this.exColor = {
-            tap: '#D8A2C9',
-            star: '#00DBF4',
-            double: '#DCDA6B',
-            break: '#EBBA63',
-        };
+        // EX 顏色定義 (shared)
+        this.exColor = exColor;
 
         // 傳感器靜態快取 (pixel canvas)
         this._sensorShapeCache = null; // canvas for sensor shapes
@@ -101,13 +98,7 @@ export class SimaiRenderer {
     // --- 核心工具函式 ---
 
     drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
-        this.ctx.drawImage(
-            img,
-            -size / 2 * imgWidthMul + offsetX,
-            -size / 2 * imgHeightMul + offsetY,
-            size * imgWidthMul,
-            size * imgHeightMul
-        );
+        return drawImgAtcenter(this.ctx, img, size, offsetX, offsetY, imgWidthMul, imgHeightMul);
     }
 
     timeFunction(x) {
@@ -858,12 +849,7 @@ export class SimaiVisualEditor {
 
         this.passOpacity = 0.7;
 
-        this.exColor = {
-            tap: '#D8A2C9',
-            star: '#00DBF4',
-            double: '#DCDA6B',
-            break: '#EBBA63',
-        };
+        this.exColor = exColor;
         // marker state: 方塊表示現在游標位置（綠色），按下時變紅
         this.markerPressed = false;
         this.markerColors = { normal: '#00FF00', pressed: '#FF0000' };
@@ -905,13 +891,7 @@ export class SimaiVisualEditor {
     }
 
     drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
-        this.ctx.drawImage(
-            img,
-            -size / 2 * imgWidthMul + offsetX,
-            -size / 2 * imgHeightMul + offsetY,
-            size * imgWidthMul,
-            size * imgHeightMul
-        );
+        return drawImgAtcenter(this.ctx, img, size, offsetX, offsetY, imgWidthMul, imgHeightMul);
     }
 
     drawTap(s) {

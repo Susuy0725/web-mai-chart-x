@@ -138,6 +138,7 @@ export const defaultSettings = {
         'hanabi': 0.6,
     },
     autoPauseOnScroll: true, // 滾動時自動暫停
+    autocomplete: true, // 編輯器自動補齊括號
     cursorFollow: true, // 游標跟隨
     restoreDefaults: function () {
         settings = { ...defaultSettings };
@@ -223,6 +224,9 @@ const settingsConfig = [
     {
         label: '其他',
         items: [
+            {
+                id: 'autocomplete', type: 'checkbox', label: '編輯器自動補齊括號', def: defaultSettings.autocomplete
+            },
             {
                 id: 'maxSlideCount', type: 'number', label: '螢幕上最大滑星顯示數量', min: 1, max: 100, step: 1, def: defaultSettings.maxSlideCount
             },
@@ -2667,7 +2671,7 @@ const visualScroller = {
     momentumFrame: null,
     // 🔴 修正：改用指數衰減係數 (Exponential Decay Coefficient)
     // 數值愈大衰減愈快。0.005 相當於在 60Hz 下約 0.92 的摩擦力
-    frictionCoeff: 0.005,
+    frictionCoeff: 0.01,
 
     pxToSec(px) {
         // 確保相容主 Scroller 或 PreviewScroller 的縮放基準
@@ -2721,7 +2725,7 @@ const startMomentum = () => {
         const clampedDt = Math.min(100, dt);
 
         // 速度過小，或是外部觸發了其他時間滑動則停止
-        if (Math.abs(vel) < 0.001 || !timeControlSliding) {
+        if (Math.abs(vel) < 0.04 || !timeControlSliding) {
             visualScroller.momentumFrame = null;
             return;
         }
@@ -2729,10 +2733,9 @@ const startMomentum = () => {
         // 🔴 關鍵修正 2：使用微積分位移公式：位移 = 速度 * 時間
         const deltaPx = vel * clampedDt * directionMult;
         const deltaSec = visualScroller.pxToSec(deltaPx);
+
         updateVisualTime(realTime + deltaSec);
 
-        // 🔴 關鍵修正 3：不限幀率的指數衰減公式 (Exponential Decay)
-        // vel = vel * e^(-k * dt)
         vel *= Math.exp(-visualScroller.frictionCoeff * clampedDt);
 
         visualScroller.momentumFrame = requestAnimationFrame(step);
@@ -2846,33 +2849,66 @@ bindScrollerEvents(previewCanvas, 'horizontal');
 const pairs = { '(': ')', '{': '}', '[': ']' };
 const closingChars = new Set(Object.values(pairs));
 
-// 括號補齊／跳過（beforeinput 在手機和桌機的文字輸入都可靠）
+// 🔴 新增一個全域防重疊鎖
+let isBracketProcessing = false;
+
+// 括號補齊／跳過
 editorInput.addEventListener('beforeinput', (e) => {
     const char = e.data;
     if (!char || char.length !== 1) return;
 
+    // 🔴 如果此時鎖是鎖上的，說明是輸入法殘留的二次觸發，直接強制攔截並丟棄！
+    if (isBracketProcessing) {
+        e.preventDefault();
+        return;
+    }
+
     const { selectionStart: start, selectionEnd: end, value } = editorInput;
 
-    if (pairs[char]) { // 開括號：自動補齊並包住選取
+    if (pairs[char] && settings.autocomplete) { // 開括號：自動補齊並包住選取
         e.preventDefault();
-        editorInput.setRangeText(char + value.slice(start, end) + pairs[char], start, end, 'end');
-        editorInput.selectionStart = editorInput.selectionEnd = start + 1;
-        editorInput.dispatchEvent(new Event('input'));
+
+        // 🔴 激活防護鎖
+        isBracketProcessing = true;
+
+        // 將 DOM 操作推遲到非同步佇列，讓輸入法緩衝區有時間消化
+        setTimeout(() => {
+            const currentVal = editorInput.value;
+
+            // 1. 精準置換文字
+            editorInput.setRangeText(char + currentVal.slice(start, end) + pairs[char], start, end, 'end');
+
+            // 2. 將游標精準定位在成對括號的中央
+            editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+
+            // 3. 觸發業務邏輯更新
+            if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
+            if (typeof editorInputDebounce === 'function') editorInputDebounce();
+            if (typeof inputDebounce === 'function') inputDebounce();
+
+            // 🔴 釋放防護鎖
+            isBracketProcessing = false;
+        }, 0);
+
     } else if (closingChars.has(char) && start === end && value[start] === char) { // 閉括號：跳過
         e.preventDefault();
         editorInput.selectionStart = editorInput.selectionEnd = start + 1;
     }
 });
 
-// Backspace 成對刪除（keydown 在桌機鍵盤更可靠）
+// Backspace 成對刪除（這部分維持不變，keydown 不受輸入法組合字根干擾）
 editorInput.addEventListener('keydown', (e) => {
     if (e.key !== 'Backspace') return;
     const { selectionStart: start, selectionEnd: end, value } = editorInput;
-    if (start === end && start > 0 && pairs[value[start - 1]] === value[start]) {
+    if (start === end && start > 0 && pairs[value[start - 1]] === value[start] && settings.autocomplete) {
         e.preventDefault();
+
         editorInput.setRangeText('', start - 1, start + 1, 'end');
         editorInput.selectionStart = editorInput.selectionEnd = start - 1;
-        editorInput.dispatchEvent(new Event('input'));
+
+        if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
+        if (typeof editorInputDebounce === 'function') editorInputDebounce();
+        if (typeof inputDebounce === 'function') inputDebounce();
     }
 });
 
@@ -3041,7 +3077,7 @@ const slideInputDebounce = debounce(() => {
     idbSet('simai_timeControl', realTime).catch((error) => {
         console.error("儲存時間控制值到 IndexedDB 失敗:", error);
     });
-}, 500);
+}, 300);
 
 slider.addEventListener('input', () => {
     timeControlSliding = true;
@@ -3286,6 +3322,7 @@ function applyVerticalFlip() {
     }, {
         p: 'q',
         q: 'p'
+        // 🔴 這裡不放 < 和 >，因為上下反轉時順逆時針狀態不變
     });
 
     const newText = `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
@@ -3315,7 +3352,9 @@ function applyHorizontalFlip() {
         p: 'q',
         q: 'p',
         s: 'z',
-        z: 's'
+        z: 's',
+        '<': '>', // 🔴 左右反轉時，順逆時針會互換
+        '>': '<'
     });
 
     const newText = `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
@@ -3515,29 +3554,19 @@ function openSecondWindow() {
     draw(); // 重新繪製到第二個 Canvas
 }
 
-// 逐幀渲染並輸出（使用 Mediabunny）
 recordVideoButton.addEventListener('click', async () => {
     if (!window.Mediabunny) {
         simpleToast({ content: 'Mediabunny 未載入，無法錄製', type: 'error' });
         return;
     }
 
-    const {
-        Output,
-        BufferTarget,
-        WebMOutputFormat,
-        CanvasSource,
-        AudioBufferSource,
-        QUALITY_HIGH
-    } = window.Mediabunny;
-
-    // UI: 使用 createLabeledInput 建立欄位（保留音訊 checkbox）
+    // UI: 使用 createLabeledInput 建立欄位
     const container = document.createElement('div');
     container.style.cssText = 'display:flex;flex-direction:column;gap:8px;font-size:13px;';
 
     const inputRefs = {};
-    const startDefault = String(Math.max(0, realTime || 0).toFixed(2));
-    const endDefault = (typeof audioManager?.getBGMDuration === 'function') ? String(Math.min(endTime || 0, audioManager.getBGMDuration() || endTime || 0).toFixed(2)) : String((endTime || 0).toFixed(2));
+    const startDefault = 0;
+    const endDefault = String((endTime + musicDelay).toFixed(2));
     const fpsDefault = '30';
 
     const startField = createLabeledInput1({ value: startDefault, labelText: '開始時間 (s):', type: 'text', assign: 'record_start', ref: inputRefs });
@@ -3548,7 +3577,6 @@ recordVideoButton.addEventListener('click', async () => {
     const bgmVolField = createLabeledInput1({ value: settings.musicVolume, labelText: 'BGM 音量:', type: 'text', assign: 'record_bgm_vol', ref: inputRefs });
     const sfxVolField = createLabeledInput1({ value: settings.SfxVolume, labelText: 'SFX 音量:', type: 'text', assign: 'record_sfx_vol', ref: inputRefs });
 
-    // 將輸入欄改為 number 類型以方便限制
     if (inputRefs.record_start) { inputRefs.record_start.type = 'number'; inputRefs.record_start.step = '0.01'; inputRefs.record_start.min = '0'; }
     if (inputRefs.record_end) { inputRefs.record_end.type = 'number'; inputRefs.record_end.step = '0.01'; inputRefs.record_end.min = '0'; }
     if (inputRefs.record_fps) { inputRefs.record_fps.type = 'number'; inputRefs.record_fps.step = '1'; inputRefs.record_fps.min = '1'; }
@@ -3556,17 +3584,22 @@ recordVideoButton.addEventListener('click', async () => {
     if (inputRefs.record_height) { inputRefs.record_height.type = 'number'; inputRefs.record_height.step = '1'; inputRefs.record_height.min = '1'; }
     if (inputRefs.record_bgm_vol) { inputRefs.record_bgm_vol.type = 'number'; inputRefs.record_bgm_vol.step = '0.1'; inputRefs.record_bgm_vol.min = '0'; }
     if (inputRefs.record_sfx_vol) { inputRefs.record_sfx_vol.type = 'number'; inputRefs.record_sfx_vol.step = '0.1'; inputRefs.record_sfx_vol.min = '0'; }
-    // 包含音訊 checkbox（獨立處理）
+
+    // 加上無障礙 htmlFor 與防止點擊穿透樣式
     const audioLabel = document.createElement('label');
-    audioLabel.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    audioLabel.htmlFor = 'record_audio_chk';
+    audioLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;pointer-events:auto!important;';
     const audioSpan = document.createElement('span'); audioSpan.textContent = '包含音訊:'; audioSpan.style.cssText = 'width:110px;color:#ddd;';
-    const audioChk = document.createElement('input'); audioChk.type = 'checkbox'; audioChk.checked = !!audioManager?.bgmBuffer;
+    const audioChk = document.createElement('input'); audioChk.type = 'checkbox'; audioChk.id = 'record_audio_chk'; audioChk.checked = !!audioManager?.bgmBuffer;
+    audioChk.style.cssText = 'width:16px;height:16px;cursor:pointer;pointer-events:auto!important;';
     audioLabel.appendChild(audioSpan); audioLabel.appendChild(audioChk);
-    // 包含打擊音效（單獨選項）
+
     const sfxLabel = document.createElement('label');
-    sfxLabel.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    sfxLabel.htmlFor = 'record_sfx_chk';
+    sfxLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;pointer-events:auto!important;';
     const sfxSpan = document.createElement('span'); sfxSpan.textContent = '包含打擊音效:'; sfxSpan.style.cssText = 'width:110px;color:#ddd;';
-    const sfxChk = document.createElement('input'); sfxChk.type = 'checkbox'; sfxChk.checked = true;
+    const sfxChk = document.createElement('input'); sfxChk.type = 'checkbox'; sfxChk.id = 'record_sfx_chk'; sfxChk.checked = true;
+    sfxChk.style.cssText = 'width:16px;height:16px;cursor:pointer;pointer-events:auto!important;';
     sfxLabel.appendChild(sfxSpan); sfxLabel.appendChild(sfxChk);
 
     container.appendChild(startField.wrapper);
@@ -3587,538 +3620,18 @@ recordVideoButton.addEventListener('click', async () => {
             {
                 text: '開始',
                 onClick: async (pwCtx) => {
-                    const outlineImage = await (async () => {
-                        try {
-                            const response = await fetch('./Skin/outline.png');
-                            if (!response.ok) throw new Error('fetch failed: ' + response.status);
-                            const blob = await response.blob();
-                            // 先嘗試建立 ImageBitmap（效能較好），失敗則回退到 HTMLImageElement
-                            try {
-                                if (window.createImageBitmap) {
-                                    return await createImageBitmap(blob);
-                                }
-                            } catch (e) {
-                                console.warn('createImageBitmap 失敗，改用 Image element', e);
-                            }
-                            return await new Promise((res, rej) => {
-                                const img = new Image();
-                                img.crossOrigin = 'anonymous';
-                                img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
-                                img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
-                                img.src = URL.createObjectURL(blob);
-                            });
-                        } catch (e) {
-                            console.error(`外框圖片載入失敗`, e);
-                            return null;
-                        }
-                    })();
-                    let start = parseFloat(inputRefs.record_start?.value) || 0;
-                    let end = parseFloat(inputRefs.record_end?.value) || endTime || (audioManager?.getBGMDuration ? audioManager.getBGMDuration() : endTime || 0);
-                    const fps = Math.max(1, parseInt(inputRefs.record_fps?.value || '30', 10));
-                    const width = Math.max(1, parseInt(inputRefs.record_width?.value || '1080', 10));
-                    const height = Math.max(1, parseInt(inputRefs.record_height?.value || '720', 10));
-                    const bgmVolume = parseFloat(inputRefs.record_bgm_vol?.value) ?? settings.musicVolume ?? 1.0;
-                    const sfxVolume = parseFloat(inputRefs.record_sfx_vol?.value) ?? settings.sfxVolume ?? 1.0;
-                    const includeAudio = audioChk.checked && !!audioManager?.bgmBuffer;
-
-                    if (end <= start) {
-                        simpleToast({ content: '結束時間需大於開始時間', type: 'error' });
-                        return;
-                    }
-
-                    try {
-                        pwCtx.setButtons([{ text: '取消', hideOnClick: true }]);
-                        pwCtx.setProgress(0);
-                        pwCtx.setContent('準備中...');
-
-                        // 建立 offscreen canvas（不加入 DOM）
-                        const off = document.createElement('canvas');
-                        off.width = width;
-                        off.height = height;
-                        const offCtx = off.getContext('2d');
-
-                        const dpr = window.devicePixelRatio || 1;
-
-                        const scaleValue = renderer?.scale ?? scale;
-                        const p = Math.min(width, height) / scaleBase * scaleValue;
-                        offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
-
-                        // Mediabunny 輸出設定
-                        const target = new BufferTarget();
-                        const format = new WebMOutputFormat();
-                        const output = new Output({ format, target });
-
-                        const encodingConfig = {
-                            codec: 'vp8',
-                            bitrate: QUALITY_HIGH,
-                            keyFrameInterval: 0.5,
-                            latencyMode: 'quality'
-                        };
-
-                        const videoSource = new CanvasSource(off, encodingConfig);
-                        output.addVideoTrack(videoSource, { frameRate: fps });
-
-                        // 準備匯出的背景來源：優先背景影片，其次背景圖片，否則使用純色
-                        let exportVideo = null;
-                        let exportVideoReady = false;
-                        if (editorBackgroundVideo && editorBackgroundVideo.src) {
-                            try {
-                                exportVideo = document.createElement('video');
-                                exportVideo.src = editorBackgroundVideo.src;
-                                exportVideo.muted = true;
-                                exportVideo.crossOrigin = 'anonymous';
-                                exportVideo.preload = 'auto';
-                                // 等待 metadata（或短 timeout）以取得 duration/尺寸
-                                await new Promise((res) => {
-                                    let done = false;
-                                    const onloaded = () => { if (done) return; done = true; exportVideo.removeEventListener('loadedmetadata', onloaded); res(); };
-                                    exportVideo.addEventListener('loadedmetadata', onloaded);
-                                    setTimeout(() => { if (done) return; done = true; exportVideo.removeEventListener('loadedmetadata', onloaded); res(); }, 1500);
-                                });
-                                exportVideoReady = true;
-                            } catch (e) {
-                                console.warn('建立匯出用背景影片失敗', e);
-                                exportVideo = null;
-                                exportVideoReady = false;
-                            }
-                        }
-
-                        // 預先建立 audioSource 與切片，但不要在 start 前 add 到 encoder
-                        let audioSource = null;
-                        let slicedAudio = null;
-                        if (includeAudio) {
-                            audioSource = new AudioBufferSource({ codec: 'opus', bitrate: QUALITY_HIGH });
-                            output.addAudioTrack(audioSource);
-                            // slice AudioBuffer
-                            const sliceAudioBuffer = (buf, s, e) => {
-                                const sr = buf.sampleRate;
-                                const startSample = Math.max(0, Math.floor(s * sr));
-                                const endSample = Math.min(buf.length, Math.floor(e * sr));
-                                const len = Math.max(0, endSample - startSample);
-                                const nb = new AudioBuffer({ length: len, numberOfChannels: buf.numberOfChannels, sampleRate: sr });
-                                for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-                                    const data = buf.getChannelData(ch).subarray(startSample, endSample);
-                                    nb.getChannelData(ch).set(data);
-                                }
-                                return nb;
-                            };
-
-                            const bgmBuf = audioManager.bgmBuffer;
-                            slicedAudio = bgmBuf ? sliceAudioBuffer(bgmBuf, start, end) : null;
-
-                            // 若使用者勾選包含打擊音效，合成 SFX 到切片上
-                            const includeSfx = sfxChk.checked;
-                            if (includeSfx) {
-                                const sfxEvents = [];
-                                const longSoundEvents = []; // 新增：用於收集需要長按迴圈的音效
-
-                                for (let ni = 0; ni < notes.length; ni++) {
-                                    const note = notes[ni];
-                                    const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-                                    const startT = note.time + musicDelay;
-                                    const endT = note.time + skipT + musicDelay;
-
-                                    // 收集常規短音效 (包含 Mono 屬性與音量)
-                                    if (startT >= start && startT <= end) {
-                                        note._startEffectPlayed = false;
-                                        const evs = audioManager.getSfxEventsForNote(note, startT);
-                                        for (const ev of evs) {
-                                            sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
-                                        }
-                                    }
-                                    if (endT >= start && endT <= end) {
-                                        note._startEffectPlayed = true;
-                                        const evsEnd = audioManager.getSfxEventsForNote(note, endT);
-                                        for (const ev of evsEnd) {
-                                            sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
-                                        }
-                                    }
-
-                                    // 收集長按音效 (Touch Hold Riser)
-                                    if (note.type === 'touch' && note.holdDuration > 0) {
-                                        // 只要這段長按的時間區間有與錄製區間 [start, end] 重疊就記錄
-                                        if (startT < end && endT > start) {
-                                            longSoundEvents.push({
-                                                key: 'touchHold_riser',
-                                                startSec: startT,
-                                                endSec: endT
-                                            });
-                                        }
-                                    }
-                                }
-
-                                // 依據時間排序，這是為了後續能正確尋找 Mono 音效的下一次觸發時間
-                                sfxEvents.sort((a, b) => a.time - b.time);
-
-                                // 核心音訊合成函數
-                                const mixSfxInto = (baseBuf, events, longEvents, s, e) => {
-                                    const sr = baseBuf ? baseBuf.sampleRate : (audioManager.ctx.sampleRate || 48000);
-                                    const outLen = Math.max(1, Math.ceil((e - s) * sr));
-                                    const bgmChannels = baseBuf ? baseBuf.numberOfChannels : 0;
-
-                                    let sfxMaxCh = 1;
-                                    for (const [k, b] of audioManager.bufferMap.entries()) {
-                                        if (b && b.numberOfChannels > sfxMaxCh) sfxMaxCh = b.numberOfChannels;
-                                    }
-                                    const outCh = Math.max(bgmChannels || 0, sfxMaxCh || 1);
-                                    const out = new AudioBuffer({ length: outLen, numberOfChannels: outCh, sampleRate: sr });
-
-                                    // 1. 處理 BGM 拷貝與音量
-                                    if (baseBuf) {
-                                        for (let ch = 0; ch < outCh; ch++) {
-                                            const dst = out.getChannelData(ch);
-                                            const src = baseBuf.getChannelData(ch < baseBuf.numberOfChannels ? ch : 0);
-                                            const copyLen = Math.min(src.length, outLen);
-
-                                            if (bgmVolume === 1.0) {
-                                                dst.set(src.subarray(0, copyLen));
-                                            } else {
-                                                for (let i = 0; i < copyLen; i++) {
-                                                    dst[i] = src[i] * bgmVolume;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // 2. 處理長按音效 (Riser) 及其迴圈邏輯
-                                    const addLoopingBufferAt = (key, eventStartSec, eventEndSec) => {
-                                        const sfxBuf = audioManager.bufferMap.get(key);
-                                        if (!sfxBuf) return;
-                                        const loop = audioManager.loopPoints[key];
-
-                                        // 依據 AudioManager，長音有獨立 Gain (預設 0.5)，再加上全局 SFX 音量
-                                        const finalVol = 0.5 * sfxVolume;
-
-                                        const sfxRate = sfxBuf.sampleRate || sr;
-                                        // 該音效在錄影區段內實際可聽見的區間
-                                        const audibleStartSec = Math.max(s, eventStartSec);
-                                        const audibleEndSec = Math.min(e, eventEndSec);
-                                        if (audibleStartSec >= audibleEndSec) return;
-
-                                        const startIdx = Math.floor((audibleStartSec - s) * sr);
-                                        const endIdx = Math.floor((audibleEndSec - s) * sr);
-
-                                        for (let ch = 0; ch < sfxBuf.numberOfChannels; ch++) {
-                                            const src = sfxBuf.getChannelData(ch);
-                                            const dst = out.getChannelData(ch < outCh ? ch : 0);
-
-                                            for (let idx = startIdx; idx < endIdx; idx++) {
-                                                if (idx < 0 || idx >= outLen) continue;
-
-                                                // 計算當前取樣點相對於音效發聲起點經過了多少秒
-                                                const timeSinceEventStart = (s + idx / sr) - eventStartSec;
-                                                let sampleSec = timeSinceEventStart;
-
-                                                // 迴圈點折返邏輯
-                                                if (loop) {
-                                                    if (sampleSec >= loop.end) {
-                                                        const loopDuration = loop.end - loop.start;
-                                                        const timeInsideLoop = (sampleSec - loop.end) % loopDuration;
-                                                        sampleSec = loop.start + timeInsideLoop;
-                                                    }
-                                                } else if (sampleSec >= sfxBuf.length / sfxRate) {
-                                                    continue;
-                                                }
-
-                                                const srcIdx = Math.floor(sampleSec * sfxRate);
-                                                if (srcIdx >= 0 && srcIdx < src.length) {
-                                                    dst[idx] += src[srcIdx] * finalVol;
-                                                }
-                                            }
-                                        }
-                                    };
-
-                                    // 將收集到的長按音效渲染進 Buffer
-                                    for (const lev of longEvents) {
-                                        addLoopingBufferAt(lev.key, lev.startSec, lev.endSec);
-                                    }
-
-                                    // 3. 處理短音效與 Mono 切斷邏輯
-                                    const addBufferAt = (sfxBuf, atSec, baseVol, isMono, cutoffSec) => {
-                                        if (!sfxBuf) return;
-                                        const finalVol = (baseVol ?? 1) * sfxVolume;
-                                        const offsetIdx = Math.floor((atSec - s) * sr);
-                                        const sfxRate = sfxBuf.sampleRate || sr;
-                                        const ratio = sr / sfxRate;
-
-                                        // 計算最大可播放時間 (遇到截斷點則提早結束)
-                                        let maxDurationSec = sfxBuf.length / sfxRate;
-                                        if (isMono && cutoffSec !== undefined) {
-                                            maxDurationSec = Math.min(maxDurationSec, cutoffSec - atSec);
-                                        }
-                                        const maxSamples = Math.floor(maxDurationSec * sfxRate);
-
-                                        for (let ch = 0; ch < sfxBuf.numberOfChannels; ch++) {
-                                            const src = sfxBuf.getChannelData(ch);
-                                            const dst = out.getChannelData(ch < outCh ? ch : 0);
-                                            for (let i = 0; i < maxSamples && i < src.length; i++) {
-                                                const idx = offsetIdx + Math.floor(i * ratio);
-                                                if (idx < 0) continue;
-                                                if (idx >= outLen) break;
-                                                dst[idx] += src[i] * finalVol;
-                                            }
-                                        }
-                                    };
-
-                                    // apply all short events
-                                    for (let i = 0; i < events.length; i++) {
-                                        const ev = events[i];
-                                        const sfxBuf = audioManager.bufferMap.get(ev.key);
-                                        if (!sfxBuf) continue;
-
-                                        // 如果是 Mono 音效，往後尋找同一個 key 的下一次發聲時間作為截斷點
-                                        let cutoffSec = undefined;
-                                        if (ev.isMono) {
-                                            for (let j = i + 1; j < events.length; j++) {
-                                                if (events[j].key === ev.key && events[j].isMono) {
-                                                    cutoffSec = events[j].time;
-                                                    break;
-                                                }
-                                            }
-                                        }
-
-                                        addBufferAt(sfxBuf, ev.time, ev.volume, ev.isMono, cutoffSec);
-                                    }
-
-                                    // 4. Clamp (防止破音)
-                                    for (let ch = 0; ch < outCh; ch++) {
-                                        const d = out.getChannelData(ch);
-                                        for (let i = 0; i < d.length; i++) {
-                                            if (d[i] > 1) d[i] = 1;
-                                            else if (d[i] < -1) d[i] = -1;
-                                        }
-                                    }
-
-                                    return out;
-                                };
-
-                                // 執行合成
-                                slicedAudio = mixSfxInto(slicedAudio, sfxEvents, longSoundEvents, start, end);
-                            }
-                        }
-
-                        // 啟動輸出（start 必須在加入音訊資料前呼叫）
-                        await output.start();
-
-                        // 若有切好的音訊，現在再送入 encoder
-                        if (includeAudio && audioSource && slicedAudio) {
-                            await audioSource.add(slicedAudio);
-                        }
-
-                        // 暫存並切換 renderer context 到 offscreen
-                        const mainCtx = canvas.getContext('2d');
-                        renderer.setContext(offCtx);
-
-                        // faster seek helper to reduce per-frame seek latency
-                        const seekVideoTo = async (video, time) => {
-                            if (!video) return;
-                            const cur = video.currentTime || 0;
-                            if (Math.abs(cur - time) <= VIDEO_SEEK_THRESHOLD) return;
-
-                            // Try fastSeek when supported
-                            if (typeof video.fastSeek === 'function') {
-                                try { video.fastSeek(time); } catch (e) { try { video.currentTime = time; } catch (e2) { video.currentTime = time; } }
-                                await new Promise((res) => {
-                                    let done = false;
-                                    const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
-                                    video.addEventListener('seeked', onseek);
-                                    setTimeout(() => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); }, 200);
-                                });
-                                return;
-                            }
-
-                            // Use requestVideoFrameCallback when available (often faster)
-                            if (typeof video.requestVideoFrameCallback === 'function') {
-                                try { video.currentTime = time; } catch (e) { video.currentTime = time; }
-                                await new Promise((res) => {
-                                    let done = false;
-                                    const cb = () => { if (done) return; done = true; res(); };
-                                    try { video.requestVideoFrameCallback(cb); } catch (e) { /* ignore */ }
-                                    setTimeout(() => { if (done) return; done = true; res(); }, 200);
-                                });
-                                return;
-                            }
-
-                            // Fallback to seeked event with a shorter timeout
-                            await new Promise((res) => {
-                                let done = false;
-                                const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
-                                video.addEventListener('seeked', onseek);
-                                try { video.currentTime = time; } catch (e) { video.currentTime = time; }
-                                setTimeout(() => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); }, 300);
-                            });
-                        };
-
-                        // offline render loop
-                        const total = end - start;
-                        const frameCount = Math.max(1, Math.ceil(total * fps));
-                        const step = 1 / fps;
-
-                        pwCtx.setContent(`開始逐幀渲染：${frameCount} 幀`);
-                        for (let i = 0; i < frameCount; i++) {
-                            const t = start + i * step; // 真實時間 (s)
-                            const globalT = t - (musicDelay || 0);
-
-                            // 準備 buckets（複製自 draw 的分類邏輯，但不包含副作用）
-                            const playingFlag = false;
-                            const speedCoeff = settings.speed * 0.8833 + 0.8167;
-                            const touchSpeedCoeff = settings.touchSpeed * 0.8833 + 0.8167;
-
-                            const buckets = { slide: [], tapnhold: [], touch: [] };
-                            const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
-
-                            let playComboLocal = 0;
-                            let playScoreLocal = 0;
-                            let slideOnScreenCount = 0;
-                            let nowIndexLocal = 0;
-
-                            for (let j = notes.length - 1; j >= 0; j--) {
-                                const note = notes[j];
-                                const noteT = note.time - globalT;
-                                const noteType = note.type;
-                                const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-
-                                if (noteT < 0) {
-                                    const shouldCountCombo =
-                                        (noteType === 'slide' ? (note.lastSlide && skipT + noteT < 0) :
-                                            noteType === 'hold' ? (skipT + noteT < 0) :
-                                                noteType === 'touch' && note.holdDuration !== undefined ? (skipT + noteT < 0) :
-                                                    noteType !== 'slide');
-                                    if (shouldCountCombo) {
-                                        playComboLocal++;
-                                        playScoreLocal += ((note.isBreak ? 5 :
-                                            (noteType === "slide" ? 3 :
-                                                note.holdDuration !== undefined ? 2 : 1)
-                                        ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
-                                    }
-                                }
-
-                                const tval = 1 - renderer.timeFunction(noteT * speedCoeff);
-                                const touchT = 1 - renderer.timeFunction(noteT * touchSpeedCoeff);
-
-                                const isVisible =
-                                    (noteType === 'slide' ? (tval >= (settings.middleDistance || 0.25)) :
-                                        noteType === 'touch' ? (touchT >= -1) :
-                                            tval >= -1)
-                                    && -noteT <= skipT + (note.isHanabi ? (settings.hanabiEffectDecayTime || 0.8) : (settings.effectDecayTime || 0.4));
-
-                                if (isVisible) {
-                                    if (noteType === 'slide') {
-                                        if (slideOnScreenCount < (settings.maxSlideCount || 500)) {
-                                            buckets.slide.push(note);
-                                            slideOnScreenCount++;
-                                        }
-                                    } else if (noteType === 'hold' || noteType === 'tap') {
-                                        buckets.tapnhold.push(note);
-                                    } else if (noteType === 'touch') {
-                                        buckets.touch.push(note);
-                                    }
-                                }
-                            }
-
-                            // 每幀先把背景畫到 offscreen（優先影片 > 圖片 > 純色），再讓 renderer 在上層繪製
-                            try {
-                                offCtx.save();
-                                // 切回像素座標以方便 drawImage
-                                offCtx.setTransform(1, 0, 0, 1, 0, 0);
-                                // 先以背景色填滿整張離線畫布
-                                offCtx.fillStyle = settings.backgroundColor || '#000';
-                                offCtx.fillRect(0, 0, off.width, off.height);
-                                const rs = renderer.scale || scale;
-
-                                // 計算中央方框 (backgroundContainer 行為：以畫布最小邊為方框)
-                                const boxSize = Math.min(off.width, off.height);
-                                const boxX = Math.round((off.width - boxSize) / 2);
-                                const boxY = Math.round((off.height - boxSize) / 2);
-                                const boxW = boxSize, boxH = boxSize;
-
-                                // helper: draw image/video with object-fit: contain into dest rect
-                                const drawContain = (srcW, srcH, drawFn) => {
-                                    if (!srcW || !srcH) return drawFn(0, 0, srcW, srcH, boxX, boxY, boxW, boxH);
-                                    const scale = Math.min(boxW / srcW, boxH / srcH) * rs;
-                                    const dw = Math.round(srcW * scale);
-                                    const dh = Math.round(srcH * scale);
-                                    const dx = Math.round(boxX + (boxW - dw) / 2);
-                                    const dy = Math.round(boxY + (boxH - dh) / 2);
-                                    return drawFn(0, 0, srcW, srcH, dx, dy, dw, dh);
-                                };
-
-                                if (exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
-                                    // 以實際時間 t 為基準 seek
-                                    const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
-                                    if (Math.abs((exportVideo.currentTime || 0) - bgTarget) > VIDEO_SEEK_THRESHOLD) {
-                                        await seekVideoTo(exportVideo, bgTarget);
-                                    }
-                                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
-                                    const vw = exportVideo.videoWidth || exportVideo.width || boxW;
-                                    const vh = exportVideo.videoHeight || exportVideo.height || boxH;
-                                    drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(exportVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh));
-                                    offCtx.filter = 'none';
-                                } else if (editorBackgroundImage && editorBackgroundImage.src && editorBackgroundImage.complete) {
-                                    const img = editorBackgroundImage;
-                                    const iw = img.naturalWidth || img.width || boxW;
-                                    const ih = img.naturalHeight || img.height || boxH;
-                                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
-                                    drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(img, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh));
-                                    offCtx.filter = 'none';
-                                } else {
-                                    // 已用背景色塗滿
-                                }
-                                if (outlineImage) {
-                                    offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
-                                    offCtx.drawImage(
-                                        outlineImage,
-                                        scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9,
-                                        scaleBase * 0.9, scaleBase * 0.9,
-                                    );
-                                }
-                            } finally {
-                                offCtx.restore();
-                            }
-
-                            // 呼叫 renderer 繪製於背景之上（不清除畫面）
-                            renderer.drawFrame({
-                                globalTime: globalT,
-                                buckets,
-                                dt: step,
-                                showSensor: settings.showSensor,
-                                showSensorText: (settings.showSensorTextWhenPaused && false),
-                                playCombo: playComboLocal,
-                                playScore: playScoreLocal,
-                                nowIndex: nowIndexLocal,
-                                skipClear: true
-                            });
-
-                            // 將當前 offscreen canvas 狀態加入 video source（時間從 0 開始）
-                            const tsRelative = i * step;
-                            await videoSource.add(tsRelative, step);
-
-                            pwCtx.setProgress(((i + 1) / frameCount) * 100);
-                            pwCtx.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀`);
-                        }
-
-                        // 完成並產生檔案
-                        await output.finalize();
-                        const mime = await output.getMimeType();
-                        const ext = output.format?.fileExtension || '.webm';
-                        const buf = target.buffer;
-                        if (!buf) throw new Error('未取得輸出 buffer');
-                        const blob = new Blob([buf], { type: mime });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a'); a.href = url; a.download = `simai_render${ext}`; document.body.appendChild(a); a.click(); a.remove();
-
-                        simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
-
-                        // 還原 renderer context
-                        renderer.setContext(mainCtx);
-                        pwCtx.setProgress(100);
-                        pwCtx.setContent('完成');
-                    } catch (err) {
-                        console.error('逐幀渲染失敗', err);
-                        simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
-                        try { pwCtx.setContent('錯誤：' + String(err)); } catch (e) { }
-                        try { renderer.setContext(canvas.getContext('2d')); } catch (e) { }
-                    }
+                    // 🔴 修正：將 includeAudio 與 includeSfx 由此處精準抓取並傳入
+                    await videoRender(pwCtx, {
+                        start: parseFloat(inputRefs.record_start?.value) || 0,
+                        end: parseFloat(inputRefs.record_end?.value) || endTime || (audioManager?.getBGMDuration ? audioManager.getBGMDuration() : endTime || 0),
+                        fps: Math.max(1, parseInt(inputRefs.record_fps?.value || '30', 10)),
+                        width: Math.max(1, parseInt(inputRefs.record_width?.value || '1080', 10)),
+                        height: Math.max(1, parseInt(inputRefs.record_height?.value || '720', 10)),
+                        bgmVolume: parseFloat(inputRefs.record_bgm_vol?.value) ?? settings.musicVolume ?? 0.8,
+                        sfxVolume: parseFloat(inputRefs.record_sfx_vol?.value) ?? settings.sfxVolume ?? 1.0,
+                        includeBgm: audioChk.checked && !!audioManager?.bgmBuffer,
+                        includeSfx: sfxChk.checked // 🔴 成功傳遞
+                    });
                 },
             },
             { text: '取消', hideOnClick: true }
@@ -4213,8 +3726,6 @@ function draw(dt = 0) {
     const hanabiEffectDecayTime = settings.hanabiEffectDecayTime;
     const maxSlideCount = settings.maxSlideCount;
     const middleDistance = settings.middleDistance;
-    const speedCoeff = settings.speed * 0.8833 + 0.8167;
-    const touchSpeedCoeff = settings.touchSpeed * 0.8833 + 0.8167;
     const notesLength = notes.length;
 
     // 初始化 index
@@ -4251,6 +3762,21 @@ function draw(dt = 0) {
         const noteT = note.time - globalTime;
         const noteType = note.type;
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+
+        const calcPiecewiseSpeed = (x) => {
+            if (x >= 1) {
+                return x * 0.8833 + 0.8167;
+            } else if (x <= -1) {
+                return x * 0.8833 - 0.8167;
+            } else {
+                return x * 1.7;
+            }
+        };
+        const noteHispeed = note.hispeed ?? 1;
+        // 2. 精準套用至常規速度與 Touch 速度
+        const speedCoeff = calcPiecewiseSpeed(settings.speed * noteHispeed);
+        const touchSpeedCoeff = calcPiecewiseSpeed(settings.touchSpeed * noteHispeed);
+
 
         // 索引追蹤（早期完成以減少迴圈計算）
         if (!foundIndexForThisFrame && realTime >= (note.time + musicDelay) && noteType !== "slide") {
@@ -4625,4 +4151,584 @@ function _init() {
             }
         }
     });
+}
+
+
+async function videoRender(pwCtx, {
+    start = 0,
+    end = 0,
+    fps = 30,
+    width = 1080,
+    height = 720,
+    bgmVolume = 0.8,
+    sfxVolume = 1.0,
+    includeAudio = true,
+    includeBgm = true,
+    includeSfx = true, // 🔴 接收參數
+} = {}) {
+    const {
+        Output,
+        BufferTarget,
+        WebMOutputFormat,
+        CanvasSource,
+        AudioBufferSource,
+        QUALITY_HIGH
+    } = window.Mediabunny;
+
+    const outlineImage = await (async () => {
+        try {
+            const response = await fetch('./Skin/outline.png');
+            if (!response.ok) throw new Error('fetch failed: ' + response.status);
+            const blob = await response.blob();
+            try {
+                if (window.createImageBitmap) return await createImageBitmap(blob);
+            } catch (e) {
+                console.warn('createImageBitmap 失敗，改用 Image element', e);
+            }
+            return await new Promise((res, rej) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
+                img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
+                img.src = URL.createObjectURL(blob);
+            });
+        } catch (e) {
+            console.error(`外框圖片載入失敗`, e);
+            return null;
+        }
+    })();
+
+    if (end <= start) {
+        simpleToast({ content: '結束時間需大於開始時間', type: 'error' });
+        return;
+    }
+
+    try {
+        pwCtx.setButtons([{ text: '取消', hideOnClick: true }]);
+        pwCtx.setProgress(0);
+        pwCtx.setContent('準備中...');
+
+        const off = document.createElement('canvas');
+        off.width = width;
+        off.height = height;
+        const offCtx = off.getContext('2d');
+
+        const scaleValue = renderer?.scale ?? scale;
+        const p = Math.min(width, height) / scaleBase * scaleValue;
+        offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
+
+        const target = new BufferTarget();
+        const format = new WebMOutputFormat();
+        const output = new Output({ format, target });
+
+        // 視訊軌設定
+        const encodingConfig = {
+            codec: 'vp8',
+            bitrate: QUALITY_HIGH,
+            keyFrameInterval: 0.5,
+            latencyMode: 'quality'
+        };
+
+        const videoSource = new CanvasSource(off, encodingConfig);
+        output.addVideoTrack(videoSource, { frameRate: fps });
+
+        let exportVideo = null;
+        let exportVideoReady = false;
+        if (editorBackgroundVideo && editorBackgroundVideo.src) {
+            try {
+                exportVideo = document.createElement('video');
+                exportVideo.src = editorBackgroundVideo.src;
+                exportVideo.muted = true;
+                exportVideo.crossOrigin = 'anonymous';
+                exportVideo.preload = 'auto';
+                await new Promise((res) => {
+                    let done = false;
+                    const onloaded = () => { if (done) return; done = true; res(); };
+                    exportVideo.addEventListener('loadedmetadata', onloaded);
+                    setTimeout(() => { if (done) return; done = true; res(); }, 1500);
+                });
+                exportVideoReady = true;
+            } catch (e) {
+                console.warn('建立匯出用背景影片失敗', e);
+            }
+        }
+
+        let audioSource = null;
+        let slicedAudio = null;
+
+        // 🔴 核心重構：先完整合成好音訊，拿到規格後再向 output 註冊音軌
+        if (includeAudio) {
+            if (includeBgm) {
+                const t = audioManager.getBGMDuration();
+                if (start < t && end <= t) {
+                    const sliceAudioBuffer = (buf, s, e) => {
+                        const sr = buf.sampleRate;
+                        const startSample = Math.max(0, Math.floor(s * sr));
+                        const endSample = Math.min(buf.length, Math.floor(e * sr));
+                        const len = Math.max(0, endSample - startSample);
+                        const nb = new AudioBuffer({ length: len, numberOfChannels: buf.numberOfChannels, sampleRate: sr });
+                        for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+                            const data = buf.getChannelData(ch).subarray(startSample, endSample);
+                            nb.getChannelData(ch).set(data);
+                        }
+                        return nb;
+                    };
+
+                    const bgmBuf = audioManager.bgmBuffer;
+                    slicedAudio = bgmBuf ? sliceAudioBuffer(bgmBuf, start, end) : null;
+                }
+            }
+
+            if (includeSfx) {
+                const sfxEvents = [];
+                const longSoundEvents = [];
+                const sfxFrameSet = new Set();
+
+                for (let ni = 0; ni < notes.length; ni++) {
+                    const note = notes[ni];
+                    const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+                    const startT = note.time + musicDelay;
+                    const endT = note.time + skipT + musicDelay;
+
+                    /*
+                    if (noteType === "touch" && note.holdDuration > 0) {
+                        const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
+                        const noteId = `riser_${note.pos}_${note.time}`;
+                        if (isInsideHold && !note._riserActive) {
+                            audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
+                            note._riserActive = true;
+                        } else if (!isInsideHold && note._riserActive) {
+                            audioManager.stopLongSound(noteId);
+                            note._riserActive = false;
+                        }
+                    }
+
+                    // 開始音效
+                    if (noteT <= 0 && !note._startEffectPlayed) {
+                        if (!(noteType === "slide" && !note.firstSlide)) {
+                            audioManager.queueSound(note, note.time + (note.slideDelay ?? 0));
+                        }
+                        note._startEffectPlayed = true;
+                    }
+
+                    // 結束音效：簡化條件判斷
+                    if (-noteT > skipT && !note._endEffectPlayed) {
+                        const shouldPlayEndSound =
+                            (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                            (noteType !== "slide" && note.isBreak) ||
+                            note.isHanabi ||
+                            (note.holdDuration !== undefined && noteType !== "tap");
+                        if (shouldPlayEndSound) {
+                            audioManager.queueSound(note, note.time + skipT);
+                        }
+                        note._endEffectPlayed = true;
+                    }
+                    */
+
+                    if (startT >= start && startT <= end) {
+                        note._startEffectPlayed = false;
+                        const evs = audioManager.getSfxEventsForNote(note, startT + (note.slideDelay ?? 0));
+                        if (!(note.type === "slide" && !note.firstSlide)) {
+                            for (const ev of evs) {
+                                // 改為毫秒級去重（避免以 fps 為單位而濾掉高頻觸發）
+                                const timeMs = Math.floor(ev.time * 1000);
+                                const dedupeKey = `${timeMs}_${ev.key}`;
+                                if (sfxFrameSet.has(dedupeKey)) continue;
+                                sfxFrameSet.add(dedupeKey);
+
+                                sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
+                            }
+                            note._startEffectPlayed = true;
+                        }
+                    }
+                    if (endT >= start && endT <= end) {
+                        note._startEffectPlayed = true;
+                        const shouldPlayEndSound =
+                            (note.type === "slide" && note.lastSlide && note.isBreak) ||
+                            (note.type !== "slide" && note.isBreak) ||
+                            note.isHanabi ||
+                            (note.holdDuration !== undefined && note.type !== "tap");
+                        if (shouldPlayEndSound) {
+                            const evsEnd = audioManager.getSfxEventsForNote(note, endT);
+                            for (const ev of evsEnd) {
+                                // 改為毫秒級去重（避免以 fps 為單位而濾掉高頻觸發）
+                                const timeMs = Math.floor(ev.time * 1000);
+                                const dedupeKey = `${timeMs}_${ev.key}`;
+                                if (sfxFrameSet.has(dedupeKey)) continue;
+                                sfxFrameSet.add(dedupeKey);
+
+                                sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
+                            }
+                        }
+                        note._endEffectPlayed = true;
+                    }
+                    if (note.type === 'touch' && note.holdDuration > 0) {
+                        if (startT < end && endT > start) {
+                            longSoundEvents.push({ key: 'touchHold_riser', startSec: startT, endSec: endT });
+                        }
+                    }
+                }
+
+                sfxEvents.sort((a, b) => a.time - b.time);
+
+                // 內部核心混音工廠
+                const mixSfxInto = (baseBuf, events, longEvents, s, e) => {
+                    const sr = baseBuf ? baseBuf.sampleRate : (audioManager.ctx.sampleRate || 48000);
+                    const outLen = Math.max(1, Math.ceil((e - s) * sr));
+                    const bgmChannels = baseBuf ? baseBuf.numberOfChannels : 0;
+
+                    let sfxMaxCh = 1;
+                    for (const [k, b] of audioManager.bufferMap.entries()) {
+                        if (b && b.numberOfChannels > sfxMaxCh) sfxMaxCh = b.numberOfChannels;
+                    }
+                    const outCh = Math.max(bgmChannels || 0, sfxMaxCh || 1);
+                    const out = new AudioBuffer({ length: outLen, numberOfChannels: outCh, sampleRate: sr });
+
+                    if (baseBuf) {
+                        for (let ch = 0; ch < outCh; ch++) {
+                            const dst = out.getChannelData(ch);
+                            const src = baseBuf.getChannelData(ch < baseBuf.numberOfChannels ? ch : 0);
+                            const copyLen = Math.min(src.length, outLen);
+                            for (let i = 0; i < copyLen; i++) {
+                                dst[i] = src[i] * bgmVolume;
+                            }
+                        }
+                    }
+
+                    const addLoopingBufferAt = (key, eventStartSec, eventEndSec) => {
+                        const sfxBuf = audioManager.bufferMap.get(key);
+                        if (!sfxBuf) return;
+                        const loop = audioManager.loopPoints[key];
+                        const finalVol = 0.5 * sfxVolume;
+                        const sfxRate = sfxBuf.sampleRate || sr;
+
+                        const audibleStartSec = Math.max(s, eventStartSec);
+                        const audibleEndSec = Math.min(e, eventEndSec);
+                        if (audibleStartSec >= audibleEndSec) return;
+
+                        const startIdx = Math.floor((audibleStartSec - s) * sr);
+                        const endIdx = Math.floor((audibleEndSec - s) * sr);
+
+                        for (let ch = 0; ch < sfxBuf.numberOfChannels; ch++) {
+                            const src = sfxBuf.getChannelData(ch);
+                            const dst = out.getChannelData(ch < outCh ? ch : 0);
+
+                            for (let idx = startIdx; idx < endIdx; idx++) {
+                                if (idx < 0 || idx >= outLen) continue;
+                                const timeSinceEventStart = (s + idx / sr) - eventStartSec;
+                                let sampleSec = timeSinceEventStart;
+
+                                if (loop) {
+                                    if (sampleSec >= loop.end) {
+                                        sampleSec = loop.start + ((sampleSec - loop.end) % (loop.end - loop.start));
+                                    }
+                                } else if (sampleSec >= sfxBuf.length / sfxRate) {
+                                    continue;
+                                }
+
+                                const srcPos = sampleSec * sfxRate;
+                                const srcIdx0 = Math.floor(srcPos);
+                                const srcIdx1 = srcIdx0 + 1;
+                                const frac = srcPos - srcIdx0;
+                                const s0 = (srcIdx0 >= 0 && srcIdx0 < src.length) ? src[srcIdx0] : 0;
+                                const s1 = (srcIdx1 >= 0 && srcIdx1 < src.length) ? src[srcIdx1] : 0;
+                                const sampleVal = s0 * (1 - frac) + s1 * frac;
+                                dst[idx] += sampleVal * finalVol;
+                            }
+                        }
+                    };
+
+                    for (const lev of longEvents) {
+                        addLoopingBufferAt(lev.key, lev.startSec, lev.endSec);
+                    }
+
+                    const addBufferAt = (sfxBuf, atSec, baseVol, isMono, cutoffSec) => {
+                        if (!sfxBuf) return;
+                        const finalVol = (baseVol ?? 1) * sfxVolume;
+                        const dstRate = sr;
+                        const srcRate = sfxBuf.sampleRate || sr;
+                        const dstStart = Math.floor((atSec - s) * dstRate);
+                        const ratio = srcRate / dstRate;
+
+                        let maxDurationSec = sfxBuf.length / srcRate;
+                        if (isMono && cutoffSec !== undefined) {
+                            maxDurationSec = Math.min(maxDurationSec, cutoffSec - atSec);
+                        }
+                        const maxDstSamples = Math.floor(maxDurationSec * dstRate);
+
+                        for (let ch = 0; ch < outCh; ch++) {
+                            const src = sfxBuf.getChannelData(ch < sfxBuf.numberOfChannels ? ch : 0);
+                            const dst = out.getChannelData(ch);
+
+                            for (let i = 0; i < maxDstSamples; i++) {
+                                const dstIdx = dstStart + i;
+                                if (dstIdx < 0) continue;
+                                if (dstIdx >= outLen) break;
+
+                                const srcPos = i * ratio;
+                                const srcIdx0 = Math.floor(srcPos);
+                                const srcIdx1 = srcIdx0 + 1;
+                                if (srcIdx0 >= src.length) break;
+
+                                const frac = srcPos - srcIdx0;
+                                const s0 = src[srcIdx0] || 0;
+                                const s1 = src[srcIdx1] || 0;
+                                const sample = s0 * (1 - frac) + s1 * frac;
+
+                                // 純加總樣本值，延後處理峰值以避免逐次非線性失真
+                                dst[dstIdx] += sample * finalVol;
+                            }
+                        }
+                    };
+
+                    const lastTriggerTimes = new Map();
+
+                    for (let i = 0; i < events.length; i++) {
+                        const ev = events[i];
+                        if (lastTriggerTimes.has(ev.key)) {
+                            const lastTime = lastTriggerTimes.get(ev.key);
+                            if (ev.time - lastTime == 0) {
+                                continue;
+                            }
+                        }
+                        lastTriggerTimes.set(ev.key, ev.time);
+
+                        const sfxBuf = audioManager.bufferMap.get(ev.key);
+                        if (!sfxBuf) continue;
+
+                        let cutoffSec = undefined;
+                        if (ev.isMono) {
+                            for (let j = i + 1; j < events.length; j++) {
+                                if (events[j].key === ev.key && events[j].isMono) {
+                                    cutoffSec = events[j].time;
+                                    break;
+                                }
+                            }
+                        }
+                        addBufferAt(sfxBuf, ev.time, ev.volume, ev.isMono, cutoffSec);
+                    }
+
+                    // 以峰值 (peak) 為基準做一次性縮放，避免失真與破音
+                    let peak = 0;
+                    for (let ch = 0; ch < outCh; ch++) {
+                        const d = out.getChannelData(ch);
+                        for (let i = 0; i < d.length; i++) {
+                            const v = Math.abs(d[i]);
+                            if (v > peak) peak = v;
+                        }
+                    }
+                    if (peak > 1) {
+                        const scale = 1 / peak;
+                        for (let ch = 0; ch < outCh; ch++) {
+                            const d = out.getChannelData(ch);
+                            for (let i = 0; i < d.length; i++) {
+                                d[i] *= scale;
+                            }
+                        }
+                    }
+                    return out;
+                };
+
+                slicedAudio = mixSfxInto(slicedAudio, sfxEvents, longSoundEvents, start, end);
+            }
+
+            // 🔴 關鍵修正：此時混音完全結束，拿到了帶有正確規格的 slicedAudio。
+            // 立即將明確的 sampleRate 與聲道數宣告給編碼器，再將音軌塞進輸出器中
+            if (slicedAudio) {
+                audioSource = new AudioBufferSource({
+                    codec: 'opus',
+                    bitrate: QUALITY_HIGH,
+                    sampleRate: slicedAudio.sampleRate,        // 補上確切採樣率
+                    numberOfChannels: slicedAudio.numberOfChannels // 補上確切聲道數
+                });
+                output.addAudioTrack(audioSource);
+            }
+        }
+
+        // 🔴 順序修正：此時音、視訊軌皆已配置完整，安心啟動
+        await output.start();
+
+        // 啟動後，將音訊資料塞入
+        if (includeAudio && audioSource && slicedAudio) {
+            await audioSource.add(slicedAudio);
+        }
+
+        const mainCtx = canvas.getContext('2d');
+        renderer.setContext(offCtx);
+
+        const seekVideoTo = async (video, time) => {
+            if (!video) return;
+            const cur = video.currentTime || 0;
+            if (Math.abs(cur - time) <= VIDEO_SEEK_THRESHOLD) return;
+
+            if (typeof video.fastSeek === 'function') {
+                try { video.fastSeek(time); } catch (e) { video.currentTime = time; }
+                await new Promise((res) => {
+                    let done = false;
+                    const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
+                    video.addEventListener('seeked', onseek);
+                    setTimeout(() => { if (done) return; done = true; res(); }, 200);
+                });
+                return;
+            }
+            await new Promise((res) => {
+                let done = false;
+                const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
+                video.addEventListener('seeked', onseek);
+                try { video.currentTime = time; } catch (e) { video.currentTime = time; }
+                setTimeout(() => { if (done) return; done = true; res(); }, 300);
+            });
+        };
+
+        const total = end - start;
+        const frameCount = Math.max(1, Math.ceil(total * fps));
+        const step = 1 / fps;
+
+        pwCtx.setContent(`開始逐幀渲染：${frameCount} 幀`);
+        for (let i = 0; i < frameCount; i++) {
+            const t = start + i * step;
+            const globalT = t - (musicDelay || 0);
+
+            const speedCoeff = settings.speed * 0.8833 + 0.8167;
+            const touchSpeedCoeff = settings.touchSpeed * 0.8833 + 0.8167;
+
+            const buckets = { slide: [], tapnhold: [], touch: [] };
+            let playComboLocal = 0;
+            let playScoreLocal = 0;
+            let slideOnScreenCount = 0;
+            let nowIndexLocal = 0;
+
+            for (let j = notes.length - 1; j >= 0; j--) {
+                const note = notes[j];
+                const noteT = note.time - globalT;
+                const noteType = note.type;
+                const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+
+                if (noteT < 0) {
+                    const shouldCountCombo =
+                        (noteType === 'slide' ? (note.lastSlide && skipT + noteT < 0) :
+                            noteType === 'hold' ? (skipT + noteT < 0) :
+                                noteType === 'touch' && note.holdDuration !== undefined ? (skipT + noteT < 0) :
+                                    noteType !== 'slide');
+                    if (shouldCountCombo) {
+                        playComboLocal++;
+                        playScoreLocal += ((note.isBreak ? 5 :
+                            (noteType === "slide" ? 3 :
+                                note.holdDuration !== undefined ? 2 : 1)
+                        ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
+                    }
+                }
+
+                const tval = 1 - renderer.timeFunction(noteT * speedCoeff);
+                const touchT = 1 - renderer.timeFunction(noteT * touchSpeedCoeff);
+
+                const isVisible =
+                    (noteType === 'slide' ? (tval >= (settings.middleDistance || 0.25)) :
+                        noteType === 'touch' ? (touchT >= -1) :
+                            tval >= -1)
+                    && -noteT <= skipT + (note.isHanabi ? (settings.hanabiEffectDecayTime || 0.8) : (settings.effectDecayTime || 0.4));
+
+                if (isVisible) {
+                    if (noteType === 'slide') {
+                        if (slideOnScreenCount < (settings.maxSlideCount || 500)) {
+                            buckets.slide.push(note);
+                            slideOnScreenCount++;
+                        }
+                    } else if (noteType === 'hold' || noteType === 'tap') {
+                        buckets.tapnhold.push(note);
+                    } else if (noteType === 'touch') {
+                        buckets.touch.push(note);
+                    }
+                }
+            }
+
+            try {
+                offCtx.save();
+                offCtx.setTransform(1, 0, 0, 1, 0, 0);
+                offCtx.fillStyle = settings.backgroundColor || '#000';
+                offCtx.fillRect(0, 0, off.width, off.height);
+                const rs = renderer.scale || scale;
+
+                const boxSize = Math.min(off.width, off.height);
+                const boxX = Math.round((off.width - boxSize) / 2);
+                const boxY = Math.round((off.height - boxSize) / 2);
+                const boxW = boxSize, boxH = boxSize;
+
+                const drawContain = (srcW, srcH, drawFn) => {
+                    if (!srcW || !srcH) return drawFn(0, 0, srcW, srcH, boxX, boxY, boxW, boxH);
+                    const scale = Math.min(boxW / srcW, boxH / srcH) * rs;
+                    const dw = Math.round(srcW * scale);
+                    const dh = Math.round(srcH * scale);
+                    const dx = Math.round(boxX + (boxW - dw) / 2);
+                    const dy = Math.round(boxY + (boxH - dh) / 2);
+                    return drawFn(0, 0, srcW, srcH, dx, dy, dw, dh);
+                };
+
+                if (exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
+                    const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
+                    if (Math.abs((exportVideo.currentTime || 0) - bgTarget) > VIDEO_SEEK_THRESHOLD) {
+                        await seekVideoTo(exportVideo, bgTarget);
+                    }
+                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                    const vw = exportVideo.videoWidth || exportVideo.width || boxW;
+                    const vh = exportVideo.videoHeight || exportVideo.height || boxH;
+                    drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(exportVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh));
+                    offCtx.filter = 'none';
+                } else if (editorBackgroundImage && editorBackgroundImage.src && editorBackgroundImage.complete) {
+                    const img = editorBackgroundImage;
+                    const iw = img.naturalWidth || img.width || boxW;
+                    const ih = img.naturalHeight || img.height || boxH;
+                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                    drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(img, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh));
+                    offCtx.filter = 'none';
+                }
+
+                if (outlineImage) {
+                    offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
+                    offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
+                }
+            } finally {
+                offCtx.restore();
+            }
+
+            renderer.drawFrame({
+                globalTime: globalT,
+                buckets,
+                dt: step,
+                showSensor: settings.showSensor,
+                showSensorText: false,
+                playCombo: playComboLocal,
+                playScore: playScoreLocal,
+                nowIndex: nowIndexLocal,
+                skipClear: true
+            });
+
+            const tsRelative = i * step;
+            await videoSource.add(tsRelative, step);
+
+            pwCtx.setProgress(((i + 1) / frameCount) * 100);
+            pwCtx.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀`);
+        }
+
+        await output.finalize();
+        const mime = await output.getMimeType();
+        const ext = output.format?.fileExtension || '.webm';
+        const buf = target.buffer;
+        if (!buf) throw new Error('未取得輸出 buffer');
+
+        const blob = new Blob([buf], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `simai_render${ext}`; document.body.appendChild(a); a.click(); a.remove();
+
+        simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
+
+        renderer.setContext(mainCtx);
+        pwCtx.setProgress(100);
+        pwCtx.setContent('完成');
+    } catch (err) {
+        console.error('逐幀渲染失敗', err);
+        simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
+        try { pwCtx.setContent('錯誤：' + String(err)); } catch (e) { }
+        try { renderer.setContext(canvas.getContext('2d')); } catch (e) { }
+    }
 }

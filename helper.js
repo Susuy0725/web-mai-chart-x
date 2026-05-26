@@ -351,7 +351,7 @@ class AudioManager {
         this.sfxGainNode.gain.value = this.sfxMasterVolume;
 
         this.longSoundGainNode = this.ctx.createGain();
-        this.longSoundGainNode.gain.value = 0.5;
+        this.longSoundGainNode.gain.value = 0.25;
 
         // 建立 DynamicsCompressorNode，避免多個 long sound 疊加造成爆音
         this.longSoundCompressor = this.ctx.createDynamicsCompressor();
@@ -1254,103 +1254,197 @@ export function simpleToast({
     timeout = 2000,
     type = "info"
 } = {}) {
-    const MAX_TOASTS = 3; // 🔴 這裡設定畫面上最多同時存在的數量
+
+    const MAX_TOASTS = 3;
 
     let container = document.getElementById('hint-container');
+
     if (!container) {
+
         container = document.createElement('div');
+
         container.id = 'hint-container';
+
         container.style.cssText = `
             position: fixed;
-            top: 0px;
-            left: 0px;
+            top: 0;
+            left: 0;
             padding: 10px;
             z-index: 10000;
+
             display: flex;
             flex-direction: column;
+
             pointer-events: none;
-            overflow-y: auto;
+
+            overflow: hidden;
+
             max-height: 100vh;
         `;
+
         document.body.appendChild(container);
     }
 
-    // 🔴 關鍵修正：堆疊高度限制邏輯
-    // 如果目前的子節點數量大於或等於上限，就剔除最舊的
-    while (container.childNodes.length >= MAX_TOASTS) {
-        const oldestPopup = container.firstChild;
-        if (oldestPopup && typeof oldestPopup._triggerRemove === 'function') {
-            // 呼叫原本包裝好的絲滑消失動畫
-            oldestPopup._triggerRemove();
-        } else if (oldestPopup) {
-            // 備案：如果還沒綁定完成，直接硬拔防止卡死
-            container.removeChild(oldestPopup);
-        }
+    // =========================
+    // 限制最大 toast 數量
+    // =========================
+
+    const activeToasts =
+        [...container.children]
+            .filter(v => !v._isRemoving);
+
+    if (activeToasts.length >= MAX_TOASTS) {
+
+        const oldest = activeToasts[0];
+
+        oldest?._triggerRemove?.();
     }
 
+    // =========================
+    // 建立 toast
+    // =========================
+
     const popup = document.createElement('div');
-    const color = { info: '#00bbff', error: '#ff4444', success: '#00ffcc', warning: '#ffcc00' }[type] || '#404040';
+
+    const colorMap = {
+        info: '#00bbff',
+        error: '#ff4444',
+        success: '#00ffcc',
+        warning: '#ffcc00'
+    };
+
+    const color =
+        colorMap[type] || '#404040';
 
     popup.style.cssText = `
         display: flex;
         align-items: center;
         justify-content: flex-start;
+
         background: #202020;
         color: white;
+
         padding: 10px 15px;
+
         border-left: 4px solid ${color};
+
         border-radius: 4px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+        box-shadow:
+            0 4px 12px rgba(0,0,0,0.5);
+
         font-size: 13px;
+
         pointer-events: auto;
+
         width: fit-content;
         max-width: 300px;
+
         margin-bottom: 10px;
+
         overflow: hidden;
-        height: 20px; 
-        max-height: 100px; 
+
+        min-height: 20px;
+        max-height: 100px;
+
         flex-shrink: 0;
+
         opacity: 1;
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+        transform: translateX(0);
+
+        transition:
+            opacity 0.4s cubic-bezier(0.4,0,0.2,1),
+            transform 0.4s cubic-bezier(0.4,0,0.2,1),
+            max-height 0.4s cubic-bezier(0.4,0,0.2,1),
+            margin 0.4s cubic-bezier(0.4,0,0.2,1),
+            padding 0.4s cubic-bezier(0.4,0,0.2,1);
     `;
-    popup.innerHTML = content;
+
+    // 安全版
+    popup.textContent = content;
+
     container.appendChild(popup);
 
-    // --- 1. 出現動畫 (使用 WAAPI) ---
-    popup.animate([
-        { transform: 'translateX(-40px)', opacity: 0 },
-        { transform: 'translateX(0)', opacity: 1 }
-    ], { duration: 300, easing: 'cubic-bezier(0.58, 0.18, 0.34, 1.41)' });
+    // =========================
+    // 出現動畫
+    // =========================
 
-    // --- 2. 移除邏輯 ---
-    let isRemoving = false;
+    popup.animate(
+        [
+            {
+                transform: 'translateX(-40px)',
+                opacity: 0
+            },
+            {
+                transform: 'translateX(0)',
+                opacity: 1
+            }
+        ],
+        {
+            duration: 300,
+            easing:
+                'cubic-bezier(0.58,0.18,0.34,1.41)'
+        }
+    );
+
+    // =========================
+    // 移除邏輯
+    // =========================
+
     const removePopup = () => {
-        if (isRemoving) return;
-        isRemoving = true;
-        clearTimeout(timer); // 🟢 安全起見，觸發時清除計時器
+
+        if (popup._isRemoving) return;
+
+        popup._isRemoving = true;
+
+        clearTimeout(timer);
 
         popup.style.maxHeight = '0px';
+
         popup.style.marginTop = '0px';
         popup.style.marginBottom = '0px';
+
         popup.style.paddingTop = '0px';
         popup.style.paddingBottom = '0px';
-        popup.style.opacity = '0';
-        popup.style.transform = 'translateX(-40px)';
-        popup.style.pointerEvents = 'none';
-        popup.style.zIndex -= 1;
 
-        popup.addEventListener('transitionend', () => {
-            if (container.contains(popup)) container.removeChild(popup);
-            if (container.childNodes.length === 0 && document.body.contains(container)) {
-                document.body.removeChild(container);
+        popup.style.opacity = '0';
+
+        popup.style.transform =
+            'translateX(-40px)';
+
+        popup.style.pointerEvents = 'none';
+
+        // transitionend 有時不穩
+        // 直接 timeout 最穩
+
+        setTimeout(() => {
+
+            popup.remove();
+
+            if (
+                container &&
+                container.children.length === 0
+            ) {
+                container.remove();
             }
-        }, { once: true });
+
+        }, 450);
     };
 
-    // 🔴 關鍵：把移除函式掛在 DOM 節點上，好讓頂部的 while 迴圈可以跨範疇呼叫它
     popup._triggerRemove = removePopup;
 
-    const timer = setTimeout(removePopup, timeout);
+    // =========================
+    // 自動關閉
+    // =========================
+
+    const timer =
+        setTimeout(removePopup, timeout);
+
+    // =========================
+    // 點擊關閉
+    // =========================
+
     popup.onclick = removePopup;
 }
 const baseURL = './Skin/', baseImageKeys = [
@@ -1769,15 +1863,6 @@ export function flipSelectedText(selected, deMap, transformDigit, swapPairs = {}
                 continue;
             }
 
-            if (ch === '>') {
-                result += '<';
-                continue;
-            }
-            if (ch === '<') {
-                result += '>';
-                continue;
-            }
-
             if (swapPairs[ch]) {
                 result += swapPairs[ch];
                 continue;
@@ -2160,3 +2245,59 @@ export const defaultSettings = {
         settings = { ...defaultSettings };
     }
 };
+
+const activeDebug = () => {
+    const debugInfoEl = document.createElement('div');
+    debugInfoEl.style.position = 'fixed';
+    debugInfoEl.style.minWidth = '50px';
+    debugInfoEl.style.minHeight = '50px';
+    debugInfoEl.style.top = '10px';
+    debugInfoEl.style.right = '10px';
+    debugInfoEl.style.padding = '5px 10px';
+    debugInfoEl.style.backgroundColor = 'rgba(24, 171, 122, 0.58)';
+    debugInfoEl.style.color = '#fff';
+    debugInfoEl.style.fontSize = '12px';
+    debugInfoEl.style.zIndex = '10000';
+    debugInfoEl.style.cursor = 'move'; // 提示使用者這可以拖曳
+    debugInfoEl.style.userSelect = 'none'; // 防止拖曳時不小心選取到文字
+
+    // 拖曳邏輯變數
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    debugInfoEl.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        // 計算滑鼠點擊點與元素左上角的相對距離
+        const rect = debugInfoEl.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+    });
+
+    // 監聽 window 而不是元素本身，這樣滑鼠移太快才不會斷掉
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        // 計算新位置
+        let newX = e.clientX - offsetX;
+        let newY = e.clientY - offsetY;
+
+        // 限制不要拖出視窗外（選用，如果你想讓它隨便飛可以刪掉邊界限制）
+        const maxX = window.innerWidth - debugInfoEl.offsetWidth;
+        const maxY = window.innerHeight - debugInfoEl.offsetHeight;
+        newX = Math.max(0, Math.min(newX, maxX));
+        newY = Math.max(0, Math.min(newY, maxY));
+
+        // 因為原本設定了 right: 10px，拖曳時我們改用 left 和 top 來精準定位
+        debugInfoEl.style.right = 'auto';
+        debugInfoEl.style.left = `${newX}px`;
+        debugInfoEl.style.top = `${newY}px`;
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    document.body.appendChild(debugInfoEl);
+    window.debugInfoEl = debugInfoEl;
+}
+window.activeDebug = activeDebug;

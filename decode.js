@@ -40,6 +40,7 @@ export function simaiDecode(data = "", baseOffset = true) {
         nowTime = 0,
         nowBpm = 60,
         nowSplit = 4,
+        hispeed = 1,
         overrideSplitTime = null,
         noteCommaIndex = 0,
         indexToTime = [];
@@ -90,6 +91,15 @@ export function simaiDecode(data = "", baseOffset = true) {
             prop = propMatches[1].trim();
             // 清除 noteStr 中的標籤，避免影響後續解析 (例如 1<PROP:"RED">b -> 1b)
             e = e.replace(/^<([^>]*)>$/, '');
+            if (prop.startsWith("HS*")) {
+                const hispeedValue = parseFloat(prop.slice(3));
+                if (!isNaN(hispeedValue)) {
+                    hispeed = hispeedValue;
+                    //tags.push({ type: 'hispeed', value: hispeed, time: nowTime });
+                } else {
+                    pushWarn("Invalid hispeed value in property:", { errpos: noteCommaIndex });
+                }
+            }
         }
         indexToTime[noteCommaIndex] = nowTime;
         if (!e || e === '') {
@@ -140,6 +150,18 @@ export function simaiDecode(data = "", baseOffset = true) {
                     raw = raw.slice(0, -match[0].length); // 剝掉這層標籤
                 }
                 if (props.length === 0) props = null;
+                if (props) {
+                    const prop = props[props.length - 1]; // 以最後一個標籤為準
+                    if (prop.startsWith("HS*")) {
+                        const hispeedValue = parseFloat(prop.slice(3));
+                        if (!isNaN(hispeedValue)) {
+                            hispeed = hispeedValue;
+                            //tags.push({ type: 'hispeed', value: hispeed, time: nowTime });
+                        } else {
+                            pushWarn("Invalid hispeed value in property:", { errpos: noteCommaIndex });
+                        }
+                    }
+                }
                 const splitr = (() => {
                     if (raw.includes('/')) {
                         return raw.split('/').map(s => s.trim());
@@ -168,6 +190,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             isDouble: true,
                             time: time,
                             type: 'tap',
+                            hispeed: hispeed,
                             index: noteCommaIndex
                         };
                         tempNotes.push(noteObj);
@@ -252,6 +275,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             isDouble: parts.length > 1,
                             time: time,
                             type: type,
+                            hispeed: hispeed,
                             index: noteCommaIndex
                         };
                     })();
@@ -459,6 +483,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     slideDelay: currentDelay,
                                     slideDuration: segmentDuration,
                                     isIllegal: seg.illegal,
+                                    hispeed: hispeed,
                                 });
                                 if (index === segments.length - 1) {
                                     if (isSlideBreak) { breakCounts++ } else { slideCounts++ }

@@ -187,7 +187,17 @@ export class SimaiRenderer {
     }
 
     getNoteTransform(noteT, speedMult = 1) {
-        const progress = noteT * (this.settings.speed * 0.8833 + 0.8167) * speedMult;
+        const calcPiecewiseSpeed = (x) => {
+            if (x >= 1) {
+                return x * 0.8833 + 0.8167;
+            } else if (x <= -1) {
+                return x * 0.8833 - 0.8167;
+            } else {
+                // 當 abs(x) < 1 時
+                return x * 1.7;
+            }
+        };
+        const progress = noteT * calcPiecewiseSpeed(this.settings.speed * speedMult);
         const t = 1 - this.timeFunction(progress);
         const displayT = Math.max(this.settings.middleDistance, t);
         const currentScale = t < this.settings.middleDistance
@@ -522,9 +532,9 @@ export class SimaiRenderer {
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const { time: noteTime, pos, isBreak, isDouble, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const { t, displayT, currentScale } = this.getNoteTransform(noteT);
+        const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
@@ -572,9 +582,9 @@ export class SimaiRenderer {
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const { t, displayT, currentScale } = this.getNoteTransform(noteT);
+        const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
@@ -623,9 +633,9 @@ export class SimaiRenderer {
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration, hispeed } = s;
         const noteT = (noteTime - this.globalTime);
-        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167));
+        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const posInfo = noteRefPos[pos - 1];
 
         if (-noteT > holdDuration) {
@@ -690,9 +700,9 @@ export class SimaiRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, holdDuration } = s;
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration, hispeed } = s;
         const noteT = (noteTime - this.globalTime);
-        const t = 1 - this.timeFunction(noteT * (this.settings.touchSpeed * 0.8833 + 0.8167));
+        const t = 1 - this.timeFunction(noteT * (this.settings.touchSpeed * 0.8833 + 0.8167) * hispeed);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
         if (holdDuration) {
@@ -726,7 +736,7 @@ export class SimaiRenderer {
                 this.drawImgAtcenter(touchBorder, size * 2.6);
                 this.ctx.restore();
                 this.ctx.rotate(Math.PI * -0.75);
-                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.55);
+                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.35);
                 for (let i = 0; i < 4; i++) {
                     this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                     this.ctx.rotate(Math.PI / 2);
@@ -754,7 +764,7 @@ export class SimaiRenderer {
             const a = this.touchTimeFunction(18 * (1 - t) / 1.5) * 1.6;
 
             this.ctx.translate(posInfo.x, posInfo.y);
-            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.55);
+            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.35);
             for (let i = 0; i < 4; i++) {
                 this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
@@ -780,9 +790,9 @@ export class SimaiRenderer {
             imgs.push(target);
         }
 
-        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path } = s;
+        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167));
+        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const p = path || generatePath(pos, slideEnd);
         if (p.totalLength < 1e-4) return;
 

@@ -400,6 +400,7 @@ class AudioManager {
         this.loopPoints = {
             'touchHold_riser': { start: 10, end: 11.8 }
         };
+        this.scheduledSources = [];
     }
 
     /**
@@ -508,6 +509,7 @@ class AudioManager {
      * 停止背景音樂
      */
     stopBGM() {
+        this.stopAllScheduledSounds();
         if (this.bgmSource) {
             try {
                 this.bgmSource.stop();
@@ -516,6 +518,15 @@ class AudioManager {
             }
             this.bgmSource = null;
         }
+    }
+
+    stopAllScheduledSounds() {
+        for (const src of this.scheduledSources) {
+            try {
+                src.stop();
+            } catch (e) { }
+        }
+        this.scheduledSources = [];
     }
 
     /**
@@ -634,12 +645,12 @@ class AudioManager {
             case 'hold':
                 events.push({ key: 'answer', time: targetTime, isMono: false, volume: this.sfxVolumes['answer'] });
                 if (!note._startEffectPlayed) {
-                    if (note.isEx) key = 'judge_ex';
                     if (note.isBreak) {
                         key = 'judge_break';
                         events.push({ key: 'break', time: targetTime, isMono: true, volume: this.sfxVolumes['break'] });
                     } else {
-                        key = 'judge';
+                        if (note.isEx) key = 'judge_ex';
+                        else key = 'judge';
                     }
                     isMono = false;
                 } else {
@@ -711,27 +722,30 @@ class AudioManager {
      * @param {number} globalTime - 目前遊戲運行的時間 (秒)
      */
     update(globalTime) {
-        // 只要佇列首位時間到了，就播放並移出佇列
-        while (this.soundQueue.length > 0 && globalTime >= this.soundQueue[0].targetTime) {
-            const { key, isMono, volume } = this.soundQueue.shift();
-            this.play(key, isMono, volume);
+        const lookAhead = 0.1; // 100ms look-ahead
+        while (this.soundQueue.length > 0 && globalTime + lookAhead >= this.soundQueue[0].targetTime) {
+            const { key, isMono, volume, targetTime } = this.soundQueue.shift();
+            const playTime = this.ctx.currentTime + (targetTime - globalTime) / this.playbackRate;
+            this.play(key, isMono, volume, playTime);
         }
     }
 
     /**
      * 執行最終播放 (Web Audio API 核心)
      */
-    play(key, isMono = false, volume = 1) {
+    play(key, isMono = false, volume = 1, playTime = null) {
         const buffer = this.bufferMap.get(key);
         if (!buffer) return;
 
         // 解鎖音訊限制
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        // Mono 模式處理
+        // Mono 模式處理 (預約在未來新音效開始播放時才中斷舊音效，避免提早中斷產生靜音間隙)
         if (isMono && this.playingSources.has(key)) {
             try {
-                this.playingSources.get(key).stop();
+                const oldSource = this.playingSources.get(key);
+                const stopTime = playTime !== null ? Math.max(this.ctx.currentTime, playTime) : this.ctx.currentTime;
+                oldSource.stop(stopTime);
             } catch (e) { }
         }
 
@@ -751,7 +765,19 @@ class AudioManager {
             this.playingSources.set(key, source);
         }
 
-        source.start(0);
+        if (playTime !== null) {
+            const timeToPlay = Math.max(this.ctx.currentTime, playTime);
+            source.start(timeToPlay);
+            this.scheduledSources.push(source);
+            source.onended = () => {
+                const index = this.scheduledSources.indexOf(source);
+                if (index !== -1) {
+                    this.scheduledSources.splice(index, 1);
+                }
+            };
+        } else {
+            source.start(0);
+        }
     }
     /**
          * @param {string} id 唯一標籤 (建議用 note_pos_time)
@@ -1455,8 +1481,8 @@ const baseURL = './Skin/', baseImageKeys = [
     'hold_break_on', 'hold_each_on', 'hold_on',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
     'touch', 'touch_each', 'touch_point', 'touch_point_each',
-    'star', 'star_break', 'star_each', 'star_double', 'star_ex',
-    'star_break_double', 'star_each_double', 'star_ex_double',
+    'star', 'star_pink', 'star_break', 'star_each', 'star_double', 'star_ex',
+    'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double',
     'slide', 'slide_each', 'slide_break', 'SlideArc',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
 ];
@@ -1486,17 +1512,19 @@ export async function loadAllImages(onProgress) {
     };
 
     // 3. 使用 map 建立任務隊列，確保每一個 key 都會回報進度
-    const loadQueue = allKeys.map(key => {
+    const loadQueue = allKeys.map(async key => {
         const url = `${baseURL}${key}.png`;
-        return getImgWithCache(url, key)
-            .then(img => {
+        try {
+            try {
+                const img = await getImgWithCache(url, key);
                 if (img) images[key] = img;
-            })
-            .catch(err => {
+            } catch (err) {
                 // 如果是那個忘記刪的舊 Key，這裡會抓到錯誤但不會卡住
                 console.warn(`[資源缺失] 無法載入 ${key}:`, err);
-            })
-            .finally(() => report(key)); // 無論成功失敗都必須 report
+            }
+        } finally {
+            return report(key);
+        } // 無論成功失敗都必須 report
     });
 
     await Promise.all(loadQueue);
@@ -1560,16 +1588,34 @@ function tintImage(img, r, g, b, amount = 0.5) {
     // 2. 繪製原始圖像
     ctx.drawImage(img, 0, 0, w, h);
 
-    // 3. 套用色彩合成
-    // 'source-atop' 會保留原圖透明度，並在有像素的地方填色
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillStyle = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+    // 3. 套用精確的色彩乘法混合 (若有 CORS 限制則降級回 source-atop)
+    try {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const len = data.length;
 
-    // 這裡我們直接用 amount 控制全域透明度，效果更精確
-    ctx.globalAlpha = Math.max(0, Math.min(1, amount));
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+        const factorR = 1 - amount + amount * (r / 255);
+        const factorG = 1 - amount + amount * (g / 255);
+        const factorB = 1 - amount + amount * (b / 255);
+
+        for (let i = 0; i < len; i += 4) {
+            data[i] = Math.min(255, Math.max(0, Math.round(data[i] * factorR))); // R
+            data[i + 1] = Math.min(255, Math.max(0, Math.round(data[i + 1] * factorG))); // G
+            data[i + 2] = Math.min(255, Math.max(0, Math.round(data[i + 2] * factorB))); // B
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+    } catch (e) {
+        console.warn("getImageData failed (probably CORS issue): falling back to source-atop method.", e);
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+        ctx.globalAlpha = Math.max(0, Math.min(1, amount));
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+    }
 
     return canvas;
 }

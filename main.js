@@ -25,7 +25,6 @@ let
     renderer,
     visualEditorRenderer,
     previewRender,
-    recorder,
     settings = {},
     isContextEdited = false,
     isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587;
@@ -34,6 +33,18 @@ window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
 
 _init();
+
+if (typeof document !== 'undefined' && document.fonts) {
+    document.fonts.load('10px combo').then(() => {
+        if (renderer) {
+            renderer._sensorCacheParams = { w: 0, h: 0, scale: 0 };
+            renderer._middleDisplayCacheParams = { w: 0, h: 0, scale: 0 };
+        }
+        if (typeof draw === 'function') {
+            draw();
+        }
+    });
+}
 
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
@@ -142,6 +153,7 @@ export const defaultSettings = {
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     cursorFollow: true, // 游標跟隨
+    globalTimeline: true, // 全局時間軸
     restoreDefaults: function () {
         settings = { ...defaultSettings };
     }
@@ -240,6 +252,9 @@ const settingsConfig = [
             },
             {
                 id: 'autoPauseOnScroll', type: 'checkbox', label: '滾動時自動暫停', def: defaultSettings.autoPauseOnScroll
+            },
+            {
+                id: 'globalTimeline', type: 'checkbox', label: '顯示全域時間軸', def: defaultSettings.globalTimeline
             }
         ]
     }
@@ -247,6 +262,8 @@ const settingsConfig = [
 
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
+let playStartTimestamp = null;
+let playStartRealTime = 0;
 let secondCtx = null;
 let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
@@ -958,6 +975,7 @@ tapBpmButton.addEventListener('click', () => {
 function setDataEmpty() {
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
+    playStartTimestamp = null;
     maidata = {};
     nowDifficulty = 5;
     backgroundImage = null;
@@ -1334,6 +1352,7 @@ const offsetInputDebounce = debounce(() => {
 
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime); // 調整音樂播放位置，讓它與節拍更貼合
+        syncPlayTimer();
     }
     maidata.first = musicDelay;
     saveMaidata();
@@ -1442,6 +1461,7 @@ function setPlaybackSpeed(speed) {
     audioManager.setPlaybackRate(speed);
     if (playing) {
         audioManager.playBGM(realTime);
+        syncPlayTimer();
     }
     if (editorBackgroundVideo.src) {
         editorBackgroundVideo.playbackRate = speed;
@@ -1466,6 +1486,7 @@ const setEditorCss = (visible = null) => {
     // 同步捲動永遠執行（透過 rAF 批次處理，避免頻繁 layout thrash）
     syncHighlightLayerScroll();
 
+    slider.style.display = settings.globalTimeline ? 'block' : 'none';
     if (visible === null) return;
 
     const visualMode = isVisualMode();
@@ -1631,6 +1652,7 @@ settingsButton.addEventListener('click', () => {
         });
 
         saveSettingsDebounce();
+        setEditorCss();
         draw();
         simpleToast({ content: '設定已儲存', type: 'success', timeout: 1500 });
     };
@@ -2699,6 +2721,7 @@ const updateVisualTime = (newTime) => {
     audioManager.stopAllLongSounds();
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime);
+        syncPlayTimer();
     } else {
         audioManager.clearSoundQueue();
         audioManager.stopBGM();
@@ -3093,6 +3116,7 @@ slider.addEventListener('input', () => {
         // 2. 播放中拖動：音樂即時同步跳轉 (Seek)
         // 注意：Web Audio API 重建 Source Node 很快，但極速拖動可能會有噴麥音
         audioManager.playBGM(realTime);
+        syncPlayTimer();
     } else {
         // 3. 暫停中拖動：只需停止 BGM 並更新畫布預覽
         audioManager.stopBGM();
@@ -3127,6 +3151,7 @@ playButton.addEventListener('click', () => {
         playButton.dataset.playing = 'false';
         playButton.children[0].innerText = "play_arrow";
         lastTimestamp = null;
+        playStartTimestamp = null;
 
         // --- 停止音效與 BGM ---
         audioManager.stopAllLongSounds();
@@ -3147,6 +3172,8 @@ playButton.addEventListener('click', () => {
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
         lastTimestamp = performance.now();
+        playStartRealTime = realTime;
+        playStartTimestamp = performance.now();
 
         // --- 從當前的 realTime 同步啟動 BGM ---
         audioManager.playBGM(realTime);
@@ -3163,6 +3190,7 @@ resetButton.addEventListener('click', () => {
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;
     lastTimestamp = null;
+    playStartTimestamp = null;
     realTime = 0;
     globalTime = realTime - musicDelay;
     updateSlider(realTime);
@@ -3183,6 +3211,7 @@ stopButton.addEventListener('click', () => {
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;
     lastTimestamp = null;
+    playStartTimestamp = null;
     realTime = lastStartTime || 0;
     globalTime = realTime - musicDelay;
     updateSlider(realTime);
@@ -3216,7 +3245,7 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
     } else {
         showPlayControlsBtn.style.display = 'none';
         hideButton.dataset.hidden = 'false';
-        slider.style.display = 'block';
+        slider.style.display = settings.globalTimeline ? 'block' : 'none';
         cC.style.display = 'flex';
         if (visualVisible) {
             previewContainer.style.display = 'none';
@@ -3266,6 +3295,7 @@ getCursorNoteIndex.addEventListener('click', () => {
 
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime);
+        syncPlayTimer();
     } else {
         draw();
     }
@@ -3378,6 +3408,13 @@ fHorizontalButton.addEventListener('click', () => {
     applyHorizontalFlip();
 });
 
+function syncPlayTimer() {
+    if (playButton.dataset.playing === 'true') {
+        playStartRealTime = realTime;
+        playStartTimestamp = performance.now();
+    }
+}
+
 function update(timestamp) {
     // 1. 基本時間計算
     const bp = settings.playbackSpeed || 1;
@@ -3389,7 +3426,12 @@ function update(timestamp) {
 
     // 2. 邏輯更新區塊：僅在播放狀態下推進時間
     if (isPlaying) {
-        realTime += dt * bp;
+        if (playStartTimestamp === null) {
+            playStartTimestamp = performance.now();
+            playStartRealTime = realTime;
+        }
+        const elapsed = (performance.now() - playStartTimestamp) / 1000;
+        realTime = playStartRealTime + elapsed * bp;
         globalTime = realTime - musicDelay;
         if (settings.cursorFollow) {
             cursorLastIndexTime = dataIndexToTime[nowIndex] || 0; // 更新游標對應的時間
@@ -3432,6 +3474,7 @@ function update(timestamp) {
             playButton.children[0].innerText = "play_arrow";
             globalTime = endTime;
             updateSlider(endTime);
+            playStartTimestamp = null;
         }
     }
 
@@ -3817,39 +3860,54 @@ function draw(dt = 0) {
                 }
             }
 
-            // 開始音效
-            if (noteT <= 0 && !note._startEffectPlayed) {
+            const lookAhead = 0.1; // 100ms look-ahead
+
+            // 開始音效 (含前瞻)
+            const startTargetT = note.time + (note.slideDelay ?? 0);
+            const startNoteT = startTargetT - globalTime;
+            if (startNoteT <= lookAhead && !note._startEffectPlayed) {
                 if (!(noteType === "slide" && !note.firstSlide)) {
-                    audioManager.queueSound(note, note.time + (note.slideDelay ?? 0));
+                    audioManager.queueSound(note, startTargetT);
                 }
                 note._startEffectPlayed = true;
             }
 
-            // 結束音效：簡化條件判斷
-            if (-noteT > skipT && !note._endEffectPlayed) {
+            // 結束音效 (含前瞻)
+            const endTargetT = note.time + skipT;
+            const endNoteT = endTargetT - globalTime;
+            if (endNoteT <= lookAhead && !note._endEffectPlayed) {
                 const shouldPlayEndSound =
                     (noteType === "slide" && note.lastSlide && note.isBreak) ||
                     (noteType !== "slide" && note.isBreak) ||
                     note.isHanabi ||
                     (note.holdDuration !== undefined && noteType !== "tap");
                 if (shouldPlayEndSound) {
-                    audioManager.queueSound(note, note.time + skipT);
+                    audioManager.queueSound(note, endTargetT);
                 }
                 note._endEffectPlayed = true;
             }
-        } else if (noteT > 0) {
+        } else {
             // 倒帶或拖動時重置狀態
-            note._startEffectPlayed = false;
-            note._endEffectPlayed = false;
-            if (note._riserActive) {
-                audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
-                note._riserActive = false;
+            const lookAhead = 0.1;
+            const startTargetT = note.time + (note.slideDelay ?? 0);
+            const endTargetT = note.time + skipT;
+            if (startTargetT - globalTime > lookAhead) {
+                note._startEffectPlayed = false;
+            }
+            if (endTargetT - globalTime > lookAhead) {
+                note._endEffectPlayed = false;
+            }
+            if (note.time - globalTime > 0) {
+                if (note._riserActive) {
+                    audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
+                    note._riserActive = false;
+                }
             }
         }
 
         // 繪製可見性判斷
-        const t = 1 - renderer.timeFunction(noteT * speedCoeff);
-        const touchT = 1 - renderer.timeFunction(noteT * touchSpeedCoeff);
+        const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
+        const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
 
         const isVisible =
             (noteType === "slide" ? t >= middleDistance :
@@ -4026,7 +4084,6 @@ function _init() {
                     hideEditorButton.children[0].textContent = "right_panel_open";
                     editorContainer.dataset.hidden = 'true';
                 }
-                setEditorCss(!hideEditor);
                 changeDisplayMode.value = settings.displayMode ?? 'simai';
                 renderer = new SimaiRenderer(canvas, settings);
                 renderer.setImages(images);
@@ -4040,6 +4097,7 @@ function _init() {
                 setPlaybackSpeed(settings.playbackSpeed);
                 draw();
                 updateSlider(realTime);
+                setEditorCss(!hideEditor);
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();
             } catch (e) {

@@ -47,6 +47,7 @@ export class SimaiRenderer {
             play_score: null,
             backgroundDarkness: null,
         };
+        this.hanabiEffect = {};
     }
 
 
@@ -218,6 +219,8 @@ export class SimaiRenderer {
 
         if (!this.images) return;
 
+        this.hanabiEffect = {};
+
         // 1. 更新座標指標
         this.updateCanvasMetrics();
         const { _hw: hw, _hh: hh, canvas: { width: w, height: h } } = this;
@@ -233,7 +236,8 @@ export class SimaiRenderer {
         // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
         this.drawMiddleDisplay();
 
-        // 4. 使用 for...of 代替 forEach (在某些瀏覽器中效能更好)
+        for (const n of buckets.touch) this.getTouchHanabi(n);
+        this.drawHanabiEffects();
         for (const n of buckets.slide) this.drawSlide(n);
 
         for (const n of buckets.tapnhold) {
@@ -241,7 +245,6 @@ export class SimaiRenderer {
             else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
         }
-
         for (const n of buckets.touch) this.drawTouch(n);
 
         this.drawStaticBackground();
@@ -539,7 +542,7 @@ export class SimaiRenderer {
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
-        if (t > 1) {
+        if (noteT <= 0) {
             ctx.save();
             ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
@@ -589,7 +592,7 @@ export class SimaiRenderer {
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
-        if (t > 1) {
+        if (noteT <= 0) {
             ctx.save();
             ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
@@ -598,8 +601,8 @@ export class SimaiRenderer {
         }
 
         const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
-            : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"));
+        const imgKey = isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))
+            : (isBreak ? "star_break" : (isDouble ? "star_each" : (this.settings.pinkStars ? "star_pink" : "star")));
         const img = isBreak
             ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
             : this.images[imgKey];
@@ -699,6 +702,34 @@ export class SimaiRenderer {
         }
     }
 
+    getTouchHanabi(s) {
+        const { time: noteTime, pos, touchPos, holdDuration } = s;
+        const noteT = (noteTime - this.globalTime);
+        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+        if (holdDuration) {
+            if (s.isHanabi) {
+                const key = touchPos + pos;
+                const effT = holdDuration + noteT;
+                this.hanabiEffect[key] = {
+                    x: posInfo.x,
+                    y: posInfo.y,
+                    noteT: (this.hanabiEffect[key] ? Math.max(this.hanabiEffect[key].noteT, effT) : effT),
+                    isCenter: touchPos === "C"
+                };
+            }
+            return;
+        }
+        if (s.isHanabi) {
+            const key = touchPos + pos;
+            this.hanabiEffect[key] = {
+                x: posInfo.x,
+                y: posInfo.y,
+                noteT: (this.hanabiEffect[key] ? Math.max(this.hanabiEffect[key].noteT, noteT) : noteT),
+                isCenter: touchPos === "C"
+            };
+        }
+    }
+
     drawTouch(s) {
         const { time: noteTime, pos, touchPos, isDouble, holdDuration, hispeed } = s;
         const noteT = (noteTime - this.globalTime);
@@ -710,7 +741,6 @@ export class SimaiRenderer {
             const imgs = [];
             for (let i = 0; i < 4; i++) {
                 const img = this.images["touchhold_" + i];
-                //if (imgNotExists(img)) return;
                 imgs.push(img);
             }
             const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
@@ -720,7 +750,6 @@ export class SimaiRenderer {
             if (-noteT > holdDuration) {
                 this.ctx.translate(posInfo.x, posInfo.y);
                 this.simpleHitEffect(holdDuration + noteT);
-                if (s.isHanabi) this.simpleHanabi(holdDuration + noteT, s.touchPos === "C");
             } else {
                 const size = this.settings.noteBaseSize * 0.7;
                 const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
@@ -736,7 +765,7 @@ export class SimaiRenderer {
                 this.drawImgAtcenter(touchBorder, size * 2.6);
                 this.ctx.restore();
                 this.ctx.rotate(Math.PI * -0.75);
-                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.35);
+                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
                 for (let i = 0; i < 4; i++) {
                     this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                     this.ctx.rotate(Math.PI / 2);
@@ -755,16 +784,15 @@ export class SimaiRenderer {
         //if (imgNotExists(img)) return;
 
         this.ctx.save();
-        if (t > 1) {
+        if (noteT <= 0) {
             this.ctx.translate(posInfo.x, posInfo.y);
             this.simpleHitEffect(noteT);
-            if (s.isHanabi) this.simpleHanabi(noteT, s.touchPos === "C");
         } else {
             const size = this.settings.noteBaseSize * 0.7;
             const a = this.touchTimeFunction(18 * (1 - t) / 1.5) * 1.6;
 
             this.ctx.translate(posInfo.x, posInfo.y);
-            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.35);
+            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
             for (let i = 0; i < 4; i++) {
                 this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
@@ -843,6 +871,16 @@ export class SimaiRenderer {
             this.ctx.restore();
         }
         this.ctx.restore();
+    }
+
+    drawHanabiEffects() {
+        for (const key in this.hanabiEffect) {
+            const eff = this.hanabiEffect[key];
+            this.ctx.save();
+            this.ctx.translate(eff.x, eff.y);
+            this.simpleHanabi(eff.noteT, eff.isCenter);
+            this.ctx.restore();
+        }
     }
 }
 

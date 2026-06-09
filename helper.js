@@ -1164,6 +1164,7 @@ export function popupWindow({
     const closePopup = () => {
         if (closed) return;
         closed = true;
+        ctx.isClosed = true;
         backdrop.style.pointerEvents = 'none';
         backdrop.style.opacity = '0';
         popup.animate([
@@ -1204,6 +1205,7 @@ export function popupWindow({
             progressContainer.style.display = 'block';
             progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
         },
+        isClosed: false,
         elements: {
             backdrop,
             popup,
@@ -1958,46 +1960,14 @@ window.addEventListener('resize', () => updateBackgroundSquare(_cEl));
 // 初次更新
 setTimeout(() => updateBackgroundSquare(_cEl), 0);
 
-export const createLabeledInput = (value, labelText, assign, isTextarea, inputRefs) => {
-    console.log(`Creating input for ${labelText} with initial value:`, value, "inputrefs:", inputRefs);
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
-
-    const label = document.createElement('label');
-    label.textContent = labelText;
-    label.style.cssText = "font-size:12px;color:#888;margin-bottom:2px;";
-
-    const input = isTextarea ? document.createElement('textarea') : document.createElement('input');
-    if (!isTextarea) {
-        input.type = 'text';
-    }
-    input.value = value ?? '';
-    input.title = labelText;
-    input.placeholder = labelText;
-    input.style.cssText = "padding:4px;border:1px solid #333;border-radius:4px;background:#111;color:#fff;font-size:12px;resize:vertical;padding:8px;";
-
-    input.addEventListener('input', () => {
-        const newValue = input.value;
-        if (assign) {
-            tempData[assign] = newValue;
-        }
-    });
-
-    if (assign) inputRefs[assign] = input;
-
-    wrapper.appendChild(label);
-    wrapper.appendChild(input);
-    return { wrapper, input };
-};
-
 export const createLabeledInput1 = ({
     value,
     labelText,
-    type = 'text', // 'text' | 'textarea' | 'select'
+    type = 'text', // 現在支援 'text' | 'textarea' | 'select' | 'number' | 'range' | 'color' 等等
     assign,
     data = {},
     ref = {},
-    options = [] // for select: array of strings, array of {value,label}, or object map {value:label}
+    options = []
 } = {}) => {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = "display:flex;flex-direction:column;margin-bottom:6px;";
@@ -2011,7 +1981,7 @@ export const createLabeledInput1 = ({
         input = document.createElement('textarea');
     } else if (type === 'select') {
         input = document.createElement('select');
-        // populate options
+        // 填充選項的邏輯保持你寫的，寫得很好
         if (Array.isArray(options)) {
             options.forEach(opt => {
                 const optionEl = document.createElement('option');
@@ -2033,7 +2003,7 @@ export const createLabeledInput1 = ({
         }
     } else {
         input = document.createElement('input');
-        input.type = 'text';
+        input.type = type; // 讓它能直接支援 number、color、range、checkbox 等原生類型！
     }
 
     if (type !== 'select') {
@@ -2043,11 +2013,20 @@ export const createLabeledInput1 = ({
     }
 
     input.title = labelText;
-    if (type !== 'select') input.placeholder = labelText;
-    input.style.cssText = "padding:4px;border:1px solid #333;border-radius:4px;background:#111;color:#fff;font-size:12px;resize:vertical;padding:8px;";
+    if (type !== 'select' && type !== 'color' && type !== 'range') {
+        input.placeholder = labelText;
+    }
+
+    input.style.cssText = "border:1px solid #333;border-radius:4px;background:#111;color:#fff;font-size:12px;resize:vertical;padding:8px;box-sizing:border-box;";
 
     const handleChange = () => {
-        const newValue = input.value;
+        let newValue = input.value;
+
+        // 貼心小優化：如果類型是數字，自動轉成數字型態再存進 data，免得以後計算還要 parseInt
+        if (type === 'number' || type === 'range') {
+            newValue = Number(newValue);
+        }
+
         if (assign) data[assign] = newValue;
     };
 
@@ -2242,54 +2221,6 @@ export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, o
     };
 
     return container;
-};
-export const defaultSettings = {
-    // Game
-    speed: 6.5,
-    touchSpeed: 7,
-    slideSpeed: 0,
-    middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
-    moviebrightness: -4,
-    showSensor: true,
-    pinkStars: false,
-    rotateStars: false,
-    // Misc
-    displayMode: 'simai', // simai 或 visual
-    middleDistance: 0.25,
-    effectDecayTime: 0.4,
-    hanabiEffectDecayTime: 0.8,
-    noteBaseSize: 11,
-    maxSlideCount: 500, // on screen,
-    inputDebounceTime: 800, // ms
-    showSensorTextWhenPaused: true,
-    hideBackgroundWhenPaused: false,
-    disableVideo: false, // 關閉影片背景（如果有的話）
-    visualZoom: 200, // 視覺模式下的縮放倍率
-    slideIllegalRed: false,
-    showUI: false,
-    // Sound & Playback
-    playbackSpeed: 1, // 播放速度，1 是正常速度
-    globalVolume: 0.65, // 全局音量，0 到 1 之間
-    musicVolume: 0.8, // 音樂音量，0 到 1 之間
-    SfxVolume: 1, // 音效音量，0 到 1 之間
-    sfxVolumes: {
-        'clock': 0.8,
-        'answer': 1,
-        'judge': 0.4,
-        'judge_ex': 0.4,
-        'judge_break': 0.4,
-        'judge_break_slide': 0.4,
-        'break': 0.4,
-        'slide': 0.4,
-        'break_slide_start': 0.4,
-        'touch': 0.4,
-        'hanabi': 0.6,
-    },
-    autoPauseOnScroll: true, // 滾動時自動暫停
-
-    restoreDefaults: function () {
-        settings = { ...defaultSettings };
-    }
 };
 
 const activeDebug = () => {

@@ -1590,25 +1590,50 @@ function tintImage(img, r, g, b, amount = 0.5) {
     // 2. 繪製原始圖像
     ctx.drawImage(img, 0, 0, w, h);
 
-    // 3. 套用精確的色彩乘法混合 (若有 CORS 限制則降級回 source-atop)
+    if (amount <= 0) return canvas;
+
+    // 3. 使用 GPU 混合模式套用色彩乘法混合 (若有 CORS 限制則會拋錯降級)
     try {
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-        const len = data.length;
-
-        const factorR = 1 - amount + amount * (r / 255);
-        const factorG = 1 - amount + amount * (g / 255);
-        const factorB = 1 - amount + amount * (b / 255);
-
-        for (let i = 0; i < len; i += 4) {
-            data[i] = Math.min(255, Math.max(0, Math.round(data[i] * factorR))); // R
-            data[i + 1] = Math.min(255, Math.max(0, Math.round(data[i + 1] * factorG))); // G
-            data[i + 2] = Math.min(255, Math.max(0, Math.round(data[i + 2] * factorB))); // B
+        // 建立一個暫時的 Canvas 用來染色
+        let tintCanvas;
+        if (typeof OffscreenCanvas !== 'undefined') {
+            tintCanvas = new OffscreenCanvas(w, h);
+        } else {
+            tintCanvas = document.createElement('canvas');
+            tintCanvas.width = w;
+            tintCanvas.height = h;
         }
+        const tctx = tintCanvas.getContext('2d');
 
-        ctx.putImageData(imgData, 0, 0);
+        // a. 在 tintCanvas 上繪製原圖
+        tctx.drawImage(img, 0, 0, w, h);
+
+        // b. 將顏色填充至非透明區域 (source-in 取得純色剪影)
+        tctx.save();
+        tctx.globalCompositeOperation = 'source-in';
+        tctx.fillStyle = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+        tctx.fillRect(0, 0, w, h);
+        tctx.restore();
+
+        // c. 與原圖進行色彩乘法混合 (multiply)
+        tctx.save();
+        tctx.globalCompositeOperation = 'multiply';
+        tctx.drawImage(img, 0, 0, w, h);
+        tctx.restore();
+
+        // d. 確保透明度通道完全正確
+        tctx.save();
+        tctx.globalCompositeOperation = 'destination-in';
+        tctx.drawImage(img, 0, 0, w, h);
+        tctx.restore();
+
+        // 4. 將染色圖像按 amount 的透明度疊加至主 canvas 上
+        ctx.save();
+        ctx.globalAlpha = amount;
+        ctx.drawImage(tintCanvas, 0, 0);
+        ctx.restore();
     } catch (e) {
-        console.warn("getImageData failed (probably CORS issue): falling back to source-atop method.", e);
+        console.warn("GPU tint failed: falling back to source-atop method.", e);
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
         ctx.save();
@@ -1629,6 +1654,9 @@ let _tintCache = new WeakMap();
  */
 export function getTintedImage(img, amount = 0.5, { r = 255, g = 255, b = 255, colorCode = null } = {}) {
     if (!img) return null;
+
+    // 快速通道：若不需染色，直接回傳原圖，避開快取與 Canvas 染色負載
+    if (amount <= 0) return img;
 
     // 1. 初始化圖片對應的快取 Map (使用 WeakMap 避免記憶體洩漏)
     let map = _tintCache.get(img);
@@ -1654,11 +1682,11 @@ export function getTintedImage(img, amount = 0.5, { r = 255, g = 255, b = 255, c
     }
 
     // 3. 數值邊界檢查與正規化
-    const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
-    r = clamp(r); g = clamp(g); b = clamp(b);
+    const clampVal = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    r = clampVal(r); g = clampVal(g); b = clampVal(b);
 
-    // Amount 取到小數點後兩位，防止 key 跑掉 (例如 0.5000000001)
-    const normalizedAmount = Math.round(amount * 100) / 100;
+    // Amount 正規化為 0.05 粒度，提高閃爍時的快取命中率
+    const normalizedAmount = Math.round(amount * 20) / 20;
 
     // 4. 快取檢索
     const key = `${r}|${g}|${b}|${normalizedAmount}`;

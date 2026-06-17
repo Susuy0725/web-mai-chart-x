@@ -100,6 +100,7 @@
                         </span>
                         <div class="utilitySubmenu">
                             <div class="utilityButton" data-buttonAction="createNew">新建</div>
+                            <div class="utilityButton" data-buttonAction="projectManager">專案總管</div>
                             <div class="utilityButton" data-buttonAction="readFolder">讀取資料夾
                                 <input type="file" webkitdirectory directory multiple />
                             </div>
@@ -160,9 +161,12 @@
                     <option value="1">EASY</option>
                 </select>
             </div>
-
-            <div class="utilityButton noFixedsize" data-buttonAction="readyBeat">預備拍<input type="checkbox"
-                    name="d"><span></span>
+            <div class="utilityButton miniButton" data-buttonAction="playbackSpeedMinus">-
+            </div>
+            <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed">播放速度
+                <input type="number" step="0.25" value="1" name="d" min="0.25" max="2">
+            </div>
+            <div class="utilityButton miniButton" data-buttonAction="playbackSpeedAdd">+
             </div>
             <div class="utilityButton noFixedsize" data-buttonAction="displayMode">顯示模式
                 <select name="d">
@@ -170,8 +174,8 @@
                     <option value="visual">軌道</option>
                 </select>
             </div>
-            <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed">播放速度
-                <input type="number" step="0.25" value="1" name="d" min="0.25" max="2">
+            <div class="utilityButton noFixedsize" data-buttonAction="readyBeat">預備拍<input type="checkbox"
+                    name="d"><span></span>
             </div>
             <div class="utilityButton miniButton" data-buttonAction="help">
                 <span class="material-symbols-outlined" translate="no">

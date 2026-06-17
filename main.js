@@ -1,4 +1,4 @@
-import { openDB, idbGet, idbSet } from './indexDB.js';
+import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from './indexDB.js';
 import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput1, createCustomSlider } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
@@ -43,7 +43,13 @@ let
     previewRender,
     settings = {},
     isContextEdited = false,
-    isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587;
+    isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587,
+    currentProjectId = null,
+    lastEditorValue = '';
+
+// 專案命名空間化的讀寫包裝
+const projSet = (key, value) => idbSetProject(currentProjectId, key, value);
+const projGet = (key) => idbGetProject(currentProjectId, key);
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
@@ -1021,20 +1027,26 @@ function setDataEmpty() {
     inputDebounce();
     saveMaidata();
 
-    idbSet('simai_background_image', null).catch(() => { });
-    idbSet('simai_background_video', null).catch(() => { });
-    idbSet('simai_now_difficulty', nowDifficulty).catch(() => { });
-    idbSet('simai_resource_bgm', null).catch(() => { });
-    idbSet('simai_timeControl', 0).catch(() => { });
+    projSet('background_image', null).catch(() => { });
+    projSet('background_video', null).catch(() => { });
+    projSet('now_difficulty', nowDifficulty).catch(() => { });
+    projSet('resource_bgm', null).catch(() => { });
+    projSet('timeControl', 0).catch(() => { });
 }
 
 fetchFromMainoteButton.addEventListener('click', () => {
-    const { createClient } = supabase;
+    // 以 globalThis 取得 Supabase，避免在 module/非 module 環境中直接存取未宣告的全域變數導致錯誤
+    const createClient = globalThis.supabase?.createClient;
+    if (typeof createClient !== 'function') {
+        console.warn('Supabase client not found on globalThis.');
+        simpleToast({ content: 'Supabase 未載入，請在 index.html 加入 CDN：<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>', type: 'warning', timeout: 4000 });
+        return;
+    }
 
     const SUPABASE_CONFIG = {
         url: "https://tntzyagdhlrdeswyrsjw.supabase.co",
         key: "sb_publishable_eoR0itFK2HCrDAMd-6Jbxg_OYCkGWTJ"
-    }
+    };
     const client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
 
     async function getLevelCharts({
@@ -1053,8 +1065,8 @@ fetchFromMainoteButton.addEventListener('click', () => {
             // 篩選條件
             if (level) query = query.eq('level', level);
             if (difficulty) query = query.eq('difficulty', difficulty);
-            if (version) query = query.eq('version', version);
-            if (category) query = query.eq('category', category);
+            if (version) query = query.eq('songs.version', version);
+            if (category) query = query.eq('songs.genre', category);
 
             if (songTitle) {
                 // 建議：將關鍵字切開做多重模糊搜尋，手感會更好
@@ -1118,7 +1130,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     };
 
     // 定義選項清單
-    const levelOptions = [{ value: '0', text: '全部' }];
+    const levelOptions = [{ value: '', text: '全部' }];
     for (let i = 1; i <= 6; i++) levelOptions.push({ value: i.toString(), text: `Level ${i}` });
     for (let i = 7; i <= 14; i++) {
         levelOptions.push({ value: i.toString(), text: `Level ${i}` })
@@ -1139,32 +1151,32 @@ fetchFromMainoteButton.addEventListener('click', () => {
     const versionOptions = [
         { value: '', text: '全部版本' },
         { value: 'maimai', text: 'maimai' },
-        { value: 'maimai_plus', text: 'maimai PLUS' },
-        { value: 'green', text: 'GreeN' },
-        { value: 'green_plus', text: 'GreeN PLUS' }, // 建議補上 PLUS
-        { value: 'orange', text: 'ORANGE' },
-        { value: 'orange_plus', text: 'ORANGE PLUS' },
-        { value: 'pink', text: 'PiNK' },
-        { value: 'pink_plus', text: 'PiNK PLUS' },
-        { value: 'murasaki', text: 'MURASAKi' },
-        { value: 'murasaki_plus', text: 'MURASAKi PLUS' },
-        { value: 'milk', text: 'MiLK' },
-        { value: 'milk_plus', text: 'MiLK PLUS' },
-        { value: 'finale', text: 'FiNALE' },
-        { value: 'deluxe', text: 'でらっくす (DX)' },
-        { value: 'deluxe_plus', text: 'でらっくす PLUS' },
-        { value: 'splash', text: 'Splash' },
-        { value: 'splash_plus', text: 'Splash PLUS' },
-        { value: 'universe', text: 'UNiVERSE' },
-        { value: 'universe_plus', text: 'UNiVERSE PLUS' },
-        { value: 'festival', text: 'FESTiVAL' },
-        { value: 'festival_plus', text: 'FESTiVAL PLUS' },
-        { value: 'buddies', text: 'BUDDiES' },
-        { value: 'buddies_plus', text: 'BUDDiES PLUS' },
-        { value: 'prism', text: 'PRiSM' },
-        { value: 'prism_plus', text: 'PRiSM PLUS' },
-        { value: 'circle', text: 'CiRCLE' },
-        { value: 'circle_plus', text: 'CiRCLE PLUS' },
+        { value: 'maimai PLUS', text: 'maimai PLUS' },
+        { value: 'GreeN', text: 'GreeN' },
+        { value: 'GreeN PLUS', text: 'GreeN PLUS' },
+        { value: 'ORANGE', text: 'ORANGE' },
+        { value: 'ORANGE PLUS', text: 'ORANGE PLUS' },
+        { value: 'PiNK', text: 'PiNK' },
+        { value: 'PiNK PLUS', text: 'PiNK PLUS' },
+        { value: 'MURASAKi', text: 'MURASAKi' },
+        { value: 'MURASAKi PLUS', text: 'MURASAKi PLUS' },
+        { value: 'MiLK', text: 'MiLK' },
+        { value: 'MiLK PLUS', text: 'MiLK PLUS' },
+        { value: 'FiNALE', text: 'FiNALE' },
+        { value: 'でらっくす', text: 'でらっくす (DX)' },
+        { value: 'でらっくす PLUS', text: 'でらっくす PLUS' },
+        { value: 'Splash', text: 'Splash' },
+        { value: 'Splash PLUS', text: 'Splash PLUS' },
+        { value: 'UNiVERSE', text: 'UNiVERSE' },
+        { value: 'UNiVERSE PLUS', text: 'UNiVERSE PLUS' },
+        { value: 'FESTiVAL', text: 'FESTiVAL' },
+        { value: 'FESTiVAL PLUS', text: 'FESTiVAL PLUS' },
+        { value: 'BUDDiES', text: 'BUDDiES' },
+        { value: 'BUDDiES PLUS', text: 'BUDDiES PLUS' },
+        { value: 'PRiSM', text: 'PRiSM' },
+        { value: 'PRiSM PLUS', text: 'PRiSM PLUS' },
+        { value: 'CiRCLE', text: 'CiRCLE' },
+        { value: 'CiRCLE PLUS', text: 'CiRCLE PLUS' },
     ];
 
     const categoryOptions = [
@@ -1216,6 +1228,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
         const resultContainer = document.createElement('div');
         resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;padding-right:4px;';
 
+        let resultPopupCtx = null;
         result.forEach((chart) => {
             const item = document.createElement('div');
             item.style.cssText = 'padding:10px;background:#2a2a2a;border:1px solid #444;border-radius:4px;cursor:pointer;transition:all 0.2s;';
@@ -1229,13 +1242,83 @@ fetchFromMainoteButton.addEventListener('click', () => {
             `;
 
             item.onclick = () => {
-                if (!confirm(`是否載入譜面：${songTitle}？`)) return;
-                setDataEmpty();
-                editorInput.value = chart.chart_data;
-                saveMaidata();
-                inputDebounce();
-                simpleToast({ content: `已載入：${songTitle}`, type: 'success' });
-                popupWindow.close();
+                const maidataHaveContext = (() => {
+                    if (audioManager.haveBGM && audioManager.haveBGM()) return true;
+                    for (let i = 1; i <= 7; i++) {
+                        if (maidata && maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") return true;
+                    }
+                    return false;
+                })();
+
+                const loadChart = async (mode) => {
+                    if (mode === 'new') {
+                        const newId = await projectCreate('未命名專案');
+                        currentProjectId = newId;
+                        localStorage.setItem('simai_lastProjectId', currentProjectId);
+                        console.log(`[Project] 已建立新專案: ${newId}`);
+                    }
+
+                    setDataEmpty();
+
+                    // chart_data 是純 simai note 資料，需手動組裝 maidata 物件
+                    const diffKey = (chart.difficulty || 'MASTER').toUpperCase();
+                    const diffMap = { 'EASY': 1, 'BASIC': 2, 'ADVANCED': 3, 'EXPERT': 4, 'MASTER': 5, 'RE:MASTER': 6, 'UTAGE': 7 };
+                    const targetDiff = diffMap[diffKey] || 5;
+
+                    maidata = {};
+                    maidata.title = chart.songs?.title || songTitle || '';
+                    maidata[`inote_${targetDiff}`] = chart.chart_data || '';
+
+                    // 設定難度
+                    nowDifficulty = targetDiff;
+                    changeDifficulty.value = nowDifficulty;
+                    projSet('now_difficulty', nowDifficulty).catch(() => { });
+
+                    // 填入編輯器
+                    editorInput.value = maidata[`inote_${targetDiff}`] || '';
+                    getres(editorInput.value);
+                    applyHighlight(editorInput.value);
+
+                    // 重置編輯歷史
+                    undoStack = [];
+                    redoStack = [];
+                    historyMap = {};
+                    lastEditorValue = editorInput.value || '';
+
+                    saveMaidata();
+
+                    // 嘗試以歌曲標題更新專案名稱
+                    const displayName = maidata.title || songTitle;
+                    if (displayName && currentProjectId) {
+                        projectUpdateName(currentProjectId, displayName).catch(() => { });
+                    }
+
+                    simpleToast({ content: `已載入：${songTitle}`, type: 'success', timeout: 1500 });
+                    if (resultPopupCtx) resultPopupCtx.close();
+                };
+
+                if (maidataHaveContext) {
+                    popupWindow({
+                        title: "載入譜面",
+                        content: "偵測到目前已有編輯內容。\n請選擇要如何處理：",
+                        buttons: [
+                            {
+                                text: "覆蓋目前專案",
+                                onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
+                            },
+                            {
+                                text: "開啟為新專案",
+                                onClick: (ctx) => { ctx.close(); loadChart('new'); }
+                            },
+                            {
+                                text: "取消",
+                                hideOnClick: true
+                            }
+                        ]
+                    });
+                } else {
+                    loadChart('overwrite');
+                }
             };
 
             item.onmouseenter = () => { item.style.borderColor = '#0066cc'; item.style.background = '#333'; };
@@ -1243,7 +1326,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
             resultContainer.appendChild(item);
         });
 
-        popupWindow({
+        resultPopupCtx = popupWindow({
             title: `搜尋結果 (${result.length})`,
             customContent: resultContainer,
             buttons: [{ text: "關閉", hideOnClick: true }]
@@ -1262,10 +1345,13 @@ fetchFromMainoteButton.addEventListener('click', () => {
     });
 });
 
-createNewButton.addEventListener('click', () => {
-    if (!confirm('是否要建立新的譜面？這將重置目前編輯內容。')) return;
+createNewButton.addEventListener('click', async () => {
+    if (!confirm('是否要建立新的譜面？這將建立一個新專案。')) return;
+    const newId = await projectCreate('未命名專案');
+    currentProjectId = newId;
+    localStorage.setItem('simai_lastProjectId', currentProjectId);
     setDataEmpty();
-    simpleToast({ content: '已建立新譜面', type: 'success', timeout: 1200 });
+    simpleToast({ content: '已建立新專案', type: 'success', timeout: 1200 });
 });
 
 const getres = ((simaiDataValue) => {
@@ -1376,12 +1462,19 @@ const offsetInputDebounce = debounce(() => {
 }, 500);
 
 const saveMaidata = debounce(() => {
-    idbSet('simai_maidata', maidata).catch((error) => {
+    projSet('maidata', maidata).catch((error) => {
         console.error("儲存maidata到IndexedDB失敗:", error);
     });
+    if (currentProjectId) {
+        const name = maidata?.title || null;
+        projectTouch(currentProjectId).catch(() => { });
+        if (name) projectUpdateName(currentProjectId, name).catch(() => { });
+    }
 }, 2000);
 
 const inputDebounce = debounce(() => {
+    // 記錄歷史 (diff)
+    recordEditorHistory();
     const value = editorInput.value;
     // 解析 Note 邏輯
     getres(value);
@@ -1954,7 +2047,7 @@ chartInfoButton.addEventListener('click', () => {
                     backgroundImage = file;
                     editorBackgroundImage.src = objectUrl;
                     editorBackgroundImage.style.display = 'block';
-                    idbSet('simai_background_image', file);
+                    projSet('background_image', file);
                 }
             };
             fileInput.click();
@@ -2068,7 +2161,7 @@ chartInfoButton.addEventListener('click', () => {
 readyBeatCheckbox.checked = readyBeat;
 readyBeatCheckbox.addEventListener('change', () => {
     readyBeat = readyBeatCheckbox.checked;
-    idbSet('simai_ready_beat', readyBeatCheckbox.checked).then(() => {
+    projSet('ready_beat', readyBeatCheckbox.checked).then(() => {
         console.log("已儲存預備拍狀態到 IndexedDB:", readyBeatCheckbox.checked);
     }).catch((error) => {
         console.error("儲存預備拍狀態到 IndexedDB 失敗:", error);
@@ -2197,8 +2290,7 @@ helpButton.addEventListener('click', () => {
     });
 });
 
-let lastEditorValue = editorInput.value || '';
-const editorInputDebounce = debounce(() => {
+function recordEditorHistory() {
     if (editorInput.value !== lastEditorValue) {
         const change = computeChange(lastEditorValue, editorInput.value);
         if (change) {
@@ -2207,7 +2299,7 @@ const editorInputDebounce = debounce(() => {
         }
         lastEditorValue = editorInput.value;
     }
-}, 500);
+}
 
 let cursorLastIndexTime = 0;
 document.addEventListener('selectionchange', () => {
@@ -2283,9 +2375,6 @@ editorInput.addEventListener('input', () => {
     // 立即更新顏色高亮 (視覺上達到打字立刻出現)
     applyHighlight(value);
 
-    // 延遲記錄歷史狀態
-    editorInputDebounce();
-
     // 延遲處理重解析與存檔 (避免打字時解析幾萬行導致卡頓)
     inputDebounce();
 });
@@ -2326,7 +2415,7 @@ function maidataProcess(e) {
         offsetInputDebounce();
     }
     nowDifficulty = 5; // 預設讀取 inote_5，實際可依需求調整
-    idbSet("simai_now_difficulty", nowDifficulty).then(() => {
+    projSet('now_difficulty', nowDifficulty).then(() => {
         console.log("已儲存當前難度到 IndexedDB:", nowDifficulty);
     }).catch((error) => {
         console.error("儲存當前難度到 IndexedDB 失敗:", error);
@@ -2346,6 +2435,9 @@ function maidataProcess(e) {
     lastEditorValue = editorInput.value || '';
 }
 
+// 暫存使用者選擇的檔案，等待使用者選擇「覆蓋」或「新專案」後再處理
+let _pendingFolderFiles = null;
+
 folderInput.addEventListener('click', (e) => {
     e.stopPropagation();
     const input = folderInput.children[0];
@@ -2361,13 +2453,43 @@ folderInput.addEventListener('click', (e) => {
         return false;
     })();
     if (maidataHaveContext) {
-        const confirmReset = confirm("載入新的資料夾將會覆蓋目前的編輯內容，是否繼續？");
-        if (!confirmReset) {
-            return;
-        }
+        // 有現有內容，先讓使用者選擇怎麼處理
+        _pendingFolderFiles = null; // 先清空
+        popupWindow({
+            title: "讀取資料夾",
+            content: "偵測到目前已有編輯內容。\n請選擇要如何處理：",
+            buttons: [
+                {
+                    text: "覆蓋目前專案",
+                    onClick: (ctx) => {
+                        ctx.close();
+                        // 標記模式後開啟檔案選擇器
+                        _pendingFolderFiles = 'overwrite';
+                        input.value = '';
+                        input.click();
+                    }
+                },
+                {
+                    text: "開啟為新專案",
+                    onClick: (ctx) => {
+                        ctx.close();
+                        _pendingFolderFiles = 'new';
+                        input.value = '';
+                        input.click();
+                    }
+                },
+                {
+                    text: "取消",
+                    hideOnClick: true
+                }
+            ]
+        });
+    } else {
+        // 沒有現有內容，直接開啟檔案選擇器（視為覆蓋）
+        _pendingFolderFiles = 'overwrite';
+        input.value = '';
+        input.click();
     }
-    input.value = '';
-    input.click();
 });
 
 folderInput.children[0].addEventListener('click', (e) => {
@@ -2381,10 +2503,28 @@ folderInput.children[0].onchange = async (event) => {
         console.warn("未選擇任何檔案");
         return;
     }
+
+    const mode = _pendingFolderFiles || 'overwrite';
+    _pendingFolderFiles = null;
+
+    if (mode === 'new') {
+        // 建立新專案
+        const newId = await projectCreate('未命名專案');
+        currentProjectId = newId;
+        localStorage.setItem('simai_lastProjectId', currentProjectId);
+        console.log(`[Project] 已建立新專案: ${newId}`);
+    }
+
     setDataEmpty(); // 先清空現有資料，避免讀取失敗時殘留舊資料干擾
     await handleFolderInput(files);
     setEndtime(endTime);
     draw();
+
+    // 嘗試用 maidata.title 更新專案名稱
+    if (maidata?.title && currentProjectId) {
+        projectUpdateName(currentProjectId, maidata.title).catch(() => { });
+    }
+    simpleToast({ content: mode === 'new' ? '已開啟為新專案' : '已載入至目前專案', type: 'success', timeout: 1500 });
 };
 
 async function handleFolderInput(files) {
@@ -2433,7 +2573,7 @@ async function handleFolderInput(files) {
             const url = URL.createObjectURL(file);
             await audioManager.setBackgroundMusic(url, file);
             setEndtime(endTime);
-            idbSet('simai_resource_bgm', file).then(() => {
+            projSet('resource_bgm', file).then(() => {
                 console.log('已儲存音樂檔到 IndexedDB');
             }).catch((error) => {
                 console.error('儲存音樂檔到 IndexedDB 失敗:', error);
@@ -2455,7 +2595,7 @@ async function handleFolderInput(files) {
                 editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
                 editorBackgroundVideo.style.display = 'none';
                 editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                idbSet('simai_background_video', file).catch((error) => {
+                projSet('background_video', file).catch((error) => {
                     console.error('儲存背景圖到 IndexedDB 失敗:', error);
                 });
                 continue;
@@ -2466,7 +2606,7 @@ async function handleFolderInput(files) {
                 editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
                 editorBackgroundImage.style.display = 'block';
                 editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                idbSet('simai_background_image', file).catch((error) => {
+                projSet('background_image', file).catch((error) => {
                     console.error('儲存背景圖到 IndexedDB 失敗:', error);
                 });
                 continue;
@@ -2481,7 +2621,7 @@ async function handleFolderInput(files) {
                 editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
                 editorBackgroundVideo.style.display = 'none';
                 editorBackgroundVideo.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
-                idbSet('simai_background_video', file).catch((error) => {
+                projSet('background_video', file).catch((error) => {
                     console.error('儲存背景圖到 IndexedDB 失敗:', error);
                 });
                 continue;
@@ -2536,7 +2676,7 @@ hideEditorButton.addEventListener('click', () => {
     hideEditorButton.children[0].innerText = currentlyHidden ? 'right_panel_close' : 'right_panel_open';
 
     // 儲存的是 "是否隱藏" 的狀態
-    idbSet('simai_hide_editor', !currentlyHidden).then(() => {
+    projSet('hide_editor', !currentlyHidden).then(() => {
         //console.log("已儲存編輯器顯示狀態到 IndexedDB:", !nextStateVisible);
     }).catch((error) => {
         console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
@@ -2550,7 +2690,7 @@ hideEditorButton.addEventListener('click', () => {
 
 const difficultyInputDebounce = debounce(() => {
     const difficulty = changeDifficulty.value;
-    idbSet('simai_now_difficulty', difficulty).then(() => {
+    projSet('now_difficulty', difficulty).then(() => {
         console.log("已儲存難度到 IndexedDB:", difficulty);
     }).catch((error) => {
         console.error("儲存難度到 IndexedDB 失敗:", error);
@@ -2926,7 +3066,6 @@ editorInput.addEventListener('beforeinput', (e) => {
 
             // 3. 觸發業務邏輯更新
             if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
-            if (typeof editorInputDebounce === 'function') editorInputDebounce();
             if (typeof inputDebounce === 'function') inputDebounce();
 
             // 🔴 釋放防護鎖
@@ -2950,7 +3089,6 @@ editorInput.addEventListener('keydown', (e) => {
         editorInput.selectionStart = editorInput.selectionEnd = start - 1;
 
         if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
-        if (typeof editorInputDebounce === 'function') editorInputDebounce();
         if (typeof inputDebounce === 'function') inputDebounce();
     }
 });
@@ -2965,7 +3103,7 @@ addMusicButton.addEventListener('click', () => {
             const url = URL.createObjectURL(file);
             await audioManager.setBackgroundMusic(url, file);
             setEndtime(endTime);
-            idbSet('simai_resource_bgm', file);
+            projSet('resource_bgm', file);
         }
     };
     input.click();
@@ -3117,7 +3255,7 @@ const slideInputDebounce = debounce(() => {
             }
         }
     }
-    idbSet('simai_timeControl', realTime).catch((error) => {
+    projSet('timeControl', realTime).catch((error) => {
         console.error("儲存時間控制值到 IndexedDB 失敗:", error);
     });
 }, 300);
@@ -3340,7 +3478,7 @@ const applySelectedRotation = (direction) => {
     editorInput.selectionEnd = start + rotated.length;
     editorInput.setSelectionRange(start, start + rotated.length);
     applyHighlight(newText);
-    editorInputDebounce();
+    recordEditorHistory();
     inputDebounce();
     editorInput.focus();
 };
@@ -3381,7 +3519,7 @@ function applyVerticalFlip() {
     editorInput.selectionEnd = start + rotated.length;
     editorInput.setSelectionRange(start, start + rotated.length);
     applyHighlight(newText);
-    editorInputDebounce();
+    recordEditorHistory();
     inputDebounce();
     editorInput.focus();
 }
@@ -3413,7 +3551,7 @@ function applyHorizontalFlip() {
     editorInput.selectionEnd = start + rotated.length;
     editorInput.setSelectionRange(start, start + rotated.length);
     applyHighlight(newText);
-    editorInputDebounce();
+    recordEditorHistory();
     inputDebounce();
     editorInput.focus();
 }
@@ -3444,13 +3582,29 @@ function update(timestamp) {
 
     // 2. 邏輯更新區塊：僅在播放狀態下推進時間
     if (isPlaying) {
-        if (playStartTimestamp === null) {
-            playStartTimestamp = performance.now();
-            playStartRealTime = realTime;
+        let timeUpdatedByBgm = false;
+        if (audioManager.haveBGM()) {
+            const bgmTime = audioManager.getBGMTime();
+            if (bgmTime !== null) {
+                realTime = bgmTime;
+                globalTime = realTime - musicDelay;
+                timeUpdatedByBgm = true;
+                // 更新 playStart 以供 fallback 使用
+                playStartTimestamp = performance.now();
+                playStartRealTime = realTime;
+            }
         }
-        const elapsed = (performance.now() - playStartTimestamp) / 1000;
-        realTime = playStartRealTime + elapsed * bp;
-        globalTime = realTime - musicDelay;
+
+        if (!timeUpdatedByBgm) {
+            if (playStartTimestamp === null) {
+                playStartTimestamp = performance.now();
+                playStartRealTime = realTime;
+            }
+            const elapsed = (performance.now() - playStartTimestamp) / 1000;
+            realTime = playStartRealTime + elapsed * bp;
+            globalTime = realTime - musicDelay;
+        }
+
         if (settings.cursorFollow) {
             cursorLastIndexTime = dataIndexToTime[nowIndex] || 0; // 更新游標對應的時間
             const point = rawData.slice(0, nowIndex + 1).join(',').length;
@@ -3459,15 +3613,8 @@ function update(timestamp) {
             editorInput.selectionEnd = point;
         }
 
-        // BGM 與影片同步邏輯（每秒檢查一次）
+        // 背景影片同步邏輯（每秒檢查一次）
         if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
-            const bgmTime = audioManager.haveBGM() ? audioManager.getBGMTime() : null;
-            if (bgmTime !== null && Math.abs(bgmTime - realTime) > 0.03) {
-                realTime = bgmTime;
-                globalTime = realTime - musicDelay;
-            }
-
-            // 背景影片同步邏輯[cite: 2]
             if (editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 2) {
                 const nowSec = performance.now() / 1000;
                 const diff = Math.abs(editorBackgroundVideo.currentTime - realTime);
@@ -3899,6 +4046,18 @@ recordVideoButton.addEventListener('click', async () => {
 
 window.addEventListener('resize', resize);
 
+getButton("playbackSpeedAdd", "utility").addEventListener("click", () => {
+    let sp = settings.playbackSpeed + 0.25;
+    if (sp >= 2.0) sp = 2.0;
+    setPlaybackSpeed(sp);
+});
+
+getButton("playbackSpeedMinus", "utility").addEventListener("click", () => {
+    let sp = settings.playbackSpeed - 0.25;
+    if (sp <= 0.25) sp = 0.25;
+    setPlaybackSpeed(sp);
+});
+
 window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) {
         // 🔴 修正：拿掉外面的 e.preventDefault()，改在需要攔截的 case 內個別加上
@@ -3934,7 +4093,7 @@ window.addEventListener('keydown', (e) => {
             case 'z': {
                 // 🟢 關鍵優化：只有當焦點不在編輯器輸入框內時，才觸發譜面架構的 Undo
                 // 這樣使用者在打字時，Ctrl+Z 依然能正常撤銷他剛剛打錯的字！
-                if (document.activeElement !== editorInput) {
+                if (document.activeElement === editorInput) {
                     e.preventDefault();
                     undoButton.click();
                     simpleToast({ content: '復原譜面變更', type: 'info', timeout: 1200 });
@@ -3944,7 +4103,7 @@ window.addEventListener('keydown', (e) => {
 
             case 'y': {
                 // 🟢 同理優化重作邏輯
-                if (document.activeElement !== editorInput) {
+                if (document.activeElement === editorInput) {
                     e.preventDefault();
                     redoButton.click();
                     simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
@@ -4200,6 +4359,305 @@ function draw(dt = 0) {
     });
 }
 
+// ============================================================
+// 專案管理核心函數
+// ============================================================
+
+/**
+ * 載入當前 currentProjectId 的專案資料到編輯器
+ * @param {function} [step] - 進度回呼 (progress, message)
+ */
+async function loadProjectData(step) {
+    const s = step || (() => { });
+    s(84, "正在載入專案資料...");
+
+    const [
+        savedTimeControl,
+        savedBgm,
+        savedMaiData,
+        savedDifficulty,
+        bg,
+        bgVideo,
+        hideEditor,
+        savedReadyBeat,
+    ] = await Promise.all([
+        projGet('timeControl'),
+        projGet('resource_bgm'),
+        projGet('maidata'),
+        projGet('now_difficulty'),
+        projGet('background_image'),
+        projGet('background_video'),
+        projGet('hide_editor'),
+        projGet('ready_beat'),
+    ]);
+
+    readyBeat = savedReadyBeat === true || savedReadyBeat === 'true';
+    readyBeatCheckbox.checked = readyBeat;
+
+    if (savedTimeControl && !isNaN(savedTimeControl)) {
+        realTime = savedTimeControl;
+        globalTime = realTime - musicDelay;
+    } else {
+        realTime = 0;
+        globalTime = -musicDelay;
+    }
+
+    if (savedDifficulty) {
+        nowDifficulty = savedDifficulty;
+        changeDifficulty.value = nowDifficulty;
+    }
+
+    if (savedMaiData) {
+        s(88, "還原編輯內容...");
+        maidata = savedMaiData;
+        editorInput.value = maidata["inote_" + nowDifficulty] || '';
+        getres(editorInput.value);
+        applyHighlight(editorInput.value);
+
+        // 初始化時同步 lastEditorValue 並清空當前 session 歷史
+        undoStack = [];
+        redoStack = [];
+        historyMap = {};
+        lastEditorValue = editorInput.value || '';
+
+        musicDelay = parseFloat(maidata.first) || 0;
+        offsetInput.value = musicDelay;
+        offsetInputDebounce();
+    } else {
+        maidata = {};
+        editorInput.value = '';
+        applyHighlight('');
+        undoStack = [];
+        redoStack = [];
+        historyMap = {};
+        lastEditorValue = '';
+        musicDelay = 0;
+        offsetInput.value = 0;
+    }
+
+    if (bgVideo) {
+        backgroundVideo = bgVideo;
+        editorBackgroundVideo.src = URL.createObjectURL(bgVideo);
+        editorBackgroundVideo.style.display = 'none';
+        editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+    } else {
+        backgroundVideo = null;
+        editorBackgroundVideo.src = "";
+        editorBackgroundVideo.style.display = 'none';
+    }
+
+    if (bg) {
+        backgroundImage = bg;
+        editorBackgroundImage.src = URL.createObjectURL(bg);
+        editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
+        editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+    } else {
+        backgroundImage = null;
+        editorBackgroundImage.src = "";
+        editorBackgroundImage.style.display = 'none';
+    }
+
+    if (savedBgm) {
+        s(95, "正在還原背景音樂...");
+        await audioManager.setBackgroundMusic(savedBgm);
+        setEndtime(endTime);
+    } else {
+        audioManager.removeBackgroundMusic().catch(() => { });
+    }
+
+    if (hideEditor) {
+        hideEditorButton.children[0].textContent = "right_panel_open";
+        editorContainer.dataset.hidden = 'true';
+    } else {
+        hideEditorButton.children[0].textContent = "right_panel_close";
+        delete editorContainer.dataset.hidden;
+    }
+
+    update();
+    draw();
+    updateSlider(realTime);
+}
+
+/**
+ * 切換到指定專案（完整流程：停止播放 → 清除狀態 → 載入新專案）
+ * @param {string} projectId
+ */
+async function loadProject(projectId) {
+    // 停止播放
+    if (playButton.dataset.playing === 'true') {
+        playButton.dataset.playing = 'false';
+        playButton.children[0].innerText = "play_arrow";
+        playStartTimestamp = null;
+        audioManager.stopBGM();
+    }
+
+    currentProjectId = projectId;
+    localStorage.setItem('simai_lastProjectId', currentProjectId);
+
+    // 載入專案資料
+    await loadProjectData();
+
+    const list = await projectList();
+    const proj = list.find(p => p.id === projectId);
+    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
+}
+
+/**
+ * 開啟專案總管 UI
+ */
+function openProjectManager() {
+    const setStyle = (el, styles) => Object.assign(el.style, styles);
+
+    const buildList = async (container) => {
+        container.innerHTML = '';
+        const list = await projectList();
+
+        if (list.length === 0) {
+            container.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">尚無任何專案</div>';
+            return;
+        }
+
+        // 按更新時間排序（最近的在上）
+        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+        for (const proj of list) {
+            const isCurrent = proj.id === currentProjectId;
+            const row = document.createElement('div');
+            setStyle(row, {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 10px',
+                background: isCurrent ? '#333' : '#1a1a1a',
+                border: isCurrent ? '1px solid #ccc' : '1px solid #333',
+                borderRadius: '6px',
+                marginBottom: '6px',
+                gap: '8px',
+                transition: 'background 0.15s',
+            });
+
+            // 左側：名稱 + 時間
+            const infoDiv = document.createElement('div');
+            setStyle(infoDiv, { flex: '1', minWidth: '0', overflow: 'hidden' });
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = proj.name || '未命名專案';
+            setStyle(nameSpan, {
+                fontWeight: '600',
+                fontSize: '13px',
+                color: isCurrent ? '#fff' : '#ccc',
+                display: 'block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            });
+            if (isCurrent) nameSpan.textContent += ' （目前）';
+
+            const timeSpan = document.createElement('span');
+            const d = new Date(proj.updatedAt || proj.createdAt);
+            timeSpan.textContent = `上次編輯：${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+            setStyle(timeSpan, { fontSize: '10px', color: '#888', display: 'block', marginTop: '2px' });
+
+            infoDiv.appendChild(nameSpan);
+            infoDiv.appendChild(timeSpan);
+
+            // 右側：按鈕
+            const btnGroup = document.createElement('div');
+            setStyle(btnGroup, { display: 'flex', gap: '4px', flexShrink: '0' });
+
+            const makeBtn = (text, onClick, color = '#404040') => {
+                const btn = document.createElement('button');
+                btn.textContent = text;
+                setStyle(btn, {
+                    background: color,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                });
+                btn.addEventListener('mouseenter', () => btn.style.opacity = '0.8');
+                btn.addEventListener('mouseleave', () => btn.style.opacity = '1');
+                btn.onclick = onClick;
+                return btn;
+            };
+
+            if (!isCurrent) {
+                btnGroup.appendChild(makeBtn('開啟', async () => {
+                    await loadProject(proj.id);
+                    buildList(container);
+                }, '#2d6e2d'));
+            }
+
+            btnGroup.appendChild(makeBtn('重新命名', async () => {
+                const newName = prompt('請輸入新的專案名稱：', proj.name || '');
+                if (newName !== null && newName.trim() !== '') {
+                    await projectRename(proj.id, newName.trim());
+                    buildList(container);
+                }
+            }));
+
+            btnGroup.appendChild(makeBtn('刪除', async () => {
+                if (isCurrent) {
+                    alert('無法刪除目前正在使用的專案。\n請先切換到其他專案後再刪除。');
+                    return;
+                }
+                if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
+                await projectDelete(proj.id);
+                buildList(container);
+                simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
+            }, '#6e2d2d'));
+
+            row.appendChild(infoDiv);
+            row.appendChild(btnGroup);
+            container.appendChild(row);
+        }
+    };
+
+    const container = document.createElement('div');
+    setStyle(container, {
+        maxHeight: '350px',
+        overflowY: 'auto',
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#555 transparent',
+    });
+
+    buildList(container);
+
+    popupWindow({
+        title: "專案總管",
+        customContent: container,
+        width: 480,
+        maxWidth: 560,
+        buttons: [
+            {
+                text: "新建空白專案",
+                onClick: async () => {
+                    const name = prompt('請輸入專案名稱：', '未命名專案');
+                    if (name === null) return;
+                    const newId = await projectCreate(name.trim() || '未命名專案');
+                    await loadProject(newId);
+                    buildList(container);
+                }
+            },
+            {
+                text: "關閉",
+                hideOnClick: true,
+            }
+        ]
+    });
+}
+
+// 綁定專案總管按鈕
+const projectManagerButton = getButton("projectManager", "utility");
+if (projectManagerButton) {
+    projectManagerButton.addEventListener('click', () => {
+        openProjectManager();
+    });
+}
+
 function _init() {
     popupWindow({
         title: "正在準備環境...",
@@ -4212,33 +4670,35 @@ function _init() {
                 await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
 
                 images = await loadAllImages((pct, key) => step(40 + pct * 0.4, `正在載入素材: ${key} (${Math.round(pct)}%)`));
-                readyBeat = await idbGet('simai_ready_beat') === 'true';
 
-                step(80, "正在恢復上次的編輯狀態...");
-                const [
-                    savedTimeControl,
-                    savedBgm,
-                    savedMaiData,
-                    savedDifficulty,
-                    bg,
-                    bgVideo,
-                    hideEditor,
-                    savedSettings,
-                ] = await Promise.all([
-                    idbGet('simai_timeControl'),
-                    idbGet('simai_resource_bgm'),
-                    idbGet('simai_maidata'),
-                    idbGet('simai_now_difficulty'),
-                    idbGet('simai_background_image'),
-                    idbGet('simai_background_video'),
-                    idbGet('simai_hide_editor'),
-                    idbGet('simai_settings'),
-                ]);
-                if (savedTimeControl && !isNaN(savedTimeControl)) {
-                    realTime = savedTimeControl; globalTime = realTime - musicDelay; update();
+                // === 專案系統初始化 ===
+                step(78, "正在初始化專案系統...");
+                const migratedId = await migrateFromLegacy();
+                if (migratedId) {
+                    currentProjectId = migratedId;
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                    console.log(`[Project] 遷移完成，使用專案: ${currentProjectId}`);
+                } else {
+                    // 嘗試從 localStorage 取得上次使用的專案
+                    const lastId = localStorage.getItem('simai_lastProjectId');
+                    const list = await projectList();
+                    if (lastId && list.some(p => p.id === lastId)) {
+                        currentProjectId = lastId;
+                    } else if (list.length > 0) {
+                        // 使用最後更新的專案
+                        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                        currentProjectId = list[0].id;
+                    } else {
+                        // 全新使用者，建立預設空白專案
+                        currentProjectId = await projectCreate('未命名專案');
+                    }
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
                 }
+
+                // === 載入全域設定 (不隨專案切換) ===
+                step(80, "正在恢復設定...");
+                const savedSettings = await idbGet('simai_settings');
                 if (savedSettings) {
-                    step(84, "還原設定...");
                     settings = JSON.parse(savedSettings);
                     let isMissingSettings = false;
                     for (const key in defaultSettings) {
@@ -4256,47 +4716,12 @@ function _init() {
                     settings = { ...defaultSettings }
                     await idbSet('simai_settings', JSON.stringify(settings));
                 };
-                if (savedDifficulty) { nowDifficulty = savedDifficulty; changeDifficulty.value = nowDifficulty; }
-                if (savedMaiData) {
-                    step(88, "還原編輯內容...");
-                    maidata = savedMaiData;
-                    editorInput.value = maidata["inote_" + nowDifficulty] || '';
-                    getres(editorInput.value);
-                    applyHighlight(editorInput.value);
 
-                    // 初始化時同步 lastEditorValue 並清空當前 session 歷史
-                    undoStack = [];
-                    redoStack = [];
-                    historyMap = {};
-                    lastEditorValue = editorInput.value || '';
+                // === 載入當前專案資料 ===
+                step(84, "正在恢復上次的編輯狀態...");
+                await loadProjectData(step);
 
-                    musicDelay = parseFloat(maidata.first) || 0;
-                    offsetInput.value = musicDelay;
-                    offsetInputDebounce();
-                };
-                if (bgVideo) {
-                    backgroundVideo = bgVideo;
-                    editorBackgroundVideo.src = URL.createObjectURL(bgVideo);
-                    editorBackgroundVideo.style.display = 'none';
-                    editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                }
-                if (bg) {
-                    // 保留原本的 Blob，並同時將畫面上的 <img> 元素設為該來源
-                    backgroundImage = bg;
-                    editorBackgroundImage.src = URL.createObjectURL(bg);
-                    editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
-                    editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                }
-                if (savedBgm) {
-                    step(95, "正在還原背景音樂...");
-                    await audioManager.setBackgroundMusic(savedBgm);
-                    setEndtime(endTime);
-                }
                 window.settings = settings;
-                if (hideEditor) {
-                    hideEditorButton.children[0].textContent = "right_panel_open";
-                    editorContainer.dataset.hidden = 'true';
-                }
                 changeDisplayMode.value = settings.displayMode ?? 'simai';
                 renderer = new SimaiRenderer(canvas, settings);
                 renderer.setImages(images);
@@ -4310,7 +4735,7 @@ function _init() {
                 setPlaybackSpeed(settings.playbackSpeed);
                 draw();
                 updateSlider(realTime);
-                setEditorCss(!hideEditor);
+                setEditorCss(!await projGet('hide_editor'));
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();
             } catch (e) {
@@ -4352,7 +4777,7 @@ function _init() {
 
                             // 2. 篩選並刪除符合條件的 Key
                             allKeys.forEach(key => {
-                                if (typeof key === 'string' && key.startsWith('simai_')) {
+                                if (typeof key === 'string' && (key.startsWith('simai_') || key.startsWith('proj_') || key === '__project_list__')) {
                                     store.delete(key);
                                     deleteCount++;
                                 }

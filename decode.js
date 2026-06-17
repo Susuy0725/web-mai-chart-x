@@ -112,7 +112,7 @@ export function simaiDecode(data = "", baseOffset = true) {
             if (e.includes('`')) {
                 const rawsub = e.split('`').map(s => s.trim());
                 if (rawsub.some(s => s === '')) {
-                    pushWarn("Empty note detected in backticks, skipping:", { errpos: noteCommaIndex });
+                    pushWarn("Empty note detected in backticks, ", { errpos: noteCommaIndex });
                     continue;
                 }
                 const subNotes = e.split('`').filter(n => n.trim() !== '');
@@ -170,7 +170,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                     }
                 })();
                 if (splitr.some(s => s === '')) {
-                    pushWarn("Empty note detected in split, skipping:", { errpos: noteCommaIndex });
+                    pushWarn("Empty note detected in split, ", { errpos: noteCommaIndex });
                     return;
                 }
                 if (splitr.length === 1 && !isNaN(splitr[0]) && splitr[0].length === 2) {
@@ -239,7 +239,7 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     // 🔥 關鍵檢查：如果現在 tempCheck 還剩下任何字元，代表有非法輸入！
                     if (tempCheck.length > 0) {
-                        pushWarn(`Invalid character(s) "${tempCheck}" detected in note "${noteStr}", skipping:`, { errpos: noteCommaIndex });
+                        pushWarn(`Invalid character(s) "${tempCheck}" detected in note "${noteStr}", `, { errpos: noteCommaIndex });
                         return; // 跳過這個音符，不進入後續邏輯
                     }
 
@@ -283,7 +283,7 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     // 檢查 Flags
                     if (noteStr.includes('b') && !slideMatch) {
-                        if (touchMatch) return pushWarn("Break flag 'b' is not allowed in touch notes, skipping:", { errpos: noteCommaIndex });
+                        if (touchMatch) return pushWarn("Break flag 'b' is not allowed in touch notes, ", { errpos: noteCommaIndex });
                         noteObj.isBreak = true
                         breakCounts++;
                         tapCounts--;
@@ -291,8 +291,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                     };
                     if (noteStr.includes('$')) {
                         if (slideMatch) pushWarn("Slide already have a star! This is unnecessary,", { errpos: noteCommaIndex });
-                        if (touchMatch) return pushWarn("Star flag '$' is not allowed in touch notes, skipping:", { errpos: noteCommaIndex });
-                        if (noteStr.includes('h')) return pushWarn("Star flag '$' is not allowed in hold notes, skipping:", { errpos: noteCommaIndex });
+                        if (touchMatch) return pushWarn("Star flag '$' is not allowed in touch notes, ", { errpos: noteCommaIndex });
+                        if (noteStr.includes('h')) return pushWarn("Star flag '$' is not allowed in hold notes, ", { errpos: noteCommaIndex });
                         noteObj.isStar = true
                         noteStr = noteStr.replace(/\$/g, '');
                     };
@@ -304,17 +304,17 @@ export function simaiDecode(data = "", baseOffset = true) {
                         if (!slideMatch && touchMatch) {
                             noteObj.isHanabi = true;
                             if (noteStr.replace(/f/, '').includes('f')) {
-                                pushWarn("Multiple Hanabi flags 'f' detected, skipping:", { errpos: noteCommaIndex });
+                                pushWarn("Multiple Hanabi flags 'f' detected, ", { errpos: noteCommaIndex });
                                 return;
                             }
                         } else {
-                            pushWarn("Hanabi flag 'f' is not allowed in other notes!, skipping:", { errpos: noteCommaIndex });
+                            pushWarn("Hanabi flag 'f' is not allowed in other notes!, ", { errpos: noteCommaIndex });
                             return;
                         }
                     }
                     if (noteStr.includes('h')) {
                         if (slideMatch) {
-                            pushWarn("Hold flag 'h' is not allowed in slide notes, skipping:", { errpos: noteCommaIndex });
+                            pushWarn("Hold flag 'h' is not allowed in slide notes, ", { errpos: noteCommaIndex });
                             return;
                         }
                         noteObj.isHold = true;
@@ -322,7 +322,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                         const match = noteStr.match(/\[([^\[\]]*)\]/);
                         const residue = noteStr.replace(/\[([^\[\]]*)\]/, '').replace(/h/, '');
                         if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
-                            pushWarn("Invalid format in hold note, skipping:", { errpos: noteCommaIndex });
+                            pushWarn("Invalid format in hold note, ", { errpos: noteCommaIndex });
                             return;
                         }
                         //noteObj.holdDuration = parseBeats("1280:1", nowBpm).time;
@@ -331,7 +331,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             const durationStr = match[1].trim();
                             const { time: duration, _ } = parseBeats(durationStr, nowBpm);
                             if (duration < 0 || isNaN(duration) || duration === Infinity) {
-                                pushWarn("Invalid hold syntax in note, skipping:", { errpos: noteCommaIndex });
+                                pushWarn("Invalid hold syntax in note, ", { errpos: noteCommaIndex });
                                 return;
                             }
                             noteObj.holdDuration = duration;
@@ -350,13 +350,13 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                     }
                     if (noteStr.includes('@') && !slideMatch) {
-                        return pushWarn("Star flag '@' is not allowed in other notes, skipping:", { errpos: noteCommaIndex });
+                        return pushWarn("Star flag '@' is not allowed in other notes, ", { errpos: noteCommaIndex });
                     }
                     if (noteStr.includes('!') && !slideMatch) {
-                        return pushWarn("Star flag '!' is not allowed in other notes, skipping:", { errpos: noteCommaIndex });
+                        return pushWarn("Star flag '!' is not allowed in other notes, ", { errpos: noteCommaIndex });
                     }
                     if (noteStr.includes('?') && !slideMatch) {
-                        return pushWarn("Star flag '?' is not allowed in other notes, skipping:", { errpos: noteCommaIndex });
+                        return pushWarn("Star flag '?' is not allowed in other notes, ", { errpos: noteCommaIndex });
                     }
                     let noHeadSlide = false, hideHeadSlide = false;
                     if (slideMatch && !noteStr.includes('h')) {
@@ -377,13 +377,13 @@ export function simaiDecode(data = "", baseOffset = true) {
                         }
                         for (let i = 0; i < slideParts.length; i++) {
                             const slidePartMatch = slideParts[i].match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-                            if (!slidePartMatch) return pushWarn("Missing slide type in slide note, skipping:", { errpos: noteCommaIndex });
+                            if (!slidePartMatch) return pushWarn("Missing slide type in slide note, ", { errpos: noteCommaIndex });
                             const timeMatches = slideParts[i].match(/\[([^\[\]]*)\]/g);
                             if (!timeMatches) return pushWarn("Missing time format:", { errpos: noteCommaIndex });
                             const timeValues = timeMatches.map(m => m.slice(1, -1));
                             const residue = slideParts[i].replace(/\[([^\[\]]*)\]/g, '');
                             if (residue.includes('[') || residue.includes(']')) {
-                                pushWarn("Invalid time format or empty in slide note, skipping:", { errpos: noteCommaIndex });
+                                pushWarn("Invalid time format or empty in slide note, ", { errpos: noteCommaIndex });
                                 return;
                             }
                             noteObj.isStar = true;
@@ -401,7 +401,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             }
                             if (p[0].includes('?')) {
                                 if (!noteObj.isStar) {
-                                    return pushWarn("Star flag '@' at here is not allowed, skipping:", { errpos: noteCommaIndex });
+                                    return pushWarn("Star flag '@' at here is not allowed, ", { errpos: noteCommaIndex });
                                 }
                                 noHeadSlide = true;
                                 p[0] = p[0].replace(/\?/g, '');
@@ -409,10 +409,10 @@ export function simaiDecode(data = "", baseOffset = true) {
                             }
                             if (p[0].includes('!')) {
                                 if (!noteObj.isStar) {
-                                    return pushWarn("Star flag '@' at here is not allowed, skipping:", { errpos: noteCommaIndex });
+                                    return pushWarn("Star flag '@' at here is not allowed, ", { errpos: noteCommaIndex });
                                 }
                                 if (noHeadSlide) {
-                                    pushWarn("Using '!' and '?' at the same time is contradictory, skipping:", { errpos: noteCommaIndex });
+                                    pushWarn("Using '!' and '?' at the same time is contradictory, ", { errpos: noteCommaIndex });
                                 }
                                 hideHeadSlide = true;
                                 p[0] = p[0].replace(/!/g, '');
@@ -431,7 +431,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 timeValues.forEach((t, i) => {
                                     const { time: duration, delay } = parseBeats(t, nowBpm, true);
                                     if (duration < 0 || isNaN(duration)) {
-                                        pushWarn("Invalid time format in slide note, skipping:", { errpos: noteCommaIndex });
+                                        pushWarn("Invalid time format in slide note, ", { errpos: noteCommaIndex });
                                         error = true;
                                         return;
                                     }
@@ -452,7 +452,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 const res = getSlidePath(head, end, type, mid);
                                 const path = res.path;
                                 if (res.illegal) {
-                                    pushWarn(`Illegal slide ${head}${type}${mid ?? ''}${end}, skipping:`, { errpos: noteCommaIndex });
+                                    pushWarn(`Illegal slide ${head}${type}${mid ?? ''}${end}, `, { errpos: noteCommaIndex });
                                 };
                                 return { head, end, mid, type, path, len: path.totalLength, illegal: res.illegal };
                             });
@@ -634,8 +634,8 @@ function getSlidePath(start, end, type, mid = null) {
         }
         case 'pp': {
             const cir = {
-                x: Math.cos((start - 0.972) * Math.PI / 4) * innerCirleBase * 0.456,
-                y: Math.sin((start - 0.972) * Math.PI / 4) * innerCirleBase * 0.456,
+                x: Math.cos((start - 0.971) * Math.PI / 4) * innerCirleBase * 0.456,
+                y: Math.sin((start - 0.971) * Math.PI / 4) * innerCirleBase * 0.456,
             };
             r.moveTo(startInfo.x, startInfo.y);
             r.lineToArc(cir.x, cir.y, innerCirleBase * 0.472, startInfo.rot - Math.PI);
@@ -644,6 +644,7 @@ function getSlidePath(start, end, type, mid = null) {
                     (c == 0) * -0.3 +
                     (c == 1) * -0.35 +
                     (c == 2) * -0.2 +
+                    (c == 4) * 0.02 +
                     (c == 6) * -0.15 +
                     (c == 7) * -0.2
                 ), true, (end > start) && (end - start + 8) % 8 >= 3 || start > end && (end - start + 8) % 8 == 3);
@@ -664,6 +665,7 @@ function getSlidePath(start, end, type, mid = null) {
                     (c == 0) * 0.3 +
                     (c == 1) * 0.35 +
                     (c == 2) * 0.2 +
+                    (c == 4) * -0.02 +
                     (c == 6) * 0.15 +
                     (c == 7) * 0.2
                 ), false, (start > end) && (start - end + 8) % 8 >= 3 || end > start && (start - end + 8) % 8 == 3);

@@ -10,6 +10,22 @@ export function imgNotExists(image) {
     }
     return false;
 }
+
+const baseURL = './Skin/', baseImageKeys = [
+    'no_image',
+    'tap', 'tap_break', 'tap_each', 'tap_ex',
+    'NormalArc', 'BreakArc', 'EachArc',
+    'hold', 'hold_break', 'hold_each', 'hold_ex',
+    'hold_break_on', 'hold_each_on', 'hold_on',
+    'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
+    'touch', 'touch_each', 'touch_point', 'touch_point_each',
+    'touch_border_2', 'touch_border_2_each', 'touch_border_3', 'touch_border_3_each',
+    'star', 'star_pink', 'star_break', 'star_each', 'star_double', 'star_ex',
+    'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double',
+    'slide', 'slide_each', 'slide_break', 'SlideArc',
+    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
+];
+
 export const exColor = {
     tap: '#D8A2C9',
     star: '#00DBF4',
@@ -1047,6 +1063,8 @@ export function popupWindow({
     buttons = [],
     width = 340,
     maxWidth = 600,
+    height = undefined,
+    maxHeight = "100vh",
     unclosable = false,
     onOpen,
     onClose,
@@ -1055,6 +1073,8 @@ export function popupWindow({
 } = {}) {
     const setStyle = (el, styles) => Object.assign(el.style, styles);
     const popupWidth = typeof width === 'number' ? `${width}px` : width;
+    const popupHeight = height ? (typeof height === 'number' ? `${height}px` : height) : 'auto';
+    const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : '100vh';
 
     const applyContent = (container, value) => {
         container.innerHTML = '';
@@ -1118,45 +1138,64 @@ export function popupWindow({
     // 2. 建立彈窗主體 (Popup)
     const popup = document.createElement('div');
     setStyle(popup, {
-        background: '#202020', color: 'white', padding: '10px',
+        background: '#202020', color: 'white', padding: '15px',
         border: '1px solid #404040', borderRadius: '5px',
-        maxWidth: 'calc(100% - 20px)', maxHeight: '95%',
-        boxShadow: '0 0 15px rgba(0, 0, 0, 0.7)', overflow: 'hidden',
-        width: title ? popupWidth : 'fit-content', position: 'relative',
-        maxWidth: maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%' // 允許自定義最大寬度
+        maxWidth: maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%',
+        width: title ? popupWidth : 'fit-content',
+        height: popupHeight,
+        maxHeight: popupMaxHeight,
+        boxShadow: '0 0 15px rgba(0, 0, 0, 0.7)',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        boxSizing: 'border-box',
+        overflow: 'hidden'
     });
 
     // 3. 內部組件
     const titleElem = document.createElement('h3');
-    setStyle(titleElem, { margin: '5px 0 10px 5px', minHeight: '30px', display: 'flex', alignItems: 'center', userSelect: 'none' });
+    setStyle(titleElem, { margin: '5px 0 10px 5px', minHeight: '30px', display: title ? 'flex' : 'none', alignItems: 'center', userSelect: 'none' });
     titleElem.innerText = title;
 
     const progressContainer = document.createElement('div');
     const progressBar = document.createElement('div');
-    setStyle(progressContainer, { width: '100%', height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', display: 'none' });
+    setStyle(progressContainer, { width: '100%', height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', display: 'none', marginBottom: '10px' });
     setStyle(progressBar, { width: '0%', height: '100%', background: '#00ffcc', transition: 'width 0.3s ease' });
     progressContainer.appendChild(progressBar);
+
+    // Scrollable content wrapper
+    const bodyElem = document.createElement('div');
+    setStyle(bodyElem, {
+        flex: '1 1 auto',
+        overflowY: 'auto',
+        minHeight: '0',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+    });
 
     const contentElem = document.createElement('div');
     setStyle(contentElem, {
         fontFamily: 'monospace', fontSize: '12px', background: '#151515',
         padding: '10px', borderRadius: '3px', whiteSpace: 'pre-wrap',
-        overflow: 'auto', maxHeight: '190px', display: content ? 'block' : 'none'
+        display: content ? 'block' : 'none'
     });
     applyContent(contentElem, typeof content === 'string' ? content.trim() : content);
 
     const customContentElem = document.createElement('div');
     setStyle(customContentElem, {
-        marginTop: '10px',
         padding: '10px',
         background: '#1a1a1a',
         border: '1px solid #333',
         borderRadius: '3px',
-        display: 'none'
+        display: 'none',
+        height: "100%",
     });
 
+    bodyElem.append(contentElem, customContentElem);
+
     const btnContainer = document.createElement('div');
-    setStyle(btnContainer, { display: 'flex', gap: '10px', marginTop: '10px', overflowX: 'auto', flexWrap: 'nowrap' });
+    setStyle(btnContainer, { display: 'flex', gap: '10px', marginTop: '10px', overflowX: 'auto', flexWrap: 'nowrap', flexShrink: '0' });
 
     // --- 功能函式 ---
 
@@ -1209,6 +1248,7 @@ export function popupWindow({
         elements: {
             backdrop,
             popup,
+            body: bodyElem,
             content: contentElem,
             customContent: customContentElem,
             progressBar,
@@ -1230,22 +1270,17 @@ export function popupWindow({
         backdrop.onclick = (e) => e.target === backdrop && closePopup();
         const closeX = document.createElement('div');
         closeX.innerText = '×';
-        setStyle(closeX, { position: 'absolute', top: '10px', right: '10px', cursor: 'pointer', fontSize: '20px', color: '#aaa', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' });
+        setStyle(closeX, { position: 'absolute', top: '10px', right: '10px', cursor: 'pointer', fontSize: '20px', color: '#aaa', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '10' });
         closeX.onclick = closePopup;
         popup.appendChild(closeX);
     }
 
-    popup.append(titleElem, progressContainer);
+    popup.append(titleElem, progressContainer, bodyElem, btnContainer);
 
     if (customContent) {
         setCustomContent(customContent);
-        popup.appendChild(customContentElem);
-    } else {
-        popup.appendChild(contentElem);
-        popup.appendChild(customContentElem);
     }
 
-    popup.appendChild(btnContainer);
     backdrop.appendChild(popup);
     document.body.appendChild(backdrop);
 
@@ -1475,19 +1510,7 @@ export function simpleToast({
 
     popup.onclick = removePopup;
 }
-const baseURL = './Skin/', baseImageKeys = [
-    'no_image',
-    'tap', 'tap_break', 'tap_each', 'tap_ex',
-    'NormalArc', 'BreakArc', 'EachArc',
-    'hold', 'hold_break', 'hold_each', 'hold_ex',
-    'hold_break_on', 'hold_each_on', 'hold_on',
-    'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
-    'touch', 'touch_each', 'touch_point', 'touch_point_each',
-    'star', 'star_pink', 'star_break', 'star_each', 'star_double', 'star_ex',
-    'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double',
-    'slide', 'slide_each', 'slide_break', 'SlideArc',
-    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
-];
+
 /**
  * 載入所有圖片素材，支援進度回報
  * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)

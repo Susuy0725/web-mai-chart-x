@@ -454,7 +454,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 if (res.illegal) {
                                     pushWarn(`Illegal slide ${head}${type}${mid ?? ''}${end}, `, { errpos: noteCommaIndex });
                                 };
-                                return { head, end, mid, type, path, len: path.totalLength, illegal: res.illegal };
+                                return { head, end, mid, type, path, len: path.totalLength, illegal: res.illegal, additional: res.additional, };
                             });
 
                             if (segments.includes(null)) return pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
@@ -479,6 +479,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     slideMid: seg.mid,
                                     slideType: seg.type,
                                     path: seg.path,
+                                    wPaths: seg.additional,
                                     time: noteObj.time,
                                     slideDelay: currentDelay,
                                     slideDuration: segmentDuration,
@@ -552,6 +553,7 @@ function getSlidePath(start, end, type, mid = null) {
     let illegal = false;
     const c = (end - start + 8) % 8;
     const e = start === end;
+    const additional = {};
 
     switch (type) {
         case '-':
@@ -690,13 +692,25 @@ function getSlidePath(start, end, type, mid = null) {
             r.lineToArc(0, 0, innerCirleBase * 0.414, startInfo.rot - Math.PI * 1);
             r.lineTo(endInfo.x, endInfo.y);
             break;
-        case 'w':
+        case 'w': {
             if (c !== 4 || e) {
                 illegal = true;
             }
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
+
+            const a = noteRefPos[(end - 2 + 8) % 8];
+            const b = noteRefPos[end % 8];
+            additional.w1 = new PathRecorder();
+            additional.w2 = new PathRecorder();
+
+            additional.w1.moveTo(startInfo.x, startInfo.y);
+            additional.w1.lineTo(a.x, a.y);
+
+            additional.w2.moveTo(startInfo.x, startInfo.y);
+            additional.w2.lineTo(b.x, b.y);
             break;
+        }
         default:
             if (e) {
                 illegal = true;
@@ -708,5 +722,5 @@ function getSlidePath(start, end, type, mid = null) {
             break;
     }
 
-    return { path: r, illegal };
+    return { path: r, additional, illegal };
 }

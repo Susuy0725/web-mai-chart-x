@@ -83,6 +83,8 @@ const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
 const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
+const addVideoButton = getButton("addVideo", "utility");
+const importFromVideoButton = getButton("importFromVideo", "utility");
 const readMaidataButton = getButton("readMaidata", "utility");
 const readZipButton = getButton("readZip", "utility");
 const chartInfoButton = getButton("chartInfo", "utility");
@@ -107,6 +109,7 @@ const editorBackgroundVideo = document.getElementById('backgroundVideo');
 const tapBpmButton = getButton("tapBpm", "utility");
 const manageResourcesButton = getButton("manageResources", "utility");
 const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
+const playbackReset = getButton("playbackSpeed", "utility");
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const helpButton = getButton("help", "utility");
@@ -155,6 +158,7 @@ export const defaultSettings = {
     slideIllegalRed: false,
     showUI: false,
     // Sound & Playback
+    notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
     globalVolume: 0.65, // 全局音量，0 到 1 之間
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
@@ -172,6 +176,7 @@ export const defaultSettings = {
         'touch': 0.4,
         'hanabi': 0.6,
     },
+
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     cursorFollow: true, // 游標跟隨
@@ -199,6 +204,12 @@ const settingsConfig = [
                     if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
                 },
             },
+            {
+                id: 'pinkStars',
+                type: 'checkbox',
+                label: '粉紅色星星',
+                def: defaultSettings.pinkStars || false
+            },
         ]
     },
     {
@@ -221,12 +232,6 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: '暫停時隱藏背景',
                 def: defaultSettings.hideBackgroundWhenPaused
-            },
-            {
-                id: 'pinkStars',
-                type: 'checkbox',
-                label: '粉紅色星星',
-                def: defaultSettings.pinkStars || false
             },
             {
                 id: 'rotateStars',
@@ -254,6 +259,12 @@ const settingsConfig = [
             {
                 id: 'sfxVolumes', type: 'object', label: '個別音效音量', def: defaultSettings.sfxVolumes,
                 apply: (val) => { audioManager.setSFXVolumes(val); }
+            },
+            {
+                id: 'notPlayHoldEnd',
+                type: 'checkbox',
+                label: '不播放 Hold 結尾音效',
+                def: defaultSettings.notPlayHoldEnd
             }
         ]
     },
@@ -1559,6 +1570,11 @@ playbackSpeedInput.addEventListener('change', () => {
     simpleToast({ content: `已設定播放速度：${speed}x`, type: 'success', timeout: 1800 });
 });
 
+playbackReset.addEventListener('click', () => {
+    setPlaybackSpeed(1);
+    simpleToast({ content: '重置播放速度', type: 'success', timeout: 1800 });
+});
+
 function setPlaybackSpeed(speed) {
     typeof speed === 'string' && (speed = parseFloat(speed));
     speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
@@ -2278,15 +2294,152 @@ redoButton.addEventListener('click', () => {
 });
 
 helpButton.addEventListener('click', () => {
+    // 💡 以後想改內容、加新功能，只要改這個設定陣列就好！
+    const helpData = [
+        {
+            tabTitle: "基礎操作",
+            title: "編輯與檔案操作",
+            items: [
+                `<b>檔案讀取與新建</b>：點擊左上角 <span class="material-symbols-outlined" translate="no">menu</span>選單中「檔案」來新建專案、讀取資料夾或 ZIP 壓縮檔`,
+                `<b>下載</b>：點擊左上角 <span class="material-symbols-outlined" translate="no">menu</span>選單中「檔案 > 下載」可以將專案以壓縮形式下載下來`,
+                `<b>底部功能列</b>：<span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span>隱藏此列、<span class="material-symbols-outlined" translate="no">keyboard</span>顯示鍵盤`,
+                `<b>專案擁有自動保存功能、也可以<span class="code-highlight">Ctrl</span><span class="code-highlight">S</span>保存</b>`
+            ],
+            isList: false // 控制要用一般段落 <p> 還是一般列表 <ul>
+        },
+        {
+            tabTitle: "快速鍵",
+            title: "常用快速鍵",
+            items: [
+                `<b>播放 / 暫停</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Space</span>。`,
+                `<b>從頭開始</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Backspace</span>。`,
+                `<b>復原 / 重做</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Z</span> / <span class="code-highlight">Ctrl</span><span class="code-highlight">Y</span>`,
+                `<b>加速播放</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">P</span>`,
+                `<b>減速播放</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">O</span>`,
+                `<b>縮放倍率</b>：<span class="code-highlight">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。`
+            ],
+            isList: true
+        }
+    ];
+
+    // --- 1. CSS 樣式獨立抽出來 ---
+    const style = `
+    <style>
+      .help-container {
+        color: #aaaaaa;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .help-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #2d2d2d;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .help-tabs::-webkit-scrollbar { display: none; }
+      .tab-btn {
+        background: transparent;
+        color: #757575;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        position: relative;
+        transition: color 0.2s ease;
+      }
+      .tab-btn:hover { color: #ffffff; }
+      .tab-btn.active { color: #ffffff; font-weight: bold; }
+      .tab-btn.active::after {
+        content: "";
+        position: absolute;
+        bottom: -1px; left: 20px; right: 20px; height: 3px;
+        background-color: #3b82f6;
+      }
+      .tab-pane {
+        font-size: 13.5px;
+        line-height: 1.8;
+        color: #aaaaaa;
+        animation: fadeIn 0.15s ease-out;
+      }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .tab-pane h4 {
+        color: #ffffff; font-size: 15px; margin-top: 0; margin-bottom: 16px;
+        border-left: 3px solid #3b82f6; padding-left: 8px; font-weight: 600;
+      }
+      .tab-pane p { margin: 8px 0 12px 0; }
+      .tab-pane ul { margin: 8px 0 12px 0; padding-left: 0; list-style: none; }
+      .tab-pane li { position: relative; padding-left: 16px; margin-bottom: 8px; }
+      .tab-pane li::before {
+        content: "•"; color: #3b82f6; font-weight: bold;
+        position: absolute; left: 4px; top: 0;
+      }
+      .tab-pane b { color: #ffffff; }
+      .code-highlight {
+        background: #242424; color: #ffffff; padding: 3px 8px; border-radius: 4px;
+        font-family: Consolas, Monaco, monospace; font-size: 12px; border: 1px solid #3a3a3a;
+        display: inline-block; line-height: 1.2; margin: 0 2px; vertical-align: middle;
+      }
+      /* 讓 Material Icons 在文字裡對齊更完美 */
+      .material-symbols-outlined {
+        vertical-align: middle;
+        font-size: 18px;
+        margin: 0 2px;
+      }
+    </style>`;
+
+    // --- 2. 透過 Array 串接自動產生 HTML 結構 ---
+    const tabsHTML = helpData.map((data, i) => `
+        <button class="tab-btn ${i === 0 ? 'active' : ''}">${data.tabTitle}</button>
+    `).join('');
+
+    const panesHTML = helpData.map((data, i) => {
+        // 依據 isList 決定渲染成 <ul><li> 還是複數個 <p>
+        const contentBody = data.isList
+            ? `<ul>${data.items.map(item => `<li>${item}</li>`).join('')}</ul>`
+            : data.items.map(item => `<p>${item}</p>`).join('');
+
+        return `
+            <div class="tab-pane" style="display: ${i === 0 ? 'block' : 'none'};">
+                <h4>${data.title}</h4>
+                ${contentBody}
+            </div>
+        `;
+    }).join('');
+
+    // 組合成最終內容
     const content = `
-    <h2>Simai譜面編輯器使用說明</h2>
-    <p>(wip)</p>`
+        ${style}
+        <div class="help-container">
+            <div class="help-tabs">${tabsHTML}</div>
+            ${panesHTML}
+        </div>
+    `;
+
+    // --- 3. 開啟彈窗與事件綁定（邏輯完全不需要動）---
     popupWindow({
-        title: "幫助",
+        title: "幫助說明",
         customContent: content,
+        width: 480,
+        height: "80%",
         buttons: [
             { text: "關閉", hideOnClick: true }
-        ]
+        ],
+        onOpen: (ctx) => {
+            const container = ctx.elements.customContent;
+            const buttons = container.querySelectorAll('.tab-btn');
+            const panes = container.querySelectorAll('.tab-pane');
+            buttons.forEach((btn, index) => {
+                btn.onclick = () => {
+                    buttons.forEach(b => b.classList.remove('active'));
+                    panes.forEach(p => p.style.display = 'none');
+                    btn.classList.add('active');
+                    panes[index].style.display = 'block';
+                };
+            });
+        }
     });
 });
 
@@ -2650,25 +2803,82 @@ readMaidataButton.addEventListener('click', () => {
 });
 
 readZipButton.addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.zip';
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                setDataEmpty();
-                JSZip.loadAsync(file).then(async (zip) => {
-                    await handleFolderInput(zip.files);
-                });
-                resize();
-            };
-            reader.readAsArrayBuffer(file);
+    const maidataHaveContext = (() => {
+        if (audioManager.haveBGM()) {
+            return true;
         }
+        for (let i = 1; i <= 7; i++) {
+            if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
+                return true;
+            }
+        }
+        return false;
+    })();
+
+    const triggerZipInput = (mode) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.zip';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    if (mode === 'new') {
+                        // 建立新專案
+                        const newId = await projectCreate('未命名專案');
+                        currentProjectId = newId;
+                        localStorage.setItem('simai_lastProjectId', currentProjectId);
+                        console.log(`[Project] 已建立新專案: ${newId}`);
+                    }
+                    setDataEmpty();
+                    JSZip.loadAsync(file).then(async (zip) => {
+                        await handleFolderInput(zip.files);
+                        setEndtime(endTime);
+                        draw();
+                        // 嘗試用 maidata.title 更新專案名稱
+                        if (maidata?.title && currentProjectId) {
+                            projectUpdateName(currentProjectId, maidata.title).catch(() => { });
+                        }
+                        simpleToast({ content: mode === 'new' ? '已開啟為新專案' : '已載入至目前專案', type: 'success', timeout: 1500 });
+                    });
+                    resize();
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        };
+        input.click();
     };
-    input.click();
-})
+
+    if (maidataHaveContext) {
+        popupWindow({
+            title: "讀取壓縮檔",
+            content: "偵測到目前已有編輯內容。\n請選擇要如何處理：",
+            buttons: [
+                {
+                    text: "覆蓋目前專案",
+                    onClick: (ctx) => {
+                        ctx.close();
+                        triggerZipInput('overwrite');
+                    }
+                },
+                {
+                    text: "開啟為新專案",
+                    onClick: (ctx) => {
+                        ctx.close();
+                        triggerZipInput('new');
+                    }
+                },
+                {
+                    text: "取消",
+                    hideOnClick: true
+                }
+            ]
+        });
+    } else {
+        triggerZipInput('overwrite');
+    }
+});
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
@@ -2739,21 +2949,77 @@ changeDisplayMode.addEventListener('change', (e) => {
     draw();
 });
 
-previewZoomInButton.addEventListener('click', () => {
-    settings.visualZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom + ZOOM_STEP));
-    visualEditorRenderer.setZoom(settings.visualZoom);
-    previewRender.setZoom(settings.visualZoom);
-    saveSettingsDebounce();
-    draw();
-});
+function setupZoomButton(button, isZoomIn) {
+    let timeoutId = null;
+    let intervalId = null;
+    let isPressed = false;
 
-previewZoomOutButton.addEventListener('click', () => {
-    settings.visualZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom - ZOOM_STEP));
-    visualEditorRenderer.setZoom(settings.visualZoom);
-    previewRender.setZoom(settings.visualZoom);
-    saveSettingsDebounce();
-    draw();
-});
+    const performZoom = () => {
+        const step = isZoomIn ? ZOOM_STEP : -ZOOM_STEP;
+        settings.visualZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom + step));
+        visualEditorRenderer.setZoom(settings.visualZoom);
+        previewRender.setZoom(settings.visualZoom);
+        saveSettingsDebounce();
+        draw();
+    };
+
+    const stopZoom = () => {
+        if (!isPressed) return;
+        isPressed = false;
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+        }
+        if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+        }
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', stopZoom);
+        window.removeEventListener('pointercancel', stopZoom);
+    };
+
+    const handlePointerMove = (e) => {
+        if (!isPressed) return;
+        const rect = button.getBoundingClientRect();
+        const isInBounds = (
+            e.clientX >= rect.left &&
+            e.clientX <= rect.right &&
+            e.clientY >= rect.top &&
+            e.clientY <= rect.bottom
+        );
+        if (!isInBounds) {
+            stopZoom();
+        }
+    };
+
+    button.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return; // Only primary button (left click) or touch
+        isPressed = true;
+        e.preventDefault();
+
+        performZoom();
+
+        timeoutId = setTimeout(() => {
+            if (!isPressed) return;
+            intervalId = setInterval(() => {
+                performZoom();
+            }, 50);
+        }, 400);
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', stopZoom);
+        window.addEventListener('pointercancel', stopZoom);
+    });
+
+    button.addEventListener('click', (e) => {
+        e.preventDefault();
+    });
+}
+
+setupZoomButton(previewZoomInButton, true);
+setupZoomButton(previewZoomOutButton, false);
+
 
 hideUtilityButton.addEventListener('click', () => {
     const utilityBtns = document.getElementById('topUtilityBtns');
@@ -3104,6 +3370,53 @@ addMusicButton.addEventListener('click', () => {
             await audioManager.setBackgroundMusic(url, file);
             setEndtime(endTime);
             projSet('resource_bgm', file);
+        }
+    };
+    input.click();
+});
+
+addVideoButton.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'video/*';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            backgroundVideo = file;
+            editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+            editorBackgroundVideo.style.display = 'none';
+            editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+            projSet('background_video', file).then(() => {
+                simpleToast({ content: '已儲存背景影片', type: 'success' });
+            }).catch((error) => {
+                console.error('儲存背景影片失敗:', error);
+            });
+        }
+    };
+    input.click();
+});
+
+importFromVideoButton.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'video/*';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            // 1. 載入背景影片
+            backgroundVideo = file;
+            editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+            editorBackgroundVideo.style.display = 'none';
+            editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+            await projSet('background_video', file);
+
+            // 2. 載入背景音樂 (直接使用影片檔案作為音訊來源解碼)
+            const url = URL.createObjectURL(file);
+            await audioManager.setBackgroundMusic(url, file);
+            setEndtime(endTime);
+            await projSet('resource_bgm', file);
+
+            simpleToast({ content: '已從影片匯入背景影片與音樂', type: 'success' });
         }
     };
     input.click();
@@ -3996,7 +4309,7 @@ recordVideoButton.addEventListener('click', async () => {
     );
 
     popupWindow({
-        title: '逐幀渲染錄製',
+        title: '影片錄製',
         customContent: container,
         width: '420px',
         buttons: [
@@ -4082,7 +4395,7 @@ window.addEventListener('keydown', (e) => {
             }
 
             case 'p': {
-                e.preventDefault(); // 🟢 攔截瀏覽器預設的列印網頁
+                e.preventDefault();
                 let sp = settings.playbackSpeed + 0.25;
                 if (sp >= 2.0) sp = 2.0;
                 setPlaybackSpeed(sp);
@@ -4091,8 +4404,6 @@ window.addEventListener('keydown', (e) => {
             }
 
             case 'z': {
-                // 🟢 關鍵優化：只有當焦點不在編輯器輸入框內時，才觸發譜面架構的 Undo
-                // 這樣使用者在打字時，Ctrl+Z 依然能正常撤銷他剛剛打錯的字！
                 if (document.activeElement === editorInput) {
                     e.preventDefault();
                     undoButton.click();
@@ -4102,12 +4413,23 @@ window.addEventListener('keydown', (e) => {
             }
 
             case 'y': {
-                // 🟢 同理優化重作邏輯
                 if (document.activeElement === editorInput) {
                     e.preventDefault();
                     redoButton.click();
                     simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
                 }
+                break;
+            }
+        }
+        switch (e.code) {
+            case 'Space': {
+                e.preventDefault();
+                playButton.click();
+                break;
+            }
+            case 'Backspace': {
+                e.preventDefault();
+                resetButton.click();
                 break;
             }
         }
@@ -4243,7 +4565,6 @@ function draw(dt = 0) {
                 }
                 note._startEffectPlayed = true;
             }
-
             // 結束音效 (含前瞻)
             const endTargetT = note.time + skipT;
             const endNoteT = endTargetT - globalTime;
@@ -4252,7 +4573,7 @@ function draw(dt = 0) {
                     (noteType === "slide" && note.lastSlide && note.isBreak) ||
                     (noteType !== "slide" && note.isBreak) ||
                     note.isHanabi ||
-                    (note.holdDuration !== undefined && noteType !== "tap");
+                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
                 if (shouldPlayEndSound) {
                     audioManager.queueSound(note, endTargetT);
                 }
@@ -4936,6 +5257,7 @@ async function videoRender(pwCtx, {
 
     const mainCtx = canvas.getContext('2d');
 
+    let exportVideo = null;
     try {
         pwCtx.setButtons([{ text: '取消', hideOnClick: true }]);
         pwCtx.setProgress(0);
@@ -4967,7 +5289,6 @@ async function videoRender(pwCtx, {
         const videoSource = new CanvasSource(off, encodingConfig);
         output.addVideoTrack(videoSource, { frameRate: fps });
 
-        let exportVideo = null;
         let exportVideoReady = false;
         if (editorBackgroundVideo && editorBackgroundVideo.src) {
             try {
@@ -4976,6 +5297,14 @@ async function videoRender(pwCtx, {
                 exportVideo.muted = true;
                 exportVideo.crossOrigin = 'anonymous';
                 exportVideo.preload = 'auto';
+                exportVideo.style.position = 'fixed';
+                exportVideo.style.left = '-9999px';
+                exportVideo.style.top = '0';
+                exportVideo.style.width = '1px';
+                exportVideo.style.height = '1px';
+                exportVideo.style.opacity = '0.01';
+                exportVideo.style.pointerEvents = 'none';
+                document.body.appendChild(exportVideo);
                 await new Promise((res) => {
                     let done = false;
                     const onloaded = () => { if (done) return; done = true; res(); };
@@ -5268,27 +5597,27 @@ async function videoRender(pwCtx, {
 
         renderer.setContext(offCtx);
 
-        const seekVideoTo = async (video, time) => {
-            if (!video) return;
-            const cur = video.currentTime || 0;
-            if (Math.abs(cur - time) <= VIDEO_SEEK_THRESHOLD) return;
-
-            if (typeof video.fastSeek === 'function') {
-                try { video.fastSeek(time); } catch (e) { video.currentTime = time; }
-                await new Promise((res) => {
-                    let done = false;
-                    const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
-                    video.addEventListener('seeked', onseek);
-                    setTimeout(() => { if (done) return; done = true; res(); }, 200);
-                });
-                return;
-            }
-            await new Promise((res) => {
+        const seekVideoTo = (video, time) => {
+            if (!video) return Promise.resolve();
+            return new Promise((res) => {
                 let done = false;
-                const onseek = () => { if (done) return; done = true; video.removeEventListener('seeked', onseek); res(); };
+                const onseek = () => {
+                    if (done) return;
+                    done = true;
+                    video.removeEventListener('seeked', onseek);
+                    res();
+                };
                 video.addEventListener('seeked', onseek);
-                try { video.currentTime = time; } catch (e) { video.currentTime = time; }
-                setTimeout(() => { if (done) return; done = true; res(); }, 300);
+                try {
+                    video.currentTime = time;
+                } catch (e) {
+                    console.error("seek video failed", e);
+                }
+                setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    res();
+                }, 150);
             });
         };
 
@@ -5384,9 +5713,7 @@ async function videoRender(pwCtx, {
 
                 if (exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
                     const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
-                    if (Math.abs((exportVideo.currentTime || 0) - bgTarget) > VIDEO_SEEK_THRESHOLD) {
-                        await seekVideoTo(exportVideo, bgTarget);
-                    }
+                    await seekVideoTo(exportVideo, bgTarget);
                     try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
                     const vw = exportVideo.videoWidth || exportVideo.width || boxW;
                     const vh = exportVideo.videoHeight || exportVideo.height || boxH;
@@ -5448,5 +5775,9 @@ async function videoRender(pwCtx, {
         simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
         try { pwCtx.setContent('錯誤：' + String(err)); } catch (e) { }
         try { renderer.setContext(mainCtx); } catch (e) { }
+    } finally {
+        if (exportVideo && exportVideo.parentNode) {
+            exportVideo.parentNode.removeChild(exportVideo);
+        }
     }
 }

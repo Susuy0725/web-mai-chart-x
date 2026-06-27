@@ -1,31 +1,10 @@
-# web-mai-chart-x
+# Web mai Chart X
 
 [繁體中文](#繁體中文) | [English](#english)
 
-
----
-
-## English
-
-A simple web-based maimai chart tool.
-
-### 🚀 The tool website
-[Click me to visit Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
-
-### ✏️Changelog
-[Click me to visit Chagelog](./CHANGELOG.md) 
-
-### 🛠 Future Plans (TODO)
-- [ ] Visual editor optimization
-- [ ] Vertical mode support
-- [ ] Key recording feature
-- [ ] Star effects and rotation fixes
-
----
-
 ## 繁體中文
 
-一個簡單的網頁版 maimai 譜面工具。
+一個簡單易用的的網頁版 maimai 譜面製作工具。
 
 ### 🚀 線上網站
 [點我前往 Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
@@ -33,10 +12,12 @@ A simple web-based maimai chart tool.
 ### ✏️更新日誌
 [點我查看更新日誌](./CHANGELOG.md)
 
-### 🛠 開發進度 (TODO)
-- [ ] 視覺化編輯器優化
-- [ ] 直向模式 (Vertical Mode)
-- [ ] 按鍵錄製功能
-- [ ] 星星特效與旋轉修正
+## English
 
-持續更新中！
+An Easy-to-Use web-based maimai chart tool.
+
+### 🚀 The tool website
+[Click me to visit Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
+
+### ✏️Changelog
+[Click me to visit Chagelog](./CHANGELOG.md) 

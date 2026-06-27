@@ -5173,7 +5173,7 @@ function _init() {
 }
 
 
-async function resampleAudioBuffer(audioBuffer, targetSampleRate = 48000) {
+async function resampleAudioBuffer(audioBuffer, targetSampleRate = 44100) {
     if (audioBuffer.sampleRate === targetSampleRate) {
         return audioBuffer;
     }
@@ -5221,7 +5221,7 @@ async function videoRender(pwCtx, {
     const {
         Output,
         BufferTarget,
-        WebMOutputFormat,
+        Mp4OutputFormat,
         CanvasSource,
         AudioBufferSource,
         QUALITY_HIGH
@@ -5275,12 +5275,12 @@ async function videoRender(pwCtx, {
         offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
 
         const target = new BufferTarget();
-        const format = new WebMOutputFormat();
+        const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
         const output = new Output({ format, target });
 
         // 視訊軌設定
         const encodingConfig = {
-            codec: 'vp8',
+            codec: 'avc',
             bitrate: QUALITY_HIGH,
             keyFrameInterval: 0.5,
             latencyMode: 'quality'
@@ -5564,7 +5564,7 @@ async function videoRender(pwCtx, {
 
             if (slicedAudio) {
                 // 🔴 關鍵修正：強制將採樣率轉換為 48000 Hz (Opus 編碼器要求)
-                slicedAudio = await resampleAudioBuffer(slicedAudio, 48000);
+                slicedAudio = await resampleAudioBuffer(slicedAudio, 44100);
 
                 // 🔴 補上靜音，使音軌長度與視訊精確對齊
                 const targetLen = Math.max(1, Math.ceil((end - start) * slicedAudio.sampleRate));
@@ -5579,7 +5579,7 @@ async function videoRender(pwCtx, {
 
         if (slicedAudio) {
             audioSource = new AudioBufferSource({
-                codec: 'opus',
+                codec: 'aac',
                 bitrate: QUALITY_HIGH,
                 sampleRate: slicedAudio.sampleRate,
                 numberOfChannels: slicedAudio.numberOfChannels
@@ -5757,7 +5757,7 @@ async function videoRender(pwCtx, {
 
         await output.finalize();
         const mime = await output.getMimeType();
-        const ext = output.format?.fileExtension || '.webm';
+        const ext = output.format?.fileExtension || '.mp4';
         const buf = target.buffer;
         if (!buf) throw new Error('未取得輸出 buffer');
 

@@ -2,14 +2,18 @@
 
 [繁體中文](#繁體中文) | [English](#english)
 
+
 ---
 
 ## English
 
 A simple web-based maimai chart tool.
 
-### 🚀 Live Demo
-[https://susuy0725.github.io/web-mai-chart-x/](https://susuy0725.github.io/web-mai-chart-x/)
+### 🚀 The tool website
+[Click me to visit Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
+
+### ✏️Changelog
+[Click me to visit Chagelog](./CHANGELOG.md) 
 
 ### 🛠 Future Plans (TODO)
 - [ ] Visual editor optimization
@@ -24,7 +28,10 @@ A simple web-based maimai chart tool.
 一個簡單的網頁版 maimai 譜面工具。
 
 ### 🚀 線上網站
-[https://susuy0725.github.io/web-mai-chart-x/](https://susuy0725.github.io/web-mai-chart-x/)
+[點我前往 Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
+
+### ✏️更新日誌
+[點我查看更新日誌](./CHANGELOG.md)
 
 ### 🛠 開發進度 (TODO)
 - [ ] 視覺化編輯器優化

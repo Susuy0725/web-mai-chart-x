@@ -2,6 +2,4 @@ visual editor
 滑星依感應器消失
 按鍵錄製功能
 vertical mode
-粉紅色星星
 星星旋轉
-修復自動補全

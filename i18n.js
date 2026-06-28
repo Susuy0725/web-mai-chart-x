@@ -1,9 +1,11 @@
 import { zhTW } from './locales/zh-TW.js';
 import { en } from './locales/en.js';
+import { ja } from './locales/ja.js';
 
 const translations = {
     'zh-TW': zhTW,
-    'en': en
+    'en': en,
+    'ja': ja,
 };
 
 let currentLang = localStorage.getItem('simai_lang') || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
@@ -54,7 +56,7 @@ export function t(key, params = {}) {
             }
         }
     }
-    
+
     if (typeof value === 'string') {
         return value.replace(/\{(\w+)\}/g, (match, p1) => {
             return params[p1] !== undefined ? params[p1] : match;
@@ -68,7 +70,7 @@ export function applyI18nToDOM() {
     elements.forEach(el => {
         const key = el.getAttribute('data-i18n');
         const translation = t(key);
-        
+
         if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
             if (el.hasAttribute('placeholder')) {
                 el.placeholder = translation;

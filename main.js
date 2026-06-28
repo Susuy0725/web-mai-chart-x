@@ -193,20 +193,6 @@ const settingsConfig = [
     {
         label: 'settings.tabs.basic',
         items: [
-            {
-                id: 'lang',
-                type: 'dropdown',
-                label: 'settings.items.lang',
-                options: [
-                    { value: 'zh-TW', label: '繁體中文' },
-                    { value: 'en', label: 'English' }
-                ],
-                def: getCurrentLang(),
-                get: () => getCurrentLang(),
-                apply: (val) => {
-                    setLang(val);
-                }
-            },
             { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
             { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
@@ -227,6 +213,21 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.pinkStars',
                 def: defaultSettings.pinkStars || false
+            },
+            {
+                id: 'lang',
+                type: 'dropdown',
+                label: 'settings.items.lang',
+                options: [
+                    { value: 'zh-TW', label: '繁體中文' },
+                    { value: 'en', label: 'English' },
+                    { value: 'ja', label: '日本語' },
+                ],
+                def: getCurrentLang(),
+                get: () => getCurrentLang(),
+                apply: (val) => {
+                    setLang(val);
+                }
             },
         ]
     },
@@ -523,6 +524,73 @@ manageResourcesButton.addEventListener('click', async () => {
         ]
     });
 });
+/**
+ * 將 AudioBuffer 轉換為 16-bit PCM WAV Blob
+ */
+function audioBufferToWav(buffer) {
+    const numOfChan = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // 1 = raw PCM
+    const bitDepth = 16;
+
+    let result;
+    if (numOfChan === 2) {
+        result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+    } else {
+        result = buffer.getChannelData(0);
+    }
+
+    return writeWavFile(result, numOfChan, sampleRate, format, bitDepth);
+}
+
+function interleave(inputL, inputR) {
+    const length = inputL.length + inputR.length;
+    const result = new Float32Array(length);
+    let index = 0;
+    let inputIndex = 0;
+    while (index < length) {
+        result[index++] = inputL[inputIndex];
+        result[index++] = inputR[inputIndex];
+        inputIndex++;
+    }
+    return result;
+}
+
+function writeWavFile(samples, numOfChan, sampleRate, format, bitDepth) {
+    const blockAlign = numOfChan * (bitDepth / 8);
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = samples.length * (bitDepth / 8);
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numOfChan, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+}
+
+function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+}
 
 /**
  * 1. 音訊緩衝區管理器（負責音訊運算、備份與復原）
@@ -697,9 +765,11 @@ editMusicButton.addEventListener('click', () => {
             <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px; justify-content:space-between;">
                 <div>
                     <span style="font-weight:bold; color:#00a2ff; font-size:12px;">${t('popup.editMusic.firstBeatOffset')}</span>
-                    <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
-                        <input type="number" id="editOffsetInput" value="${musicDelay.toFixed(3)}" step="0.001" style="width:100px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
-                        <span style="color:#aaa; font-size:12px;">seconds</span>
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                        <input type="number" id="editOffsetInput" value="${musicDelay.toFixed(2)}" step="0.01" style="width:85px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
+                        <span style="color:#aaa; font-size:12px; margin-right:4px;">s</span>
+                        <button id="shiftDecBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#ff4d4d; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">-1 拍</button>
+                        <button id="shiftIncBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#22c55e; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">+1 拍</button>
                     </div>
                 </div>
             </div>
@@ -749,6 +819,8 @@ editMusicButton.addEventListener('click', () => {
     const zoomValLabel = controls.querySelector('#zoomValLabel');
 
     const playClockBtn = controls.querySelector('#playClockBtn');
+    const shiftDecBeatBtn = controls.querySelector('#shiftDecBeatBtn');
+    const shiftIncBeatBtn = controls.querySelector('#shiftIncBeatBtn');
 
     // 建立首拍對齊 UI 卡片 (使用者體驗優化)
     const alignCard = document.createElement('div');
@@ -879,6 +951,28 @@ editMusicButton.addEventListener('click', () => {
         triggerRedraw();
     });
 
+    const adjustOffsetByBeat = (direction) => {
+        const bpm = parseFloat(bpmInput.value) || clockBpm;
+        if (bpm <= 0) return;
+        const secPerBeat = 60 / bpm;
+
+        const wasPlaying = isPreviewing;
+        if (wasPlaying) {
+            stopPreview();
+        }
+
+        offsetTime = Math.max(0, offsetTime + direction * secPerBeat);
+        offsetInputNode.value = offsetTime.toFixed(2);
+        triggerRedraw();
+
+        if (wasPlaying) {
+            startPreview();
+        }
+    };
+
+    shiftDecBeatBtn.addEventListener('click', () => adjustOffsetByBeat(-1));
+    shiftIncBeatBtn.addEventListener('click', () => adjustOffsetByBeat(1));
+
     // --- 核心優化：重新整理跨平台拖曳互動 ---
     let isDragging = false;
     let startX = 0;
@@ -908,7 +1002,7 @@ editMusicButton.addEventListener('click', () => {
         if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
 
         offsetTime = Math.max(0, Math.min(duration, viewStart + (x / rect.width) * viewLength));
-        offsetInputNode.value = offsetTime.toFixed(3);
+        offsetInputNode.value = offsetTime.toFixed(2);
         startOffset = offsetTime;
         triggerRedraw();
     };
@@ -924,7 +1018,7 @@ editMusicButton.addEventListener('click', () => {
 
         // 這裡維持你原本的拖曳方向邏輯
         offsetTime = Math.max(0, Math.min(duration, startOffset - deltaTime));
-        offsetInputNode.value = offsetTime.toFixed(3);
+        offsetInputNode.value = offsetTime.toFixed(2);
         triggerRedraw(); // 純重繪，絕對不跑音訊播放！
     };
 
@@ -976,7 +1070,7 @@ editMusicButton.addEventListener('click', () => {
         if (padDuration > 0) {
             bufferManager.padStart(padDuration);
             offsetTime = targetDuration;
-            offsetInputNode.value = offsetTime.toFixed(3);
+            offsetInputNode.value = offsetTime.toFixed(2);
             triggerRedraw();
             simpleToast({
                 content: t('toast.padBeatsSuccess', {
@@ -1007,7 +1101,7 @@ editMusicButton.addEventListener('click', () => {
         stopPreview();
         if (bufferManager.cropStart(offsetTime)) {
             offsetTime = 0;
-            offsetInputNode.value = "0.000";
+            offsetInputNode.value = "0.00";
             triggerRedraw();
             simpleToast({ content: t('toast.cropSuccess'), type: 'success' });
         }
@@ -1026,7 +1120,7 @@ editMusicButton.addEventListener('click', () => {
 
         bufferManager.padStart(secPerBeat);
         offsetTime += secPerBeat;
-        offsetInputNode.value = offsetTime.toFixed(3);
+        offsetInputNode.value = offsetTime.toFixed(2);
         triggerRedraw();
         simpleToast({ content: t('toast.padSuccess'), type: 'success' });
     });
@@ -1042,7 +1136,7 @@ editMusicButton.addEventListener('click', () => {
         stopPreview();
         bufferManager.restoreOriginal();
         offsetTime = musicDelay;
-        offsetInputNode.value = offsetTime.toFixed(3);
+        offsetInputNode.value = offsetTime.toFixed(2);
         triggerRedraw();
         simpleToast({ content: t('toast.restoreSuccess'), type: 'info' });
     });
@@ -1063,12 +1157,12 @@ editMusicButton.addEventListener('click', () => {
         buttons: [
             {
                 text: t('popup.apply'),
-                onClick: (ctx) => {
+                onClick: async (ctx) => {
                     const bpm = parseFloat(bpmInput.value) || clockBpm;
-                    musicDelay = offsetTime;
+                    musicDelay = parseFloat(offsetTime.toFixed(2));
 
                     // 連動更新外部編輯器控制項數值
-                    if (typeof offsetInput !== 'undefined') offsetInput.value = musicDelay;
+                    if (typeof offsetInput !== 'undefined') offsetInput.value = musicDelay.toFixed(2);
                     editorInput.value += `\n(${bpm})`;
 
                     if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
@@ -1076,6 +1170,35 @@ editMusicButton.addEventListener('click', () => {
                     if (typeof offsetInputDebounce === 'function') offsetInputDebounce();
 
                     stopPreview();
+
+                    // ✨ 核心功能：將修改後的音訊儲存至 IndexedDB
+                    simpleToast({ content: t('toast.savingMusic'), type: 'info' });
+
+                    try {
+                        const wavBlob = audioBufferToWav(audioManager.bgmBuffer);
+                        let fileName = 'bgm.wav';
+                        if (audioManager.bgmFile && audioManager.bgmFile.name) {
+                            fileName = audioManager.bgmFile.name;
+                            // 確保檔名尾碼是 .wav
+                            if (!fileName.toLowerCase().endsWith('.wav')) {
+                                const lastDotIdx = fileName.lastIndexOf('.');
+                                if (lastDotIdx !== -1) {
+                                    fileName = fileName.substring(0, lastDotIdx) + '.wav';
+                                } else {
+                                    fileName = fileName + '.wav';
+                                }
+                            }
+                        }
+                        const editedFile = new File([wavBlob], fileName, { type: 'audio/wav' });
+                        audioManager.bgmFile = editedFile;
+
+                        await projSet('resource_bgm', editedFile);
+                        simpleToast({ content: t('toast.saveMusicSuccess'), type: 'success' });
+                    } catch (err) {
+                        console.error('Failed to save BGM:', err);
+                        simpleToast({ content: t('toast.saveMusicError'), type: 'error' });
+                    }
+
                     ctx.close();
                 }
             },
@@ -5459,6 +5582,7 @@ async function videoRender({
     const mainCtx = canvas.getContext('2d');
 
     let exportVideo = null;
+    let output = null;
 
     const popup = popupWindow({
         title: "渲染影片",
@@ -5480,7 +5604,7 @@ async function videoRender({
 
         const target = new BufferTarget();
         const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
-        const output = new Output({ format, target });
+        output = new Output({ format, target });
 
         // 視訊軌設定
         const encodingConfig = {
@@ -5956,7 +6080,10 @@ async function videoRender({
             await videoSource.add(tsRelative, step);
 
             popup.setProgress(((i + 1) / frameCount) * 100);
-            popup.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀`);
+            popup.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀 (${(((i + 1) / frameCount) * 100).toFixed(2)}%)`);
+
+            // 讓出主執行緒，供瀏覽器重繪 UI 與處理點擊取消事件
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         await output.finalize();
@@ -5975,7 +6102,7 @@ async function videoRender({
         popup.setProgress(100);
         popup.setContent('完成');
 
-        setInterval(() => {
+        setTimeout(() => {
             popup.close();
         }, 3000);
     } catch (err) {
@@ -5986,6 +6113,9 @@ async function videoRender({
     } finally {
         if (exportVideo && exportVideo.parentNode) {
             exportVideo.parentNode.removeChild(exportVideo);
+        }
+        if (output && output.state !== 'finalized' && output.state !== 'canceled') {
+            output.cancel().catch(e => console.error("Error cancelling output:", e));
         }
     }
 }

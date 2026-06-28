@@ -4,8 +4,8 @@
     --const-collapsed-playControls-height: 70px;
     --playControls-height: 130px;
     --editor-bg: #1F1F1F;
-    --top-utility-bg: #181818;
-    --top-utility-btn: #2B2B2B;
+    --top-utility-bg: #0b0b0f;
+    --top-utility-btn: #2c2c2c;
 }
 
 @font-face {
@@ -34,7 +34,7 @@ body {
         'FILL' 1,
         'wght' 400,
         'GRAD' 0,
-        'opsz' 24
+        'opsz' 32
 }
 
 #canvasContainer {
@@ -111,7 +111,7 @@ body {
     height: var(--playControls-height);
     bottom: 0;
     left: 0;
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--top-utility-bg);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -185,6 +185,7 @@ body {
 }
 
 #miniPreviewContainer #miniPreview {
+    background: black;
     position: absolute;
     width: calc(100% - 4px);
     height: 100%;
@@ -247,7 +248,7 @@ body {
     display: flex;
     width: 40px;
     height: 40px;
-    border: 2px solid var(--top-utility-btn);
+    border: 1px solid var(--top-utility-btn);
     padding: 5px;
     border-radius: 5px;
     color: white;
@@ -378,7 +379,6 @@ body {
 .utilityButton.noFixedsize {
     width: auto;
     padding: 5px 10px;
-    border: var(--top-utility-btn) 1px solid;
 }
 
 .utilityButton.miniButton {
@@ -388,12 +388,12 @@ body {
 }
 
 .utilityButton span.material-symbols-outlined {
-    font-size: 24px;
+    font-size: 22px;
     font-variation-settings:
         'FILL' 0,
-        'wght' 200,
+        'wght' 300,
         'GRAD' 0,
-        'opsz' 24
+        'opsz' 22
 }
 
 .utilityButton input[type="number"] {

@@ -1330,7 +1330,7 @@ export function simpleToast({
 
         container.style.cssText = `
             position: fixed;
-            top: 0;
+            top: 40px;
             left: 0;
             padding: 10px;
             z-index: 10000;

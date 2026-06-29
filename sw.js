@@ -1,6 +1,6 @@
 // Basic service worker for offline caching
 // Cache name should be bumped when assets change
-const CACHE_NAME = 'web-mai-chart-cache-v5';
+const CACHE_NAME = 'web-mai-chart-cache-v7';
 const ASSETS = [
     './',
     './index.html',
@@ -14,6 +14,10 @@ const ASSETS = [
     './mediabunny.cjs',
     './favicon.ico',
     './Skin/outline.png',
+    './i18n.js',
+    './locales/en.js',
+    './locales/ja.js',
+    './locales/zh-TW.js',
 ];
 
 self.addEventListener('install', (event) => {

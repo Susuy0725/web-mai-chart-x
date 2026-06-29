@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>i18n Translation Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=add,arrow_back,check_circle,close,code,content_copy,delete,download,error,refresh,search,translate" />
+    <style>
+        :root {
+            --bg-base: #0a0c10;
+            --bg-panel: rgba(22, 26, 33, 0.7);
+            --bg-surface: #161b22;
+            --bg-input: #0d1117;
+            --border-glow: #30363d;
+            --border-focus: #58a6ff;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --accent-primary: #1f6feb;
+            --accent-hover: #388bfd;
+            --accent-success: #2ea043;
+            --accent-danger: #f85149;
+            --accent-warning: #d29922;
+            --glass-blur: blur(12px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            height: 100vh;
+            /* 👈 改成固定的 height，鎖死螢幕高度 */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top Header */
+        header {
+            background-color: rgba(13, 17, 23, 0.85);
+            backdrop-filter: var(--glass-blur);
+            border-bottom: 1px solid var(--border-glow);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            font-size: 28px;
+            color: var(--accent-focus);
+            background: linear-gradient(135deg, #58a6ff, #1f6feb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .logo-badge {
+            background-color: rgba(88, 166, 255, 0.15);
+            color: var(--border-focus);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+            border: 1px solid rgba(88, 166, 255, 0.2);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid transparent;
+            user-select: none;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-surface);
+            color: var(--text-primary);
+            border-color: var(--border-glow);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--bg-panel);
+            border-color: var(--text-secondary);
+        }
+
+        .btn-danger {
+            background-color: rgba(248, 81, 73, 0.15);
+            color: var(--accent-danger);
+            border-color: rgba(248, 81, 73, 0.2);
+        }
+
+        .btn-danger:hover {
+            background-color: var(--accent-danger);
+            color: white;
+        }
+
+        /* Editor Layout */
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Sidebar / Drawer for Live Code Export */
+        .export-panel {
+            width: 420px;
+            background-color: var(--bg-surface);
+            border-left: 1px solid var(--border-glow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: width 0.3s ease;
+            flex-shrink: 0;
+            z-index: 5;
+        }
+
+        .export-panel.collapsed {
+            width: 0;
+            border-left: none;
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(13, 17, 23, 0.5);
+        }
+
+        .panel-tabs {
+            display: flex;
+            gap: 4px;
+            background-color: var(--bg-input);
+            padding: 3px;
+            border-radius: 6px;
+            border: 1px solid var(--border-glow);
+        }
+
+        .panel-tab {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+
+        .panel-tab.active {
+            background-color: var(--bg-surface);
+            color: var(--text-primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+
+        .code-container {
+            flex: 1;
+            padding: 16px;
+            overflow: auto;
+            background-color: #05070a;
+            position: relative;
+        }
+
+        .code-block {
+            font-family: 'Consolas', 'Courier New', Courier, monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #7ee787;
+            /* Light green syntax */
+            white-space: pre;
+            tab-size: 4;
+        }
+
+        .code-actions {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-glow);
+            display: flex;
+            gap: 12px;
+            background-color: rgba(13, 17, 23, 0.5);
+        }
+
+        /* Main Grid Space */
+        .main-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: var(--bg-base);
+        }
+
+        /* Filter & Search Bar */
+        .search-bar {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            background-color: rgba(22, 26, 33, 0.3);
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .search-wrapper {
+            position: relative;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 20px;
+        }
+
+        .input-text {
+            width: 100%;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+            padding: 10px 12px 10px 40px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .input-text:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+        }
+
+        .filter-select {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+            min-width: 160px;
+        }
+
+        .filter-select:focus {
+            border-color: var(--border-focus);
+        }
+
+        /* Virtual Scrolling or Grid Table */
+        .grid-header {
+            display: grid;
+            grid-template-columns: 240px 1fr 1fr 80px;
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-glow);
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .grid-body {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .grid-row {
+            display: grid;
+            grid-template-columns: 240px 1fr 1fr 80px;
+            border-bottom: 1px solid var(--border-glow);
+            padding: 12px 24px;
+            align-items: center;
+            transition: background-color 0.15s;
+        }
+
+        .grid-row:hover {
+            background-color: rgba(88, 166, 255, 0.04);
+        }
+
+        .grid-row.highlight-missing-zh {
+            background-color: rgba(210, 153, 34, 0.04);
+        }
+
+        .grid-row.highlight-missing-en {
+            background-color: rgba(248, 81, 73, 0.04);
+        }
+
+        .col-key {
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-right: 12px;
+        }
+
+        .col-value-container {
+            width: 100%;
+            padding-right: 16px;
+        }
+
+        .col-textarea {
+            width: 100%;
+            background-color: transparent;
+            border: 1px solid transparent;
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+            resize: none;
+            transition: all 0.15s;
+            line-height: 1.4;
+            min-height: 32px;
+            font-family: inherit;
+        }
+
+        .col-textarea:focus {
+            background-color: var(--bg-input);
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
+        }
+
+        .col-textarea.missing {
+            border: 1px dashed rgba(248, 81, 73, 0.4);
+            background-color: rgba(248, 81, 73, 0.03);
+        }
+
+        .col-textarea.missing::placeholder {
+            color: rgba(248, 81, 73, 0.5);
+            font-style: italic;
+        }
+
+        .col-actions {
+            display: flex;
+            justify-content: center;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 4px;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .btn-icon:hover {
+            background-color: rgba(248, 81, 73, 0.15);
+            color: var(--accent-danger);
+        }
+
+        .status-bar {
+            background-color: var(--bg-surface);
+            border-top: 1px solid var(--border-glow);
+            padding: 8px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .status-stats {
+            display: flex;
+            gap: 16px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.success {
+            background-color: var(--accent-success);
+        }
+
+        .status-dot.danger {
+            background-color: var(--accent-danger);
+        }
+
+        .status-dot.warning {
+            background-color: var(--accent-warning);
+        }
+
+        /* Modal Dialog */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            width: 500px;
+            max-width: 90vw;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transform: scale(0.95);
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .modal-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-glow);
+            background-color: rgba(13, 17, 23, 0.3);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Drag & Drop Overlay Hint */
+        .drop-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(31, 111, 235, 0.15);
+            border: 2px dashed var(--accent-primary);
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .drop-overlay.active {
+            opacity: 1;
+        }
+
+        .drop-box {
+            background-color: var(--bg-surface);
+            padding: 24px 40px;
+            border-radius: 8px;
+            border: 1px solid var(--border-glow);
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Toast Alert */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-glow);
+            padding: 12px 20px;
+            border-radius: 6px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 1000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+
+        .toast.active {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-icon {
+            font-size: 20px;
+        }
+
+        .toast-icon.success {
+            color: var(--accent-success);
+        }
+
+        .toast-icon.error {
+            color: var(--accent-danger);
+        }
+
+        .toast-icon.info {
+            color: var(--border-focus);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Drag and Drop Overlay -->
+    <div id="dropOverlay" class="drop-overlay">
+        <div class="drop-box">
+            <span class="material-symbols-outlined"
+                style="font-size: 48px; color: var(--border-focus); margin-bottom: 12px;">translate</span>
+            <h3 style="margin-bottom: 6px;">拖曳語言檔案至此</h3>
+            <p style="color: var(--text-secondary); font-size: 13px;">支援 zh-TW.js 與 en.js 檔案</p>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <span id="toastIcon" class="material-symbols-outlined toast-icon">check_circle</span>
+        <span id="toastMessage" style="font-size: 13px;">成功訊息</span>
+    </div>
+
+    <!-- Top Header -->
+    <header>
+        <div class="logo-section">
+            <span class="material-symbols-outlined logo-icon">translate</span>
+            <h1 class="logo-title">i18n Translation Editor</h1>
+            <span class="logo-badge">Beta</span>
+        </div>
+        <div class="header-actions">
+            <a href="/" class="btn btn-secondary"><span class="material-symbols-outlined">arrow_back</span>回到主程式</a>
+            <button id="addKeyBtn" class="btn btn-primary"><span class="material-symbols-outlined">add</span>新增
+                Key</button>
+            <button id="togglePanelBtn" class="btn btn-secondary"><span
+                    class="material-symbols-outlined">code</span>切換程式碼面板</button>
+        </div>
+    </header>
+
+    <!-- Workspace Layout -->
+    <div class="workspace" id="dragZone">
+        <!-- Main Translation Grid -->
+        <main class="main-editor">
+            <!-- Filter / Search Header -->
+            <div class="search-bar">
+                <div class="search-wrapper">
+                    <span class="material-symbols-outlined search-icon">search</span>
+                    <input type="text" id="searchInput" class="input-text" placeholder="搜尋 Key 或是翻譯內容 (支援萬用字元)...">
+                </div>
+                <select id="filterSelect" class="filter-select">
+                    <option value="all">所有 Keys</option>
+                    <option value="missing-zh">缺失 繁體中文 翻譯</option>
+                    <option value="missing-en">缺失 英文 翻譯</option>
+                    <option value="incomplete">所有未完成項目</option>
+                </select>
+                <button id="reloadLocalesBtn" class="btn btn-secondary"><span
+                        class="material-symbols-outlined">refresh</span>載入原始語系</button>
+            </div>
+
+            <!-- Grid Headers -->
+            <div class="grid-header">
+                <div>i18n Key</div>
+                <div>繁體中文 (zh-TW)</div>
+                <div>英文 (en)</div>
+                <div style="text-align: center;">操作</div>
+            </div>
+
+            <!-- Grid Table Rows -->
+            <div class="grid-body" id="gridBody">
+                <!-- Rows will be injected here -->
+            </div>
+
+            <!-- Status Indicator Bar -->
+            <div class="status-bar">
+                <div class="status-stats">
+                    <div class="status-item">
+                        <span id="statTotal" style="font-weight: 600;">0</span> Keys
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot success"></span>
+                        已完成: <span id="statDone" style="font-weight: 600;">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot danger"></span>
+                        缺失英文: <span id="statMissingEn" style="font-weight: 600;">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot warning"></span>
+                        缺失中文: <span id="statMissingZh" style="font-weight: 600;">0</span>
+                    </div>
+                </div>
+                <div>
+                    拖曳 <code>locales/*.js</code> 至瀏覽器可手動匯入
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Side Code Live Preview Panel -->
+        <aside class="export-panel" id="exportPanel">
+            <div class="panel-header">
+                <h3 style="font-size: 14px; font-weight: 600;">匯出代碼</h3>
+                <div class="panel-tabs">
+                    <div class="panel-tab active" data-lang="zh-TW">zh-TW.js</div>
+                    <div class="panel-tab" data-lang="en">en.js</div>
+                </div>
+            </div>
+
+            <div class="code-container">
+                <pre class="code-block" id="codeBlock">export const zhTW = {};</pre>
+            </div>
+
+            <div class="code-actions">
+                <button id="copyCodeBtn" class="btn btn-secondary" style="flex: 1;"><span
+                        class="material-symbols-outlined">content_copy</span>複製代碼</button>
+                <button id="downloadBtn" class="btn btn-primary" style="flex: 1;"><span
+                        class="material-symbols-outlined">download</span>下載檔案</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Modal Dialog for Adding Translation Key -->
+    <div id="modalOverlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">新增 i18n 翻譯項目</h3>
+                <button id="modalCloseBtn" class="btn-icon"><span
+                        class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newKeyInput" class="form-label">i18n Key (支援點記法命名，例如 <code>menu.help</code>)</label>
+                    <input type="text" id="newKeyInput" class="input-text" style="padding-left: 12px;"
+                        placeholder="例如: menu.new_button">
+                </div>
+                <div class="form-group">
+                    <label for="newZhInput" class="form-label">繁體中文 (zh-TW)</label>
+                    <input type="text" id="newZhInput" class="input-text" style="padding-left: 12px;"
+                        placeholder="例如: 確定">
+                </div>
+                <div class="form-group">
+                    <label for="newEnInput" class="form-label">英文 (en)</label>
+                    <input type="text" id="newEnInput" class="input-text" style="padding-left: 12px;"
+                        placeholder="example: Apply">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="modalCancelBtn" class="btn btn-secondary">取消</button>
+                <button id="modalConfirmBtn" class="btn btn-primary">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script Logic -->
+    <script type="module">
+        let currentData = {}; // key -> { zh: string, en: string }
+        let currentExportTab = 'zh-TW'; // 'zh-TW' or 'en'
+
+        // 系統內建預設的語系
+        const defaultZh = {
+            sw: { update: "遊戲有新版本更新！請重新整理網頁套用。" },
+            menu: {
+                file: "檔案", fileNew: "新建", fileProjectManager: "專案總管",
+                fileReadFolder: "讀取資料夾", fileReadZip: "讀取壓縮檔",
+                fileDownload: "下載", fileAddMusic: "加入音樂", fileAddVideo: "加入影片",
+                fileImportFromVideo: "從影片匯入", fileReadMaidata: "讀取maidata",
+                tools: "功能/工具", toolsGetNowNoteIndex: "游標移至播放頭",
+                toolsGetCursorNoteIndex: "播放頭移至游標", toolsRecordVideo: "錄製影片",
+                toolsEditMusic: "編輯音樂開頭", toolsTapBpm: "Tap BPM",
+                toolsQuickGenerate: "快速生成", toolsFetchFromMainote: "從Mainote抓取資料",
+                toolsPopup: "預覽彈出", manageResources: "資源管理",
+                chartInfo: "譜面資訊", settings: "設定", edit: "編輯",
+                editUndo: "復原", editRedo: "重作", editRotateClockwise: "順時針旋轉",
+                editRotateCounterClockwise: "逆時針旋轉", editRotate180: "180度旋轉",
+                editFlipVertical: "上下反轉", editFlipHorizontal: "左右反轉",
+                offset: "偏移", changeDifficulty: "難度切換", playbackSpeed: "播放速度",
+                displayMode: "顯示模式", displayModeSimai: "simai 語法",
+                displayModeVisual: "軌道", readyBeat: "預備拍"
+            }
+        };
+
+        const defaultEn = {
+            sw: { update: "New version update available! Please refresh the page to apply." },
+            menu: {
+                file: "File", fileNew: "New Project", fileProjectManager: "Project Manager",
+                fileReadFolder: "Load Folder", fileReadZip: "Load Zip File",
+                fileDownload: "Download", fileAddMusic: "Add Music", fileAddVideo: "Add Video",
+                fileImportFromVideo: "Import from Video", fileReadMaidata: "Load maidata",
+                tools: "Tools", toolsGetNowNoteIndex: "Move Cursor to Playhead",
+                toolsGetCursorNoteIndex: "Move Playhead to Cursor", toolsRecordVideo: "Record Video",
+                toolsEditMusic: "Edit BGM & Offset", toolsTapBpm: "Tap BPM",
+                toolsQuickGenerate: "Quick Generate", toolsFetchFromMainote: "Fetch from Mainote",
+                toolsPopup: "Popout Preview", manageResources: "Resource Manager",
+                chartInfo: "Chart Info", settings: "Settings", edit: "Edit",
+                editUndo: "Undo", editRedo: "Redo", editRotateClockwise: "Rotate Clockwise",
+                editRotateCounterClockwise: "Rotate Counter-Clockwise", editRotate180: "Rotate 180°",
+                editFlipVertical: "Flip Vertical", editFlipHorizontal: "Flip Horizontal",
+                offset: "Offset", changeDifficulty: "Change Difficulty", playbackSpeed: "Playback Speed",
+                displayMode: "Display Mode", displayModeSimai: "simai syntax",
+                displayModeVisual: "track", readyBeat: "ready beat"
+            }
+        };
+
+        // --- DOM Elements ---
+        const gridBody = document.getElementById('gridBody');
+        const searchInput = document.getElementById('searchInput');
+        const filterSelect = document.getElementById('filterSelect');
+        const reloadLocalesBtn = document.getElementById('reloadLocalesBtn');
+        const addKeyBtn = document.getElementById('addKeyBtn');
+        const togglePanelBtn = document.getElementById('togglePanelBtn');
+        const exportPanel = document.getElementById('exportPanel');
+        const codeBlock = document.getElementById('codeBlock');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const panelTabs = document.querySelectorAll('.panel-tab');
+
+        // Modal elements
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+        const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+        const newKeyInput = document.getElementById('newKeyInput');
+        const newZhInput = document.getElementById('newZhInput');
+        const newEnInput = document.getElementById('newEnInput');
+
+        // Stats elements
+        const statTotal = document.getElementById('statTotal');
+        const statDone = document.getElementById('statDone');
+        const statMissingEn = document.getElementById('statMissingEn');
+        const statMissingZh = document.getElementById('statMissingZh');
+
+        // DragZone
+        const dragZone = document.getElementById('dragZone');
+        const dropOverlay = document.getElementById('dropOverlay');
+
+        // Toast
+        const toast = document.getElementById('toast');
+        const toastIcon = document.getElementById('toastIcon');
+        const toastMessage = document.getElementById('toastMessage');
+
+        // --- Helper: Flatten & Unflatten Objects ---
+        function flattenObject(obj, prefix = '') {
+            let result = {};
+            for (const key in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                    const nestedKey = prefix ? `${prefix}.${key}` : key;
+                    if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+                        Object.assign(result, flattenObject(obj[key], nestedKey));
+                    } else {
+                        result[nestedKey] = obj[key];
+                    }
+                }
+            }
+            return result;
+        }
+
+        function unflattenObject(flat) {
+            const result = {};
+            for (const [key, val] of Object.entries(flat)) {
+                const parts = key.split('.');
+                let current = result;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (i === parts.length - 1) {
+                        current[part] = val;
+                    } else {
+                        if (!current[part] || typeof current[part] !== 'object') {
+                            current[part] = {};
+                        }
+                        current = current[part];
+                    }
+                }
+            }
+            return result;
+        }
+
+        // --- Helper: Javascript Serializer ---
+        function serializeToESModule(obj, exportName) {
+            const spaces = ' '.repeat(4);
+
+            function serialize(val, indentLevel = 4) {
+                const sp = ' '.repeat(indentLevel);
+                if (typeof val === 'object' && val !== null) {
+                    let str = '{\n';
+                    const keys = Object.keys(val);
+                    for (let i = 0; i < keys.length; i++) {
+                        const k = keys[i];
+                        const v = val[k];
+                        const comma = i === keys.length - 1 ? '' : ',';
+                        // 處理包含特殊字元的 Key
+                        const keyRep = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : `"${k}"`;
+
+                        str += `${sp}${keyRep}: ${serialize(v, indentLevel + 4)}${comma}\n`;
+                    }
+                    str += ' '.repeat(indentLevel - 4) + '}';
+                    return str;
+                } else if (typeof val === 'string') {
+                    const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                    return `"${escaped}"`;
+                }
+                return val;
+            }
+
+            return `export const ${exportName} = ${serialize(obj)};\n`;
+        }
+
+        // --- Core: Toast alert ---
+        function showToast(message, type = 'success') {
+            toastMessage.textContent = message;
+            toast.className = 'toast active';
+
+            if (type === 'success') {
+                toastIcon.textContent = 'check_circle';
+                toastIcon.className = 'material-symbols-outlined toast-icon success';
+            } else if (type === 'error') {
+                toastIcon.textContent = 'error';
+                toastIcon.className = 'material-symbols-outlined toast-icon error';
+            } else {
+                toastIcon.textContent = 'info';
+                toastIcon.className = 'material-symbols-outlined toast-icon info';
+            }
+
+            setTimeout(() => {
+                toast.classList.remove('active');
+            }, 3000);
+        }
+
+        // --- Core: Load Translations ---
+        async function loadLocales() {
+            try {
+                // 嘗試動態從伺服器載入當前的 locales 檔案
+                const zhModule = await import('/locales/zh-TW.js');
+                const enModule = await import('/locales/en.js');
+
+                const zhFlat = flattenObject(zhModule.zhTW);
+                const enFlat = flattenObject(enModule.en);
+
+                // 建立聯集的所有 keys
+                const allKeys = new Set([...Object.keys(zhFlat), ...Object.keys(enFlat)]);
+                currentData = {};
+                for (const key of allKeys) {
+                    currentData[key] = {
+                        zh: zhFlat[key] || '',
+                        en: enFlat[key] || ''
+                    };
+                }
+
+                showToast("語系檔案載入成功！");
+            } catch (err) {
+                console.warn("[i18n Editor] 無法載入本地伺服器檔案，將改用預設資料:", err);
+
+                const zhFlat = flattenObject(defaultZh);
+                const enFlat = flattenObject(defaultEn);
+
+                const allKeys = new Set([...Object.keys(zhFlat), ...Object.keys(enFlat)]);
+                currentData = {};
+                for (const key of allKeys) {
+                    currentData[key] = {
+                        zh: zhFlat[key] || '',
+                        en: enFlat[key] || ''
+                    };
+                }
+                showToast("已載入預設語系備份項目", "info");
+            }
+
+            renderGrid();
+            updateExportCode();
+        }
+
+        // --- Core: Render Grid Rows ---
+        function renderGrid() {
+            gridBody.innerHTML = '';
+
+            const searchVal = searchInput.value.trim().toLowerCase();
+            const filterVal = filterSelect.value;
+
+            const sortedKeys = Object.keys(currentData).sort();
+
+            let total = 0;
+            let done = 0;
+            let missingEn = 0;
+            let missingZh = 0;
+
+            for (const key of sortedKeys) {
+                const { zh, en } = currentData[key];
+
+                // 計算數值
+                total++;
+                if (zh && en) done++;
+                if (!zh) missingZh++;
+                if (!en) missingEn++;
+
+                // Filter and Search conditions
+                if (filterVal === 'missing-zh' && zh) continue;
+                if (filterVal === 'missing-en' && en) continue;
+                if (filterVal === 'incomplete' && zh && en) continue;
+
+                if (searchVal) {
+                    const matchKey = key.toLowerCase().includes(searchVal);
+                    const matchZh = zh.toLowerCase().includes(searchVal);
+                    const matchEn = en.toLowerCase().includes(searchVal);
+                    if (!matchKey && !matchZh && !matchEn) continue;
+                }
+
+                // Row class for highlights
+                let rowClass = 'grid-row';
+                if (!zh) rowClass += ' highlight-missing-zh';
+                else if (!en) rowClass += ' highlight-missing-en';
+
+                const row = document.createElement('div');
+                row.className = rowClass;
+                row.innerHTML = `
+                    <div class="col-key" title="${key}">${key}</div>
+                    <div class="col-value-container">
+                        <textarea class="col-textarea ${!zh ? 'missing' : ''}" data-key="${key}" data-lang="zh" placeholder="${!zh ? '尚未翻譯中文 (zh-TW)' : ''}">${zh}</textarea>
+                    </div>
+                    <div class="col-value-container">
+                        <textarea class="col-textarea ${!en ? 'missing' : ''}" data-key="${key}" data-lang="en" placeholder="${!en ? 'Missing English (en)' : ''}">${en}</textarea>
+                    </div>
+                    <div class="col-actions">
+                        <button class="btn-icon delete-row-btn" data-key="${key}" title="刪除項目">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
+                    </div>
+                `;
+
+                gridBody.appendChild(row);
+            }
+
+            // Update stats labels
+            statTotal.textContent = total;
+            statDone.textContent = done;
+            statMissingZh.textContent = missingZh;
+            statMissingEn.textContent = missingEn;
+
+            // Hook textareas update listeners
+            const textareas = gridBody.querySelectorAll('.col-textarea');
+            textareas.forEach(ta => {
+                ta.addEventListener('input', (e) => {
+                    const k = e.target.dataset.key;
+                    const lang = e.target.dataset.lang;
+                    const v = e.target.value;
+
+                    currentData[k][lang] = v;
+
+                    // Update missing visual cue
+                    if (v.trim() === '') {
+                        e.target.classList.add('missing');
+                    } else {
+                        e.target.classList.remove('missing');
+                    }
+
+                    updateExportCode();
+                });
+            });
+
+            // Hook delete button listeners
+            const deleteButtons = gridBody.querySelectorAll('.delete-row-btn');
+            deleteButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const k = e.currentTarget.dataset.key;
+                    if (confirm(`確定要刪除 "${k}" 翻譯項目嗎？`)) {
+                        delete currentData[k];
+                        renderGrid();
+                        updateExportCode();
+                        showToast("刪除成功！");
+                    }
+                });
+            });
+        }
+
+        // --- Core: Export Code Generation ---
+        function updateExportCode() {
+            const flatZh = {};
+            const flatEn = {};
+
+            for (const [k, obj] of Object.entries(currentData)) {
+                if (obj.zh) flatZh[k] = obj.zh;
+                if (obj.en) flatEn[k] = obj.en;
+            }
+
+            if (currentExportTab === 'zh-TW') {
+                const unflatZh = unflattenObject(flatZh);
+                codeBlock.textContent = serializeToESModule(unflatZh, 'zhTW');
+            } else {
+                const unflatEn = unflattenObject(flatEn);
+                codeBlock.textContent = serializeToESModule(unflatEn, 'en');
+            }
+        }
+
+        // --- Event: Search and Filters ---
+        searchInput.addEventListener('input', renderGrid);
+        filterSelect.addEventListener('change', renderGrid);
+        reloadLocalesBtn.addEventListener('click', loadLocales);
+
+        // --- Event: Sidebar Panel Toggle ---
+        togglePanelBtn.addEventListener('click', () => {
+            exportPanel.classList.toggle('collapsed');
+        });
+
+        // --- Event: Code Tab switching ---
+        panelTabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                panelTabs.forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                currentExportTab = e.target.dataset.lang;
+                updateExportCode();
+            });
+        });
+
+        // --- Event: Copy Code ---
+        copyCodeBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(codeBlock.textContent).then(() => {
+                showToast("語系代碼已複製到剪貼簿！");
+            }).catch(err => {
+                showToast("複製失敗：" + err, "error");
+            });
+        });
+
+        // --- Event: Download Code ---
+        downloadBtn.addEventListener('click', () => {
+            const content = codeBlock.textContent;
+            const filename = currentExportTab === 'zh-TW' ? 'zh-TW.js' : 'en.js';
+            const blob = new Blob([content], { type: 'text/javascript;charset=utf-8;' });
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast(`成功匯出下載 ${filename}`);
+        });
+
+        // --- Event: Modal Box ---
+        addKeyBtn.addEventListener('click', () => {
+            modalOverlay.classList.add('active');
+            newKeyInput.focus();
+        });
+
+        function closeModal() {
+            modalOverlay.classList.remove('active');
+            newKeyInput.value = '';
+            newZhInput.value = '';
+            newEnInput.value = '';
+        }
+
+        modalCloseBtn.addEventListener('click', closeModal);
+        modalCancelBtn.addEventListener('click', closeModal);
+
+        modalConfirmBtn.addEventListener('click', () => {
+            const key = newKeyInput.value.trim();
+            const zh = newZhInput.value.trim();
+            const en = newEnInput.value.trim();
+
+            if (!key) {
+                showToast("i18n Key 欄位不可空白！", "error");
+                return;
+            }
+
+            if (currentData[key]) {
+                if (!confirm(`Key "${key}" 已存在。要覆寫此 Key 的翻譯內容嗎？`)) {
+                    return;
+                }
+            }
+
+            currentData[key] = { zh, en };
+            closeModal();
+            renderGrid();
+            updateExportCode();
+            showToast("成功加入語系項目！");
+        });
+
+        // --- Drag and Drop Parser ---
+        function parseModuleSource(content, exportName) {
+            // 用來安全抽離 ES Module 結構並轉成物件的簡單 Regex/Evaluator
+            // 由於可能是 export const en = { ... } 或 export const zhTW = { ... }
+            const regex = new RegExp(`export\\s+const\\s+${exportName}\\s*=\\s*(\\{[\\s\\S]*?\\});?\\s*$`);
+            const match = content.match(regex);
+
+            if (!match) {
+                // 回退到匹配任何 export const xxx = { ... } 
+                const fallbackRegex = /export\s+const\s+\w+\s*=\s*(\{[\s\S]*?\});?\s*$/;
+                const fallbackMatch = content.match(fallbackRegex);
+                if (!fallbackMatch) throw new Error("無效的語系模組格式 (需為 export const xxx = {...})");
+                return eval(`(${fallbackMatch[1]})`);
+            }
+
+            return eval(`(${match[1]})`);
+        }
+
+        // Drag zone event binds
+        window.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.add('active');
+        });
+
+        dropOverlay.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.remove('active');
+        });
+
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.remove('active');
+
+            const files = e.dataTransfer.files;
+            if (files.length === 0) return;
+
+            let loadedCount = 0;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const filename = file.name.toLowerCase();
+                const reader = new FileReader();
+
+                reader.onload = function (evt) {
+                    const text = evt.target.result;
+                    try {
+                        let parsedObj = {};
+                        if (filename.includes('zh-tw') || filename === 'zhtw.js') {
+                            parsedObj = parseModuleSource(text, 'zhTW');
+                            const flat = flattenObject(parsedObj);
+                            for (const [k, v] of Object.entries(flat)) {
+                                if (!currentData[k]) currentData[k] = { zh: '', en: '' };
+                                currentData[k].zh = v;
+                            }
+                            loadedCount++;
+                        } else if (filename.includes('en') || filename === 'en.js') {
+                            parsedObj = parseModuleSource(text, 'en');
+                            const flat = flattenObject(parsedObj);
+                            for (const [k, v] of Object.entries(flat)) {
+                                if (!currentData[k]) currentData[k] = { zh: '', en: '' };
+                                currentData[k].en = v;
+                            }
+                            loadedCount++;
+                        } else {
+                            showToast(`無法辨識語系類型: ${file.name}`, "error");
+                        }
+
+                        if (loadedCount > 0) {
+                            renderGrid();
+                            updateExportCode();
+                            showToast(`成功解析並匯入 ${file.name}`);
+                        }
+                    } catch (err) {
+                        showToast(`解析 ${file.name} 失敗: ${err.message}`, "error");
+                    }
+                };
+
+                reader.readAsText(file);
+            }
+        });
+
+        // --- App Boot ---
+        loadLocales();
+    </script>
+</body>
+
+</html>

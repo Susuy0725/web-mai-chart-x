@@ -2,6 +2,10 @@ import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, proj
 import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput1, createCustomSlider } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
+import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
+
+// 初始化進行靜態翻譯
+applyI18nToDOM();
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js')
@@ -187,16 +191,16 @@ export const defaultSettings = {
 };
 const settingsConfig = [
     {
-        label: '基本',
+        label: 'settings.tabs.basic',
         items: [
-            { id: 'speed', type: 'number', label: ' Tap/Hold 速度', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
-            { id: 'slideSpeed', type: 'number', label: ' Slide 速度', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
-            { id: 'touchSpeed', type: 'number', label: ' Touch 速度', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
-            { id: 'middleDisplay', type: 'dropdown', label: '中間顯示', options: [{ value: 0, label: '關閉' }, { value: 1, label: 'COMBO' }, { value: 2, label: '分數' }], def: defaultSettings.middleDisplay },
+            { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
+            { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
+            { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
+            { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.score' }], def: defaultSettings.middleDisplay },
             {
                 id: 'moviebrightness',
                 type: 'number',
-                label: '背景暗度',
+                label: 'settings.items.moviebrightness',
                 step: 1, min: -4, max: 0,
                 def: defaultSettings.moviebrightness || 0,
                 apply: (val) => {
@@ -207,87 +211,102 @@ const settingsConfig = [
             {
                 id: 'pinkStars',
                 type: 'checkbox',
-                label: '粉紅色星星',
+                label: 'settings.items.pinkStars',
                 def: defaultSettings.pinkStars || false
+            },
+            {
+                id: 'lang',
+                type: 'dropdown',
+                label: 'settings.items.lang',
+                options: [
+                    { value: 'zh-TW', label: '繁體中文' },
+                    { value: 'en', label: 'English' },
+                    { value: 'ja', label: '日本語' },
+                ],
+                def: getCurrentLang(),
+                get: () => getCurrentLang(),
+                apply: (val) => {
+                    setLang(val);
+                }
             },
         ]
     },
     {
-        label: '顯示',
+        label: 'settings.tabs.display',
         items: [
             {
                 id: 'showSensor',
                 type: 'checkbox',
-                label: '顯示感應器',
+                label: 'settings.items.showSensor',
                 def: defaultSettings.showSensor
             },
             {
                 id: 'showSensorTextWhenPaused',
                 type: 'checkbox',
-                label: '暫停時顯示感應器文字',
+                label: 'settings.items.showSensorTextWhenPaused',
                 def: defaultSettings.showSensorTextWhenPaused
             },
             {
                 id: 'hideBackgroundWhenPaused',
                 type: 'checkbox',
-                label: '暫停時隱藏背景',
+                label: 'settings.items.hideBackgroundWhenPaused',
                 def: defaultSettings.hideBackgroundWhenPaused
             },
             {
                 id: 'rotateStars',
                 type: 'checkbox',
-                label: '星星旋轉',
+                label: 'settings.items.rotateStars',
                 def: defaultSettings.rotateStars || false
             }
         ]
     },
     {
-        label: '音效',
+        label: 'settings.tabs.sfx',
         items: [
             {
-                id: 'globalVolume', type: 'range', label: '全局音量', min: 0, max: 1, step: 0.1, def: defaultSettings.globalVolume,
+                id: 'globalVolume', type: 'range', label: 'settings.items.globalVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.globalVolume,
                 apply: (val) => { audioManager.setGlobalVolume(val); }
             },
             {
-                id: 'musicVolume', type: 'range', label: '音樂音量', min: 0, max: 1, step: 0.1, def: defaultSettings.musicVolume,
+                id: 'musicVolume', type: 'range', label: 'settings.items.musicVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.musicVolume,
                 apply: (val) => { audioManager.setBGMVolume(val); }
             },
             {
-                id: 'SfxVolume', type: 'range', label: '音效音量', min: 0, max: 1, step: 0.1, def: defaultSettings.SfxVolume,
+                id: 'SfxVolume', type: 'range', label: 'settings.items.SfxVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.SfxVolume,
                 apply: (val) => { audioManager.setSFXVolume(val); }
             },
             {
-                id: 'sfxVolumes', type: 'object', label: '個別音效音量', def: defaultSettings.sfxVolumes,
+                id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,
                 apply: (val) => { audioManager.setSFXVolumes(val); }
             },
             {
                 id: 'notPlayHoldEnd',
                 type: 'checkbox',
-                label: '不播放 Hold 結尾音效',
+                label: 'settings.items.notPlayHoldEnd',
                 def: defaultSettings.notPlayHoldEnd
             }
         ]
     },
     {
-        label: '其他',
+        label: 'settings.tabs.other',
         items: [
             {
-                id: 'autocomplete', type: 'checkbox', label: '編輯器自動補齊括號', def: defaultSettings.autocomplete
+                id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
             },
             {
-                id: 'maxSlideCount', type: 'number', label: '螢幕上最大滑星顯示數量', min: 1, max: 100, step: 1, def: defaultSettings.maxSlideCount
+                id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100, step: 1, def: defaultSettings.maxSlideCount
             },
             {
-                id: 'inputDebounceTime', type: 'number', label: '編輯器刷新時間 (ms)', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
+                id: 'inputDebounceTime', type: 'number', label: 'settings.items.inputDebounceTime', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
             },
             {
-                id: 'showUI', type: 'checkbox', label: '顯示FPS介面', def: defaultSettings.showUI
+                id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
             },
             {
-                id: 'autoPauseOnScroll', type: 'checkbox', label: '滾動時自動暫停', def: defaultSettings.autoPauseOnScroll
+                id: 'autoPauseOnScroll', type: 'checkbox', label: 'settings.items.autoPauseOnScroll', def: defaultSettings.autoPauseOnScroll
             },
             {
-                id: 'globalTimeline', type: 'checkbox', label: '顯示全域時間軸', def: defaultSettings.globalTimeline
+                id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
             }
         ]
     }
@@ -375,7 +394,7 @@ manageResourcesButton.addEventListener('click', async () => {
 
     // 呼叫你的 simplePopupWindow
     popupWindow({
-        title: "資源管理",
+        title: t('popup.resource.title'),
         content: await getSize(),
         buttons: [
             {
@@ -491,7 +510,7 @@ manageResourcesButton.addEventListener('click', async () => {
                                 }
                             },
                             {
-                                text: "關閉",
+                                text: t('popup.close'),
                                 hideOnClick: true
                             }
                         ]
@@ -499,12 +518,79 @@ manageResourcesButton.addEventListener('click', async () => {
                 }
             },
             {
-                text: "關閉",
+                text: t('popup.close'),
                 hideOnClick: true
             }
         ]
     });
 });
+/**
+ * 將 AudioBuffer 轉換為 16-bit PCM WAV Blob
+ */
+function audioBufferToWav(buffer) {
+    const numOfChan = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // 1 = raw PCM
+    const bitDepth = 16;
+
+    let result;
+    if (numOfChan === 2) {
+        result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+    } else {
+        result = buffer.getChannelData(0);
+    }
+
+    return writeWavFile(result, numOfChan, sampleRate, format, bitDepth);
+}
+
+function interleave(inputL, inputR) {
+    const length = inputL.length + inputR.length;
+    const result = new Float32Array(length);
+    let index = 0;
+    let inputIndex = 0;
+    while (index < length) {
+        result[index++] = inputL[inputIndex];
+        result[index++] = inputR[inputIndex];
+        inputIndex++;
+    }
+    return result;
+}
+
+function writeWavFile(samples, numOfChan, sampleRate, format, bitDepth) {
+    const blockAlign = numOfChan * (bitDepth / 8);
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = samples.length * (bitDepth / 8);
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numOfChan, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+}
+
+function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+}
 
 /**
  * 1. 音訊緩衝區管理器（負責音訊運算、備份與復原）
@@ -579,14 +665,14 @@ class BgmEditorWaveformCanvas {
     }
 
     /** 🎨 繪製渲染核心 */
-    draw(offsetTime, visualOffset, zoomValue) {
+    draw(offsetTime, zoomValue) {
         const bgmBuffer = this.bm.buffer;
         const duration = this.bm.duration;
         const data = bgmBuffer.getChannelData(0);
 
         const zoom = Math.max(1, parseFloat(zoomValue) || 1);
         const viewLength = Math.max(0.1, duration / zoom);
-        const viewCenter = Math.min(duration, Math.max(0, offsetTime + visualOffset));
+        const viewCenter = Math.min(duration, Math.max(0, offsetTime));
 
         let viewStart = viewCenter - viewLength / 2;
         if (viewStart < 0) viewStart = 0;
@@ -634,169 +720,399 @@ class BgmEditorWaveformCanvas {
  */
 editMusicButton.addEventListener('click', () => {
     if (!audioManager.bgmBuffer) {
-        simpleToast({ content: '請先匯入音樂', type: 'warning' });
+        simpleToast({ content: t('toast.needBgm'), type: 'warning' });
         return;
     }
 
-    // 初始化音訊管理器與畫布管理器
     const bufferManager = new BgmEditorBufferManager(audioManager);
-
     let offsetTime = musicDelay;
-    let visualOffset = 0;
     let isPreviewing = false;
     let previewInterval;
+    let editTaps = [];
+
+    // 用來記錄拖曳前是不是正在播放，拖曳時要先閉嘴
+    let wasPreviewingBeforeDrag = false;
 
     // 建立 UI 容器與元素
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;width:min(90vw,600px);';
+    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;box-sizing:border-box;color:#e0e0e0;';
 
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 120;
-    canvas.style.cssText = 'width:100%;height:120px;background:#111;border:1px solid #555;border-radius:4px;cursor:crosshair;';
+    canvas.style.cssText = 'width:100%;height:120px;background:#0f0f0f;border:1px solid #444;border-radius:6px;cursor:crosshair;display:block;';
     container.appendChild(canvas);
 
     const wfCanvas = new BgmEditorWaveformCanvas(canvas, bufferManager);
 
     const controls = document.createElement('div');
-    controls.style.cssText = 'display:flex;gap:15px;align-items:center;flex-wrap:wrap;';
+    controls.style.cssText = 'display:flex;flex-direction:column;gap:12px;width:100%;';
     controls.innerHTML = `
-        <label style="display:flex;align-items:center;gap:5px;">
-            BPM: <input type="number" id="editBpmInput" value="${clockBpm}" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;">
-            第一拍偏移(s): <input type="number" id="editOffsetInput" value="${musicDelay.toFixed(3)}" step="0.001" style="width:80px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;">
-            縮放: <input type="number" id="editZoomInput" value="1" min="1" max="20" step="0.1" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">x
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;">
-            BGM音量: <input type="number" id="editBgmVolumeInput" value="0.75" min="0" max="1" step="0.05" style="width:60px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">x
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;">
-            音訊偏移(s): <input type="number" id="editShiftInput" value="0" step="0.001" style="width:80px;background:#222;color:#fff;border:1px solid #555;padding:4px;border-radius:4px;">
-        </label>
+        <!-- 第一排: BPM 敲擊與第一拍偏移 -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
+            <!-- BPM 區塊 -->
+            <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px;">
+                <span style="font-weight:bold; color:#00a2ff; font-size:12px;">BPM & Tap Estimator</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="number" id="editBpmInput" value="${clockBpm}" style="width:70px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
+                    <button id="editTapBpmBtn" type="button" style="padding:6px 14px; background:#0055ff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px; user-select:none; transition:background 0.2s;">Tap</button>
+                    <button id="editTapResetBtn" type="button" style="padding:6px 8px; background:#333; color:#ccc; border:1px solid #444; border-radius:4px; cursor:pointer; font-size:11px;">${t('popup.tapBpm.btnReset')}</button>
+                </div>
+                <span id="editTapBpmStatus" style="font-size:11px; color:#888;">${t('popup.tapBpm.msgNotStarted')}</span>
+            </div>
+
+            <!-- 第一拍偏移區塊 -->
+            <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px; justify-content:space-between;">
+                <div>
+                    <span style="font-weight:bold; color:#00a2ff; font-size:12px;">${t('popup.editMusic.firstBeatOffset')}</span>
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                        <input type="number" id="editOffsetInput" value="${musicDelay.toFixed(2)}" step="0.01" style="width:85px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
+                        <span style="color:#aaa; font-size:12px; margin-right:4px;">s</span>
+                        <button id="shiftDecBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#ff4d4d; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">-1 拍</button>
+                        <button id="shiftIncBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#22c55e; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">+1 拍</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第二排: Waveform Zoom & BGM Vol -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; background:#1a1a1a; padding:12px; border-radius:6px; border:1px solid #333;">
+            <div style="display:flex; flex-direction:column; gap:6px; justify-content:center;">
+                <span style="font-weight:bold; color:#00a2ff; font-size:12px;">Zoom Waveform</span>
+                <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                    <button id="zoomOutBtn" type="button" style="width:30px; height:30px; background:#333; color:#fff; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; user-select:none;">-</button>
+                    <input type="range" id="editZoomSlider" min="1" max="20" step="0.5" value="1" style="flex:1; cursor:pointer; margin:0; height:6px;">
+                    <button id="zoomInBtn" type="button" style="width:30px; height:30px; background:#333; color:#fff; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; user-select:none;">+</button>
+                    <span id="zoomValLabel" style="font-size:11px; color:#ccc; min-width:32px; text-align:right; font-weight:bold;">1.0x</span>
+                </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px; justify-content:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:bold; color:#aaa; font-size:12px;">BGM Volume</span>
+                    <input type="number" id="editBgmVolumeInput" value="0.75" min="0" max="1" step="0.05" style="width:65px; background:#111; color:#fff; border:1px solid #444; padding:5px 8px; border-radius:4px; text-align:center; font-size:13px; font-weight:bold;">
+                </div>
+            </div>
+        </div>
+
+        <!-- 第三排: 節拍器預覽與精準 Shift 偏移 -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
+            <button id="playClockBtn" type="button" style="width:100%; height:44px; background:#222; color:#00a2ff; border:1px solid #00a2ff; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s;">
+                <span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.previewMetronome')}
+            </button>
+        </div>
     `;
     container.appendChild(controls);
 
     // 快捷 DOM 查詢
     const bpmInput = controls.querySelector('#editBpmInput');
     const offsetInputNode = controls.querySelector('#editOffsetInput');
-    const zoomInput = controls.querySelector('#editZoomInput');
     const bgmVolumeInput = controls.querySelector('#editBgmVolumeInput');
-    const shiftInput = controls.querySelector('#editShiftInput');
 
-    // 建立視覺偏移 Slider
-    const visualOffsetSlider = document.createElement('input');
-    visualOffsetSlider.type = 'range';
-    visualOffsetSlider.min = -5;
-    visualOffsetSlider.max = 5;
-    visualOffsetSlider.step = 0.01;
-    visualOffsetSlider.value = 0;
-    visualOffsetSlider.style.cssText = 'width:100%;';
+    const editTapBpmBtn = controls.querySelector('#editTapBpmBtn');
+    const editTapResetBtn = controls.querySelector('#editTapResetBtn');
+    const editTapBpmStatus = controls.querySelector('#editTapBpmStatus');
 
-    const visualOffsetLabel = document.createElement('div');
-    visualOffsetLabel.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#ccc;';
-    visualOffsetLabel.innerHTML = `<span>視覺偏移: </span><strong id="visualOffsetValue">0.00s</strong>`;
+    const zoomSlider = controls.querySelector('#editZoomSlider');
+    const zoomInBtn = controls.querySelector('#zoomInBtn');
+    const zoomOutBtn = controls.querySelector('#zoomOutBtn');
+    const zoomValLabel = controls.querySelector('#zoomValLabel');
 
-    const offsetControl = document.createElement('div');
-    offsetControl.style.cssText = 'display:flex;flex-direction:column;gap:6px;width:100%;';
-    offsetControl.appendChild(visualOffsetLabel);
-    offsetControl.appendChild(visualOffsetSlider);
-    container.appendChild(offsetControl);
+    const playClockBtn = controls.querySelector('#playClockBtn');
+    const shiftDecBeatBtn = controls.querySelector('#shiftDecBeatBtn');
+    const shiftIncBeatBtn = controls.querySelector('#shiftIncBeatBtn');
+
+    // 建立首拍對齊 UI 卡片 (使用者體驗優化)
+    const alignCard = document.createElement('div');
+    alignCard.style.cssText = 'background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:12px; display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box;';
+
+    const alignHeader = document.createElement('div');
+    alignHeader.style.cssText = 'font-weight:bold; color:#00a2ff; font-size:12px; display:flex; justify-content:space-between; align-items:center;';
+    alignHeader.innerHTML = `<span>${t('popup.editMusic.alignmentTitle')}</span><span id="currentBeatsSpan" style="color:#aaa;"></span>`;
+
+    const alignBody = document.createElement('div');
+    alignBody.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap; color:#ddd; font-size:12px;';
+    alignBody.innerHTML = `
+        <span>${t('popup.editMusic.alignmentPrefix')}</span>
+        <input type="number" id="alignBeatsInput" value="4" style="width:55px; background:#111; color:#fff; border:1px solid #444; padding:5px; border-radius:4px; text-align:center; font-weight:bold; font-size:12px;">
+        <span>${t('popup.editMusic.alignmentSuffix')}</span>
+        <button id="alignBeatsBtn" type="button" style="padding:6px 14px; background:#006400; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">${t('popup.editMusic.alignmentBtn')}</button>
+    `;
+
+    const alignFooter = document.createElement('div');
+    alignFooter.style.cssText = 'font-size:11px; color:#888; line-height:1.4;';
+    alignFooter.textContent = t('popup.editMusic.alignmentDesc');
+
+    alignCard.appendChild(alignHeader);
+    alignCard.appendChild(alignBody);
+    alignCard.appendChild(alignFooter);
+    container.appendChild(alignCard);
+
+    const alignBeatsInput = alignBody.querySelector('#alignBeatsInput');
+    const alignBeatsBtn = alignBody.querySelector('#alignBeatsBtn');
+    const currentBeatsSpan = alignHeader.querySelector('#currentBeatsSpan');
+
+    const updateAlignmentUI = () => {
+        const bpm = parseFloat(bpmInput.value) || clockBpm;
+        const secPerBeat = 60 / bpm;
+        const curBeats = offsetTime / secPerBeat;
+        currentBeatsSpan.textContent = t('popup.editMusic.alignmentCurrent', { beats: curBeats.toFixed(2) });
+
+        // 自動推薦下一個 4 的倍數拍數（除非使用者正在輸入）
+        if (document.activeElement !== alignBeatsInput) {
+            const suggested = Math.max(4, Math.ceil(curBeats / 4) * 4);
+            alignBeatsInput.value = suggested;
+        }
+    };
 
     // 封裝重繪快取方法
     const triggerRedraw = () => {
-        wfCanvas.draw(offsetTime, visualOffset, parseFloat(zoomInput.value));
+        wfCanvas.draw(offsetTime, parseFloat(zoomSlider.value));
+        updateAlignmentUI();
     };
 
-    // 節拍器與控制功能
-    const playClockBtn = document.createElement('button');
-    playClockBtn.innerText = '節拍器預覽 (從播放頭)';
-    playClockBtn.style.cssText = 'padding:4px 10px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
-    controls.appendChild(playClockBtn);
+    const startPreview = () => {
+        stopPreview(); // 確保乾淨
+        const bpm = parseFloat(bpmInput.value) || clockBpm;
+        const msPerBeat = 60000 / bpm;
+
+        // 1. 播放音樂
+        audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
+
+        // 2. 啟動同步節拍器
+        let expectedTickTime = performance.now() + msPerBeat;
+        previewInterval = setInterval(() => {
+            const now = performance.now();
+            if (now >= expectedTickTime) {
+                audioManager.play('clock');
+                expectedTickTime += msPerBeat;
+            }
+        }, 10);
+
+        playClockBtn.innerHTML = `<span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.stopPreview')}`;
+        isPreviewing = true;
+    };
 
     const stopPreview = () => {
-        if (isPreviewing) {
+        if (isPreviewing || previewInterval) {
             clearInterval(previewInterval);
+            previewInterval = null;
             audioManager.stopBGM();
-            playClockBtn.innerText = '節拍器預覽 (從播放頭)';
+            playClockBtn.innerHTML = `<span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.previewMetronome')}`;
             isPreviewing = false;
         }
     };
 
-    // --- UI 事件監聽綁定 ---
-    zoomInput.addEventListener('change', triggerRedraw);
+    // --- Zoom 操作與人因優化 ---
+    const updateZoom = (val) => {
+        val = Math.max(1, Math.min(30, parseFloat(val) || 1));
+        zoomSlider.value = val;
+        zoomValLabel.textContent = `${val.toFixed(1)}x`;
+        triggerRedraw();
+    };
+    zoomSlider.addEventListener('input', () => updateZoom(zoomSlider.value));
+    zoomInBtn.addEventListener('click', () => updateZoom(parseFloat(zoomSlider.value) + 1));
+    zoomOutBtn.addEventListener('click', () => updateZoom(parseFloat(zoomSlider.value) - 1));
+
+    // --- Tap BPM 估算器邏輯 ---
+    const updateTapDisplay = () => {
+        if (editTaps.length === 0) {
+            editTapBpmStatus.textContent = t('popup.tapBpm.msgNotStarted');
+        } else if (editTaps.length === 1) {
+            editTapBpmStatus.textContent = t('popup.tapBpm.msgOneMore');
+        } else {
+            const intervals = [];
+            for (let i = 1; i < editTaps.length; i++) {
+                intervals.push(editTaps[i] - editTaps[i - 1]);
+            }
+            const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
+            const bpm = 60000 / avg;
+            if (isFinite(bpm) && bpm > 0) {
+                bpmInput.value = bpm.toFixed(1);
+                editTapBpmStatus.textContent = `${bpm.toFixed(1)} BPM (${editTaps.length} taps)`;
+                updateAlignmentUI();
+            }
+        }
+    };
+    editTapBpmBtn.addEventListener('click', () => {
+        editTaps.push(performance.now());
+        if (editTaps.length > 12) editTaps.shift();
+        updateTapDisplay();
+    });
+    editTapResetBtn.addEventListener('click', () => {
+        editTaps = [];
+        updateTapDisplay();
+    });
+
+    // --- UI 事件監聽與跨平台觸控綁定 ---
+    bpmInput.addEventListener('input', updateAlignmentUI);
     offsetInputNode.addEventListener('change', (e) => {
         offsetTime = parseFloat(e.target.value) || 0;
         triggerRedraw();
     });
 
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const zoom = parseFloat(zoomInput.value) || 1;
-        offsetTime = Math.max(0, (x / rect.width) * bufferManager.duration / zoom - visualOffset);
-        offsetInputNode.value = offsetTime.toFixed(3);
-        triggerRedraw();
-        if (isPreviewing) {
-            audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
-        }
-    });
+    const adjustOffsetByBeat = (direction) => {
+        const bpm = parseFloat(bpmInput.value) || clockBpm;
+        if (bpm <= 0) return;
+        const secPerBeat = 60 / bpm;
 
-    visualOffsetSlider.addEventListener('input', () => {
-        visualOffset = parseFloat(visualOffsetSlider.value) || 0;
-        container.querySelector('#visualOffsetValue').innerText = `${visualOffset.toFixed(2)}s`;
-        triggerRedraw();
-    });
-
-    playClockBtn.addEventListener('click', () => {
-        if (isPreviewing) {
+        const wasPlaying = isPreviewing;
+        if (wasPlaying) {
             stopPreview();
+        }
+
+        offsetTime = Math.max(0, offsetTime + direction * secPerBeat);
+        offsetInputNode.value = offsetTime.toFixed(2);
+        triggerRedraw();
+
+        if (wasPlaying) {
+            startPreview();
+        }
+    };
+
+    shiftDecBeatBtn.addEventListener('click', () => adjustOffsetByBeat(-1));
+    shiftIncBeatBtn.addEventListener('click', () => adjustOffsetByBeat(1));
+
+    // --- 核心優化：重新整理跨平台拖曳互動 ---
+    let isDragging = false;
+    let startX = 0;
+    let startOffset = 0;
+
+    const handleStart = (clientX) => {
+        isDragging = true;
+        startX = clientX;
+        startOffset = offsetTime;
+
+        // 【優化點 1】按下的瞬間，如果正在預覽，先暫停聲音，避免鬼畜爆音
+        wasPreviewingBeforeDrag = isPreviewing;
+        if (isPreviewing) {
+            audioManager.stopBGM(); // 僅停止聲音，不清除計時器大架構，或者直接調 stopPreview()
+            clearInterval(previewInterval); // 暫停節拍器
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const zoom = parseFloat(zoomSlider.value) || 1;
+        const duration = bufferManager.duration;
+        const viewLength = Math.max(0.1, duration / zoom);
+        const viewCenter = Math.min(duration, Math.max(0, offsetTime));
+
+        let viewStart = viewCenter - viewLength / 2;
+        if (viewStart < 0) viewStart = 0;
+        if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
+
+        offsetTime = Math.max(0, Math.min(duration, viewStart + (x / rect.width) * viewLength));
+        offsetInputNode.value = offsetTime.toFixed(2);
+        startOffset = offsetTime;
+        triggerRedraw();
+    };
+
+    const handleMove = (clientX) => {
+        if (!isDragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const deltaX = clientX - startX;
+        const zoom = parseFloat(zoomSlider.value) || 1;
+        const duration = bufferManager.duration;
+        const viewLength = Math.max(0.1, duration / zoom);
+        const deltaTime = (deltaX / rect.width) * viewLength;
+
+        // 這裡維持你原本的拖曳方向邏輯
+        offsetTime = Math.max(0, Math.min(duration, startOffset - deltaTime));
+        offsetInputNode.value = offsetTime.toFixed(2);
+        triggerRedraw(); // 純重繪，絕對不跑音訊播放！
+    };
+
+    const handleEnd = () => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        // 【優化點 2】手放開、拖曳結束了，才一次性重啟音樂與節拍器
+        if (wasPreviewingBeforeDrag) {
+            startPreview();
+        }
+    };
+
+    // --- 綁定事件 ---
+    playClockBtn.addEventListener('click', () => {
+        if (isPreviewing) stopPreview(); else startPreview();
+    });
+
+    const onWindowMouseMove = (e) => handleMove(e.clientX);
+    const onWindowMouseUp = () => handleEnd();
+    const onWindowTouchMove = (e) => {
+        if (e.touches.length > 0) {
+            handleMove(e.touches[0].clientX);
+        }
+    };
+    const onWindowTouchEnd = () => handleEnd();
+
+    canvas.addEventListener('mousedown', (e) => handleStart(e.clientX));
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
+
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 0) {
+            handleStart(e.touches[0].clientX);
+        }
+    }, { passive: true });
+    window.addEventListener('touchmove', onWindowTouchMove, { passive: true });
+    window.addEventListener('touchend', onWindowTouchEnd);
+
+    // 首拍對齊執行按鈕監聽
+    alignBeatsBtn.addEventListener('click', () => {
+        stopPreview();
+        const bpm = parseFloat(bpmInput.value) || clockBpm;
+        const secPerBeat = 60 / bpm;
+        const targetBeats = parseFloat(alignBeatsInput.value) || 4;
+        const targetDuration = targetBeats * secPerBeat;
+        const padDuration = targetDuration - offsetTime;
+
+        if (padDuration > 0) {
+            bufferManager.padStart(padDuration);
+            offsetTime = targetDuration;
+            offsetInputNode.value = offsetTime.toFixed(2);
+            triggerRedraw();
+            simpleToast({
+                content: t('toast.padBeatsSuccess', {
+                    seconds: padDuration.toFixed(3),
+                    beats: targetBeats
+                }),
+                type: 'success'
+            });
         } else {
-            const bpm = parseFloat(bpmInput.value) || clockBpm;
-            const msPerBeat = 60000 / bpm;
-            audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
-
-            let expectedTickTime = performance.now() + msPerBeat;
-            previewInterval = setInterval(() => {
-                const now = performance.now();
-                if (now >= expectedTickTime) {
-                    audioManager.play('clock');
-                    expectedTickTime += msPerBeat;
-                }
-            }, 10);
-
-            playClockBtn.innerText = '停止預覽';
-            isPreviewing = true;
+            simpleToast({ content: t('toast.padBeatsInvalid'), type: 'warning' });
         }
     });
 
     // --- 功能性按鈕箱配置 ---
     const actionBox = document.createElement('div');
-    actionBox.style.cssText = 'display:flex;gap:10px;margin-top:5px;flex-wrap:wrap;';
+    actionBox.style.cssText = 'display:flex;gap:10px;margin-top:5px;flex-wrap:wrap;width:100%;';
 
     // 按鈕 1：裁切
     const cropBtn = document.createElement('button');
-    cropBtn.innerText = '裁去播放頭前所有音訊';
-    cropBtn.style.cssText = 'padding:4px 8px;background:#8b0000;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    cropBtn.id = 'cropBtn';
+    cropBtn.type = 'button';
+    cropBtn.innerHTML = `✂️ ${t('popup.editMusic.cropBefore')}`;
+    cropBtn.style.cssText = 'flex:1; min-width:140px; height:38px; background:#8b0000; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;';
     cropBtn.addEventListener('click', () => {
         if (offsetTime <= 0) return;
-        if (!confirm('確定要從播放頭處裁切掉前面的音樂嗎？')) return;
+        if (!confirm(t('popup.editMusic.confirmCropBefore'))) return;
 
         stopPreview();
         if (bufferManager.cropStart(offsetTime)) {
             offsetTime = 0;
-            offsetInputNode.value = "0.000";
+            offsetInputNode.value = "0.00";
             triggerRedraw();
-            simpleToast({ content: '音訊已自播放頭裁剪', type: 'success' });
+            simpleToast({ content: t('toast.cropSuccess'), type: 'success' });
         }
     });
 
     // 按鈕 2：依 BPM 補白
     const padBtn = document.createElement('button');
-    padBtn.innerText = '在開頭補白 1 拍';
-    padBtn.style.cssText = 'padding:4px 8px;background:#006400;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    padBtn.id = 'padBtn';
+    padBtn.type = 'button';
+    padBtn.innerHTML = `➕ ${t('popup.editMusic.padOneBeat')}`;
+    padBtn.style.cssText = 'flex:1; min-width:140px; height:38px; background:#006400; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;';
     padBtn.addEventListener('click', () => {
         stopPreview();
         const bpm = parseFloat(bpmInput.value) || clockBpm;
@@ -804,54 +1120,30 @@ editMusicButton.addEventListener('click', () => {
 
         bufferManager.padStart(secPerBeat);
         offsetTime += secPerBeat;
-        offsetInputNode.value = offsetTime.toFixed(3);
+        offsetInputNode.value = offsetTime.toFixed(2);
         triggerRedraw();
-        simpleToast({ content: '已在音訊開頭補白', type: 'success' });
+        simpleToast({ content: t('toast.padSuccess'), type: 'success' });
     });
 
-    // 按鈕 3：精準自訂偏移（支援正負值）
-    const shiftBtn = document.createElement('button');
-    shiftBtn.innerText = '套用音訊偏移';
-    shiftBtn.style.cssText = 'padding:4px 8px;background:#004a75;color:#fff;border:1px solid #555;border-radius:4px;cursor:pointer;';
-    shiftBtn.addEventListener('click', () => {
-        const shiftSeconds = parseFloat(shiftInput.value) || 0;
-        if (shiftSeconds === 0) return;
-
-        stopPreview();
-        if (shiftSeconds > 0) {
-            bufferManager.padStart(shiftSeconds);
-            offsetTime += shiftSeconds;
-            simpleToast({ content: `已補白 ${shiftSeconds.toFixed(3)}s。`, type: 'success' });
-        } else {
-            if (Math.abs(shiftSeconds) >= bufferManager.duration) {
-                simpleToast({ content: '裁剪長度超過總長。', type: 'error' });
-                return;
-            }
-            bufferManager.cropStart(Math.abs(shiftSeconds));
-            offsetTime = Math.max(0, offsetTime + shiftSeconds);
-        }
-        offsetInputNode.value = offsetTime.toFixed(3);
-        triggerRedraw();
-    });
-
-    // ✨ 新增按鈕 4：緊急安全備份還原
+    // ✨ 按鈕 4：緊急安全備份還原
     const restoreBtn = document.createElement('button');
-    restoreBtn.innerText = '還原原始音訊';
-    restoreBtn.style.cssText = 'padding:4px 8px;background:#444;color:#aaa;border:1px solid #555;border-radius:4px;cursor:pointer;';
+    restoreBtn.id = 'restoreBtn';
+    restoreBtn.type = 'button';
+    restoreBtn.innerHTML = `🔄 ${t('popup.editMusic.restoreOriginal')}`;
+    restoreBtn.style.cssText = 'flex:1; min-width:140px; height:38px; background:#333; color:#aaa; border:1px solid #444; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;';
     restoreBtn.addEventListener('click', () => {
-        if (!confirm('確定要放棄本次視窗內的所有裁切/補白修改，還原成剛載入的音樂嗎？')) return;
+        if (!confirm(t('popup.editMusic.confirmRestore'))) return;
         stopPreview();
         bufferManager.restoreOriginal();
         offsetTime = musicDelay;
-        offsetInputNode.value = offsetTime.toFixed(3);
+        offsetInputNode.value = offsetTime.toFixed(2);
         triggerRedraw();
-        simpleToast({ content: '已還原至最原始音訊狀態', type: 'info' });
+        simpleToast({ content: t('toast.restoreSuccess'), type: 'info' });
     });
 
     actionBox.appendChild(cropBtn);
     actionBox.appendChild(padBtn);
-    actionBox.appendChild(shiftBtn);
-    actionBox.appendChild(restoreBtn); // 塞入還原按鈕
+    actionBox.appendChild(restoreBtn);
     container.appendChild(actionBox);
 
     // 初始化第一次繪製
@@ -859,18 +1151,18 @@ editMusicButton.addEventListener('click', () => {
 
     // 彈出視窗配置
     popupWindow({
-        title: '編輯音樂與第一拍 offset',
+        title: t('popup.editMusic.title'),
         customContent: container,
         width: 'max-content',
         buttons: [
             {
-                text: '套用',
-                onClick: (ctx) => {
+                text: t('popup.apply'),
+                onClick: async (ctx) => {
                     const bpm = parseFloat(bpmInput.value) || clockBpm;
-                    musicDelay = offsetTime;
+                    musicDelay = parseFloat(offsetTime.toFixed(2));
 
                     // 連動更新外部編輯器控制項數值
-                    if (typeof offsetInput !== 'undefined') offsetInput.value = musicDelay;
+                    if (typeof offsetInput !== 'undefined') offsetInput.value = musicDelay.toFixed(2);
                     editorInput.value += `\n(${bpm})`;
 
                     if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
@@ -878,11 +1170,40 @@ editMusicButton.addEventListener('click', () => {
                     if (typeof offsetInputDebounce === 'function') offsetInputDebounce();
 
                     stopPreview();
+
+                    // ✨ 核心功能：將修改後的音訊儲存至 IndexedDB
+                    simpleToast({ content: t('toast.savingMusic'), type: 'info' });
+
+                    try {
+                        const wavBlob = audioBufferToWav(audioManager.bgmBuffer);
+                        let fileName = 'bgm.wav';
+                        if (audioManager.bgmFile && audioManager.bgmFile.name) {
+                            fileName = audioManager.bgmFile.name;
+                            // 確保檔名尾碼是 .wav
+                            if (!fileName.toLowerCase().endsWith('.wav')) {
+                                const lastDotIdx = fileName.lastIndexOf('.');
+                                if (lastDotIdx !== -1) {
+                                    fileName = fileName.substring(0, lastDotIdx) + '.wav';
+                                } else {
+                                    fileName = fileName + '.wav';
+                                }
+                            }
+                        }
+                        const editedFile = new File([wavBlob], fileName, { type: 'audio/wav' });
+                        audioManager.bgmFile = editedFile;
+
+                        await projSet('resource_bgm', editedFile);
+                        simpleToast({ content: t('toast.saveMusicSuccess'), type: 'success' });
+                    } catch (err) {
+                        console.error('Failed to save BGM:', err);
+                        simpleToast({ content: t('toast.saveMusicError'), type: 'error' });
+                    }
+
                     ctx.close();
                 }
             },
             {
-                text: '取消',
+                text: t('popup.cancel'),
                 hideOnClick: true,
                 onClick: () => {
                     stopPreview();
@@ -893,6 +1214,10 @@ editMusicButton.addEventListener('click', () => {
         ],
         onClose: () => {
             stopPreview();
+            window.removeEventListener('mousemove', onWindowMouseMove);
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            window.removeEventListener('touchmove', onWindowTouchMove, { passive: true });
+            window.removeEventListener('touchend', onWindowTouchEnd);
         }
     });
 });
@@ -904,32 +1229,32 @@ tapBpmButton.addEventListener('click', () => {
     container.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;';
 
     const hint = document.createElement('div');
-    hint.innerText = '請連續敲擊「Tap」至少 2 次以計算 BPM，建議 4 次以上會更穩定。';
+    hint.innerText = t('popup.tapBpm.hint');
     container.appendChild(hint);
 
     const stats = document.createElement('div');
     stats.style.cssText = 'display:flex;justify-content:space-between;gap:10px; flex-wrap:wrap;';
     stats.innerHTML = `
-            <div>Tap 次數: <strong id="tapBpmCount">0</strong></div>
-            <div>BPM: <strong id="tapBpmValue">--</strong></div>
+            <div>${t('popup.tapBpm.count')}<strong id="tapBpmCount">0</strong></div>
+            <div>${t('popup.tapBpm.bpm')}<strong id="tapBpmValue">--</strong></div>
         `;
     container.appendChild(stats);
 
     const tapButton = document.createElement('button');
     tapButton.type = 'button';
-    tapButton.innerText = 'Tap';
+    tapButton.innerText = t('popup.tapBpm.btnTap');
     tapButton.style.cssText = 'width:100%;padding:10px 0;font-size:16px;font-weight:600;background:#333;color:#fff;border:1px solid #555;border-radius:6px;cursor:pointer;';
     container.appendChild(tapButton);
 
     const resetButton = document.createElement('button');
     resetButton.type = 'button';
-    resetButton.innerText = '重置';
+    resetButton.innerText = t('popup.tapBpm.btnReset');
     resetButton.style.cssText = 'width:100%;padding:8px 0;font-size:14px;background:#222;color:#fff;border:1px solid #444;border-radius:6px;cursor:pointer;';
     container.appendChild(resetButton);
 
     const message = document.createElement('div');
     message.style.cssText = 'color:#ccc;font-size:12px;line-height:1.4;';
-    message.innerText = '尚未開始敲擊。';
+    message.innerText = t('popup.tapBpm.msgNotStarted');
     container.appendChild(message);
 
     const updateDisplay = () => {
@@ -939,7 +1264,7 @@ tapBpmButton.addEventListener('click', () => {
 
         if (taps.length < 2) {
             if (bpmElem) bpmElem.innerText = '--';
-            message.innerText = taps.length === 0 ? '尚未開始敲擊。' : '再敲一次即可計算 BPM。';
+            message.innerText = taps.length === 0 ? t('popup.tapBpm.msgNotStarted') : t('popup.tapBpm.msgOneMore');
             return;
         }
 
@@ -950,7 +1275,7 @@ tapBpmButton.addEventListener('click', () => {
         const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
         const bpm = 60000 / avg;
         if (bpmElem) bpmElem.innerText = isFinite(bpm) ? bpm.toFixed(1) : '--';
-        message.innerText = `目前使用 ${intervals.length} 個間隔計算 BPM。建議使用 4 次以上敲擊以減少誤差。`;
+        message.innerText = t('popup.tapBpm.msgIntervals', { count: intervals.length });
     };
 
     tapButton.addEventListener('click', () => {
@@ -965,14 +1290,14 @@ tapBpmButton.addEventListener('click', () => {
     });
 
     popupWindow({
-        title: 'Tap BPM',
+        title: t('popup.tapBpm.title'),
         customContent: container,
         buttons: [
             {
-                text: '加入 BPM',
+                text: t('popup.tapBpm.btnSave'),
                 onClick: (ctx) => {
                     if (taps.length < 2) {
-                        simpleToast({ content: '請先敲擊至少 2 次 Tap 再保存 BPM。', type: 'warning', timeout: 1800 });
+                        simpleToast({ content: t('toast.tapBpmWarning'), type: 'warning', timeout: 1800 });
                         return;
                     }
 
@@ -983,7 +1308,7 @@ tapBpmButton.addEventListener('click', () => {
                     const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
                     const bpm = 60000 / avg;
                     if (!isFinite(bpm) || bpm <= 0) {
-                        simpleToast({ content: 'BPM 計算失敗，請重新敲擊。', type: 'error', timeout: 1800 });
+                        simpleToast({ content: t('toast.tapBpmError'), type: 'error', timeout: 1800 });
                         return;
                     }
                     editorInput.value += `(${bpm.toFixed(1)})`;
@@ -992,13 +1317,13 @@ tapBpmButton.addEventListener('click', () => {
                     applyHighlight(editorInput.value);
 
                     inputDebounce();
-                    simpleToast({ content: `已設定 BPM：${clockBpm}`, type: 'success', timeout: 1800 });
+                    simpleToast({ content: t('toast.tapBpmSuccess', { bpm: bpm.toFixed(1) }), type: 'success', timeout: 1800 });
                     ctx.close();
                 },
                 hideOnClick: true
             },
             {
-                text: '關閉',
+                text: t('popup.close'),
                 hideOnClick: true
             }
         ]
@@ -1050,7 +1375,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     const createClient = globalThis.supabase?.createClient;
     if (typeof createClient !== 'function') {
         console.warn('Supabase client not found on globalThis.');
-        simpleToast({ content: 'Supabase 未載入，請在 index.html 加入 CDN：<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>', type: 'warning', timeout: 4000 });
+        simpleToast({ content: t('toast.supabaseWarning'), type: 'warning', timeout: 4000 });
         return;
     }
 
@@ -1096,12 +1421,12 @@ fetchFromMainoteButton.addEventListener('click', () => {
             if (error) throw error;
 
             // 因為用了 !inner，data 裡面的東西一定都帶有符合條件的 songs
-            simpleToast({ content: `找到 ${data.length} 個譜面`, type: 'success', timeout: 1500 });
+            simpleToast({ content: t('toast.chartsFound', { count: data.length }), type: 'success', timeout: 1500 });
             return data;
 
         } catch (err) {
             console.error('查詢失敗:', err);
-            simpleToast({ content: `錯誤：${err.message}`, type: 'error', timeout: 2000 });
+            simpleToast({ content: t('toast.chartQueryError', { message: err.message }), type: 'error', timeout: 2000 });
         }
     }
 
@@ -1141,7 +1466,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     };
 
     // 定義選項清單
-    const levelOptions = [{ value: '', text: '全部' }];
+    const levelOptions = [{ value: '', text: t('popup.fetchMainote.allLevels') }];
     for (let i = 1; i <= 6; i++) levelOptions.push({ value: i.toString(), text: `Level ${i}` });
     for (let i = 7; i <= 14; i++) {
         levelOptions.push({ value: i.toString(), text: `Level ${i}` })
@@ -1150,7 +1475,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     levelOptions.push({ value: 15, text: `Level 15` });
 
     const difficultyOptions = [
-        { value: '', text: '全部難度' },
+        { value: '', text: t('popup.fetchMainote.allDifficulties') },
         { value: 'Re:MASTER', text: 'Re:MASTER' },
         { value: 'MASTER', text: 'MASTER' },
         { value: 'EXPERT', text: 'EXPERT' },
@@ -1160,7 +1485,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     ];
 
     const versionOptions = [
-        { value: '', text: '全部版本' },
+        { value: '', text: t('popup.fetchMainote.allVersions') },
         { value: 'maimai', text: 'maimai' },
         { value: 'maimai PLUS', text: 'maimai PLUS' },
         { value: 'GreeN', text: 'GreeN' },
@@ -1191,7 +1516,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     ];
 
     const categoryOptions = [
-        { value: '', text: '全部分類' },
+        { value: '', text: t('popup.fetchMainote.allCategories') },
         { value: 'POPS＆アニメ', text: 'POPS & ANIME' },
         { value: 'niconico＆ボーカロイド', text: 'niconico & VOCALOID' },
         { value: '東方Project', text: '東方Project' },
@@ -1201,24 +1526,24 @@ fetchFromMainoteButton.addEventListener('click', () => {
     ];
 
     // 建立 UI 元件
-    const { row: songRow, input: songInput } = createInput('歌曲名稱', '模糊搜尋...');
-    const { row: levelRow, select: levelSelect } = createSelect('難度等級', levelOptions);
-    const { row: difficultyRow, select: difficultySelect } = createSelect('難度', difficultyOptions);
-    const { row: versionRow, select: versionSelect } = createSelect('版本', versionOptions);
-    const { row: categoryRow, select: categorySelect } = createSelect('分類', categoryOptions);
+    const { row: songRow, input: songInput } = createInput(t('popup.fetchMainote.songTitle'), t('popup.fetchMainote.songTitlePlaceholder'));
+    const { row: levelRow, select: levelSelect } = createSelect(t('popup.fetchMainote.level'), levelOptions);
+    const { row: difficultyRow, select: difficultySelect } = createSelect(t('popup.fetchMainote.difficulty'), difficultyOptions);
+    const { row: versionRow, select: versionSelect } = createSelect(t('popup.fetchMainote.version'), versionOptions);
+    const { row: categoryRow, select: categorySelect } = createSelect(t('popup.fetchMainote.category'), categoryOptions);
 
     container.append(songRow, levelRow, difficultyRow, versionRow, categoryRow);
 
     // 搜尋按鈕
     const searchBtn = document.createElement('button');
-    searchBtn.textContent = '🔍 搜尋';
+    searchBtn.textContent = t('popup.fetchMainote.btnSearch');
     searchBtn.style.cssText = 'padding:10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:8px;transition:background 0.2s;';
     searchBtn.onmouseover = () => searchBtn.style.background = '#0052a3';
     searchBtn.onmouseout = () => searchBtn.style.background = '#0066cc';
 
     searchBtn.addEventListener('click', async () => {
         searchBtn.disabled = true;
-        searchBtn.textContent = '搜尋中...';
+        searchBtn.textContent = t('popup.fetchMainote.searching');
 
         const result = await getLevelCharts({
             level: levelSelect.value,
@@ -1229,9 +1554,9 @@ fetchFromMainoteButton.addEventListener('click', () => {
         });
 
         if (!result || result.length === 0) {
-            simpleToast({ content: '未找到符合條件的譜面', type: 'warning', timeout: 1800 });
+            simpleToast({ content: t('toast.chartsNotFound'), type: 'warning', timeout: 1800 });
             searchBtn.disabled = false;
-            searchBtn.textContent = '🔍 搜尋';
+            searchBtn.textContent = t('popup.fetchMainote.btnSearch');
             return;
         }
 
@@ -1244,11 +1569,11 @@ fetchFromMainoteButton.addEventListener('click', () => {
             const item = document.createElement('div');
             item.style.cssText = 'padding:10px;background:#2a2a2a;border:1px solid #444;border-radius:4px;cursor:pointer;transition:all 0.2s;';
 
-            const songTitle = chart.songs?.title || '未知歌曲';
+            const songTitle = chart.songs?.title || t('popup.fetchMainote.unknownSong');
             item.innerHTML = `
                 <div style="font-weight:500;color:#fff;margin-bottom:4px;">${songTitle}</div>
                 <div style="font-size:12px;color:#bbb;">
-                    難度: <strong>${chart.difficulty || 'N/A'}</strong> | 等級: <strong>${chart.level || 'N/A'}</strong>
+                    ${t('popup.fetchMainote.chartDifficulty')}: <strong>${chart.difficulty || 'N/A'}</strong> | ${t('popup.fetchMainote.chartLevel')}: <strong>${chart.level || 'N/A'}</strong>
                 </div>
             `;
 
@@ -1263,7 +1588,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
 
                 const loadChart = async (mode) => {
                     if (mode === 'new') {
-                        const newId = await projectCreate('未命名專案');
+                        const newId = await projectCreate(t('popup.projectManager.untitled'));
                         currentProjectId = newId;
                         localStorage.setItem('simai_lastProjectId', currentProjectId);
                         console.log(`[Project] 已建立新專案: ${newId}`);
@@ -1304,25 +1629,25 @@ fetchFromMainoteButton.addEventListener('click', () => {
                         projectUpdateName(currentProjectId, displayName).catch(() => { });
                     }
 
-                    simpleToast({ content: `已載入：${songTitle}`, type: 'success', timeout: 1500 });
+                    simpleToast({ content: t('toast.chartLoaded', { title: songTitle }), type: 'success', timeout: 1500 });
                     if (resultPopupCtx) resultPopupCtx.close();
                 };
 
                 if (maidataHaveContext) {
                     popupWindow({
-                        title: "載入譜面",
-                        content: "偵測到目前已有編輯內容。\n請選擇要如何處理：",
+                        title: t('popup.fetchMainote.loadChartTitle'),
+                        content: t('popup.fetchMainote.loadChartConfirm'),
                         buttons: [
                             {
-                                text: "覆蓋目前專案",
+                                text: t('popup.fetchMainote.overwriteProject'),
                                 onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
                             },
                             {
-                                text: "開啟為新專案",
+                                text: t('popup.fetchMainote.openNewProject'),
                                 onClick: (ctx) => { ctx.close(); loadChart('new'); }
                             },
                             {
-                                text: "取消",
+                                text: t('popup.fetchMainote.cancel'),
                                 hideOnClick: true
                             }
                         ]
@@ -1338,31 +1663,31 @@ fetchFromMainoteButton.addEventListener('click', () => {
         });
 
         resultPopupCtx = popupWindow({
-            title: `搜尋結果 (${result.length})`,
+            title: t('popup.fetchMainote.searchResults', { count: result.length }),
             customContent: resultContainer,
-            buttons: [{ text: "關閉", hideOnClick: true }]
+            buttons: [{ text: t('popup.close'), hideOnClick: true }]
         });
 
         searchBtn.disabled = false;
-        searchBtn.textContent = '🔍 搜尋';
+        searchBtn.textContent = t('popup.fetchMainote.btnSearch');
     });
 
     container.appendChild(searchBtn);
 
     popupWindow({
-        title: "從 Mainote 抓取譜面",
+        title: t('popup.fetchMainote.title'),
         customContent: container,
-        buttons: [{ text: "關閉", hideOnClick: true }]
+        buttons: [{ text: t('popup.close'), hideOnClick: true }]
     });
 });
 
 createNewButton.addEventListener('click', async () => {
-    if (!confirm('是否要建立新的譜面？這將建立一個新專案。')) return;
-    const newId = await projectCreate('未命名專案');
+    if (!confirm(t('popup.createNewProject.confirm'))) return;
+    const newId = await projectCreate(t('popup.projectManager.untitled'));
     currentProjectId = newId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
     setDataEmpty();
-    simpleToast({ content: '已建立新專案', type: 'success', timeout: 1200 });
+    simpleToast({ content: t('toast.projectCreated'), type: 'success', timeout: 1200 });
 });
 
 const getres = ((simaiDataValue) => {
@@ -1452,7 +1777,7 @@ const getres = ((simaiDataValue) => {
 
 warnEl.addEventListener('click', () => {
     popupWindow({
-        title: "警告",
+        title: t('popup.warning.title'),
         content: warnings.map((w, i) => `• ${w}`).join('<br>'),
     });
 });
@@ -1779,7 +2104,7 @@ settingsButton.addEventListener('click', () => {
         saveSettingsDebounce();
         setEditorCss();
         draw();
-        simpleToast({ content: '設定已儲存', type: 'success', timeout: 1500 });
+        simpleToast({ content: t('toast.settingsSaved'), type: 'success', timeout: 1500 });
     };
 
     const createNumberInput = (value, step = 0.1, min = -999, max = 9999) => {
@@ -1806,7 +2131,7 @@ settingsButton.addEventListener('click', () => {
         options.forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
-            o.textContent = opt.label;
+            o.textContent = opt.label.startsWith('settings.') ? t(opt.label) : opt.label;
             if (opt.value == value) o.selected = true;
             select.appendChild(o);
         });
@@ -1815,10 +2140,11 @@ settingsButton.addEventListener('click', () => {
     };
 
     const inputRefs = {};
+    let popupCtx = null;
 
     // 重構原本的生成迴圈段落
     settingsConfig.forEach((category) => {
-        const section = addTab(category.label);
+        const section = addTab(t(category.label));
 
         if (category.html) {
             section.innerHTML += category.html;
@@ -1844,6 +2170,14 @@ settingsButton.addEventListener('click', () => {
                 el = createDropdown(currentVal, item.options);
                 el.addEventListener('change', (e) => {
                     try { targetRef[targetKey] = e.target.value; } catch (err) { }
+                    if (item.id === 'lang') {
+                        setLang(e.target.value);
+                        idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
+                        if (popupCtx) {
+                            popupCtx.close();
+                            settingsButton.click();
+                        }
+                    }
                 });
             }
             // --- C. 處理 Range ---
@@ -1905,33 +2239,33 @@ settingsButton.addEventListener('click', () => {
                 ref: targetRef,
                 key: targetKey
             };
-            section.appendChild(createRow(item.label, el));
+            section.appendChild(createRow(t(item.label), el));
         });
     });
 
     switchTab(0);
 
-    popupWindow({
-        title: '設定',
+    popupCtx = popupWindow({
+        title: t('settings.title'),
         customContent: container,
         width: "85%",
         maxWidth: "500px",
         buttons: [
             {
-                text: '儲存',
+                text: t('popup.save'),
                 onClick: (ctx) => { applySettings(); },
                 hideOnClick: true
             },
             {
-                text: '套用',
+                text: t('popup.apply'),
                 onClick: (ctx) => { applySettings(); }
             },
             {
-                text: '取消',
+                text: t('popup.cancel'),
                 hideOnClick: true
             },
             {
-                text: '重置數值',
+                text: t('popup.reset'),
                 onClick: (ctx) => {
                     Object.values(inputRefs).forEach(ref => {
                         if (ref.type === 'checkbox') {
@@ -1978,7 +2312,7 @@ chartInfoButton.addEventListener('click', () => {
      */
     const processAudioMetadata = (file) => {
         if (!file) {
-            simpleToast({ content: "找不到音訊檔案", type: "error" });
+            simpleToast({ content: t('toast.noAudioFile'), type: "error" });
             return;
         }
 
@@ -1999,7 +2333,7 @@ chartInfoButton.addEventListener('click', () => {
                 onSuccess: (tag) => {
                     const { title, artist } = tag.tags;
                     applyData(title, artist);
-                    simpleToast({ content: `成功讀取標籤：${title || '無標題'}`, type: "success" });
+                    simpleToast({ content: t('toast.tagReadSuccess', { title: title || t('popup.chartInfo.noTitle') }), type: "success" });
                 },
                 onError: (error) => {
                     console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
@@ -2019,7 +2353,7 @@ chartInfoButton.addEventListener('click', () => {
             } else {
                 applyData(fileName, null);
             }
-            simpleToast({ content: "已從檔名解析資訊", type: "info" });
+            simpleToast({ content: t('toast.fileNameParsed'), type: "info" });
         }
     };
 
@@ -2047,7 +2381,7 @@ chartInfoButton.addEventListener('click', () => {
 
         const overlay = document.createElement('div');
         overlay.style.cssText = "position:absolute; bottom:0; width:100%; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; text-align:center; padding:4px 0;";
-        overlay.textContent = "點擊更換圖片";
+        overlay.textContent = t('popup.chartInfo.clickToChangeImage');
 
         imgWrapper.appendChild(img);
         imgWrapper.appendChild(overlay);
@@ -2069,10 +2403,10 @@ chartInfoButton.addEventListener('click', () => {
             fileInput.click();
         });
         imgContainer.appendChild(imgWrapper);
-        imgContainer.appendChild(createButton("從目前 Track 讀取", () => {
+        imgContainer.appendChild(createButton(t('popup.chartInfo.readFromTrack'), () => {
             processAudioMetadata(audioManager.bgmFile);
         }));
-        imgContainer.appendChild(createButton("讀取其他音訊 Metadata", () => {
+        imgContainer.appendChild(createButton(t('popup.chartInfo.readOtherMetadata'), () => {
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.accept = 'audio/*';
@@ -2085,16 +2419,16 @@ chartInfoButton.addEventListener('click', () => {
         diffContainer.style.cssText = "width:60%; display:flex; flex-direction:column;";
 
         // 建立主要欄位並存入 inputRefs (使用 createLabeledInput1)
-        const titleField = createLabeledInput1({ value: tempData.title, labelText: "標題", type: 'text', assign: "title", data: tempData, ref: inputRefs });
-        const artistField = createLabeledInput1({ value: tempData.artist, labelText: "作者", type: 'text', assign: "artist", data: tempData, ref: inputRefs });
-        const descField = createLabeledInput1({ value: tempData.des, labelText: "譜面設計", type: 'text', assign: "des", data: tempData, ref: inputRefs });
+        const titleField = createLabeledInput1({ value: tempData.title, labelText: t('popup.chartInfo.titleLabel'), type: 'text', assign: "title", data: tempData, ref: inputRefs });
+        const artistField = createLabeledInput1({ value: tempData.artist, labelText: t('popup.chartInfo.artistLabel'), type: 'text', assign: "artist", data: tempData, ref: inputRefs });
+        const descField = createLabeledInput1({ value: tempData.des, labelText: t('popup.chartInfo.designerLabel'), type: 'text', assign: "des", data: tempData, ref: inputRefs });
 
         diffContainer.append(titleField.wrapper, artistField.wrapper, descField.wrapper);
 
         // 難度選擇與等級 (使用 createLabeledInput1 的 select)
         const dropdownField = createLabeledInput1({
             value: nowDifficulty || "5",
-            labelText: "難度",
+            labelText: t('popup.chartInfo.diffLabel'),
             type: 'select',
             assign: 'difficulty',
             data: tempData,
@@ -2106,7 +2440,7 @@ chartInfoButton.addEventListener('click', () => {
             ]
         });
 
-        // 監聽事件一樣綁在 input (select) 上面沒問題
+        // 難度選擇與等級 (使用 createLabeledInput1 的 select)
         dropdownField.input.addEventListener('change', (e) => {
             tempData.difficulty = e.target.value;
             updateDiffFields(e.target.value);
@@ -2115,8 +2449,8 @@ chartInfoButton.addEventListener('click', () => {
         const infoText = document.createElement('div');
         const updateDiffFields = (diff) => {
             infoText.innerHTML = "";
-            const lv = createLabeledInput1({ value: tempData[`lv_${diff}`], labelText: "等級", type: 'text', assign: `lv_${diff}`, data: tempData, ref: inputRefs });
-            const des = createLabeledInput1({ value: tempData[`des_${diff}`], labelText: "難度設計", type: 'text', assign: `des_${diff}`, data: tempData, ref: inputRefs });
+            const lv = createLabeledInput1({ value: tempData[`lv_${diff}`], labelText: t('popup.chartInfo.levelLabel'), type: 'text', assign: `lv_${diff}`, data: tempData, ref: inputRefs });
+            const des = createLabeledInput1({ value: tempData[`des_${diff}`], labelText: t('popup.chartInfo.designerDiffLabel'), type: 'text', assign: `des_${diff}`, data: tempData, ref: inputRefs });
             infoText.append(lv.wrapper, des.wrapper);
         };
 
@@ -2133,7 +2467,7 @@ chartInfoButton.addEventListener('click', () => {
             .filter(key => !excludedKeys.has(key) && !key.startsWith('lv_') && !key.startsWith('des_') && !key.startsWith('inote_'))
             .map(key => `&${key} = ${tempData[key]}`)
             .join("\n");
-        const customIns = createLabeledInput1({ value: insVal, labelText: "自訂指令", type: 'textarea', assign: "custom", data: tempData, ref: inputRefs });
+        const customIns = createLabeledInput1({ value: insVal, labelText: t('popup.chartInfo.customLabel'), type: 'textarea', assign: "custom", data: tempData, ref: inputRefs });
         diffContainer.appendChild(customIns.wrapper);
 
         container.appendChild(imgContainer);
@@ -2142,11 +2476,11 @@ chartInfoButton.addEventListener('click', () => {
     };
 
     popupWindow({
-        title: "譜面資訊",
+        title: t('popup.chartInfo.title'),
         customContent: createPopupContent(),
         buttons: [
             {
-                text: "確定",
+                text: t('popup.ok'),
                 onClick: (closePopup) => {
                     if (!maidata) maidata = {};
                     // 將 tempData 寫回 maidata
@@ -2169,7 +2503,7 @@ chartInfoButton.addEventListener('click', () => {
                 },
                 hideOnClick: true
             },
-            { text: "取消", hideOnClick: true }
+            { text: t('popup.cancel'), hideOnClick: true }
         ]
     });
 });
@@ -2297,27 +2631,15 @@ helpButton.addEventListener('click', () => {
     // 💡 以後想改內容、加新功能，只要改這個設定陣列就好！
     const helpData = [
         {
-            tabTitle: "基礎操作",
-            title: "編輯與檔案操作",
-            items: [
-                `<b>檔案讀取與新建</b>：點擊左上角 <span class="material-symbols-outlined" translate="no">menu</span>選單中「檔案」來新建專案、讀取資料夾或 ZIP 壓縮檔`,
-                `<b>下載</b>：點擊左上角 <span class="material-symbols-outlined" translate="no">menu</span>選單中「檔案 > 下載」可以將專案以壓縮形式下載下來`,
-                `<b>底部功能列</b>：<span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span>隱藏此列、<span class="material-symbols-outlined" translate="no">keyboard</span>顯示鍵盤`,
-                `<b>專案擁有自動保存功能、也可以<span class="code-highlight">Ctrl</span><span class="code-highlight">S</span>保存</b>`
-            ],
+            tabTitle: t('popup.help.basicTab'),
+            title: t('popup.help.basicTitle'),
+            items: t('popup.help.basicItems'),
             isList: false // 控制要用一般段落 <p> 還是一般列表 <ul>
         },
         {
-            tabTitle: "快速鍵",
-            title: "常用快速鍵",
-            items: [
-                `<b>播放 / 暫停</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Space</span>。`,
-                `<b>從頭開始</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Backspace</span>。`,
-                `<b>復原 / 重做</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Z</span> / <span class="code-highlight">Ctrl</span><span class="code-highlight">Y</span>`,
-                `<b>加速播放</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">P</span>`,
-                `<b>減速播放</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">O</span>`,
-                `<b>縮放倍率</b>：<span class="code-highlight">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。`
-            ],
+            tabTitle: t('popup.help.shortcutTab'),
+            title: t('popup.help.shortcutTitle'),
+            items: t('popup.help.shortcutItems'),
             isList: true
         }
     ];
@@ -2420,12 +2742,12 @@ helpButton.addEventListener('click', () => {
 
     // --- 3. 開啟彈窗與事件綁定（邏輯完全不需要動）---
     popupWindow({
-        title: "幫助說明",
+        title: t('popup.help.title'),
         customContent: content,
         width: 480,
         height: "80%",
         buttons: [
-            { text: "關閉", hideOnClick: true }
+            { text: t('popup.close'), hideOnClick: true }
         ],
         onOpen: (ctx) => {
             const container = ctx.elements.customContent;
@@ -2609,11 +2931,11 @@ folderInput.addEventListener('click', (e) => {
         // 有現有內容，先讓使用者選擇怎麼處理
         _pendingFolderFiles = null; // 先清空
         popupWindow({
-            title: "讀取資料夾",
-            content: "偵測到目前已有編輯內容。\n請選擇要如何處理：",
+            title: t('popup.loadConfirm.titleFolder'),
+            content: t('popup.loadConfirm.content'),
             buttons: [
                 {
-                    text: "覆蓋目前專案",
+                    text: t('popup.loadConfirm.overwrite'),
                     onClick: (ctx) => {
                         ctx.close();
                         // 標記模式後開啟檔案選擇器
@@ -2623,7 +2945,7 @@ folderInput.addEventListener('click', (e) => {
                     }
                 },
                 {
-                    text: "開啟為新專案",
+                    text: t('popup.loadConfirm.newProject'),
                     onClick: (ctx) => {
                         ctx.close();
                         _pendingFolderFiles = 'new';
@@ -2632,7 +2954,7 @@ folderInput.addEventListener('click', (e) => {
                     }
                 },
                 {
-                    text: "取消",
+                    text: t('popup.cancel'),
                     hideOnClick: true
                 }
             ]
@@ -2662,7 +2984,7 @@ folderInput.children[0].onchange = async (event) => {
 
     if (mode === 'new') {
         // 建立新專案
-        const newId = await projectCreate('未命名專案');
+        const newId = await projectCreate(t('popup.projectManager.untitled'));
         currentProjectId = newId;
         localStorage.setItem('simai_lastProjectId', currentProjectId);
         console.log(`[Project] 已建立新專案: ${newId}`);
@@ -2677,7 +2999,7 @@ folderInput.children[0].onchange = async (event) => {
     if (maidata?.title && currentProjectId) {
         projectUpdateName(currentProjectId, maidata.title).catch(() => { });
     }
-    simpleToast({ content: mode === 'new' ? '已開啟為新專案' : '已載入至目前專案', type: 'success', timeout: 1500 });
+    simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
 };
 
 async function handleFolderInput(files) {
@@ -2826,7 +3148,7 @@ readZipButton.addEventListener('click', () => {
                 reader.onload = async (e) => {
                     if (mode === 'new') {
                         // 建立新專案
-                        const newId = await projectCreate('未命名專案');
+                        const newId = await projectCreate(t('popup.projectManager.untitled'));
                         currentProjectId = newId;
                         localStorage.setItem('simai_lastProjectId', currentProjectId);
                         console.log(`[Project] 已建立新專案: ${newId}`);
@@ -2840,7 +3162,7 @@ readZipButton.addEventListener('click', () => {
                         if (maidata?.title && currentProjectId) {
                             projectUpdateName(currentProjectId, maidata.title).catch(() => { });
                         }
-                        simpleToast({ content: mode === 'new' ? '已開啟為新專案' : '已載入至目前專案', type: 'success', timeout: 1500 });
+                        simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
                     });
                     resize();
                 };
@@ -2852,25 +3174,25 @@ readZipButton.addEventListener('click', () => {
 
     if (maidataHaveContext) {
         popupWindow({
-            title: "讀取壓縮檔",
-            content: "偵測到目前已有編輯內容。\n請選擇要如何處理：",
+            title: t('popup.loadConfirm.titleZip'),
+            content: t('popup.loadConfirm.content'),
             buttons: [
                 {
-                    text: "覆蓋目前專案",
+                    text: t('popup.loadConfirm.overwrite'),
                     onClick: (ctx) => {
                         ctx.close();
                         triggerZipInput('overwrite');
                     }
                 },
                 {
-                    text: "開啟為新專案",
+                    text: t('popup.loadConfirm.newProject'),
                     onClick: (ctx) => {
                         ctx.close();
                         triggerZipInput('new');
                     }
                 },
                 {
-                    text: "取消",
+                    text: t('popup.cancel'),
                     hideOnClick: true
                 }
             ]
@@ -3070,18 +3392,18 @@ if (utilityDropdown && utilityDropdownBtn) {
 
 quickGenerateButton.addEventListener('click', () => {
     popupWindow({
-        title: "快速生成",
+        title: t('popup.quickGenerate.title'),
         content: `
-BPM: <input type="number" id="quickBpm" value="60" style="width: 80px;"><br>
-Beat: <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
+${t('popup.quickGenerate.bpmLabel')} <input type="number" id="quickBpm" value="60" style="width: 80px;"><br>
+${t('popup.quickGenerate.beatLabel')} <input type="number" id="quickBeat" value="4" style="width: 80px;"><br>`,
         buttons: [
             {
-                text: "生成",
+                text: t('popup.quickGenerate.generateBtn'),
                 onClick: (ctx) => {
                     const bpm = ctx.elements.content.querySelector('#quickBpm').value;
                     const beat = ctx.elements.content.querySelector('#quickBeat').value;
                     if (isNaN(parseFloat(bpm)) || isNaN(parseFloat(beat))) {
-                        popupWindow({ title: "請確保所有輸入都是有效的數字" });
+                        popupWindow({ title: t('popup.quickGenerate.invalidInput') });
                         return;
                     }
                     const generated = `(${parseFloat(bpm)}){${parseFloat(beat)}}`;
@@ -3416,7 +3738,7 @@ importFromVideoButton.addEventListener('click', () => {
             setEndtime(endTime);
             await projSet('resource_bgm', file);
 
-            simpleToast({ content: '已從影片匯入背景影片與音樂', type: 'success' });
+            simpleToast({ content: t('toast.videoImportSuccess'), type: 'success' });
         }
     };
     input.click();
@@ -3436,12 +3758,12 @@ downloadButton.addEventListener('click', () => {
 
     const container = document.createElement('div');
     const textEl = document.createElement('label');
-    textEl.textContent = "檔案名稱";
+    textEl.textContent = t('popup.download.fileName');
     textEl.style.cssText = "display:block;margin-bottom:5px;font-size:12px;color: lightgray;";
     container.appendChild(textEl);
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
-    nameInput.placeholder = '輸入檔案名稱';
+    nameInput.placeholder = t('popup.download.placeholder');
     nameInput.value = defaultName; // --- 這裡預填名稱 ---
     nameInput.style.cssText = "width:calc(100% - 20px);padding:8px;font-size:12px;margin-bottom:10px;background:#151515;color:white;border:1px solid #444;border-radius:4px;";
 
@@ -3459,11 +3781,11 @@ downloadButton.addEventListener('click', () => {
     const sanitize = (name) => name.replace(/[\\/:*?"<>|]/g, '_');
 
     popupWindow({
-        title: "下載譜面套件",
+        title: t('popup.download.title'),
         customContent: container,
         buttons: [
             {
-                text: "下載 Maidata",
+                text: t('popup.download.downloadMaidata'),
                 onClick: () => {
                     const content = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : "";
                     const blob = new Blob([content], { type: 'text/plain' });
@@ -3476,7 +3798,7 @@ downloadButton.addEventListener('click', () => {
                 }
             },
             {
-                text: "打包 ZIP",
+                text: t('popup.download.packZip'),
                 onClick: async (ctx) => {
                     ctx.setProgress(10);
                     const zip = new JSZip();
@@ -3518,7 +3840,7 @@ downloadButton.addEventListener('click', () => {
                     ctx.close();
                 }
             },
-            { text: "取消", hideOnClick: true }
+            { text: t('popup.cancel'), hideOnClick: true }
         ]
     });
 });
@@ -4079,7 +4401,7 @@ function openSecondWindow() {
 
 recordVideoButton.addEventListener('click', async () => {
     if (!window.Mediabunny) {
-        simpleToast({ content: 'Mediabunny 未載入，無法錄製', type: 'error' });
+        simpleToast({ content: t('toast.mediabunnyMissing'), type: 'error' });
         return;
     }
 
@@ -4171,7 +4493,7 @@ recordVideoButton.addEventListener('click', async () => {
 
         highlightTrack.style.left = `${leftPercent}%`;
         highlightTrack.style.width = `${widthPercent}%`;
-        timeLabel.textContent = `錄製範圍: ${startVal.toFixed(2)}s - ${endVal.toFixed(2)}s (共 ${(endVal - startVal).toFixed(2)}s)`;
+        timeLabel.textContent = `${t('popup.recordVideo.recordRange', { start: startVal, end: endVal, dur: (endVal - startVal).toFixed(2) })}`;
     };
 
     startInput.addEventListener('input', updateDualSlider);
@@ -4183,7 +4505,7 @@ recordVideoButton.addEventListener('click', async () => {
     // ==========================================
     const resField = createLabeledInput1({
         value: '1280x720',
-        labelText: '解析度:',
+        labelText: t('popup.recordVideo.resolution'),
         type: 'select',
         assign: 'record_res_select',
         ref: inputRefs,
@@ -4193,14 +4515,14 @@ recordVideoButton.addEventListener('click', async () => {
             { value: '1280x720', label: '1280 x 720 (720p 16:9)' },
             { value: '720x720', label: '720 x 720 (720p 1:1)' },
             { value: '640x360', label: '640 x 360 (360p 16:9)' },
-            { value: 'custom', label: '自訂...' }
+            { value: 'custom', label: t('popup.recordVideo.custom') }
         ]
     });
 
     const customResContainer = document.createElement('div');
     customResContainer.style.cssText = 'display:none; gap:8px; margin-top:4px;';
-    const customWidth = createLabeledInput1({ value: 1080, labelText: '自訂寬度:', type: 'number', assign: 'custom_w', ref: inputRefs });
-    const customHeight = createLabeledInput1({ value: 720, labelText: '自訂高度:', type: 'number', assign: 'custom_h', ref: inputRefs });
+    const customWidth = createLabeledInput1({ value: 1080, labelText: t('popup.recordVideo.customWidth'), type: 'number', assign: 'custom_w', ref: inputRefs });
+    const customHeight = createLabeledInput1({ value: 720, labelText: t('popup.recordVideo.customHeight'), type: 'number', assign: 'custom_h', ref: inputRefs });
     customWidth.wrapper.style.flex = '1';
     customHeight.wrapper.style.flex = '1';
     customResContainer.append(customWidth.wrapper, customHeight.wrapper);
@@ -4224,11 +4546,11 @@ recordVideoButton.addEventListener('click', async () => {
             { value: '60', label: '60' },
             { value: '30', label: '30' },
             { value: '24', label: '24' },
-            { value: 'custom', label: '自訂...' }
+            { value: 'custom', label: t('popup.recordVideo.custom') }
         ]
     });
 
-    const customFps = createLabeledInput1({ value: 30, labelText: '自訂 FPS 幀率:', type: 'number', assign: 'custom_fps', ref: inputRefs });
+    const customFps = createLabeledInput1({ value: 30, labelText: t('popup.recordVideo.customFps'), type: 'number', assign: 'custom_fps', ref: inputRefs });
     customFps.wrapper.style.cssText = 'display:none; margin-top:4px;';
     fpsField.wrapper.appendChild(customFps.wrapper);
 
@@ -4238,8 +4560,8 @@ recordVideoButton.addEventListener('click', async () => {
     // ==========================================
     // 4. 音量與音訊控制項（改用自訂開關，徹底免疫卡死 Bug）
     // ==========================================
-    const bgmVolField = createLabeledInput1({ value: settings.musicVolume, labelText: 'BGM 音量:', type: 'number', assign: 'record_bgm_vol', ref: inputRefs });
-    const sfxVolField = createLabeledInput1({ value: settings.SfxVolume, labelText: 'SFX 音量:', type: 'number', assign: 'record_sfx_vol', ref: inputRefs });
+    const bgmVolField = createLabeledInput1({ value: settings.musicVolume, labelText: t('popup.recordVideo.bgmVolume'), type: 'number', assign: 'record_bgm_vol', ref: inputRefs });
+    const sfxVolField = createLabeledInput1({ value: settings.SfxVolume, labelText: t('popup.recordVideo.sfxVolume'), type: 'number', assign: 'record_sfx_vol', ref: inputRefs });
 
     // 💡 封裝一個高質感自訂開關產生器
     const createCustomSwitch = (labelText, defaultChecked) => {
@@ -4294,8 +4616,8 @@ recordVideoButton.addEventListener('click', async () => {
     };
 
     // 實體化兩個帥氣的藍色動態開關
-    const audioSwitch = createCustomSwitch('包含音訊:', !!audioManager?.bgmBuffer);
-    const sfxSwitch = createCustomSwitch('包含打擊音效:', true);
+    const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
+    const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
 
     // 全部塞進彈窗大容器
     container.append(
@@ -4309,12 +4631,12 @@ recordVideoButton.addEventListener('click', async () => {
     );
 
     popupWindow({
-        title: '影片錄製',
+        title: t('popup.recordVideo.title'),
         customContent: container,
         width: '420px',
         buttons: [
             {
-                text: '開始',
+                text: t('popup.start'),
                 onClick: async (pwCtx) => {
                     const startVal = Number(startInput.value);
                     const endVal = Number(endInput.value);
@@ -4338,8 +4660,7 @@ recordVideoButton.addEventListener('click', async () => {
                     const sfxVolValNum = Number(inputRefs.record_sfx_vol?.value || 1);
                     const bgmLoaded = !!audioManager?.bgmBuffer;
 
-                    // 🌟 這裡完美改用自訂開關的 .checked 屬性拿資料
-                    await videoRender(pwCtx, {
+                    videoRender({
                         start: startVal,
                         end: endVal,
                         fps: fpsVal,
@@ -4350,9 +4671,11 @@ recordVideoButton.addEventListener('click', async () => {
                         includeBgm: audioSwitch.checked && bgmLoaded, // 讀取自訂狀態
                         includeSfx: sfxSwitch.checked                 // 讀取自訂狀態
                     });
+
+                    pwCtx.close();
                 },
             },
-            { text: '取消', hideOnClick: true }
+            { text: t('popup.cancel'), hideOnClick: true }
         ]
     });
 });
@@ -4964,7 +5287,7 @@ function openProjectManager() {
                 }
             },
             {
-                text: "關閉",
+                text: t('popup.close'),
                 hideOnClick: true,
             }
         ]
@@ -4981,19 +5304,19 @@ if (projectManagerButton) {
 
 function _init() {
     popupWindow({
-        title: "正在準備環境...",
+        title: t('popup.init.title'),
         content: "",
         buttons: [],
         unclosable: true,
         onOpen: async (ctx) => {
             try {
                 const step = (p, msg) => (ctx.setProgress(p), ctx.setContent(msg));
-                await audioManager.init((pct, key) => step(pct * 0.4, `正在載入音效: ${key} (${Math.round(pct)}%)`));
+                await audioManager.init((pct, key) => step(pct * 0.4, t('popup.init.loadingSfx', { key, percent: Math.round(pct) })));
 
-                images = await loadAllImages((pct, key) => step(40 + pct * 0.4, `正在載入素材: ${key} (${Math.round(pct)}%)`));
+                images = await loadAllImages((pct, key) => step(40 + pct * 0.4, t('popup.init.loadingAssets', { key, percent: Math.round(pct) })));
 
                 // === 專案系統初始化 ===
-                step(78, "正在初始化專案系統...");
+                step(78, t('popup.init.initProjects'));
                 const migratedId = await migrateFromLegacy();
                 if (migratedId) {
                     currentProjectId = migratedId;
@@ -5011,13 +5334,13 @@ function _init() {
                         currentProjectId = list[0].id;
                     } else {
                         // 全新使用者，建立預設空白專案
-                        currentProjectId = await projectCreate('未命名專案');
+                        currentProjectId = await projectCreate(t('popup.projectManager.untitled'));
                     }
                     localStorage.setItem('simai_lastProjectId', currentProjectId);
                 }
 
                 // === 載入全域設定 (不隨專案切換) ===
-                step(80, "正在恢復設定...");
+                step(80, t('popup.init.restoringSettings'));
                 const savedSettings = await idbGet('simai_settings');
                 if (savedSettings) {
                     settings = JSON.parse(savedSettings);
@@ -5039,7 +5362,7 @@ function _init() {
                 };
 
                 // === 載入當前專案資料 ===
-                step(84, "正在恢復上次的編輯狀態...");
+                step(84, t('popup.init.restoringState'));
                 await loadProjectData(step);
 
                 window.settings = settings;
@@ -5158,7 +5481,7 @@ function _init() {
                     }
                 },
                 {
-                    text: "關閉",
+                    text: t('popup.close'),
                     onClick: () => {
                         popupWindow({
                             title: "警告",
@@ -5206,7 +5529,7 @@ function padAudioBuffer(audioBuffer, targetLength) {
     return nb;
 }
 
-async function videoRender(pwCtx, {
+async function videoRender({
     start = 0,
     end = 0,
     fps = 30,
@@ -5251,6 +5574,7 @@ async function videoRender(pwCtx, {
     })();
 
     if (end <= start) {
+        console.log(end, start);
         simpleToast({ content: '結束時間需大於開始時間', type: 'error' });
         return;
     }
@@ -5258,12 +5582,16 @@ async function videoRender(pwCtx, {
     const mainCtx = canvas.getContext('2d');
 
     let exportVideo = null;
-    try {
-        pwCtx.setButtons([{ text: '取消', hideOnClick: true }]);
-        pwCtx.setProgress(0);
-        pwCtx.setContent('準備中...');
+    let output = null;
 
-        if (pwCtx.isClosed) return;
+    const popup = popupWindow({
+        title: "渲染影片",
+        content: "準備中...",
+        unclosable: true,
+        buttons: [{ text: '取消', hideOnClick: true }],
+    })
+    try {
+        if (popup.isClosed) return;
 
         const off = document.createElement('canvas');
         off.width = width;
@@ -5276,7 +5604,7 @@ async function videoRender(pwCtx, {
 
         const target = new BufferTarget();
         const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
-        const output = new Output({ format, target });
+        output = new Output({ format, target });
 
         // 視訊軌設定
         const encodingConfig = {
@@ -5317,7 +5645,7 @@ async function videoRender(pwCtx, {
             }
         }
 
-        if (pwCtx.isClosed) return;
+        if (popup.isClosed) return;
 
         let audioSource = null;
         let slicedAudio = null;
@@ -5572,7 +5900,7 @@ async function videoRender(pwCtx, {
             }
         }
 
-        if (pwCtx.isClosed) {
+        if (popup.isClosed) {
             try { renderer.setContext(mainCtx); } catch (e) { }
             return;
         }
@@ -5625,9 +5953,9 @@ async function videoRender(pwCtx, {
         const frameCount = Math.max(1, Math.ceil(total * fps));
         const step = 1 / fps;
 
-        pwCtx.setContent(`開始逐幀渲染：${frameCount} 幀`);
+        popup.setContent(`開始逐幀渲染：${frameCount} 幀`);
         for (let i = 0; i < frameCount; i++) {
-            if (pwCtx.isClosed) {
+            if (popup.isClosed) {
                 console.log('逐幀渲染已取消');
                 try { renderer.setContext(mainCtx); } catch (e) { }
                 return;
@@ -5751,8 +6079,11 @@ async function videoRender(pwCtx, {
             const tsRelative = i * step;
             await videoSource.add(tsRelative, step);
 
-            pwCtx.setProgress(((i + 1) / frameCount) * 100);
-            pwCtx.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀`);
+            popup.setProgress(((i + 1) / frameCount) * 100);
+            popup.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀 (${(((i + 1) / frameCount) * 100).toFixed(2)}%)`);
+
+            // 讓出主執行緒，供瀏覽器重繪 UI 與處理點擊取消事件
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         await output.finalize();
@@ -5768,16 +6099,23 @@ async function videoRender(pwCtx, {
         simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
 
         renderer.setContext(mainCtx);
-        pwCtx.setProgress(100);
-        pwCtx.setContent('完成');
+        popup.setProgress(100);
+        popup.setContent('完成');
+
+        setTimeout(() => {
+            popup.close();
+        }, 3000);
     } catch (err) {
         console.error('逐幀渲染失敗', err);
         simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
-        try { pwCtx.setContent('錯誤：' + String(err)); } catch (e) { }
+        try { popup.setContent('錯誤：' + String(err)); } catch (e) { }
         try { renderer.setContext(mainCtx); } catch (e) { }
     } finally {
         if (exportVideo && exportVideo.parentNode) {
             exportVideo.parentNode.removeChild(exportVideo);
+        }
+        if (output && output.state !== 'finalized' && output.state !== 'canceled') {
+            output.cancel().catch(e => console.error("Error cancelling output:", e));
         }
     }
 }

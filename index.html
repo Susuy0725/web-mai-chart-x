@@ -78,7 +78,8 @@
     <div id="editorContainer">
         <div id="highlight-layer" class="editor-layer" inert aria-disabled="true" aria-hidden="true"
             contenteditable="false"></div>
-        <textarea id="editor-input" class="editor-layer" spellcheck="false" placeholder="在此輸入譜面資料..."></textarea>
+        <textarea id="editor-input" class="editor-layer" spellcheck="false" data-i18n="textarea.placeholder"
+            placeholder="在此輸入譜面資料..."></textarea>
         <canvas id="visualEditor" class="visualEditor-layer" style="display: none;"></canvas>
     </div>
     <div id="utilityContainer">
@@ -94,45 +95,60 @@
                 </div>
                 <div class="utilityDropdown-content">
                     <div class="utilityButton utilityMenuTitle">
-                        <span>檔案</span>
+                        <span data-i18n="menu.file">檔案</span>
                         <span class="utilityMenuArrow material-symbols-outlined" translate="no">
                             chevron_right
                         </span>
                         <div class="utilitySubmenu">
-                            <div class="utilityButton" data-buttonAction="createNew">新建</div>
-                            <div class="utilityButton" data-buttonAction="projectManager">專案總管</div>
-                            <div class="utilityButton" data-buttonAction="readFolder">匯入資料夾
+                            <div class="utilityButton" data-buttonAction="createNew" data-i18n="menu.fileNew">新建</div>
+                            <div class="utilityButton" data-buttonAction="projectManager"
+                                data-i18n="menu.fileProjectManager">專案總管</div>
+                            <div class="utilityButton" data-buttonAction="readFolder" data-i18n="menu.fileReadFolder">
+                                讀取資料夾
                                 <input type="file" webkitdirectory directory multiple />
                             </div>
-                            <div class="utilityButton" data-buttonAction="readZip">匯入壓縮檔</div>
+                            <div class="utilityButton" data-buttonAction="readZip" data-i18n="menu.fileReadZip">讀取壓縮檔
+                            </div>
+                            <div class="utilityButton" data-buttonAction="download" data-i18n="menu.fileDownload">下載
+                            </div>
                             <hr>
-                            <div class="utilityButton" data-buttonAction="addMusic">加入音樂</div>
-                            <div class="utilityButton" data-buttonAction="addVideo">加入影片</div>
-                            <div class="utilityButton" data-buttonAction="importFromVideo">加入有聲音的影片</div>
-                            <div class="utilityButton" data-buttonAction="readMaidata">讀取maidata</div>
-                            <hr>
-                            <div class="utilityButton" data-buttonAction="download">匯出譜面</div>
+                            <div class="utilityButton" data-buttonAction="addMusic" data-i18n="menu.fileAddMusic">加入音樂
+                            </div>
+                            <div class="utilityButton" data-buttonAction="addVideo" data-i18n="menu.fileAddVideo">加入影片
+                            </div>
+                            <div class="utilityButton" data-buttonAction="importFromVideo"
+                                data-i18n="menu.fileImportFromVideo">從影片匯入</div>
+                            <div class="utilityButton" data-buttonAction="readMaidata" data-i18n="menu.fileReadMaidata">
+                                讀取maidata</div>
                         </div>
                     </div>
                     <div class="utilityButton utilityMenuTitle">
-                        <span>功能/工具</span>
+                        <span data-i18n="menu.tools">功能/工具</span>
                         <span class="utilityMenuArrow material-symbols-outlined" translate="no">
                             chevron_right
                         </span>
                         <div class="utilitySubmenu">
-                            <div class="utilityButton" data-buttonAction="getNowNoteIndex">游標移至播放頭</div>
-                            <div class="utilityButton" data-buttonAction="getCursorNoteIndex">播放頭移至游標</div>
-                            <div class="utilityButton" data-buttonAction="recordVideo">錄製影片</div>
-                            <div class="utilityButton" data-buttonAction="editMusic">編輯音樂開頭</div>
-                            <div class="utilityButton" data-buttonAction="tapBpm">Tap BPM</div>
-                            <div class="utilityButton" data-buttonAction="quickGenerate">快速生成</div>
-                            <div class="utilityButton" data-buttonAction="fetchFromMainote">從Mainote抓取資料</div>
-                            <div class="utilityButton" data-buttonAction="popup">預覽彈出</div>
+                            <div class="utilityButton" data-buttonAction="getNowNoteIndex"
+                                data-i18n="menu.toolsGetNowNoteIndex">游標移至播放頭</div>
+                            <div class="utilityButton" data-buttonAction="getCursorNoteIndex"
+                                data-i18n="menu.toolsGetCursorNoteIndex">播放頭移至游標</div>
+                            <div class="utilityButton" data-buttonAction="recordVideo"
+                                data-i18n="menu.toolsRecordVideo">錄製影片</div>
+                            <div class="utilityButton" data-buttonAction="editMusic" data-i18n="menu.toolsEditMusic">
+                                編輯音樂開頭</div>
+                            <div class="utilityButton" data-buttonAction="tapBpm" data-i18n="menu.toolsTapBpm">Tap BPM
+                            </div>
+                            <div class="utilityButton" data-buttonAction="quickGenerate"
+                                data-i18n="menu.toolsQuickGenerate">快速生成</div>
+                            <div class="utilityButton" data-buttonAction="fetchFromMainote"
+                                data-i18n="menu.toolsFetchFromMainote">從Mainote抓取資料</div>
+                            <div class="utilityButton" data-buttonAction="popup" data-i18n="menu.toolsPopup">預覽彈出</div>
                         </div>
                     </div>
-                    <div class="utilityButton" data-buttonAction="manageResources">資源管理</div>
-                    <div class="utilityButton" data-buttonAction="chartInfo">譜面資訊</div>
-                    <div class="utilityButton" data-buttonAction="settings">設定</div>
+                    <div class="utilityButton" data-buttonAction="manageResources" data-i18n="menu.manageResources">資源管理
+                    </div>
+                    <div class="utilityButton" data-buttonAction="chartInfo" data-i18n="menu.chartInfo">譜面資訊</div>
+                    <div class="utilityButton" data-buttonAction="settings" data-i18n="menu.settings">設定</div>
                 </div>
             </div>
 
@@ -141,20 +157,25 @@
                     <span class="material-symbols-outlined" translate="no">edit</span>
                 </div>
                 <div class="utilityDropdown-content">
-                    <div class="utilityButton" data-buttonAction="undo">復原</div>
-                    <div class="utilityButton" data-buttonAction="redo">重作</div>
-                    <div class="utilityButton" data-buttonAction="rotateClockwise">順時針旋轉</div>
-                    <div class="utilityButton" data-buttonAction="rotateCounterClockwise">逆時針旋轉</div>
-                    <div class="utilityButton" data-buttonAction="rotate180">180度旋轉</div>
-                    <div class="utilityButton" data-buttonAction="flipVertical">上下反轉</div>
-                    <div class="utilityButton" data-buttonAction="flipHorizontal">左右反轉</div>
+                    <div class="utilityButton" data-buttonAction="undo" data-i18n="menu.editUndo">復原</div>
+                    <div class="utilityButton" data-buttonAction="redo" data-i18n="menu.editRedo">重作</div>
+                    <div class="utilityButton" data-buttonAction="rotateClockwise" data-i18n="menu.editRotateClockwise">
+                        順時針旋轉</div>
+                    <div class="utilityButton" data-buttonAction="rotateCounterClockwise"
+                        data-i18n="menu.editRotateCounterClockwise">逆時針旋轉</div>
+                    <div class="utilityButton" data-buttonAction="rotate180" data-i18n="menu.editRotate180">180度旋轉</div>
+                    <div class="utilityButton" data-buttonAction="flipVertical" data-i18n="menu.editFlipVertical">上下反轉
+                    </div>
+                    <div class="utilityButton" data-buttonAction="flipHorizontal" data-i18n="menu.editFlipHorizontal">
+                        左右反轉</div>
                 </div>
             </div>
 
-            <div class="utilityButton noFixedsize" data-buttonAction="offset">偏移
+            <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
                 <input type="number" step="0.01" value="0" name="d">
             </div>
-            <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty">難度切換
+            <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty"
+                data-i18n="menu.changeDifficulty">難度切換
                 <select name="d">
                     <option value="7">ORIGINAL</option>
                     <option value="6">Re:MASTER</option>
@@ -167,19 +188,19 @@
             </div>
             <div class="utilityButton miniButton" data-buttonAction="playbackSpeedMinus">-
             </div>
-            <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed">播放速度
+            <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed" data-i18n="menu.playbackSpeed">播放速度
                 <input type="number" step="0.25" value="1" name="d" min="0.25" max="2">
             </div>
             <div class="utilityButton miniButton" data-buttonAction="playbackSpeedAdd">+
             </div>
-            <div class="utilityButton noFixedsize" data-buttonAction="displayMode">顯示模式
+            <div class="utilityButton noFixedsize" data-buttonAction="displayMode" data-i18n="menu.displayMode">顯示模式
                 <select name="d">
-                    <option value="simai">simai 語法</option>
-                    <option value="visual">軌道</option>
+                    <option value="simai" data-i18n="menu.displayModeSimai">simai 語法</option>
+                    <option value="visual" data-i18n="menu.displayModeVisual">軌道</option>
                 </select>
             </div>
-            <div class="utilityButton noFixedsize" data-buttonAction="readyBeat">預備拍<input type="checkbox"
-                    name="d"><span></span>
+            <div class="utilityButton noFixedsize" data-buttonAction="readyBeat" data-i18n="menu.readyBeat">預備拍<input
+                    type="checkbox" name="d"><span></span>
             </div>
             <div class="utilityButton miniButton" data-buttonAction="help">
                 <span class="material-symbols-outlined" translate="no">

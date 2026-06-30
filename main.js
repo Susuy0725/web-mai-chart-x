@@ -1,5 +1,5 @@
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from './indexDB.js';
-import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput1, createCustomSlider } from './helper.js';
+import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput1, createCustomSlider, getSensorAtPoint, wSlideRatio } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
@@ -162,6 +162,8 @@ export const defaultSettings = {
     slideIllegalRed: false,
     showUI: false,
     // Sound & Playback
+    autoPlay: true,
+
     notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
     globalVolume: 0.65, // 全局音量，0 到 1 之間
@@ -307,6 +309,9 @@ const settingsConfig = [
             },
             {
                 id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
+            },
+            {
+                id: 'autoPlay', type: 'checkbox', label: 'settings.items.autoPlay', def: defaultSettings.autoPlay
             }
         ]
     }
@@ -2800,10 +2805,23 @@ document.addEventListener('selectionchange', () => {
             const note = notes[i];
             const noteT = note.time - globalTime;
             const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+            const cullingSkipT = (note.type === "slide" && note.chainSkipT !== undefined) ? note.chainSkipT : skipT;
+            const noteType = note.type;
+
+            if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
+                note.holding = (globalTime >= note.time && globalTime <= note.time + (note.holdDuration ?? 0));
+                note.triggered = (globalTime > note.time + (note.holdDuration ?? 0));
+            } else if (noteType === 'slide') {
+                note.triggered = (globalTime > note.time + cullingSkipT);
+                note.holding = false;
+            } else {
+                note.triggered = (globalTime >= note.time);
+                note.holding = false;
+            }
 
             const isVisualVisible = noteT >= 0
                 ? Math.abs(noteT) <= V
-                : -noteT <= V + skipT;
+                : -noteT <= V + cullingSkipT;
 
             if (isVisualVisible) {
                 const noteType = note.type;
@@ -4769,6 +4787,25 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 let playClock = [false, false, false, false];
+
+function getSlideSensors(recorder, typew, spacing = 4.36) {
+    const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
+    const useSpacing = typew ? 7 : spacing;
+    const sensors = [];
+    for (let i = 1; i <= arrowCount; i++) {
+        const imgIndex = Math.min(i - 1, 10);
+        const dist = i * useSpacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+        const pt = recorder.getPointAt(dist / recorder.totalLength);
+        if (pt) {
+            const sensor = getSensorAtPoint(pt.x, pt.y);
+            if (sensor && !sensors.includes(sensor)) {
+                sensors.push(sensor);
+            }
+        }
+    }
+    return sensors;
+}
+
 function draw(dt = 0) {
     if (!renderer) return;
 
@@ -4796,7 +4833,7 @@ function draw(dt = 0) {
     }
 
     // 準備繪製桶子
-    const buckets = { slide: [], tapnhold: [], touch: [] };
+    const buckets = { slide: [], tapnhold: [], touch: [], hiteffects: [], hanabieffects: [], holdingeffects: [] };
     const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
 
     // 節拍器邏輯
@@ -4817,6 +4854,17 @@ function draw(dt = 0) {
     playScore = 0;
     let slideOnScreenCount = 0;
     let foundIndexForThisFrame = false;
+    const pressedSensors = renderer.activePointers ? new Set(renderer.activePointers.values()) : new Set();
+    const pointerStrikes = new Set();
+    if (renderer.pointerStrikes) {
+        for (const s of renderer.pointerStrikes) {
+            pointerStrikes.add(s);
+        }
+        renderer.pointerStrikes.clear();
+    }
+    const consumedStrikes = new Set();
+
+    console.log(`AT ${globalTime} / ${[...pressedSensors.keys()]} / ${[...pointerStrikes.keys()]}`);
 
     // 核心音符迴圈
     for (let i = notesLength - 1; i >= 0; i--) {
@@ -4824,6 +4872,214 @@ function draw(dt = 0) {
         const noteT = note.time - globalTime;
         const noteType = note.type;
         const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+        const cullingSkipT = (noteType === "slide" && note.chainSkipT !== undefined) ? note.chainSkipT : skipT;
+
+        // 時間軸倒退時重置判定狀態
+        if (note.time > globalTime) {
+            note.triggered = false;
+            note.holding = false;
+            note._isMissed = false;
+            note.slideStarted = false;
+            note.hitSensors = null;
+            note.requiredSensors = null;
+            note._startEffectPlayed = false;
+            note._endEffectPlayed = false;
+            note._riserActive = false;
+        }
+
+        // Autoplay logic: update triggered and holding states based on globalTime
+        if (settings.autoPlay) {
+            if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
+                note.holding = (globalTime >= note.time && globalTime <= note.time + (note.holdDuration ?? 0));
+                note.triggered = (globalTime > note.time + (note.holdDuration ?? 0));
+            } else if (noteType === 'slide') {
+                note.triggered = (globalTime > note.time + cullingSkipT);
+                note.holding = false;
+            } else {
+                note.triggered = (globalTime >= note.time);
+                note.holding = false;
+            }
+        } else {
+            // 手動遊玩判定邏輯 (非 autoplay)
+            const dtHit = globalTime - note.time;
+
+            if (noteType === 'tap' || noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
+                // Tap, Star, Hold, TouchHold 的判定
+                const sensorKey = (noteType === 'touch')
+                    ? (note.touchPos === "C" ? "C" : note.touchPos + note.pos)
+                    : ("A" + note.pos);
+
+                const isSensorPressed = (sensorKey === "C")
+                    ? (pressedSensors.has("C1") || pressedSensors.has("C2"))
+                    : pressedSensors.has(sensorKey);
+
+                // 是否有本幀新增的點擊動作 (Edge-trigger)
+                const hasStrike = (sensorKey === "C")
+                    ? (pointerStrikes.has("C1") || pointerStrikes.has("C2"))
+                    : pointerStrikes.has(sensorKey);
+
+                // 檢查是否已被同幀中時間更早的音符吃掉點擊
+                const hasEarlierPendingNote = notes.some((n, idx) =>
+                    idx < i && // 時間比當前音符早
+                    n.type === noteType &&
+                    n.pos === note.pos &&
+                    !n.triggered &&
+                    !n._isMissed &&
+                    !n.holding &&
+                    (globalTime - n.time >= -0.15)
+                );
+
+                if (!note.triggered && !note._isMissed && !note.holding) {
+                    if (hasStrike && !consumedStrikes.has(sensorKey) && !hasEarlierPendingNote && dtHit >= -0.15 && dtHit <= 0.15) {
+                        // 判定成功！
+                        note.triggered = true;
+                        consumedStrikes.add(sensorKey);
+                        // 實時播放擊中音效與特效標記
+                        audioManager.queueSound(note, globalTime);
+                        note._startEffectPlayed = true;
+
+                        // 如果是 Hold / TouchHold，觸發後進入 holding 狀態
+                        if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
+                            note.triggered = false; // Hold 在滑完前 triggered 保持為 false
+                            note.holding = true;
+                        }
+                        console.log(`[Hit] ${noteType} at pos ${note.pos}`);
+                    } else if (dtHit > 0.15) {
+                        // 超過判定時間，判定為 Miss
+                        note._isMissed = true;
+                    }
+                }
+
+                // 如果 Hold 已經在按壓中
+                if (note.holding) {
+                    // 只要時間沒到且玩家還按著
+                    if (globalTime <= note.time + (note.holdDuration ?? 0)) {
+                        note.holding = isSensorPressed;
+                    } else {
+                        // Hold 順利完成！播放 Hold 結尾音效
+                        note.triggered = true;
+                        note.holding = false;
+                        const shouldPlayEndSound = !settings.notPlayHoldEnd || note.isBreak;
+                        if (shouldPlayEndSound) {
+                            audioManager.queueSound(note, globalTime);
+                        }
+                        note._endEffectPlayed = true;
+                    }
+                }
+            } else if (noteType === 'touch') {
+                // 普通 Touch 的判定
+                const sensorKey = note.touchPos === "C" ? "C" : note.touchPos + note.pos;
+                const isSensorPressed = (sensorKey === "C")
+                    ? (pressedSensors.has("C1") || pressedSensors.has("C2"))
+                    : pressedSensors.has(sensorKey);
+
+                const hasStrike = (sensorKey === "C")
+                    ? (pointerStrikes.has("C1") || pointerStrikes.has("C2"))
+                    : pointerStrikes.has(sensorKey);
+
+                const hasEarlierPendingNote = notes.some((n, idx) =>
+                    idx < i &&
+                    n.type === noteType &&
+                    n.touchPos === note.touchPos &&
+                    n.pos === note.pos &&
+                    !n.triggered &&
+                    !n._isMissed &&
+                    (globalTime - n.time >= -0.15)
+                );
+
+                if (!note.triggered && !note._isMissed) {
+                    if (hasStrike && !consumedStrikes.has(sensorKey) && !hasEarlierPendingNote && dtHit >= -0.15 && dtHit <= 0.30) {
+                        note.triggered = true;
+                        consumedStrikes.add(sensorKey);
+                        audioManager.queueSound(note, globalTime);
+                        note._startEffectPlayed = true;
+                        console.log(`[Hit] Touch at pos ${note.touchPos}${note.pos}`);
+                    } else if (dtHit > 0.30) {
+                        note._isMissed = true;
+                    }
+                }
+            } else if (noteType === 'slide') {
+                // Slide 軌道手動滑過判定
+                if (!note.triggered && !note._isMissed) {
+                    // 找出同時間同起點的 Star note
+                    const starNote = notes.find(n =>
+                        n.time === note.time &&
+                        n.pos === note.pos &&
+                        (n.type === 'tap' && n.isStar)
+                    );
+
+                    // 街機規則：如果是無頭 Slide (starNote 不存在)，或是時間已到判定點，自動激活 Slide 供玩家滑動
+                    if (!starNote || starNote.triggered || globalTime >= note.time) {
+                        note.slideStarted = true;
+                    } else if (starNote && starNote._isMissed) {
+                        note._isMissed = true;
+                    }
+
+                    if (note.slideStarted) {
+                        const p = note.path;
+                        // 1. 初始化 requiredSensors 和 hitSensors 並且記錄每個感應器在軌道上最小的進度比
+                        if (!note.requiredSensors) {
+                            note.requiredSensors = getSlideSensors(p, note.slideType === "w");
+                            note.sensorMinProgress = {};
+                            note.hitSensors = new Set();
+
+                            const arrowCount = note.slideType === "w" ? 11 : Math.floor((p.totalLength - 2) / 4.36);
+                            const useSpacing = note.slideType === "w" ? 7 : 4.36;
+                            for (let i = 1; i <= arrowCount; i++) {
+                                const imgIndex = Math.min(i - 1, 10);
+                                const dist = i * useSpacing + (note.slideType === "w" ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                                const pt = p.getPointAt(dist / p.totalLength);
+                                if (pt) {
+                                    const sensor = getSensorAtPoint(pt.x, pt.y);
+                                    if (sensor) {
+                                        if (note.sensorMinProgress[sensor] === undefined) {
+                                            note.sensorMinProgress[sensor] = i / arrowCount;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 計算當前星星進度
+                        let slideProgress = 0;
+                        if (dtHit > note.slideDelay) {
+                            slideProgress = Math.min(1, (dtHit - note.slideDelay) / note.slideDuration);
+                        }
+
+                        // 2. 判定感應器觸發 (限制只有星星進度能觸及的感應器段落，防止點擊起點時產生超前誤觸導致破損)
+                        for (const sensor of note.requiredSensors) {
+                            const minProg = note.sensorMinProgress[sensor] ?? 0;
+                            if (slideProgress + 0.25 >= minProg) {
+                                const isPressed = (sensor === "C")
+                                    ? (pressedSensors.has("C1") || pressedSensors.has("C2"))
+                                    : pressedSensors.has(sensor);
+                                if (isPressed) {
+                                    note.hitSensors.add(sensor);
+                                    console.log(`[Slide Hit] Sensor ${sensor} activated (progress: ${(slideProgress * 100).toFixed(0)}%)`);
+                                }
+                            }
+                        }
+
+                        // 3. 檢查是否滑完
+                        if (note.hitSensors.size === note.requiredSensors.length) {
+                            note.triggered = true;
+                            // 播放 Slide 結束音效
+                            const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
+                            if (shouldPlayEndSound) {
+                                audioManager.queueSound(note, globalTime);
+                            }
+                            note._endEffectPlayed = true;
+                        } else if (dtHit > cullingSkipT + 0.5) {
+                            // 滑行超時 (例如滑軌完成時間過後 0.5s)，判定為 Miss
+                            note._isMissed = true;
+                        }
+                    } else if (dtHit > 0.15) {
+                        // 起點 Star 未被點中且超期
+                        note._isMissed = true;
+                    }
+                }
+            }
+        }
 
         const calcPiecewiseSpeed = (x) => {
             if (x >= 1) {
@@ -4848,11 +5104,13 @@ function draw(dt = 0) {
 
         // Combo 計算：提前計算避免重複條件檢查
         if (noteT < 0) {
+            const isNoteHit = settings.autoPlay ? true : (note.triggered || (noteType === 'slide' && note.slideStarted));
             const shouldCountCombo =
                 (noteType === "slide" ? (note.lastSlide && skipT + noteT < 0) :
                     noteType === "hold" ? (skipT + noteT < 0) :
                         noteType === "touch" && note.holdDuration !== undefined ? (skipT + noteT < 0) :
-                            noteType !== "slide");
+                            noteType !== "slide")
+                && isNoteHit;
             if (shouldCountCombo) {
                 playCombo++;
                 playScore += ((note.isBreak ? 5 :
@@ -4864,43 +5122,57 @@ function draw(dt = 0) {
 
         // 音效和狀態管理
         if (playing && !timeControlSliding) {
-            // Riser 邏輯
-            if (noteType === "touch" && note.holdDuration > 0) {
-                const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
-                const noteId = `riser_${note.pos}_${note.time}`;
-                if (isInsideHold && !note._riserActive) {
-                    audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
-                    note._riserActive = true;
-                } else if (!isInsideHold && note._riserActive) {
-                    audioManager.stopLongSound(noteId);
-                    note._riserActive = false;
+            if (settings.autoPlay) {
+                // Riser 邏輯
+                if (noteType === "touch" && note.holdDuration > 0) {
+                    const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
+                    const noteId = `riser_${note.pos}_${note.time}`;
+                    if (isInsideHold && !note._riserActive) {
+                        audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
+                        note._riserActive = true;
+                    } else if (!isInsideHold && note._riserActive) {
+                        audioManager.stopLongSound(noteId);
+                        note._riserActive = false;
+                    }
                 }
-            }
 
-            const lookAhead = 0.1; // 100ms look-ahead
+                const lookAhead = 0.1; // 100ms look-ahead
 
-            // 開始音效 (含前瞻)
-            const startTargetT = note.time + (note.slideDelay ?? 0);
-            const startNoteT = startTargetT - globalTime;
-            if (startNoteT <= lookAhead && !note._startEffectPlayed) {
-                if (!(noteType === "slide" && !note.firstSlide)) {
-                    audioManager.queueSound(note, startTargetT);
+                // 開始音效 (含前瞻)
+                const startTargetT = note.time + (note.slideDelay ?? 0);
+                const startNoteT = startTargetT - globalTime;
+                if (startNoteT <= lookAhead && !note._startEffectPlayed) {
+                    if (!(noteType === "slide" && !note.firstSlide)) {
+                        audioManager.queueSound(note, startTargetT);
+                    }
+                    note._startEffectPlayed = true;
                 }
-                note._startEffectPlayed = true;
-            }
-            // 結束音效 (含前瞻)
-            const endTargetT = note.time + skipT;
-            const endNoteT = endTargetT - globalTime;
-            if (endNoteT <= lookAhead && !note._endEffectPlayed) {
-                const shouldPlayEndSound =
-                    (noteType === "slide" && note.lastSlide && note.isBreak) ||
-                    (noteType !== "slide" && note.isBreak) ||
-                    note.isHanabi ||
-                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
-                if (shouldPlayEndSound) {
-                    audioManager.queueSound(note, endTargetT);
+                // 結束音效 (含前瞻)
+                const endTargetT = note.time + skipT;
+                const endNoteT = endTargetT - globalTime;
+                if (endNoteT <= lookAhead && !note._endEffectPlayed) {
+                    const shouldPlayEndSound =
+                        (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                        (noteType !== "slide" && note.isBreak) ||
+                        note.isHanabi ||
+                        (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
+                    if (shouldPlayEndSound) {
+                        audioManager.queueSound(note, endTargetT);
+                    }
+                    note._endEffectPlayed = true;
                 }
-                note._endEffectPlayed = true;
+            } else {
+                // 非 Autoplay (手動) 模式下的音效
+                if (noteType === "touch" && note.holdDuration > 0) {
+                    const noteId = `riser_${note.pos}_${note.time}`;
+                    if (note.holding && !note._riserActive) {
+                        audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
+                        note._riserActive = true;
+                    } else if (!note.holding && note._riserActive) {
+                        audioManager.stopLongSound(noteId);
+                        note._riserActive = false;
+                    }
+                }
             }
         } else {
             // 倒帶或拖動時重置狀態
@@ -4921,22 +5193,21 @@ function draw(dt = 0) {
             }
         }
 
-        // 繪製可見性判斷
-        const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
-        const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
+        // 繪製可見性判斷 (只針對音符本體)
+        const speedCoeffLocal = noteType === "touch" ? touchSpeedCoeff : speedCoeff;
+        const tval = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeffLocal));
 
-        const isVisible =
-            (noteType === "slide" ? t >= middleDistance :
-                noteType === "touch" ? touchT >= -1 :
-                    t >= -1)
-            && -noteT <= skipT + (note.isHanabi ? hanabiEffectDecayTime : effectDecayTime);
+        const isNoteVisible =
+            (noteType === "slide" ? tval >= middleDistance : tval >= -1)
+            && -noteT <= cullingSkipT + 0.375
+            && !note.triggered;
 
         const isVisualVisible = noteT >= 0
             ? Math.abs(noteT) <= V
-            : -noteT <= V + skipT;
+            : -noteT <= V + cullingSkipT;
 
-        // 快速分類到桶子
-        if (isVisible) {
+        // 快速分類音符本體到桶子
+        if (isNoteVisible) {
             if (noteType === 'slide') {
                 if (slideOnScreenCount < maxSlideCount) {
                     buckets.slide.push(note);
@@ -4947,6 +5218,44 @@ function draw(dt = 0) {
             } else if (noteType === 'touch') {
                 buckets.touch.push(note);
             }
+        }
+
+        // 特效收集邏輯
+        if (note.triggered) {
+            const isHoldType = noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0);
+            const duration = isHoldType ? note.holdDuration : 0;
+
+            // 1. 打擊特效 (Hit Effect)
+            const isWithinHitEffect = -noteT >= duration && -noteT <= duration + effectDecayTime;
+            if (isWithinHitEffect) {
+                buckets.hiteffects.push({
+                    pos: note.pos,
+                    touchPos: note.touchPos,
+                    noteT: isHoldType ? (note.holdDuration + noteT) : noteT
+                });
+            }
+
+            // 2. 煙火特效 (Hanabi Effect)
+            if (note.isHanabi) {
+                const isWithinHanabi = -noteT >= duration && -noteT <= duration + hanabiEffectDecayTime;
+                if (isWithinHanabi) {
+                    buckets.hanabieffects.push({
+                        pos: note.pos,
+                        touchPos: note.touchPos,
+                        time: note.time,
+                        noteT: isHoldType ? (note.holdDuration + noteT) : noteT
+                    });
+                }
+            }
+        }
+
+        // 3. Hold 按壓流動特效
+        if (note.holding) {
+            buckets.holdingeffects.push({
+                pos: note.pos,
+                displayT: tval,
+                noteT: noteT
+            });
         }
 
         if (isVisualVisible) {
@@ -5001,6 +5310,7 @@ function draw(dt = 0) {
         audioBuffer: audioManager.bgmBuffer,
         offset: musicDelay,
     });
+
 }
 
 // ============================================================
@@ -5967,7 +6277,7 @@ async function videoRender({
             const speedCoeff = settings.speed * 0.8833 + 0.8167;
             const touchSpeedCoeff = settings.touchSpeed * 0.8833 + 0.8167;
 
-            const buckets = { slide: [], tapnhold: [], touch: [] };
+            const buckets = { slide: [], tapnhold: [], touch: [], hiteffects: [], hanabieffects: [], holdingeffects: [] };
             let playComboLocal = 0;
             let playScoreLocal = 0;
             let slideOnScreenCount = 0;
@@ -5978,6 +6288,19 @@ async function videoRender({
                 const noteT = note.time - globalT;
                 const noteType = note.type;
                 const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+                const cullingSkipT = (noteType === 'slide' && note.chainSkipT !== undefined) ? note.chainSkipT : skipT;
+
+                // Autoplay logic: update triggered and holding states based on globalT
+                if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
+                    note.holding = (globalT >= note.time && globalT <= note.time + (note.holdDuration ?? 0));
+                    note.triggered = (globalT > note.time + (note.holdDuration ?? 0));
+                } else if (noteType === 'slide') {
+                    note.triggered = (globalT > note.time + cullingSkipT);
+                    note.holding = false;
+                } else {
+                    note.triggered = (globalT >= note.time);
+                    note.holding = false;
+                }
 
                 if (noteT < 0) {
                     const shouldCountCombo =
@@ -5994,16 +6317,15 @@ async function videoRender({
                     }
                 }
 
-                const tval = 1 - renderer.timeFunction(noteT * speedCoeff);
-                const touchT = 1 - renderer.timeFunction(noteT * touchSpeedCoeff);
+                const speedCoeffLocal = noteType === "touch" ? touchSpeedCoeff : speedCoeff;
+                const tval = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeffLocal));
 
-                const isVisible =
-                    (noteType === 'slide' ? (tval >= (settings.middleDistance || 0.25)) :
-                        noteType === 'touch' ? (touchT >= -1) :
-                            tval >= -1)
-                    && -noteT <= skipT + (note.isHanabi ? (settings.hanabiEffectDecayTime || 0.8) : (settings.effectDecayTime || 0.4));
+                const isNoteVisible =
+                    (noteType === 'slide' ? (tval >= (settings.middleDistance || 0.25)) : tval >= -1)
+                    && -noteT <= cullingSkipT + 0.375
+                    && !note.triggered;
 
-                if (isVisible) {
+                if (isNoteVisible) {
                     if (noteType === 'slide') {
                         if (slideOnScreenCount < (settings.maxSlideCount || 500)) {
                             buckets.slide.push(note);
@@ -6014,6 +6336,47 @@ async function videoRender({
                     } else if (noteType === 'touch') {
                         buckets.touch.push(note);
                     }
+                }
+
+                // 特效收集邏輯
+                const effectDecayTime = settings.effectDecayTime || 0.4;
+                const hanabiEffectDecayTime = settings.hanabiEffectDecayTime || 0.8;
+
+                if (note.triggered) {
+                    const isHoldType = noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0);
+                    const duration = isHoldType ? note.holdDuration : 0;
+
+                    // 1. 打擊特效 (Hit Effect)
+                    const isWithinHitEffect = -noteT >= duration && -noteT <= duration + effectDecayTime;
+                    if (isWithinHitEffect) {
+                        buckets.hiteffects.push({
+                            pos: note.pos,
+                            touchPos: note.touchPos,
+                            noteT: isHoldType ? (note.holdDuration + noteT) : noteT
+                        });
+                    }
+
+                    // 2. 煙火特效 (Hanabi Effect)
+                    if (note.isHanabi) {
+                        const isWithinHanabi = -noteT >= duration && -noteT <= duration + hanabiEffectDecayTime;
+                        if (isWithinHanabi) {
+                            buckets.hanabieffects.push({
+                                pos: note.pos,
+                                touchPos: note.touchPos,
+                                time: note.time,
+                                noteT: isHoldType ? (note.holdDuration + noteT) : noteT
+                            });
+                        }
+                    }
+                }
+
+                // 3. Hold 按壓流動特效
+                if (note.holding) {
+                    buckets.holdingeffects.push({
+                        pos: note.pos,
+                        displayT: tval,
+                        noteT: noteT
+                    });
                 }
             }
 

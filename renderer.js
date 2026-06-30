@@ -12,6 +12,7 @@ import {
     clamp,
     drawImgAtcenter,
     exColor,
+    getSensorAtPoint,
 } from './helper.js';
 
 export class SimaiRenderer {
@@ -48,6 +49,71 @@ export class SimaiRenderer {
             backgroundDarkness: null,
         };
         this.hanabiEffect = {};
+
+        this.activePointers = new Map();
+        this.pointerStrikes = new Set();
+        if (this.canvas && this.canvas.addEventListener) {
+            this._onPointerDown = this._onPointerDown.bind(this);
+            this._onPointerMove = this._onPointerMove.bind(this);
+            this._onPointerUp = this._onPointerUp.bind(this);
+
+            this.canvas.addEventListener('pointerdown', this._onPointerDown, { passive: false });
+            this.canvas.addEventListener('pointermove', this._onPointerMove, { passive: false });
+            this.canvas.addEventListener('pointerup', this._onPointerUp);
+            this.canvas.addEventListener('pointercancel', this._onPointerUp);
+            this.canvas.addEventListener('pointerleave', this._onPointerUp);
+        }
+    }
+
+    transformClickCoords(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX = (clientX - rect.left) * (this.canvas.width / rect.width);
+        const canvasY = (clientY - rect.top) * (this.canvas.height / rect.height);
+        
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const p = Math.min(w, h) / scaleBase * this.scale;
+        
+        const x = (canvasX - w / 2) / p;
+        const y = (canvasY - h / 2) / p;
+        return { x, y };
+    }
+
+    _onPointerDown(e) {
+        if (this.settings.autoPlay) return;
+        const { x, y } = this.transformClickCoords(e.clientX, e.clientY);
+        const sensorId = getSensorAtPoint(x, y);
+        if (sensorId) {
+            this.activePointers.set(e.pointerId, sensorId);
+            this.pointerStrikes.add(sensorId); // 登記 edge-trigger
+            e.preventDefault();
+        }
+    }
+
+    _onPointerMove(e) {
+        if (this.settings.autoPlay) return;
+        // 如果是滑鼠移動但沒有按下任何按鍵 (Hover)，則不視為觸碰，清空該指標狀態並返回
+        if (e.pointerType === 'mouse' && e.buttons === 0) {
+            this.activePointers.delete(e.pointerId);
+            return;
+        }
+        const { x, y } = this.transformClickCoords(e.clientX, e.clientY);
+        const sensorId = getSensorAtPoint(x, y);
+        const prevSensorId = this.activePointers.get(e.pointerId);
+        if (sensorId) {
+            // 只有滑入新感應器時才登記 edge-trigger
+            if (sensorId !== prevSensorId) {
+                this.pointerStrikes.add(sensorId);
+            }
+            this.activePointers.set(e.pointerId, sensorId);
+            e.preventDefault();
+        } else {
+            this.activePointers.delete(e.pointerId);
+        }
+    }
+
+    _onPointerUp(e) {
+        this.activePointers.delete(e.pointerId);
     }
 
 
@@ -238,8 +304,31 @@ export class SimaiRenderer {
         // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
         this.drawMiddleDisplay();
 
-        for (const n of buckets.touch) this.getTouchHanabi(n);
+        // 5. 處理並繪製 Touch Hanabi (煙火) 特效
+        this.hanabiEffect = {};
+        for (const eff of (buckets.hanabieffects || [])) {
+            const key = eff.touchPos + eff.pos;
+            const posInfo = touchRefPos[eff.touchPos][eff.touchPos === "C" ? 0 : eff.pos - 1];
+            this.hanabiEffect[key] = {
+                time: eff.time,
+                x: posInfo.x,
+                y: posInfo.y,
+                noteT: eff.noteT,
+                isCenter: eff.touchPos === "C"
+            };
+        }
         this.drawHanabiEffects();
+
+        // 6. 繪製 Hold 按壓流動特效
+        for (const eff of (buckets.holdingeffects || [])) {
+            this.ctx.save();
+            const posInfo = noteRefPos[eff.pos - 1];
+            this.ctx.translate(posInfo.x * eff.displayT, posInfo.y * eff.displayT);
+            this.simpleHoldEffect(eff.noteT);
+            this.ctx.restore();
+        }
+
+        // 7. 繪製音符本體
         for (const n of buckets.slide) this.drawSlide(n);
 
         for (const n of buckets.tapnhold) {
@@ -248,6 +337,17 @@ export class SimaiRenderer {
             else this.drawTap(n);
         }
         for (const n of buckets.touch) this.drawTouch(n);
+
+        // 8. 繪製打擊 (Hit) 特效 (在所有音符的最上方，符合圖層順序)
+        for (const eff of (buckets.hiteffects || [])) {
+            this.ctx.save();
+            const posInfo = eff.touchPos
+                ? touchRefPos[eff.touchPos][eff.touchPos === "C" ? 0 : eff.pos - 1]
+                : noteRefPos[eff.pos - 1];
+            this.ctx.translate(posInfo.x, posInfo.y);
+            this.simpleHitEffect(eff.noteT);
+            this.ctx.restore();
+        }
 
         this.drawStaticBackground();
         if (this.settings.showUI) this.drawUI(dt, globalTime);
@@ -536,20 +636,14 @@ export class SimaiRenderer {
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, hispeed, triggered } = s;
         const noteT = noteTime - this.globalTime;
         const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
-        if (noteT <= 0) {
-            ctx.save();
-            ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(noteT);
-            ctx.restore();
-            return;
-        }
+        if (triggered) return;
 
         const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
         const imgKey = isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap");
@@ -586,20 +680,14 @@ export class SimaiRenderer {
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMultiple, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple, hispeed, triggered } = s;
         const noteT = noteTime - this.globalTime;
         const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
-        if (noteT <= 0) {
-            ctx.save();
-            ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(noteT);
-            ctx.restore();
-            return;
-        }
+        if (triggered) return;
 
         const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
         const imgKey = isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))
@@ -637,70 +725,61 @@ export class SimaiRenderer {
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration, hispeed, triggered, holding } = s;
         const noteT = (noteTime - this.globalTime);
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const posInfo = noteRefPos[pos - 1];
 
-        if (-noteT > holdDuration) {
+        if (triggered) return;
+
+        if (-Math.max(holdDuration, 0.2) >= noteT) return;
+        const missPoint = (noteTime - this.globalTime) <= -0.375;
+        const isOn = holding;
+        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const img = getTintedImage(this.images[isOn ?
+            (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on")) :
+            (missPoint ? "hold_off" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")))], br, {
+            colorCode: "#fff8a6"
+        });
+        const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
+        const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
+        const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
+        const size = this.settings.noteBaseSize * currentScale;
+        const sizeOffset = t < this.settings.middleDistance ? 0 :
+            Math.min(Math.max(holdDuration + noteT, 0) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
+                Math.min((1 - this.settings.middleDistance) * 2.45,
+                    Math.min((t - this.settings.middleDistance) * 2.45,
+                        holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
+
+        this.ctx.save();
+        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        this.ctx.rotate(posInfo.rot);
+        this.ctx.globalAlpha = currentScale;
+        this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
+        this.ctx.restore();
+
+        if (t1 > this.settings.middleDistance) {
             this.ctx.save();
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(holdDuration + noteT);
-            this.ctx.restore();
-        } else {
-            const isOn = (noteTime - this.globalTime) <= -0.1;
-            let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-            const img = getTintedImage(this.images[isOn ?
-                (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on")) :
-                (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))], br, {
-                colorCode: "#fff8a6"
-            });
-            const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
-            const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
-            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
-            const size = this.settings.noteBaseSize * currentScale;
-            const sizeOffset = t < this.settings.middleDistance ? 0 :
-                Math.min((holdDuration + noteT) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
-                    Math.min((1 - this.settings.middleDistance) * 2.45,
-                        Math.min((t - this.settings.middleDistance) * 2.45,
-                            holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
-
-            this.ctx.save();
-            const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
-            this.ctx.rotate(posInfo.rot);
-            this.ctx.globalAlpha = currentScale;
-            this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-            this.ctx.restore();
-
-            if (t1 > this.settings.middleDistance) {
-                this.ctx.save();
-                const endimg = this.images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
-                this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
-                this.drawImgAtcenter(endimg, size * 0.65);
-                this.ctx.restore();
-            }
-
-            this.ctx.save();
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.ctx.rotate(posInfo.rot);
-            this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-            this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-            this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-
-            if (s.isEx) {
-                const ex = getTintedImage(this.images["hold_ex"], 0.6, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
-                this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-                this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-                this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-            }
-            this.ctx.restore();
-
-            this.ctx.save();
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.simpleHitEffect(noteT);
-            if (isOn) this.simpleHoldEffect(noteT);
+            const endimg = this.images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
+            this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
+            this.drawImgAtcenter(endimg, size * 0.65);
             this.ctx.restore();
         }
+
+        this.ctx.save();
+        this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        this.ctx.rotate(posInfo.rot);
+        this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+        this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+        this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+
+        if (s.isEx) {
+            const ex = getTintedImage(this.images["hold_ex"], 0.6, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
+            this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+            this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+            this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+        this.ctx.restore();
     }
 
     getTouchHanabi(s) {
@@ -716,7 +795,7 @@ export class SimaiRenderer {
 
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
         if (holdDuration) {
-            if (s.isHanabi) {
+            if (s.isHanabi && s.triggered) {
                 const effT = holdDuration + noteT;
                 this.hanabiEffect[key] = {
                     time: noteTime,
@@ -733,7 +812,7 @@ export class SimaiRenderer {
             }
             return;
         }
-        if (s.isHanabi) {
+        if (s.isHanabi && s.triggered) {
             this.hanabiEffect[key] = {
                 time: noteTime,
                 x: posInfo.x,
@@ -750,7 +829,9 @@ export class SimaiRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration, hispeed, triggered, holding } = s;
+        if (triggered) return;
+
         const zoneKey = touchPos + pos;
 
         const sameZoneNotes = (this.currentTouchNotes || []).filter(n => {
@@ -773,7 +854,8 @@ export class SimaiRenderer {
         const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
 
         if (holdDuration) {
-            const isOn = (noteTime - this.globalTime) <= -0.1;
+            const missPoint = (noteTime - this.globalTime) <= -0.375;
+            const isOn = holding;
             const imgs = [];
             for (let i = 0; i < 4; i++) {
                 const img = this.images["touchhold_" + i];
@@ -782,69 +864,52 @@ export class SimaiRenderer {
             const touchBorder = this.images.touchhold_border;
 
             this.ctx.save();
-            if (-noteT > holdDuration) {
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.simpleHitEffect(holdDuration + noteT);
-            } else {
-                const size = this.settings.noteBaseSize * 0.7;
-                const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
-                const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+            const size = this.settings.noteBaseSize * 0.7;
+            const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+            const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
 
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.ctx.save();
-                this.ctx.beginPath();
-                this.ctx.moveTo(0, 0);
-                this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
-                this.ctx.closePath();
-                this.ctx.clip();
-                this.drawImgAtcenter(touchBorder, size * 2.6);
-                this.ctx.restore();
-                this.ctx.globalAlpha = 1;
-                if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
-                    this.drawnBorders.add(zoneKey);
-                    this.drawImgAtcenter(borderImg, size * 2.65);
-                    if (count > 2)
-                        this.drawImgAtcenter(borderImg3, size * 2.65);
-                }
-                this.ctx.rotate(Math.PI * -0.75);
-                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
-                for (let i = 0; i < 4; i++) {
-                    this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
-                    this.ctx.rotate(Math.PI / 2);
-                }
-                this.ctx.globalAlpha = 1;
-                this.drawImgAtcenter(touchPoint, size * 0.4);
-                this.simpleHitEffect(noteT);
-                if (isOn) this.simpleHoldEffect(noteT);
+            this.ctx.translate(posInfo.x, posInfo.y);
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, 0);
+            this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+            this.ctx.closePath();
+            this.ctx.clip();
+            if (!missPoint || isOn) this.drawImgAtcenter(touchBorder, size * 2.6);
+            else this.drawImgAtcenter(this.images.touchhold_off, size * 2.6);
+            this.ctx.restore();
+            this.ctx.rotate(Math.PI * -0.75);
+            this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
+            for (let i = 0; i < 4; i++) {
+                this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                this.ctx.rotate(Math.PI / 2);
             }
+            this.ctx.globalAlpha = 1;
+            this.drawImgAtcenter(touchPoint, size * 0.4);
             this.ctx.restore();
             return;
         }
         const img = this.images[isDouble ? "touch_each" : "touch"];
 
         this.ctx.save();
-        if (noteT <= 0) {
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(noteT);
-        } else {
-            const size = this.settings.noteBaseSize * 0.7;
-            const a = this.touchTimeFunction(18 * (1 - t) / 1.5) * 1.6;
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.ctx.globalAlpha = 1;
-            if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
-                this.drawnBorders.add(zoneKey);
-                this.drawImgAtcenter(borderImg, size * 2.65);
-                if (count > 2)
-                    this.drawImgAtcenter(borderImg3, size * 2.65);
-            }
-            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
-            for (let i = 0; i < 4; i++) {
-                this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
-                this.ctx.rotate(Math.PI / 2);
-            }
-            this.ctx.globalAlpha = 1;
-            this.drawImgAtcenter(touchPoint, size * 0.4);
+        const size = this.settings.noteBaseSize * 0.7;
+        const a = this.touchTimeFunction(18 * (1 - Math.min(t, 1)) / 1.5) * 1.6;
+        this.ctx.translate(posInfo.x, posInfo.y);
+        this.ctx.globalAlpha = 1;
+        if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
+            this.drawnBorders.add(zoneKey);
+            this.drawImgAtcenter(borderImg, size * 2.65);
+            if (count > 2)
+                this.drawImgAtcenter(borderImg3, size * 2.65);
         }
+        this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
+        for (let i = 0; i < 4; i++) {
+            this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.rotate(Math.PI / 2);
+        }
+        this.ctx.globalAlpha = 1;
+        this.drawImgAtcenter(touchPoint, size * 0.4);
+        if (noteT < 0) this.drawImgAtcenter(this.images["touch_just"], size * 1.65);
         this.ctx.restore();
     }
 
@@ -863,7 +928,7 @@ export class SimaiRenderer {
             imgs.push(target);
         }
 
-        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed } = s;
+        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed, triggered } = s;
         const noteT = noteTime - this.globalTime;
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const p = path || generatePath(pos, slideEnd);
@@ -874,14 +939,18 @@ export class SimaiRenderer {
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
         let slideProgress = 0;
-        if (-noteT > slideDelay) {
-            slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
+        if (this.settings.autoPlay || s.slideStarted) {
+            if (-noteT > slideDelay) {
+                slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
+            }
         }
         let br = (s.isBreak && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
+        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed), {
+            hitSensors: this.settings.autoPlay ? null : s.hitSensors
+        });
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
-        if (noteT <= 0 && slideProgress < 1 && (!s.hideHead || sz >= 1)) {
+        if (noteT <= 0 && (!s.hideHead || sz >= 1) && (s.lastSlide || slideProgress < 1)) {
             const { x, y, rot } = p.getPointAt(slideProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
@@ -911,25 +980,96 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, { spacing = 4.36 } = {}) {
+    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, { spacing = 4.36, hitSensors = null } = {}) {
         const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
         spacing = typew ? 7 : spacing;
         this.ctx.save();
-        for (let i = arrowCount; i > Math.floor(starProgress * arrowCount); i--) {
-            const imgIndex = Math.min(i - 1, imgs.length - 1);
-            const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {
-                colorCode: isIllegal ? "#ff3838" : "#fff8a6"
-            });
-            const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
-            const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
 
-            this.ctx.save();
-            this.ctx.translate(x, y);
-            this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
-            const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
-            const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
-            this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
-            this.ctx.restore();
+        if (hitSensors) {
+            // 手動模式：由已滑過之感應器決定箭頭是否消失
+            for (let i = arrowCount; i > 0; i--) {
+                const imgIndex = Math.min(i - 1, imgs.length - 1);
+                const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
+
+                const arrowSensor = getSensorAtPoint(x, y);
+                if (arrowSensor && hitSensors.has(arrowSensor)) {
+                    continue;
+                }
+
+                const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {
+                    colorCode: isIllegal ? "#ff3838" : "#fff8a6"
+                });
+
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+                const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+                const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+                this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
+                this.ctx.restore();
+            }
+        } else {
+            // 自動模式：由時間軸進度自動消失
+            const passedCount = Math.floor(starProgress * arrowCount);
+
+            // 1. 找出星星當前所在的感應器
+            let starSensor = null;
+            if (starProgress > 0 && starProgress < 1) {
+                const starPoint = recorder.getPointAt(starProgress);
+                if (starPoint) {
+                    starSensor = getSensorAtPoint(starPoint.x, starPoint.y);
+                }
+            }
+
+            // 2. 決定前方哪些箭頭需要因為感應器而隱藏 (僅連續隱藏與星星當前所在相同的感應器區段)
+            const hiddenIndices = new Set();
+            if (starSensor && passedCount < arrowCount) {
+                const nextIdx = passedCount + 1;
+                const nextDist = nextIdx * spacing + (typew ? wSlideRatio[Math.min(nextIdx - 1, imgs.length - 1) * 4 + 2] : 0);
+                const nextPoint = recorder.getPointAt(nextDist / recorder.totalLength);
+                const nextSensor = getSensorAtPoint(nextPoint.x, nextPoint.y);
+
+                // 只有當星星當前所在的感應器與下一個前方的感應器相同時，才執行連續隱藏
+                if (nextSensor === starSensor) {
+                    for (let i = nextIdx; i <= arrowCount; i++) {
+                        const imgIndex = Math.min(i - 1, imgs.length - 1);
+                        const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                        const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
+                        const sensor = getSensorAtPoint(x, y);
+
+                        if (sensor === starSensor) {
+                            hiddenIndices.add(i);
+                        } else {
+                            // 一旦遇到不同的感應器，立即中斷，防止後面重複感應器區段被誤消
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. 繪製前方未滑到的箭頭 (排除已過期 passedCount 以及被連續隱藏的索引)
+            for (let i = arrowCount; i > passedCount; i--) {
+                if (hiddenIndices.has(i)) {
+                    continue;
+                }
+
+                const imgIndex = Math.min(i - 1, imgs.length - 1);
+                const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
+
+                const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {
+                    colorCode: isIllegal ? "#ff3838" : "#fff8a6"
+                });
+
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+                const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+                const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+                this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
+                this.ctx.restore();
+            }
         }
         this.ctx.restore();
     }

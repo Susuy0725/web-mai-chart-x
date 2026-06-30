@@ -485,6 +485,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     slideDuration: segmentDuration,
                                     isIllegal: seg.illegal,
                                     hispeed: hispeed,
+                                    chainSkipT: dlay + d,
                                 });
                                 if (index === segments.length - 1) {
                                     if (isSlideBreak) { breakCounts++ } else { slideCounts++ }

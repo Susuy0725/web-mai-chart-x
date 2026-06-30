@@ -16,14 +16,14 @@ const baseURL = './Skin/', baseImageKeys = [
     'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc',
     'hold', 'hold_break', 'hold_each', 'hold_ex',
-    'hold_break_on', 'hold_each_on', 'hold_on',
+    'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
-    'touch', 'touch_each', 'touch_point', 'touch_point_each',
+    'touch', 'touch_each', 'touch_point', 'touch_point_each', 'touch_just',
     'touch_border_2', 'touch_border_2_each', 'touch_border_3', 'touch_border_3_each',
     'star', 'star_pink', 'star_break', 'star_each', 'star_double', 'star_ex',
     'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double',
     'slide', 'slide_each', 'slide_break', 'SlideArc',
-    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
+    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border', 'touchhold_off'
 ];
 
 export const exColor = {
@@ -924,6 +924,35 @@ c2.lineTo(-Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135,
 c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135 - 3), Math.sin(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135);
 c2.closePath();
 touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
+
+let offscreenCtx = null;
+let offscreenCanvas = null;
+export function getSensorAtPoint(x, y) {
+    if (!offscreenCtx) {
+        try {
+            offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = 1000;
+            offscreenCanvas.height = 1000;
+            offscreenCtx = offscreenCanvas.getContext('2d');
+            // 平移到正數安全區 (500, 500) 並放大 8 倍
+            offscreenCtx.setTransform(8, 0, 0, 8, 500, 500);
+        } catch (e) {
+            return null;
+        }
+    }
+    if (!offscreenCtx) return null;
+
+    // 將以幾何中心 (0, 0) 的點 x, y 轉化為相對於 canvas 左上角的像素座標
+    const canvasX = x * 8 + 500;
+    const canvasY = y * 8 + 500;
+
+    for (const shape of touchPaths) {
+        if (offscreenCtx.isPointInPath(shape.path, canvasX, canvasY)) {
+            return shape.id;
+        }
+    }
+    return null;
+}
 
 export function getHighlight(text, errpos = []) {
     if (!text) {

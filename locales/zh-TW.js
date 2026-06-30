@@ -100,11 +100,13 @@ export const zhTW = {
         items: {
             speed: " Tap/Hold 速度",
             slideSpeed: " Slide 速度",
+            slideSkip: "Slide 跨區/跳區判定",
             touchSpeed: " Touch 速度",
             middleDisplay: "中間顯示",
             moviebrightness: "背景暗度",
             pinkStars: "粉紅色星星",
             showSensor: "顯示感應器",
+            highlightSensor: "高亮觸摸感應器",
             showSensorTextWhenPaused: "暫停時顯示感應器文字",
             hideBackgroundWhenPaused: "暫停時隱藏背景",
             rotateStars: "星星旋轉",
@@ -119,6 +121,8 @@ export const zhTW = {
             showUI: "顯示FPS介面",
             autoPauseOnScroll: "滾動時自動暫停",
             globalTimeline: "顯示全域時間軸",
+            autoPlay: "自動播放",
+            simulateAutoplay: "模擬玩家觸發 (Auto)",
             lang: "語言 / Language"
         },
         middleDisplayOpts: {

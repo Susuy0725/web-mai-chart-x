@@ -100,11 +100,13 @@ export const en = {
         items: {
             speed: "Tap/Hold Speed",
             slideSpeed: "Slide Speed",
+            slideSkip: "Slide Skip-Zone Tolerance",
             touchSpeed: "Touch Speed",
             middleDisplay: "Center Display",
             moviebrightness: "BG Dim",
             pinkStars: "Pink Stars",
             showSensor: "Show Sensors",
+            highlightSensor: "Highlight Touched Sensors",
             showSensorTextWhenPaused: "Show Sensor Text when Paused",
             hideBackgroundWhenPaused: "Hide BG when Paused",
             rotateStars: "Rotating Stars",
@@ -119,6 +121,8 @@ export const en = {
             showUI: "Show FPS Interface",
             autoPauseOnScroll: "Auto Pause on Scroll",
             globalTimeline: "Show Global Timeline",
+            autoPlay: "AutoPlay",
+            simulateAutoplay: "Simulate Player Touch (Auto)",
             lang: "Language"
         },
         middleDisplayOpts: {

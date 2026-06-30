@@ -100,11 +100,13 @@ export const ja = {
         items: {
             speed: "Tap/Hold速度",
             slideSpeed: "Slide速度",
+            slideSkip: "Slide スキップ判定",
             touchSpeed: "Touch速度",
             middleDisplay: "中央表示",
             moviebrightness: "背景の明るさ",
             pinkStars: "ピンクの星",
             showSensor: "センサーを表示",
+            highlightSensor: "タッチセンサーを強調表示",
             showSensorTextWhenPaused: "一時停止時にセンサーテキストを表示",
             hideBackgroundWhenPaused: "一時停止時に背景を非表示",
             rotateStars: "星を回転",
@@ -119,6 +121,8 @@ export const ja = {
             showUI: "FPSインターフェースを表示",
             autoPauseOnScroll: "スクロール時に自動一時停止",
             globalTimeline: "全体のタイムラインを表示",
+            autoPlay: "オートプレイ",
+            simulateAutoplay: "プレイヤーのタッチをシミュレート (Auto)",
             lang: "言語"
         },
         middleDisplayOpts: {

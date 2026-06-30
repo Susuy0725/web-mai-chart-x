@@ -875,7 +875,7 @@ export const touchPaths = [];
 for (let i = 1; i <= 8; i++) {
     // 根據圖片，A/B 的 base 與 D/E 的 base 角度有位移
     // 這裡我們把 A/B 設在中心，D/E 設在間隔處
-    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 2, E: i - 2 };
+    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 3, E: i - 3 };
 
     ['A', 'B', 'D', 'E'].forEach(type => {
         const path = new Path2D();

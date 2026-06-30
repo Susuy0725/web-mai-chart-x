@@ -69,11 +69,11 @@ export class SimaiRenderer {
         const rect = this.canvas.getBoundingClientRect();
         const canvasX = (clientX - rect.left) * (this.canvas.width / rect.width);
         const canvasY = (clientY - rect.top) * (this.canvas.height / rect.height);
-        
+
         const w = this.canvas.width;
         const h = this.canvas.height;
         const p = Math.min(w, h) / scaleBase * this.scale;
-        
+
         const x = (canvasX - w / 2) / p;
         const y = (canvasY - h / 2) / p;
         return { x, y };
@@ -179,20 +179,62 @@ export class SimaiRenderer {
 
     // --- 視覺效果 ---
 
-    simpleHitEffect(noteT) {
+    simpleHitEffect(noteT, judgment = null) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
-        this.ctx.save();
-        const decayAlpha = 1 - Math.max(0, -t);
-        const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
 
-        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
-        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
-        this.ctx.globalCompositeOperation = 'lighter';
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        this.ctx.stroke();
-        this.ctx.restore();
+        const decayAlpha = 1 - Math.max(0, -t);
+
+        if (judgment !== 'MISS') {
+            this.ctx.save();
+            const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
+            this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+            this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
+            this.ctx.globalCompositeOperation = 'lighter';
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.restore();
+        }
+
+        if (judgment) {
+            this.ctx.save();
+            this.ctx.globalAlpha = decayAlpha;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.font = 'bold 2.2px "Google Sans", sans-serif';
+
+            let color = '#FFF';
+            let strokeColor = '#000';
+            switch (judgment) {
+                case 'CRITICAL_PERFECT':
+                    color = '#FFFF00';
+                    strokeColor = '#FF8000';
+                    break;
+                case 'PERFECT':
+                    color = '#FFE600';
+                    strokeColor = '#FF8000';
+                    break;
+                case 'GREAT':
+                    color = '#FF2A85';
+                    strokeColor = '#FFFFFF';
+                    break;
+                case 'GOOD':
+                    color = '#00FF66';
+                    strokeColor = '#005500';
+                    break;
+                case 'MISS':
+                    color = '#FF3333';
+                    strokeColor = '#000000';
+                    break;
+            }
+            this.ctx.strokeStyle = strokeColor;
+            this.ctx.lineWidth = 0.4;
+            this.ctx.strokeText(judgment.replace('_', ' '), 0, -1);
+            this.ctx.fillStyle = color;
+            this.ctx.fillText(judgment.replace('_', ' '), 0, -1);
+            this.ctx.restore();
+        }
     }
 
     simpleHanabi(noteT, isCenter) {
@@ -345,7 +387,7 @@ export class SimaiRenderer {
                 ? touchRefPos[eff.touchPos][eff.touchPos === "C" ? 0 : eff.pos - 1]
                 : noteRefPos[eff.pos - 1];
             this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(eff.noteT);
+            this.simpleHitEffect(eff.noteT, eff.judgment);
             this.ctx.restore();
         }
 
@@ -631,6 +673,46 @@ export class SimaiRenderer {
             if (showSensor && this._sensorShapeCache) ctx.drawImage(this._sensorShapeCache, 0, 0);
             if (showSensorText && this._sensorTextCache) ctx.drawImage(this._sensorTextCache, 0, 0);
         } finally {
+            ctx.restore();
+        }
+
+        // 當開啟「高亮觸摸感應器」且當前有按下的感應器時進行繪製
+        if (this.settings.highlightSensor && this.activePointers && this.activePointers.size > 0) {
+            const wPx = this.canvas.width;
+            const hPx = this.canvas.height;
+            const scale = this.scale;
+            const p = Math.min(wPx, hPx) / scaleBase * scale;
+
+            ctx.save();
+            ctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+
+            // 限制高亮渲染範圍在內圈以保持視覺整潔
+            ctx.beginPath();
+            ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+
+            const pressedSensorIds = new Set(this.activePointers.values());
+
+            // 使用具有未來感的天藍色霓虹填充和描邊
+            ctx.fillStyle = '#06b6d445';
+            ctx.strokeStyle = '#22d3ee';
+            ctx.lineWidth = 0.5;
+
+            touchPaths.forEach(shape => {
+                let isPressed = pressedSensorIds.has(shape.id);
+                // 處理中心 C1 / C2 映射
+                if (shape.id === 'C' && (pressedSensorIds.has('C1') || pressedSensorIds.has('C2'))) {
+                    isPressed = true;
+                }
+
+                if (isPressed) {
+                    ctx.beginPath();
+                    ctx.fill(shape.path);
+                    ctx.stroke(shape.path);
+                }
+            });
+
             ctx.restore();
         }
     }
@@ -939,32 +1021,33 @@ export class SimaiRenderer {
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
         let slideProgress = 0;
-        if (this.settings.autoPlay || s.slideStarted) {
-            if (-noteT > slideDelay) {
-                slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
-            }
+        let starProgress = 0;
+        if (-noteT > slideDelay) {
+            starProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
         let br = (s.isBreak && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
         this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed), {
-            hitSensors: this.settings.autoPlay ? null : s.hitSensors
+            hitSensors: this.settings.autoPlay ? null : s.hitSensors,
+            requiredSensors: s.requiredSensors,
+            currentSensorIdx: s.currentSensorIdx
         });
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
-        if (noteT <= 0 && (!s.hideHead || sz >= 1) && (s.lastSlide || slideProgress < 1)) {
-            const { x, y, rot } = p.getPointAt(slideProgress);
+        if (noteT <= 0 && (!s.hideHead || sz >= 1) && (s.lastSlide || starProgress < 1)) {
+            const { x, y, rot } = p.getPointAt(starProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
             const starImg = this.images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
             const baseTransform = this.ctx.getTransform();
             if (s.slideType === "w") {
-                const w1Point = wPaths.w1.getPointAt(slideProgress);
+                const w1Point = wPaths.w1.getPointAt(starProgress);
                 this.ctx.translate(w1Point.x, w1Point.y);
                 this.ctx.rotate(w1Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
 
                 this.ctx.setTransform(baseTransform);
 
-                const w2Point = wPaths.w2.getPointAt(slideProgress);
+                const w2Point = wPaths.w2.getPointAt(starProgress);
                 this.ctx.translate(w2Point.x, w2Point.y);
                 this.ctx.rotate(w2Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
@@ -980,21 +1063,97 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, { spacing = 4.36, hitSensors = null } = {}) {
+    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, { spacing = 4.36, hitSensors = null, requiredSensors = null, currentSensorIdx = 0 } = {}) {
         const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
         spacing = typew ? 7 : spacing;
         this.ctx.save();
 
         if (hitSensors) {
-            // 手動模式：由已滑過之感應器決定箭頭是否消失
+            // 手動模式：先掃描一遍所有箭頭，找出已擊中感應器在軌道上最大的箭頭索引 maxHitIdx
+            let maxHitIdx = 0;
+            if (requiredSensors && requiredSensors.length > 0) {
+                for (let i = 1; i <= arrowCount; i++) {
+                    const imgIndex = Math.min(i - 1, imgs.length - 1);
+                    const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                    const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
+                    const arrowSensor = getSensorAtPoint(x, y);
+
+                    if (arrowSensor) {
+                        const arrowRatio = dist / recorder.totalLength;
+                        let seqIdx = -1;
+                        let minDiff = Infinity;
+                        for (let idx = 0; idx < requiredSensors.length; idx++) {
+                            const reqParts = requiredSensors[idx].split('/');
+                            if (reqParts.includes(arrowSensor)) {
+                                const sensorRatio = idx / requiredSensors.length;
+                                const diff = Math.abs(sensorRatio - arrowRatio);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    seqIdx = idx;
+                                }
+                            }
+                        }
+
+                        if (seqIdx !== -1) {
+                            if (seqIdx < currentSensorIdx) {
+                                maxHitIdx = Math.max(maxHitIdx, i);
+                            }
+                        } else {
+                            const progressRatio = currentSensorIdx / requiredSensors.length;
+                            if (arrowRatio <= progressRatio) {
+                                maxHitIdx = Math.max(maxHitIdx, i);
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (let i = 1; i <= arrowCount; i++) {
+                    const imgIndex = Math.min(i - 1, imgs.length - 1);
+                    const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                    const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
+                    const arrowSensor = getSensorAtPoint(x, y);
+
+                    if (arrowSensor && hitSensors.has(arrowSensor)) {
+                        maxHitIdx = Math.max(maxHitIdx, i);
+                    }
+                }
+            }
+
+            // 繪製箭頭時：隱藏已滑過的部分
             for (let i = arrowCount; i > 0; i--) {
+                if (i <= maxHitIdx) {
+                    continue;
+                }
+
                 const imgIndex = Math.min(i - 1, imgs.length - 1);
                 const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
                 const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
 
                 const arrowSensor = getSensorAtPoint(x, y);
-                if (arrowSensor && hitSensors.has(arrowSensor)) {
-                    continue;
+                if (requiredSensors && requiredSensors.length > 0) {
+                    if (arrowSensor) {
+                        const arrowRatio = dist / recorder.totalLength;
+                        let seqIdx = -1;
+                        let minDiff = Infinity;
+                        for (let idx = 0; idx < requiredSensors.length; idx++) {
+                            const reqParts = requiredSensors[idx].split('/');
+                            if (reqParts.includes(arrowSensor)) {
+                                const sensorRatio = idx / requiredSensors.length;
+                                const diff = Math.abs(sensorRatio - arrowRatio);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    seqIdx = idx;
+                                }
+                            }
+                        }
+                        if (seqIdx !== -1 && seqIdx < currentSensorIdx) {
+                            continue;
+                        }
+                    }
+                } else {
+                    if (arrowSensor && hitSensors.has(arrowSensor)) {
+                        continue;
+                    }
                 }
 
                 const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {

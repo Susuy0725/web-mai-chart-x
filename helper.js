@@ -23,7 +23,10 @@ const baseURL = './Skin/', baseImageKeys = [
     'star', 'star_pink', 'star_break', 'star_each', 'star_double', 'star_ex',
     'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double',
     'slide', 'slide_each', 'slide_break', 'SlideArc',
-    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border', 'touchhold_off'
+    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border', 'touchhold_off',
+    'judge_text_cPerfect', 'judge_text_cPerfect_break',
+    'judge_text_good', 'judge_text_great', 'judge_text_miss',
+    'judge_text_perfect', 'judge_text_perfect_break'
 ];
 
 export const exColor = {
@@ -693,7 +696,7 @@ class AudioManager {
                 if (note._startEffectPlayed && !note.isHanabi) return events;
                 break;
             case 'slide':
-                if (!note._startEffectPlayed && note.isBreak) {
+                if (!note._startEffectPlayed && note.isBreak && note.firstSlide !== false) {
                     events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: this.sfxVolumes['break_slide'] });
                     key = 'break_slide_start';
                     isMono = false;

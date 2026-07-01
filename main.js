@@ -1722,9 +1722,32 @@ const getres = ((simaiDataValue) => {
             simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
         } else {
             notes = result.notes;
+            const notesLen = notes.length;
+            const findImmediatePrevSegment = (currentNote) => {
+                let best = null;
+                for (let j = 0; j < notesLen; j++) {
+                    const n = notes[j];
+                    if (n !== currentNote &&
+                        n.type === 'slide' &&
+                        n.time === currentNote.time &&
+                        n.slideEnd == currentNote.pos &&
+                        (n.slideDelay ?? 0) < (currentNote.slideDelay ?? 0)) {
+                        if (!best || (n.slideDelay ?? 0) > (best.slideDelay ?? 0)) {
+                            best = n;
+                        }
+                    }
+                }
+                return best;
+            };
             for (const note of notes) {
                 if (note.type === 'slide') {
                     note.requiredSensors = getSpecialRequiredSensors(note) || getSlideSensors(note.path, note.slideType === "w");
+                    note.prevSegment = findImmediatePrevSegment(note);
+                    note.starNote = notes.find(n =>
+                        n.time === note.time &&
+                        n.pos == note.pos &&
+                        (n.type === 'tap' && n.isStar)
+                    );
                 }
             }
             decodedTags = result.tags || [];
@@ -4967,10 +4990,10 @@ function getSpecialRequiredSensors(note) {
             const seq = [];
             let curr = S;
             seq.push(`A${curr}`);
-            while (curr !== E) {
+            do {
                 curr = isCCW ? ((curr + 6) % 8 + 1) : (curr % 8 + 1);
                 seq.push(`A${curr}`);
-            }
+            } while (curr !== E);
             return seq;
         }
 
@@ -5034,7 +5057,7 @@ function getSlideSensors(recorder, typew, spacing = 4.36) {
     }
     return sensors;
 }
-
+import { noteRefPos, touchRefPos } from "./helper.js";
 function draw(dt = 0) {
     if (!renderer) return;
 
@@ -5088,23 +5111,42 @@ function draw(dt = 0) {
 
     if (settings.autoPlay && settings.simulateAutoplay) {
         // 虛擬玩家手勢輸入模擬（Auto 且開啟模擬玩家遊玩觸控時）
-        // 僅計算距離當前時間 1.5 秒內的活躍 note，以維持最高執行效能
-        const activeNotes = notes.filter(n => Math.abs(n.time - globalTime) <= 1.5);
+        if (!renderer.simulatedPointers) {
+            renderer.simulatedPointers = [];
+        } else {
+            renderer.simulatedPointers.length = 0; // 高效清除陣列
+        }
+
+        const activeNotes = notes.filter(n => {
+            const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0);
+            return globalTime >= n.time - 1.5 && globalTime <= n.time + skipT + 1.5;
+        });
         const activeLength = activeNotes.length;
         for (let i = 0; i < activeLength; i++) {
             const note = activeNotes[i];
             const noteType = note.type;
 
             let sensorKey = "";
+            let ptPos = null;
+            let ptrColor = '#00DBF4'; // 預設青藍色
+
             if (noteType === 'tap' || noteType === 'hold') {
                 sensorKey = "A" + note.pos;
+                ptPos = noteRefPos[note.pos - 1];
+                ptrColor = note.isBreak ? '#EBBA63' : (note.isEx ? '#D8A2C9' : '#00DBF4');
             } else if (noteType === 'touch') {
-                sensorKey = note.touchPos === "C" ? ("C" + (note.pos || "1")) : note.touchPos + note.pos;
+                const tPos = note.touchPos || "C";
+                sensorKey = tPos === "C" ? ("C" + (note.pos || "1")) : tPos + note.pos;
+                if (tPos === "C") {
+                    ptPos = touchRefPos.C[0];
+                } else {
+                    ptPos = touchRefPos[tPos][note.pos - 1];
+                }
+                ptrColor = '#8DFF7A'; // 綠色代表 Touch
             }
 
             if (noteType === 'tap' || noteType === 'touch' || noteType === 'hold') {
                 const isTouchHold = (noteType === 'touch' && note.holdDuration > 0);
-                // 對於單點 Tap / Touch，給予 0.1s (100ms) 的虛擬按壓持續時間，防止離散時間軸跳過判定，並提供良好的高亮停留時間
                 const dur = (noteType === 'hold' || isTouchHold) ? note.holdDuration : 0.1;
                 const tStart = note.time;
                 const tEnd = note.time + dur;
@@ -5112,10 +5154,11 @@ function draw(dt = 0) {
                 // 模擬擊中時的觸摸
                 if (globalTime >= tStart && globalTime <= tEnd) {
                     pressedSensors.add(sensorKey);
-                    // 只有在剛開始觸摸的那一刻，發送 edge strike 訊號
-                    if (!note.autoplayStruck) {
+                    if (!note.triggered && !note.holding && !note._isMissed) {
                         pointerStrikes.add(sensorKey);
-                        note.autoplayStruck = true;
+                    }
+                    if (ptPos) {
+                        renderer.simulatedPointers.push({ x: ptPos.x, y: ptPos.y, color: ptrColor });
                     }
                 }
             } else if (noteType === 'slide') {
@@ -5132,6 +5175,8 @@ function draw(dt = 0) {
                     if (note.slideType === 'w' && !note.wTracks) {
                         note.wTracks = getWSlideTracks(note);
                     }
+
+                    ptrColor = note.isBreak ? '#EBBA63' : '#FF7AD5'; // 粉色/黃色代表 Slide
 
                     if (note.slideType === 'w' && note.wTracks) {
                         const progress = (globalTime - startT) / note.slideDuration;
@@ -5155,6 +5200,15 @@ function draw(dt = 0) {
                                     note.wLastAutoplayIdxs[tIdx] = currentIdx;
                                 }
                             }
+                            if (note.wPaths) {
+                                const wPath = tIdx === 0 ? note.wPaths.w1 : (tIdx === 2 ? note.wPaths.w2 : note.path);
+                                if (wPath) {
+                                    const pt = wPath.getPointAt(progress);
+                                    if (pt) {
+                                        renderer.simulatedPointers.push({ x: pt.x, y: pt.y, color: ptrColor });
+                                    }
+                                }
+                            }
                         }
                     } else {
                         const L = note.requiredSensors?.length ?? 0;
@@ -5167,12 +5221,17 @@ function draw(dt = 0) {
                                 for (const s of sensorsToPress) {
                                     pressedSensors.add(s);
                                 }
-                                // 當進度剛切換至該感應器，或是剛開始滑的那一幀，觸發一次 edge strike
                                 if (note.lastAutoplayIdx === undefined || note.lastAutoplayIdx !== currentIdx) {
                                     for (const s of sensorsToPress) {
                                         pointerStrikes.add(s);
                                     }
                                     note.lastAutoplayIdx = currentIdx;
+                                }
+                            }
+                            if (note.path) {
+                                const pt = note.path.getPointAt(progress);
+                                if (pt) {
+                                    renderer.simulatedPointers.push({ x: pt.x, y: pt.y, color: ptrColor });
                                 }
                             }
                         }
@@ -5223,6 +5282,8 @@ function draw(dt = 0) {
         if (noteT > 0.25) {
             note.triggered = false;
             note.holding = false;
+            note.holdBroken = false;
+            note.hitStartTime = undefined;
             note._isMissed = false;
             note.slideStarted = false;
             note.hitSensors = null;
@@ -5237,18 +5298,34 @@ function draw(dt = 0) {
             note.wTrackIdxs = null;
             note.wLastAutoplayIdxs = undefined;
             note._sensorsDone = false;
+            note.judgment = null;
         }
 
         // Autoplay logic: update triggered and holding states based on globalTime
         if (settings.autoPlay && !settings.simulateAutoplay) {
             if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
                 note.holding = (globalTime >= note.time && globalTime <= note.time + (note.holdDuration ?? 0));
+                const wasTriggered = note.triggered;
                 note.triggered = (globalTime > note.time + (note.holdDuration ?? 0));
+                if (note.triggered && !wasTriggered) {
+                    note.judgment = 'CRITICAL_PERFECT';
+                }
             } else if (noteType === 'slide') {
-                note.triggered = (globalTime > note.time + cullingSkipT);
+                // 只往 true 推進，不覆蓋已被手動完成的 triggered=true 狀態
+                if (!note.triggered) {
+                    const shouldTrigger = (globalTime > note.time + cullingSkipT);
+                    if (shouldTrigger) {
+                        note.triggered = true;
+                        if (!note.judgment) note.judgment = 'CRITICAL_PERFECT';
+                    }
+                }
                 note.holding = false;
             } else {
+                const wasTriggered = note.triggered;
                 note.triggered = (globalTime >= note.time);
+                if (note.triggered && !wasTriggered) {
+                    note.judgment = 'CRITICAL_PERFECT';
+                }
                 note.holding = false;
             }
         } else {
@@ -5276,7 +5353,7 @@ function draw(dt = 0) {
                     (globalTime - n.time >= -0.25)
                 );
 
-                if (!note.triggered && !note._isMissed && !note.holding) {
+                if (!note.triggered && !note._isMissed && !note.holding && !note.holdBroken) {
                     // 放寬時間窗口到 ±0.25s
                     if (hasStrike && !consumedStrikes.has(sensorKey) && !hasEarlierPendingNote && dtHit >= -0.25 && dtHit <= 0.25) {
                         note.triggered = true;
@@ -5284,50 +5361,81 @@ function draw(dt = 0) {
                         audioManager.queueSound(note, globalTime);
                         note._startEffectPlayed = true;
 
-                        if (noteType === 'hold' || (noteType === 'touch' && note.isHold)) {
+                        const isHoldType = (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0));
+                        if (isHoldType) {
                             note.triggered = false;
                             note.holding = true;
+                            note.hitStartTime = Math.max(note.time, globalTime);
+                        }
+                        const absDt = Math.abs(dtHit);
+                        if (absDt <= 0.033) {
+                            note.judgment = 'CRITICAL_PERFECT';
+                        } else if (absDt <= 0.050) {
+                            note.judgment = 'PERFECT';
+                        } else if (absDt <= 0.100) {
+                            note.judgment = 'GREAT';
+                        } else {
+                            note.judgment = 'GOOD';
                         }
                         console.log(`[Hit] ${noteType} at ${note.time.toFixed(2)} pos:${note.pos} dt:${(dtHit * 1000).toFixed(1)}ms`);
                     } else if (dtHit > 0.25) { // 延後 Miss 判定
                         note._isMissed = true;
+                        note.judgment = 'MISS';
                         playCombo = 0;
                     }
                 }
 
                 // 如果 Hold 已經在按壓中
                 if (note.holding) {
-                    // 只要時間沒到且玩家還按著
                     if (globalTime <= note.time + (note.holdDuration ?? 0)) {
-                        note.holding = isSensorPressed;
+                        if (!isSensorPressed) {
+                            // 玩家中途放開了！不能再補
+                            note.holding = false;
+                            note.holdBroken = true;
+                            note.triggered = true;
+
+                            // 尾判計算：計算實際按壓時間比例
+                            const heldDuration = Math.max(0, globalTime - (note.hitStartTime ?? note.time));
+                            const ratio = heldDuration / (note.holdDuration ?? 1);
+
+                            let finalJudg = 'MISS';
+                            if (ratio >= 0.95) {
+                                finalJudg = note.judgment || 'PERFECT';
+                            } else if (ratio >= 0.85) {
+                                finalJudg = (note.judgment === 'CRITICAL_PERFECT' || note.judgment === 'PERFECT') ? 'GREAT' : (note.judgment || 'GREAT');
+                            } else if (ratio >= 0.50) {
+                                finalJudg = 'GOOD';
+                            } else {
+                                finalJudg = 'MISS';
+                            }
+
+                            note.judgment = finalJudg;
+                            if (finalJudg === 'MISS') {
+                                note._isMissed = true;
+                                playCombo = 0;
+                            }
+                            console.log(`[Hold Broken] pos:${note.pos} ratio:${ratio.toFixed(2)} finalJudg:${finalJudg}`);
+                        }
                     } else {
                         // Hold 順利完成！播放 Hold 結尾音效
                         note.triggered = true;
                         note.holding = false;
+                        // 按滿時，保留頭判等級 (note.judgment)
                         const shouldPlayEndSound = !settings.notPlayHoldEnd || note.isBreak;
                         if (shouldPlayEndSound) {
                             audioManager.queueSound(note, globalTime);
                         }
                         note._endEffectPlayed = true;
+                        console.log(`[Hold Completed] pos:${note.pos} finalJudg:${note.judgment}`);
                     }
                 }
             } else if (noteType === 'slide') {
                 // Slide 軌道手動滑過判定
                 // 找出同時間同起點的 Star note
-                const starNote = notes.find(n =>
-                    n.time === note.time &&
-                    n.pos == note.pos &&
-                    (n.type === 'tap' && n.isStar)
-                );
+                const starNote = note.starNote;
 
                 // Chain slide: 找出前一個同時間的 slide 段（其 slideEnd == 本段起點）
-                const prevSegment = notes.find(n =>
-                    n !== note &&
-                    n.type === 'slide' &&
-                    n.time === note.time &&
-                    n.slideEnd == note.pos &&
-                    (n.slideDelay ?? 0) < (note.slideDelay ?? 0)
-                );
+                const prevSegment = note.prevSegment;
 
                 const canProcessSensors = !prevSegment || prevSegment.triggered || prevSegment._sensorsDone;
 
@@ -5418,40 +5526,53 @@ function draw(dt = 0) {
                             }
                         }
 
+                        // W-slide 開始滑行音效觸發 (當任意一軌滑到第二個感應器且尚未播放開始音效時)
+                        if (!note._startEffectPlayed && (note.wTrackIdxs[0] >= 2 || note.wTrackIdxs[1] >= 2 || note.wTrackIdxs[2] >= 2)) {
+                            if (note.firstSlide !== false) {
+                                audioManager.queueSound(note, globalTime);
+                            }
+                            note._startEffectPlayed = true;
+                        }
+
                         const allCompleted = note.wTrackIdxs[0] >= note.wTracks[0].length &&
-                                             note.wTrackIdxs[1] >= note.wTracks[1].length &&
-                                             note.wTrackIdxs[2] >= note.wTracks[2].length;
+                            note.wTrackIdxs[1] >= note.wTracks[1].length &&
+                            note.wTrackIdxs[2] >= note.wTracks[2].length;
 
                         if (allCompleted) {
+                            const slideTotalTime = (note.slideDelay ?? 0) + (note.slideDuration ?? 0);
+                            const elapsed = globalTime - note.time;
+                            let slideJudg = 'GREAT';
+                            if (elapsed <= slideTotalTime + 0.2) {
+                                slideJudg = 'CRITICAL_PERFECT';
+                            } else if (elapsed <= slideTotalTime + 0.4) {
+                                slideJudg = 'PERFECT';
+                            }
+                            note.judgment = slideJudg;
+
                             if (note.lastSlide) {
                                 // 最後一段完成：把整個 chain 的所有段一起標為 triggered
                                 note.triggered = true;
-                                // 回溦所有前面的 chain 段
-                                let chainPrev = notes.find(n =>
-                                    n !== note && n.type === 'slide' &&
-                                    n.time === note.time && n.slideEnd == note.pos &&
-                                    (n.slideDelay ?? 0) < (note.slideDelay ?? 0)
-                                );
+                                // 回溯所有前面的 chain 段
+                                let chainPrev = note.prevSegment;
                                 while (chainPrev) {
                                     chainPrev.triggered = true;
-                                    const cp = chainPrev;
-                                    chainPrev = notes.find(n =>
-                                        n !== cp && n.type === 'slide' &&
-                                        n.time === cp.time && n.slideEnd == cp.pos &&
-                                        (n.slideDelay ?? 0) < (cp.slideDelay ?? 0)
-                                    );
+                                    chainPrev.judgment = slideJudg;
+                                    chainPrev = chainPrev.prevSegment;
                                 }
                             } else {
                                 // 中間段完成：僅標記 _sensorsDone，保留在畫面上
                                 note._sensorsDone = true;
                             }
-                            const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
-                            if (shouldPlayEndSound) {
-                                audioManager.queueSound(note, globalTime);
+                            if (!note._endEffectPlayed) {
+                                note._endEffectPlayed = true;
+                                const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
+                                if (shouldPlayEndSound) {
+                                    audioManager.queueSound(note, globalTime);
+                                }
                             }
-                            note._endEffectPlayed = true;
                         } else if (dtHit > cullingSkipT + 0.5) {
                             note._isMissed = true;
+                            note.judgment = 'MISS';
                             playCombo = 0;
                         }
                     } else {
@@ -5519,49 +5640,64 @@ function draw(dt = 0) {
                             }
                         }
 
+                        // Slide 開始滑行音效觸發 (當滑到第二個感應器且尚未播放開始音效時)
+                        if (!note._startEffectPlayed && (note.currentSensorIdx ?? 0) >= 2) {
+                            if (note.firstSlide !== false) {
+                                audioManager.queueSound(note, globalTime);
+                            }
+                            note._startEffectPlayed = true;
+                        }
+
                         // 全部滑完 → 觸發
                         if ((note.currentSensorIdx ?? 0) >= note.requiredSensors.length) {
                             if (prevSegment) {
                                 console.log(`[Chain Slide Completed] ${note.pos}-${note.slideEnd}, hitSensors: ${note.hitSensors ? Array.from(note.hitSensors).join(',') : 'none'}`);
                             }
+                            const slideTotalTime = (note.slideDelay ?? 0) + (note.slideDuration ?? 0);
+                            const elapsed = globalTime - note.time;
+                            let slideJudg = 'GREAT';
+                            if (elapsed <= slideTotalTime + 0.2) {
+                                slideJudg = 'CRITICAL_PERFECT';
+                            } else if (elapsed <= slideTotalTime + 0.4) {
+                                slideJudg = 'PERFECT';
+                            }
+                            note.judgment = slideJudg;
+
                             if (note.lastSlide) {
                                 // 最後一段完成：把整個 chain 的所有段一起標為 triggered
                                 note.triggered = true;
-                                let chainPrev = notes.find(n =>
-                                    n !== note && n.type === 'slide' &&
-                                    n.time === note.time && n.slideEnd == note.pos &&
-                                    (n.slideDelay ?? 0) < (note.slideDelay ?? 0)
-                                );
+                                let chainPrev = note.prevSegment;
                                 while (chainPrev) {
                                     chainPrev.triggered = true;
-                                    const cp = chainPrev;
-                                    chainPrev = notes.find(n =>
-                                        n !== cp && n.type === 'slide' &&
-                                        n.time === cp.time && n.slideEnd == cp.pos &&
-                                        (n.slideDelay ?? 0) < (cp.slideDelay ?? 0)
-                                    );
+                                    chainPrev.judgment = slideJudg;
+                                    chainPrev = chainPrev.prevSegment;
                                 }
                             } else {
                                 // 中間段：僅標記 _sensorsDone，保留在畫面上
                                 note._sensorsDone = true;
                             }
-                            const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
-                            if (shouldPlayEndSound) {
-                                audioManager.queueSound(note, globalTime);
+                            if (!note._endEffectPlayed) {
+                                note._endEffectPlayed = true;
+                                const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
+                                if (shouldPlayEndSound) {
+                                    audioManager.queueSound(note, globalTime);
+                                }
                             }
-                            note._endEffectPlayed = true;
                         } else if (dtHit > cullingSkipT + 0.5) {
                             note._isMissed = true;
+                            note.judgment = 'MISS';
                             playCombo = 0;
                         }
                     }
                 } else if (!prevSegment && dtHit > 0.15) {
                     // 起點 Star 未被點中且超期（只適用於第一段；後段由 prevSegment 管控）
                     note._isMissed = true;
+                    note.judgment = 'MISS';
                     playCombo = 0;
                 } else if (prevSegment && globalTime > note.time + (note.slideDelay ?? 0) + 0.5) {
                     // Chain 後段：以自身 slideDelay 為基準，超過 0.5s 後才判定 miss
                     note._isMissed = true;
+                    note.judgment = 'MISS';
                     playCombo = 0;
                 }
             }
@@ -5590,7 +5726,7 @@ function draw(dt = 0) {
 
         // Combo 計算：提前計算避免重複條件檢查
         if (noteT < 0) {
-            const isNoteHit = settings.autoPlay ? true : (note.triggered || (noteType === 'slide' && note.slideStarted));
+            const isNoteHit = (settings.autoPlay && !settings.simulateAutoplay) ? true : (note.triggered && !note._isMissed);
             const shouldCountCombo =
                 (noteType === "slide" ? (note.lastSlide && skipT + noteT < 0) :
                     noteType === "hold" ? (skipT + noteT < 0) :
@@ -5712,7 +5848,7 @@ function draw(dt = 0) {
         }
 
         // 特效收集邏輯
-        if (note.triggered) {
+        if (note.triggered || note._isMissed) {
             const isHoldType = noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0);
             const duration = isHoldType ? note.holdDuration : 0;
 
@@ -5722,7 +5858,9 @@ function draw(dt = 0) {
                 buckets.hiteffects.push({
                     pos: note.pos,
                     touchPos: note.touchPos,
-                    noteT: isHoldType ? (note.holdDuration + noteT) : noteT
+                    noteT: isHoldType ? (note.holdDuration + noteT) : noteT,
+                    judgment: note.judgment,
+                    isBreak: note.isBreak
                 });
             }
 

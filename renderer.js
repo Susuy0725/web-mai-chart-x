@@ -179,7 +179,7 @@ export class SimaiRenderer {
 
     // --- 視覺效果 ---
 
-    simpleHitEffect(noteT, judgment = null) {
+    simpleHitEffect(noteT, rot, judgment = null, isBreak = false) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
 
@@ -199,40 +199,28 @@ export class SimaiRenderer {
 
         if (judgment) {
             this.ctx.save();
+            this.ctx.rotate(rot);
             this.ctx.globalAlpha = decayAlpha;
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.font = 'bold 2.2px "Google Sans", sans-serif';
 
-            let color = '#FFF';
-            let strokeColor = '#000';
-            switch (judgment) {
-                case 'CRITICAL_PERFECT':
-                    color = '#FFFF00';
-                    strokeColor = '#FF8000';
-                    break;
-                case 'PERFECT':
-                    color = '#FFE600';
-                    strokeColor = '#FF8000';
-                    break;
-                case 'GREAT':
-                    color = '#FF2A85';
-                    strokeColor = '#FFFFFF';
-                    break;
-                case 'GOOD':
-                    color = '#00FF66';
-                    strokeColor = '#005500';
-                    break;
-                case 'MISS':
-                    color = '#FF3333';
-                    strokeColor = '#000000';
-                    break;
+            let imgKey = null;
+            if (judgment === 'CRITICAL_PERFECT') {
+                imgKey = isBreak ? 'judge_text_cPerfect_break' : 'judge_text_cPerfect';
+            } else if (judgment === 'PERFECT') {
+                imgKey = isBreak ? 'judge_text_perfect_break' : 'judge_text_perfect';
+            } else if (judgment === 'GREAT') {
+                imgKey = 'judge_text_great';
+            } else if (judgment === 'GOOD') {
+                imgKey = 'judge_text_good';
+            } else if (judgment === 'MISS') {
+                imgKey = 'judge_text_miss';
             }
-            this.ctx.strokeStyle = strokeColor;
-            this.ctx.lineWidth = 0.4;
-            this.ctx.strokeText(judgment.replace('_', ' '), 0, -1);
-            this.ctx.fillStyle = color;
-            this.ctx.fillText(judgment.replace('_', ' '), 0, -1);
+
+            const img = this.images[imgKey];
+            if (img) {
+                const imgAspect = img.width / img.height;
+                const drawHeight = 6;
+                this.drawImgAtcenter(img, drawHeight, 0, -1, imgAspect, 1);
+            }
             this.ctx.restore();
         }
     }
@@ -387,12 +375,46 @@ export class SimaiRenderer {
                 ? touchRefPos[eff.touchPos][eff.touchPos === "C" ? 0 : eff.pos - 1]
                 : noteRefPos[eff.pos - 1];
             this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(eff.noteT, eff.judgment);
+            this.simpleHitEffect(eff.noteT, posInfo.rot, eff.judgment, eff.isBreak);
             this.ctx.restore();
         }
 
         this.drawStaticBackground();
+        this.drawSimulatedPointers();
         if (this.settings.showUI) this.drawUI(dt, globalTime);
+    }
+
+    drawSimulatedPointers() {
+        if (!this.simulatedPointers || this.simulatedPointers.length === 0) return;
+        this.ctx.save();
+        for (const pt of this.simulatedPointers) {
+            this.ctx.save();
+            this.ctx.translate(pt.x, pt.y);
+
+            // 繪製外圈發光圈 (利用 globalAlpha 設定透明度)
+            this.ctx.fillStyle = pt.color || '#00DBF4';
+            
+            this.ctx.globalAlpha = 0.4;
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.settings.noteBaseSize * 0.45, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            this.ctx.globalAlpha = 0.15;
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.settings.noteBaseSize * 0.6, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // 繪製內實心圈
+            this.ctx.globalAlpha = 1.0;
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.settings.noteBaseSize * 0.2, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            this.ctx.restore();
+        }
+        this.ctx.restore();
+        this.simulatedPointers = []; // 繪製完清空
     }
 
     drawUI(dt, globalTime) {
@@ -1020,13 +1042,12 @@ export class SimaiRenderer {
         const isTaped = -noteT > 0;
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
-        let slideProgress = 0;
         let starProgress = 0;
         if (-noteT > slideDelay) {
             starProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
         let br = (s.isBreak && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed), {
+        this.drawPathWithArrows(p, starProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed), {
             hitSensors: this.settings.autoPlay ? null : s.hitSensors,
             requiredSensors: s.requiredSensors,
             currentSensorIdx: s.currentSensorIdx

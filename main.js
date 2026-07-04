@@ -184,7 +184,6 @@ document.addEventListener('mousemove', function (event) {
             dirBuffer = currentDirection;
             directionOfPointer = currentDirection;
             quickPanel.setAttribute('data-active-dir', directionOfPointer);
-            console.log('Current direction:', directionOfPointer);
         }
     }
 });
@@ -218,7 +217,6 @@ window.addEventListener('keydown', (e) => {
         quickPanel.removeAttribute('data-active-dir');
         directionOfPointer = 'middle';
         dirBuffer = 'middle';
-        console.log('Quick Panel aborted due to another key press:', e.key);
     }
 });
 
@@ -250,7 +248,6 @@ window.addEventListener('keyup', (e) => {
             quickPanel.style.display = 'none';
             quickPanel.removeAttribute('data-active-dir');
         }
-        console.log('Ctrl+Shift 被鬆開');
     }
 });
 

@@ -200,8 +200,6 @@ window.addEventListener('keydown', (e) => {
         positionOfQuickPanel.x = positionOfPointer.x;
         positionOfQuickPanel.y = positionOfPointer.y;
 
-        console.log('Ctrl+Shift 被按下，中心點鎖定在：', positionOfQuickPanel);
-
         // 顯示並定位面板
         quickPanel.style.left = positionOfPointer.x + 'px';
         quickPanel.style.top = positionOfPointer.y + 'px';

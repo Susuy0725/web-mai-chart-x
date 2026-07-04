@@ -119,6 +119,7 @@ export const zhTW = {
             showUI: "顯示FPS介面",
             autoPauseOnScroll: "滾動時自動暫停",
             globalTimeline: "顯示全域時間軸",
+            enableQuickPanel: "啟用快速面板",
             lang: "語言 / Language"
         },
         middleDisplayOpts: {
@@ -313,7 +314,8 @@ export const zhTW = {
                 `<b>復原 / 重做</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">Z</span> / <span class="code-highlight">Ctrl</span><span class="code-highlight">Y</span>`,
                 `<b>加速播放</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">P</span>`,
                 `<b>減速播放</b>：<span class="code-highlight">Ctrl</span><span class="code-highlight">O</span>`,
-                `<b>縮放倍率</b>：<span class="code-highlight">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。`
+                `<b>縮放倍率</b>：<span class="code-highlight">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。`,
+                `<b>快速面板</b>：在設定開啟後按<span class="code-highlight">Ctrl</span><span class="code-highlight">Shift</span> 並將滑鼠移向欲執行的功能，再放開<span class="code-highlight">Ctrl</span><span class="code-highlight">Shift</span>。`
             ]
         }
     }

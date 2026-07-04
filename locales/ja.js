@@ -119,6 +119,7 @@ export const ja = {
             showUI: "FPSインターフェースを表示",
             autoPauseOnScroll: "スクロール時に自動一時停止",
             globalTimeline: "全体のタイムラインを表示",
+            enableQuickPanel: "クイックパネルを有効にする",
             lang: "言語"
         },
         middleDisplayOpts: {

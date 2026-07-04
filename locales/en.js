@@ -119,6 +119,7 @@ export const en = {
             showUI: "Show FPS Interface",
             autoPauseOnScroll: "Auto Pause on Scroll",
             globalTimeline: "Show Global Timeline",
+            enableQuickPanel: "Enable Quick Panel",
             lang: "Language"
         },
         middleDisplayOpts: {

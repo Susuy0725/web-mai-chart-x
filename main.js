@@ -36,6 +36,7 @@ if ('serviceWorker' in navigator) {
 }
 
 let
+    isInitComplete = false,
     images,
     readyBeat = false,
     maidata = {},
@@ -127,10 +128,133 @@ const editorContainer = document.getElementById('editorContainer');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
+const quickPanel = document.getElementById('quick-panel');
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 
 let ctx = canvas.getContext('2d');
+
+//-----Quick panel-----
+
+let isCtrlShiftPressed = false;
+
+let directionOfPointer = '0'; // middle, left, right, up, down
+let positionOfQuickPanel = { x: 0, y: 0 };
+let positionOfPointer = { x: 0, y: 0 };
+let dirBuffer = '';
+
+// 1. 滑鼠移動事件：同時負責「更新位置」與「計算方向」
+document.addEventListener('mousemove', function (event) {
+    positionOfPointer.x = event.clientX;
+    positionOfPointer.y = event.clientY;
+
+    // 只有當 Ctrl+Shift 被按住時，才計算相對方向
+    if (isCtrlShiftPressed && quickPanel) {
+        const dx = positionOfPointer.x - positionOfQuickPanel.x;
+        const dy = positionOfPointer.y - positionOfQuickPanel.y;
+        const distanceSq = dx * dx + dy * dy;
+
+        let currentDirection = "";
+
+        if (distanceSq < 900) {
+            currentDirection = "middle";
+        } else {
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            if (angle > -22.5 && angle <= 22.5) {
+                currentDirection = "right";
+            } else if (angle > 22.5 && angle <= 67.5) {
+                currentDirection = "down-right";
+            } else if (angle > 67.5 && angle <= 112.5) {
+                currentDirection = "down";
+            } else if (angle > 112.5 && angle <= 157.5) {
+                currentDirection = "down-left";
+            } else if (angle > 157.5 || angle <= -157.5) {
+                currentDirection = "left";
+            } else if (angle > -157.5 && angle <= -112.5) {
+                currentDirection = "up-left";
+            } else if (angle > -112.5 && angle <= -67.5) {
+                currentDirection = "up";
+            } else if (angle > -67.5 && angle <= -22.5) {
+                currentDirection = "up-right";
+            }
+        }
+
+        // 當方向改變時才更新，避免效能浪費
+        if (dirBuffer !== currentDirection) {
+            dirBuffer = currentDirection;
+            directionOfPointer = currentDirection;
+            quickPanel.setAttribute('data-active-dir', directionOfPointer);
+            console.log('Current direction:', directionOfPointer);
+        }
+    }
+});
+
+// 2. 鍵盤按下事件：只負責啟用狀態、鎖定中心點
+window.addEventListener('keydown', (e) => {
+    if (!isInitComplete || !settings.enableQuickPanel || !quickPanel) return;
+
+    // 檢查是否同時按下 Ctrl 和 Shift，且目前還沒被標記為按下
+    if (e.ctrlKey && e.shiftKey && !isCtrlShiftPressed) {
+        isCtrlShiftPressed = true;
+
+        // 鎖定當前滑鼠位置為 QuickPanel 的中心點
+        positionOfQuickPanel.x = positionOfPointer.x;
+        positionOfQuickPanel.y = positionOfPointer.y;
+
+        console.log('Ctrl+Shift 被按下，中心點鎖定在：', positionOfQuickPanel);
+
+        // 顯示並定位面板
+        quickPanel.style.left = positionOfPointer.x + 'px';
+        quickPanel.style.top = positionOfPointer.y + 'px';
+        quickPanel.style.display = 'grid';
+
+        // 初始化狀態為 middle
+        dirBuffer = 'middle';
+        directionOfPointer = 'middle';
+        quickPanel.setAttribute('data-active-dir', 'middle');
+    } else if (isCtrlShiftPressed && e.key !== 'Control' && e.key !== 'Shift') {
+        isCtrlShiftPressed = false;
+        quickPanel.style.display = 'none';
+        quickPanel.removeAttribute('data-active-dir');
+        directionOfPointer = 'middle';
+        dirBuffer = 'middle';
+        console.log('Quick Panel aborted due to another key press:', e.key);
+    }
+});
+
+// 3. 鍵盤放開事件：精準解除狀態
+window.addEventListener('keyup', (e) => {
+    // 💡 改用 e.key 判斷：只要放開的是 Control 或 Shift 鍵，就關閉面板
+    if ((e.key === 'Control' || e.key === 'Shift') && isCtrlShiftPressed) {
+        isCtrlShiftPressed = false;
+        if (directionOfPointer === 'right') {
+            applySelectedRotation(1);
+        } else if (directionOfPointer === 'left') {
+            applySelectedRotation(-1);
+        } else if (directionOfPointer === 'up') {
+            applyVerticalFlip();
+        } else if (directionOfPointer === 'down') {
+            applyHorizontalFlip();
+        } else if (directionOfPointer === 'up-left') {
+            applySelectedRotation(4);
+        } else if (directionOfPointer === 'up-right') {
+            redoButton.click();
+        } else if (directionOfPointer === 'down-left') {
+            getCursorNoteIndex.click();
+        } else if (directionOfPointer === 'down-right') {
+            undoButton.click();
+        }
+        dirBuffer = ''; // 清空緩衝
+
+        if (quickPanel) {
+            quickPanel.style.display = 'none';
+            quickPanel.removeAttribute('data-active-dir');
+        }
+        console.log('Ctrl+Shift 被鬆開');
+    }
+});
+
+// -----
 const scale = 0.98;
 const
     MAX_ZOOM = 1000,
@@ -161,6 +285,7 @@ export const defaultSettings = {
     visualZoom: 200, // 視覺模式下的縮放倍率
     slideIllegalRed: false,
     showUI: false,
+    enableQuickPanel: false,
     // Sound & Playback
     notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
@@ -307,6 +432,9 @@ const settingsConfig = [
             },
             {
                 id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
+            },
+            {
+                id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
             }
         ]
     }
@@ -5382,6 +5510,7 @@ function _init() {
                 setEditorCss(!await projGet('hide_editor'));
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();
+                isInitComplete = true;
             } catch (e) {
                 console.error("初始化失敗:", e);
                 ctx.setContent(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);

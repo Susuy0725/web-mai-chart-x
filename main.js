@@ -129,6 +129,12 @@ const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
 const quickPanel = document.getElementById('quick-panel');
+const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
+
+timebaseButton.addEventListener('input', function () {
+    settings.tb1 = parseInt(this.querySelector('input[name="tb1"]').value, 10);
+    draw();
+});
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 

@@ -40,7 +40,8 @@ export const zhTW = {
         displayMode: "顯示模式",
         displayModeSimai: "simai 語法",
         displayModeVisual: "軌道",
-        readyBeat: "預備拍"
+        readyBeat: "預備拍",
+        timeSignature: "拍號"
     },
     textarea: {
         placeholder: "在此輸入譜面資料..."

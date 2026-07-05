@@ -1198,7 +1198,7 @@ export class SimaiVisualEditor {
         ctx.lineWidth = 0.5;
 
         // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
-        const period = (tag.type === 'bpm') ? (240 / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        const period = (tag.type === 'bpm') ? ((60 * (this.settings.tb1 || 4)) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {
@@ -1541,7 +1541,9 @@ export class SimaiPreviewRenderer {
         ctx.save();
 
         // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
-        const period = (tag.type === 'bpm') ? (240 / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        const period = (tag.type === 'bpm')
+            ? ((60 * (this.settings.tb1 || 4)) / tag.value)
+            : ((240 / tag.bpm) * (1 / tag.value));
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {

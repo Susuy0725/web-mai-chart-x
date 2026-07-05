@@ -40,7 +40,8 @@ export const en = {
         displayMode: "View",
         displayModeSimai: "simai Syntax",
         displayModeVisual: "Timeline",
-        readyBeat: "Prep Beats"
+        readyBeat: "Prep Beats",
+        timeSignature: "Time signature"
     },
     textarea: {
         placeholder: "Enter chart data here..."

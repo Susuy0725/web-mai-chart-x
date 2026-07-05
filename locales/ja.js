@@ -38,9 +38,10 @@ export const ja = {
         changeDifficulty: "難易度",
         playbackSpeed: "再生速度",
         displayMode: "表示モード",
-        displayModeSimai: "simai構文",
+        displayModeSimai: "Simai",
         displayModeVisual: "タイムライン",
-        readyBeat: "予備拍"
+        readyBeat: "予備拍",
+        timeSignature: "拍子記号"
     },
     textarea: {
         placeholder: "ここに譜面データを入力してください..."

@@ -1,0 +1,28 @@
+name: Auto Update Service Worker Cache Name
+
+on: [push]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 關鍵步驟：用 sed 指令把預留的字串換成 GitHub 的 Commit SHA
+    - name: Inject Commit SHA into Service Worker
+      run: |
+        # 取得前 7 碼的短期 Commit ID（例如 a1b2c3d）
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+        echo "目前的 Commit SHA 是: $SHORT_SHA"
+        
+        # 使用 sed 取代 sw.js 裡面的關鍵字（請確保 sw.js 路徑正確，如果放在根目錄就是 sw.js）
+        sed -i "s/__CACHE_VERSION__/$SHORT_SHA/g" sw.js
+
+    # 驗證步驟（可選）：印出檔案前幾行，確認有沒有修改成功
+    - name: Verify changes
+      run: head -n 5 sw.js
+
+    # 後續步驟：在這裡你可以把修改後的檔案部署到 GitHub Pages、Vercel 或你的伺服器
+    # - name: Deploy to GitHub Pages ...

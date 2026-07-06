@@ -131,10 +131,20 @@ const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
 const quickPanel = document.getElementById('quick-panel');
 const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
 
+function updateTimebase() {
+    settings.tb1 = parseInt(timebaseButton.querySelector('input[name="tb1"]').value, 10);
+    settings.tb2 = parseInt(timebaseButton.querySelector('input[name="tb2"]').value, 10);
+}
+function restoreTimebase() {
+    timebaseButton.querySelector('input[name="tb1"]').value = settings.tb1 || 4;
+    timebaseButton.querySelector('input[name="tb2"]').value = settings.tb2 || 4;
+}
 timebaseButton.addEventListener('input', function () {
-    settings.tb1 = parseInt(this.querySelector('input[name="tb1"]').value, 10);
+    updateTimebase();
+    saveSettingsDebounce();
     draw();
 });
+updateTimebase();
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 
@@ -5485,6 +5495,7 @@ function _init() {
                         await idbSet('simai_settings', JSON.stringify(settings));
                     }
                     playbackSpeedInput.value = settings.playbackSpeed;
+                    restoreTimebase();
                 } else {
                     settings = { ...defaultSettings }
                     await idbSet('simai_settings', JSON.stringify(settings));

@@ -1197,8 +1197,12 @@ export class SimaiVisualEditor {
         ctx.save();
         ctx.lineWidth = 0.5;
 
-        // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
-        const period = (tag.type === 'bpm') ? ((60 * (this.settings.tb1 || 4)) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        const tb1 = this.settings.tb1 || 4;
+        const tb2 = this.settings.tb2 || 4;
+        // period: 小節的長度 (tb1 代表一小節有幾個四分音符)
+        const period = (tag.type === 'bpm') ? ((60 * tb1) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        // beatPeriod: 格子線的間距 (tb2 代表幾分音符為一格)
+        const beatPeriod = (tag.type === 'bpm') ? ((240 / tag.value) / tb2) : 0;
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {
@@ -1229,6 +1233,27 @@ export class SimaiVisualEditor {
                 if (tag.type === 'bpm') {
                     ctx.strokeStyle = '#ffe865c0';
                     ctx.setLineDash([]); // 樣式設定移到迴圈外，效能更好
+
+                    // 自動填充小節內的拍號線(以 N 分音符為一拍)
+                    const parts = (tb1 * tb2) / 4;
+                    if (parts > 1) {
+                        ctx.save();
+                        ctx.strokeStyle = '#ffe86540'; // 較淡的顏色
+                        ctx.lineWidth = lineWidth * 0.5; // 較細的線條
+                        for (let b = 1; b < parts; b++) {
+                            const subY = (delta + i * period + b * beatPeriod) * -zoom;
+
+                            // 檢查是否超出下一個 BPM 的範圍 (防止畫出界)
+                            const subTime = tag.time + i * period + b * beatPeriod;
+                            if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
+
+                            ctx.beginPath();
+                            ctx.moveTo(-lineWidth * 0.8, subY);
+                            ctx.lineTo(lineWidth * 0.8, subY);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
 
                     // 僅在節拍線起點繪製文字
                     if (i === 0) {
@@ -1540,10 +1565,10 @@ export class SimaiPreviewRenderer {
 
         ctx.save();
 
-        // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
-        const period = (tag.type === 'bpm')
-            ? ((60 * (this.settings.tb1 || 4)) / tag.value)
-            : ((240 / tag.bpm) * (1 / tag.value));
+        const tb1 = this.settings.tb1 || 4;
+        const tb2 = this.settings.tb2 || 4;
+        const period = (tag.type === 'bpm') ? ((60 * tb1) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
+        const beatPeriod = (tag.type === 'bpm') ? ((240 / tag.value) / tb2) : 0;
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {
@@ -1575,6 +1600,23 @@ export class SimaiPreviewRenderer {
                 if (tag.type === 'bpm') {
                     ctx.strokeStyle = 'rgb(255, 217, 0)';
                     ctx.lineWidth = 2;
+
+                    const parts = (tb1 * tb2) / 4;
+                    if (parts > 1) {
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(255, 217, 0, 0.4)';
+                        ctx.lineWidth = 1;
+                        for (let b = 1; b < parts; b++) {
+                            const subTime = tag.time + i * period + b * beatPeriod;
+                            if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
+                            const subPosX = (delta + i * period + b * beatPeriod) * zoom + hw;
+                            ctx.beginPath();
+                            ctx.moveTo(subPosX, 0);
+                            ctx.lineTo(subPosX, h);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
                 } else {
                     ctx.lineWidth = 1;
                     if (i === 0) {

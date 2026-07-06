@@ -1,6 +1,6 @@
 // Basic service worker for offline caching
 // Cache name should be bumped when assets change
-const CACHE_NAME = 'web-mai-chart-cache-__CACHE_VERSION__';
+const CACHE_NAME = 'web-mai-chart-cache-b8fa293';
 const ASSETS = [
     './',
     './index.html',

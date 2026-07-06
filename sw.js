@@ -18,6 +18,7 @@ const ASSETS = [
     './locales/en.js',
     './locales/ja.js',
     './locales/zh-TW.js',
+    './rpc.js',
 ];
 
 self.addEventListener('install', (event) => {

@@ -3,6 +3,7 @@ import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, p
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
+import { updateDiscordRPC } from './rpc.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -1945,6 +1946,9 @@ const saveMaidata = debounce(() => {
         projectTouch(currentProjectId).catch(() => { });
         if (name) projectUpdateName(currentProjectId, name).catch(() => { });
     }
+    
+    // 更新 Discord RPC 狀態
+    updateDiscordRPC(maidata, nowDifficulty);
 }, 2000);
 
 const inputDebounce = debounce(() => {
@@ -5523,6 +5527,7 @@ function _init() {
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();
                 isInitComplete = true;
+                updateDiscordRPC(maidata, nowDifficulty);
             } catch (e) {
                 console.error("初始化失敗:", e);
                 ctx.setContent(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);

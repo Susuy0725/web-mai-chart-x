@@ -1,0 +1,32 @@
+name: Auto Update SW Cache and Push
+
+on:
+  push:
+    # 這裡填你平常「主要開發、推送」的分支（例如 main）
+    branches: ["main"]
+
+jobs:
+  update-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 允許 Action 接下來可以再推回 GitHub
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 🛠️ 1. 把 sw.js 裡面的關鍵字換成 Commit SHA
+      - name: Update Service Worker Cache Name
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          # 把 sw.js 的 V9 或舊版號替換掉（可以用正則表達式，或是像前面一樣預留關鍵字）
+          sed -i "s/__CACHE_VERSION__/$SHORT_SHA/g" sw.js
+
+      # 📝 2. 自動把修改後的 sw.js Commit 並推回去，這樣原本的 Pages 機制就會被觸發
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add sw.js
+          # 檢查是否有變動，有變動才 commit
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-update sw cache name [skip ci]" && git push)

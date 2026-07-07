@@ -14,6 +14,12 @@
     font-display: swap;
 }
 
+@font-face {
+    font-family: 'mono';
+    src: url('Fonts/ShareTechMono-Regular.ttf') format('truetype');
+    font-display: swap;
+}
+
 
 body {
     margin: 0;
@@ -623,7 +629,6 @@ body {
     transform-origin: center center;
     transform: translate(-50%, -50%);
     aspect-ratio: 1/1;
-    width: 11%;
     display: none;
     z-index: 1500;
 

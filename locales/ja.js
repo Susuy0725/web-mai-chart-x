@@ -88,7 +88,8 @@ export const ja = {
         projectDeleted: "プロジェクトを削除しました",
         durationError: "終了時間は開始時間より後である必要があります",
         renderComplete: "フレームレンダリングが完了しました。ファイルをダウンロードしました。",
-        renderFailed: "レンダリング失敗: {error}"
+        renderFailed: "レンダリング失敗: {error}",
+        moveMouseToOpen: "マウスを動かしてクイックパネルにアクセスします！"
     },
     settings: {
         title: "設定",
@@ -104,6 +105,10 @@ export const ja = {
             touchSpeed: "Touch速度",
             middleDisplay: "中央表示",
             moviebrightness: "背景の明るさ",
+            bright: "明るい",
+            normal: "普通",
+            dark: "暗い",
+            veryDark: "非常に暗い",
             pinkStars: "ピンクの星",
             showSensor: "センサーを表示",
             showSensorTextWhenPaused: "一時停止時にセンサーテキストを表示",

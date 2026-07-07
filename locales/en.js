@@ -88,7 +88,8 @@ export const en = {
         projectDeleted: "Project deleted",
         durationError: "End time must be greater than start time",
         renderComplete: "Frame-by-frame rendering complete. File downloaded.",
-        renderFailed: "Rendering failed: {error}"
+        renderFailed: "Rendering failed: {error}",
+        moveMouseToOpen: "Move your mouse to access quick panel!"
     },
     settings: {
         title: "Settings",
@@ -104,6 +105,10 @@ export const en = {
             touchSpeed: "Touch Speed",
             middleDisplay: "Center Display",
             moviebrightness: "BG Dim",
+            bright: "BRIGHT",
+            normal: "NORMAL",
+            dark: "DARK",
+            veryDark: "VERY DARK",
             pinkStars: "Pink Stars",
             showSensor: "Show Sensors",
             showSensorTextWhenPaused: "Show Sensor Text when Paused",

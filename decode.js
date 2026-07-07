@@ -77,8 +77,8 @@ export function simaiDecode(data = "", baseOffset = true) {
             lastSplitTag = tags.length - 1;
             lastSplitTagCommIndex = noteCommaIndex;
         }
-        if (tags[tags.length - 1]?.type == 'split') {
-            tags[tags.length - 1].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
+        if (lastSplitTag !== -1) {
+            tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
         }
         /*if (overrideSplitTime === null && (nowBpm === null || nowSplit === null)) {
             console.log("BPM or Split not defined before notes\n",(nowBpm === null || nowSplit === null));
@@ -465,6 +465,9 @@ export function simaiDecode(data = "", baseOffset = true) {
                             segments.forEach((seg, index) => {
                                 // 如果長度為 0 則平分時間，否則依長度比例分配
                                 const segmentDuration = totalLen > 0 ? d * (seg.len / totalLen) : d / segments.length;
+                                if (index === 0) {
+                                    noteObj.slideDuration = segmentDuration;
+                                }
 
                                 tempNotes.push({
                                     type: 'slide',

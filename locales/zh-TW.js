@@ -88,7 +88,8 @@ export const zhTW = {
         projectDeleted: "已刪除專案",
         durationError: "結束時間需大於開始時間",
         renderComplete: "逐幀渲染完成，檔案已下載",
-        renderFailed: "渲染失敗：{error}"
+        renderFailed: "渲染失敗：{error}",
+        moveMouseToOpen: "移動你的滑鼠來存取快捷面板!"
     },
     settings: {
         title: "設定",
@@ -104,6 +105,10 @@ export const zhTW = {
             touchSpeed: " Touch 速度",
             middleDisplay: "中間顯示",
             moviebrightness: "背景暗度",
+            bright: "BRIGHT",
+            normal: "NORMAL",
+            dark: "DARK",
+            veryDark: "VERY DARK",
             pinkStars: "粉紅色星星",
             showSensor: "顯示感應器",
             showSensorTextWhenPaused: "暫停時顯示感應器文字",

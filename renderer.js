@@ -211,7 +211,32 @@ export class SimaiRenderer {
 
     drawFrame(state) {
         const { ctx } = this;
-        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore, skipClear, nowIndex } = state;
+        const {
+            globalTime,
+            buckets,
+            dt,
+            showSensor,
+            showSensorText,
+            playCombo,
+            playScore,
+            noteQuantity = {
+                tap: 0,
+                hold: 0,
+                slide: 0,
+                touch: 0,
+                break: 0
+            },
+            playScoreRes = {
+                tap: 0,
+                hold: 0,
+                slide: 0,
+                touch: 0,
+                break: 0,
+                score: 0,
+                breakScore: 0, invScore: 0
+            },
+            nowIndex,
+        } = state;
 
         this.globalTime = globalTime;
         this.playCombo = playCombo;
@@ -250,19 +275,70 @@ export class SimaiRenderer {
         for (const n of buckets.touch) this.drawTouch(n);
 
         this.drawStaticBackground();
+        if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
         if (this.settings.showUI) this.drawUI(dt, globalTime);
     }
 
     drawUI(dt, globalTime) {
         const { ctx } = this;
         const { width: w, height: h } = this.getCanvasWH();
+
+        const debugWords = [
+            `FPS: ${dt === 0 ? 'PAUSE' : (1 / dt).toFixed(2)}`,
+            `Time: ${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`,
+        ];
+
         ctx.save();
         ctx.font = "3px Google Sans";
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillText(`FPS: ${dt === 0 ? 'PAUSE' : (1 / dt).toFixed(2)}`, -w / 2 + 2, -h / 2 + 2);
-        ctx.fillText(`Time: ${Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`, -w / 2 + 2, -h / 2 + 6);
+        debugWords.forEach((v, i) => {
+            ctx.fillText(v, -w / 2 + 2, -h / 2 + 2 + i * 4);
+        });
+        ctx.restore();
+    }
+
+    drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
+        const { width: w, height: h } = this.getCanvasWH();
+        if (h >= w) return;
+        const { ctx } = this;
+        const allRes = playScoreRes.tap + playScoreRes.hold + playScoreRes.slide + playScoreRes.touch + playScoreRes.break;
+
+        ctx.save();
+        ctx.fillStyle = "white";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.font = "9px mono";
+        ctx.letterSpacing = "-1px";
+
+        ctx.fillText(`${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`,
+            scaleBase / -2 - 3, -1);
+
+        ctx.letterSpacing = "0px";
+        ctx.font = "4px Google Sans";
+        ctx.fillText('Powered by', scaleBase / -2 - 3, h / 2 - 5);
+        ctx.font = "2.5px Google Sans";
+        ctx.fillText('susuy0725/web-mai-chart-x', scaleBase / -2 - 3, h / 2 - 2);
+
+        ctx.font = "bold 5px mono";
+        ctx.textAlign = "left";
+        [
+            `ALL: ${playCombo} / ${allRes}`,
+            `BRK: ${noteQuantity.break} / ${playScoreRes.break}`,
+            `TOH: ${noteQuantity.touch} / ${playScoreRes.touch}`,
+            `SLD: ${noteQuantity.slide} / ${playScoreRes.slide}`,
+            `HOD: ${noteQuantity.hold} / ${playScoreRes.hold}`,
+            `TAP: ${noteQuantity.tap} / ${playScoreRes.tap}`,
+        ].forEach((v, i) => {
+            ctx.fillText(v, scaleBase / 2 + 3, 18 - i * 6);
+        });
+        ctx.textBaseline = "top";
+        ctx.textAlign = "right";
+
+        ctx.fillText('DELUXE Rate:', scaleBase / -2 - 3, 1);
+        ctx.fillText(playScore.toFixed(4), scaleBase / -2 - 3, 8);
+
         ctx.restore();
     }
 
@@ -623,7 +699,15 @@ export class SimaiRenderer {
 
         // 繪製 Note 本體
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-        ctx.rotate(posInfo.rot);
+        let rot = posInfo.rot;
+        if (this.settings.rotateStars) {
+            let speed = 0;
+            if (s.slideDuration && s.slideDuration > 0) {
+                speed = clamp(1.5 / s.slideDuration, 0.5, 6);
+            }
+            rot += this.globalTime * 2 * Math.PI * speed;
+        }
+        ctx.rotate(rot);
         this.drawImgAtcenter(img, size);
 
         if (s.isEx) {
@@ -1207,7 +1291,7 @@ export class SimaiVisualEditor {
 
         if (period > 0) {
             // 1. 計算螢幕範圍內的索引
-            let minI = Math.ceil((-h / zoom - delta) / period);
+            let minI = Math.ceil((-h / zoom - delta) / period) - 1;
             let maxI = Math.floor((h / zoom - delta) / period);
 
             // 2. 邏輯約束：起點永遠從 0 開始
@@ -1239,7 +1323,7 @@ export class SimaiVisualEditor {
                     if (parts > 1) {
                         ctx.save();
                         ctx.strokeStyle = '#ffe86540'; // 較淡的顏色
-                        ctx.lineWidth = lineWidth * 0.5; // 較細的線條
+                        ctx.lineWidth = 0.5; // 較細的線條
                         for (let b = 1; b < parts; b++) {
                             const subY = (delta + i * period + b * beatPeriod) * -zoom;
 
@@ -1386,8 +1470,6 @@ export class SimaiVisualEditor {
 
     render(isVisualMode, ensureVisualEditorContext, state) {
         if (!isVisualMode || this.canvas.style.display === 'none') return;
-        console.log("rendered");
-
         const ctx = this.ctx/* || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null)*/;
         if (!ctx) return;
 
@@ -1573,7 +1655,7 @@ export class SimaiPreviewRenderer {
 
         if (period > 0) {
             // 1. 計算螢幕範圍內的索引
-            let minI = Math.ceil((-hw / zoom - delta) / period);
+            let minI = Math.ceil((-hw / zoom - delta) / period) - 1;
             let maxI = Math.floor((hw / zoom - delta) / period);
 
             // 2. 邏輯約束：起點永遠從 0 開始

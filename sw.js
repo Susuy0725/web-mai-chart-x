@@ -1,6 +1,18 @@
 // Basic service worker for offline caching
 // Cache name should be bumped when assets change
-const CACHE_NAME = 'web-mai-chart-cache-__CACHE_VERSION__';
+const CACHE_NAME = (() => {
+    const isDev = 
+        self.location.hostname === 'localhost' || 
+        self.location.hostname === '127.0.0.1' || 
+        self.location.hostname.endsWith('.ngrok-free.app');
+
+    if (isDev) {
+        return 'web-mai-chart-cache-' + Date.now();
+    } else {
+        return 'web-mai-chart-cache-__CACHE_VERSION__';
+    }
+})();
+
 const ASSETS = [
     './',
     './index.html',
@@ -13,6 +25,9 @@ const ASSETS = [
     './jszip.min.js',
     './mediabunny.cjs',
     './favicon.ico',
+    './Fonts/',
+    './Fonts/ShareTechMono-Regular.ttf',
+    './Fonts/Inter.ttf',
     './Skin/outline.png',
     './i18n.js',
     './locales/en.js',

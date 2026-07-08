@@ -612,7 +612,7 @@ export class SimaiRenderer {
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine, hispeed } = s;
         const noteT = noteTime - this.globalTime;
         const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
@@ -627,8 +627,8 @@ export class SimaiRenderer {
             return;
         }
 
-        const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap");
+        const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const imgKey = isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"));
         const img = isBreak
             ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
             : this.images[imgKey];
@@ -639,7 +639,7 @@ export class SimaiRenderer {
         ctx.save();
 
         // 繪製 Arc
-        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
         ctx.save();
         ctx.rotate(posInfo.rot);
         ctx.globalAlpha = currentScale;
@@ -662,7 +662,7 @@ export class SimaiRenderer {
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMultiple, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine, hispeed } = s;
         const noteT = noteTime - this.globalTime;
         const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
@@ -677,9 +677,10 @@ export class SimaiRenderer {
             return;
         }
 
-        const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))
-            : (isBreak ? "star_break" : (isDouble ? "star_each" : (this.settings.pinkStars ? "star_pink" : "star")));
+        const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const imgKey = isMultiple ?
+            (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))) :
+            (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (this.settings.pinkStars ? "star_pink" : "star"))));
         const img = isBreak
             ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
             : this.images[imgKey];
@@ -690,7 +691,7 @@ export class SimaiRenderer {
         ctx.save();
 
         // 繪製 Arc
-        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
+        const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc"))];
         ctx.save();
         ctx.rotate(posInfo.rot);
         ctx.globalAlpha = currentScale;
@@ -721,7 +722,7 @@ export class SimaiRenderer {
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration, hispeed } = s;
         const noteT = (noteTime - this.globalTime);
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const posInfo = noteRefPos[pos - 1];
@@ -732,11 +733,11 @@ export class SimaiRenderer {
             this.simpleHitEffect(holdDuration + noteT);
             this.ctx.restore();
         } else {
-            const isOn = (noteTime - this.globalTime) <= -0.1;
-            let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+            const isOn = (noteTime - this.globalTime) <= -0.1 && !isMine;
+            let br = (s.isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
             const img = getTintedImage(this.images[isOn ?
-                (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on")) :
-                (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))], br, {
+                (isMine ? "hold_mine" : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
+                (isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")))], br, {
                 colorCode: "#fff8a6"
             });
             const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
@@ -750,7 +751,7 @@ export class SimaiRenderer {
                             holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
 
             this.ctx.save();
-            const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+            const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
             this.ctx.rotate(posInfo.rot);
             this.ctx.globalAlpha = currentScale;
             this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
@@ -758,7 +759,7 @@ export class SimaiRenderer {
 
             if (t1 > this.settings.middleDistance) {
                 this.ctx.save();
-                const endimg = this.images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
+                const endimg = this.images[isMine ? "Hold_Mine_End" : (isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End"))];
                 this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
                 this.drawImgAtcenter(endimg, size * 0.65);
                 this.ctx.restore();
@@ -834,7 +835,7 @@ export class SimaiRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, hispeed } = s;
         const zoneKey = touchPos + pos;
 
         const sameZoneNotes = (this.currentTouchNotes || []).filter(n => {
@@ -852,18 +853,18 @@ export class SimaiRenderer {
         const t = 1 - this.timeFunction(noteT * (this.settings.touchSpeed * 0.8833 + 0.8167) * hispeed);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
-        const borderImg = this.images[isDouble ? "touch_border_2_each" : "touch_border_2"];
-        const borderImg3 = this.images[isDouble ? "touch_border_3_each" : "touch_border_3"];
-        const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
+        const borderImg = this.images[isMine ? "touch_border_2_mine" : (isDouble ? "touch_border_2_each" : "touch_border_2")];
+        const borderImg3 = this.images[isMine ? "touch_border_3_mine" : (isDouble ? "touch_border_3_each" : "touch_border_3")];
+        const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
 
         if (holdDuration) {
             const isOn = (noteTime - this.globalTime) <= -0.1;
             const imgs = [];
             for (let i = 0; i < 4; i++) {
-                const img = this.images["touchhold_" + i];
+                const img = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
                 imgs.push(img);
             }
-            const touchBorder = this.images.touchhold_border;
+            const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
 
             this.ctx.save();
             if (-noteT > holdDuration) {
@@ -884,12 +885,6 @@ export class SimaiRenderer {
                 this.drawImgAtcenter(touchBorder, size * 2.6);
                 this.ctx.restore();
                 this.ctx.globalAlpha = 1;
-                if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
-                    this.drawnBorders.add(zoneKey);
-                    this.drawImgAtcenter(borderImg, size * 2.65);
-                    if (count > 2)
-                        this.drawImgAtcenter(borderImg3, size * 2.65);
-                }
                 this.ctx.rotate(Math.PI * -0.75);
                 this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
                 for (let i = 0; i < 4; i++) {
@@ -904,7 +899,7 @@ export class SimaiRenderer {
             this.ctx.restore();
             return;
         }
-        const img = this.images[isDouble ? "touch_each" : "touch"];
+        const img = this.images[isMine ? "touch_mine" : isDouble ? "touch_each" : "touch"];
 
         this.ctx.save();
         if (noteT <= 0) {
@@ -933,8 +928,8 @@ export class SimaiRenderer {
     }
 
     drawSlide(s) {
-        const prefix = (s.isIllegal && this.settings.slideIllegalRed) ? "wifi_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_"));
-        const standardKey = (s.isIllegal && this.settings.slideIllegalRed) ? "slide" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"));
+        const prefix = (s.isIllegal && this.settings.slideIllegalRed) ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
+        const standardKey = (s.isIllegal && this.settings.slideIllegalRed) ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
 
         const imgs = [];
         if (s.slideType === "w") {
@@ -961,15 +956,15 @@ export class SimaiRenderer {
         if (-noteT > slideDelay) {
             slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
-        let br = (s.isBreak && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        this.drawPathWithArrows(p, slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
+        let br = ((s.isBreak && !s.isMine) && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        this.drawPathWithArrows(p, s.isMine ? 0 : slideProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && slideProgress < 1 && (!s.hideHead || sz >= 1)) {
             const { x, y, rot } = p.getPointAt(slideProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
-            const starImg = this.images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
+            const starImg = this.images[s.isMine ? "star_mine" : (s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star"))];
             const baseTransform = this.ctx.getTransform();
             if (s.slideType === "w") {
                 const w1Point = wPaths.w1.getPointAt(slideProgress);
@@ -1608,6 +1603,7 @@ export class SimaiPreviewRenderer {
             double: '#FFDF00',
             break: '#FF640D',
             slide: '#00FBFC',
+            mine: '#737373',
         };
         this.RENDER_LIMET = 1000;
     }
@@ -1718,7 +1714,7 @@ export class SimaiPreviewRenderer {
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -1726,17 +1722,18 @@ export class SimaiPreviewRenderer {
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
-        ctx.lineWidth = size * 0.4;
-        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
+
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
         ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+        ctx.lineWidth = size * 0.35;
+        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap));
         ctx.stroke();
         ctx.restore();
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -1744,8 +1741,7 @@ export class SimaiPreviewRenderer {
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
-        ctx.lineWidth = size * 0.4;
-        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star);
+
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
         for (let i = 0; i < 10; i++) {
@@ -1760,25 +1756,21 @@ export class SimaiPreviewRenderer {
             else ctx.lineTo(px, py);
         }
         ctx.closePath();
+        ctx.lineWidth = size * 0.35;
+        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star));
         ctx.stroke();
         ctx.restore();
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration } = s;
         const ctx = this.ctx;
-        const { height: h } = this.getCanvasWH(); // h 為中心到邊緣的距離
         const t = (noteTime - this.globalTime);
 
         const size = this.settings.noteBaseSize * this.h * 0.01;
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
-
-        // 3. 樣式設定
-        ctx.lineWidth = size * 0.4;
-        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
-
         ctx.translate(this.hw + t * this.zoom, y);
 
         // 4. 繪製正六角形
@@ -1797,12 +1789,15 @@ export class SimaiPreviewRenderer {
             else ctx.lineTo(px, py);
         }
         ctx.closePath();
+        ctx.lineWidth = size * 0.35;
+        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap));
         ctx.stroke();
+
         ctx.restore();
     }
 
     drawSlide(s) {
-        const { time: noteTime, pos, isBreak, isDouble, slideDelay, slideDuration } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine, slideDelay, slideDuration } = s;
         const t = (noteTime + slideDelay - this.globalTime);
         const ctx = this.ctx;
 
@@ -1811,7 +1806,7 @@ export class SimaiPreviewRenderer {
 
         ctx.save();
         ctx.lineWidth = size;
-        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.slide);
+        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.slide));
         ctx.setLineDash([size * 0.4, size * 0.3]);
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
@@ -1822,7 +1817,7 @@ export class SimaiPreviewRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, holdDuration, isHanabi } = s;
+        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, isHanabi } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -1830,83 +1825,71 @@ export class SimaiPreviewRenderer {
         const y = touchPos === "C" ? this.hh : ((pos - 0.5 * !(touchPos === "E" || touchPos === "D")) / 8 * this.h);
 
         ctx.save();
-        ctx.lineWidth = size * 0.4;
-        ctx.strokeStyle = isDouble ? this.color.double : this.color.star;
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
-        if (holdDuration) {
-            const hp = (holdDuration * this.zoom) / 4;
-            ctx.lineWidth = size * 0.8;
-            ctx.globalCompositeOperation = "lighter";
-            ctx.globalAlpha = 0.8;
-            for (let i = 0; i < 4; i++) {
-                this.ctx.beginPath();
-                this.ctx.moveTo(hp * i, 0);
-                this.ctx.lineTo(hp * (i + 1), 0);
-                this.ctx.closePath();
-                switch (i) {
-                    case 0:
-                        this.ctx.strokeStyle = "#EC4402";
-                        break;
-                    case 1:
-                        this.ctx.strokeStyle = "#F6EE01";
-                        break;
-                    case 2:
-                        this.ctx.strokeStyle = "#0CA163";
-                        break;
-                    case 3:
-                        this.ctx.strokeStyle = "#0197F5";
-                        break;
-                }
-                this.ctx.stroke();
+        if (isHanabi) {
+            const h = holdDuration ?? 0;
+            const color = this.ctx.createLinearGradient((h * this.zoom), -y, (h * this.zoom) + size * 4, this.h - y);
+            color.addColorStop(0, "#00D5FF");
+            color.addColorStop(0.4, "#FF00FF");
+            color.addColorStop(0.8, "#FFD823");
+            color.addColorStop(1, "#FFD823");
+
+            const width = Math.round(size * 4);
+            const height = this.h + y;
+
+            this.ctx.save();
+            this.ctx.fillStyle = color;
+
+            for (let x = 0; x < width; x += 4) {
+                // 從左到右透明度由 1.0 降至 0.0
+                this.ctx.globalAlpha = 1 - (x / width);
+                // 繪製 1px 寬的垂直色條
+                this.ctx.fillRect((h * this.zoom) + x, -y, 4, height);
             }
-            if (isHanabi) {
-                const color = this.ctx.createLinearGradient((holdDuration * this.zoom), -y, (holdDuration * this.zoom) + size * 4, this.h - y);
-                color.addColorStop(0, "#00D5FF");
-                color.addColorStop(0.4, "#FF00FF");
-                color.addColorStop(0.8, "#FFD823");
-                color.addColorStop(1, "#FFD823");
 
-                const width = Math.round(size * 4);
-                const height = this.h + y;
-
-                this.ctx.save();
-                this.ctx.fillStyle = color;
-
-                for (let x = 0; x < width; x += 4) {
-                    // 從左到右透明度由 1.0 降至 0.0
-                    this.ctx.globalAlpha = 1 - (x / width);
-                    // 繪製 1px 寬的垂直色條
-                    this.ctx.fillRect((holdDuration * this.zoom) + x, -y, 4, height);
+            this.ctx.restore();
+        }
+        if (holdDuration) {
+            ctx.lineWidth = size * 0.8;
+            if (isMine) {
+                ctx.globalAlpha = 1;
+                ctx.globalCompositeOperation = "source-over";
+                const hp = Math.max(4, holdDuration * this.zoom);
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(hp, 0);
+                this.ctx.closePath();
+                this.ctx.stroke();
+            } else {
+                ctx.globalCompositeOperation = "lighter";
+                ctx.globalAlpha = 0.8;
+                const hp = Math.max(4, holdDuration * this.zoom) / 4;
+                for (let i = 0; i < 4; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(hp * i, 0);
+                    this.ctx.lineTo(hp * (i + 1), 0);
+                    this.ctx.closePath();
+                    switch (i) {
+                        case 0:
+                            this.ctx.strokeStyle = "#EC4402";
+                            break;
+                        case 1:
+                            this.ctx.strokeStyle = "#F6EE01";
+                            break;
+                        case 2:
+                            this.ctx.strokeStyle = "#0CA163";
+                            break;
+                        case 3:
+                            this.ctx.strokeStyle = "#0197F5";
+                            break;
+                    }
+                    this.ctx.stroke();
                 }
-
-                this.ctx.restore();
             }
         } else {
-            if (isHanabi) {
-                ctx.globalCompositeOperation = "lighter";
-                // 沿用你原本定義的垂直/斜向漸層
-                const color = this.ctx.createLinearGradient(0, -y, size * 4, this.h - y);
-                color.addColorStop(0, "#00D5FF");
-                color.addColorStop(0.4, "#FF00FF");
-                color.addColorStop(0.8, "#FFD823");
-                color.addColorStop(1, "#FFD823");
-
-                const width = Math.round(size * 4);
-                const height = this.h + y; // 確保延伸到底部
-
-                this.ctx.save();
-                this.ctx.fillStyle = color;
-
-                for (let x = 0; x < width; x += 4) {
-                    // 從左到右透明度由 1.0 降至 0.0
-                    this.ctx.globalAlpha = 1 - (x / width);
-                    // 繪製 1px 寬的垂直色條
-                    this.ctx.fillRect(x, -y, 4, height);
-                }
-
-                this.ctx.restore();
-            }
+            ctx.lineWidth = size * 0.35;
+            ctx.strokeStyle = isMine ? this.color.mine : (isDouble ? this.color.double : this.color.star);
             ctx.strokeRect(-size * 0.5, -size * 0.5, size, size);
         }
         ctx.restore();
@@ -2021,12 +2004,12 @@ export class SimaiPreviewRenderer {
         this.drawAudioWaveform(audioBuffer, offset);
         visualBuckets.tags.forEach(t => this.drawTag(t));
         visualBuckets.slide.forEach(n => this.drawSlide(n));
-        visualBuckets.touch.forEach(n => this.drawTouch(n));
         visualBuckets.tapnhold.forEach(n => {
             if (n.type === "hold") this.drawHold(n);
             else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
         });
+        visualBuckets.touch.forEach(n => this.drawTouch(n));
         const ct = hw + (cursorIndexTime - globalTime) * this.zoom;
         this.drawTriangle(
             ct - h * 0.1, 0,

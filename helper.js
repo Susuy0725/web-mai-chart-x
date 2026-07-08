@@ -13,18 +13,20 @@ export function imgNotExists(image) {
 
 const baseURL = './Skin/', baseImageKeys = [
     'no_image',
-    'tap', 'tap_break', 'tap_each', 'tap_ex',
-    'NormalArc', 'BreakArc', 'EachArc',
-    'hold', 'hold_break', 'hold_each', 'hold_ex',
+    'tap', 'tap_break', 'tap_each', 'tap_ex', 'tap_mine',
+    'NormalArc', 'BreakArc', 'EachArc', 'SlideArc', 'MineArc',
+    'hold', 'hold_break', 'hold_each', 'hold_ex', 'hold_mine',
     'hold_break_on', 'hold_each_on', 'hold_on',
-    'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
-    'touch', 'touch_each', 'touch_point', 'touch_point_each',
-    'touch_border_2', 'touch_border_2_each', 'touch_border_3', 'touch_border_3_each',
-    'star', 'star_pink', 'star_break', 'star_each', 'star_double', 'star_ex',
-    'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double',
-    'slide', 'slide_each', 'slide_break', 'SlideArc',
-    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border'
+    'Hold_End', 'Hold_Break_End', 'Hold_Each_End', 'Hold_Mine_End',
+    'touch', 'touch_each', 'touch_mine', 'touch_point', 'touch_point_each', 'touch_point_mine',
+    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each', 'touch_border_2_mine', 'touch_border_3_mine',
+    'star', 'star_pink', 'star_break', 'star_each', 'star_ex', 'star_mine',
+    'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
+    'slide', 'slide_each', 'slide_break', 'slide_mine',
+    'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
+    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine',
 ];
+const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
 
 export const exColor = {
     tap: '#D8A2C9',
@@ -1517,7 +1519,6 @@ export function simpleToast({
  */
 export async function loadAllImages(onProgress) {
     const images = {};
-    const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_'];
 
     // 1. 先把所有要載入的 Key 整理成一個陣列
     const allKeys = [...baseImageKeys];
@@ -1563,19 +1564,27 @@ async function getImgWithCache(url, key) {
         // 2. 沒快取則抓取網路資料
         try {
             const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP status ${response.status}`);
+            }
             blob = await response.blob();
             // 3. 存入 IndexedDB
             await idbSet(`img_cache_${key}`, blob);
         } catch (e) {
             console.error(`圖片載入失敗: ${url}`, e);
-            return null;
+            throw e; // 拋出錯誤以利呼叫端捕獲
         }
     }
 
+    if (!blob) {
+        throw new Error(`Blob is null for key: ${key}`);
+    }
+
     // 4. 將 Blob 轉為 Image 物件
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
+        img.onerror = (err) => reject(new Error(`Failed to decode image blob for key: ${key}`));
         img.src = URL.createObjectURL(blob);
     });
 }
@@ -3000,7 +3009,7 @@ export class SimaiLogicControler {
             const note = notes[i];
             const noteT = note.time - globalTime;
             const noteType = note.type;
-            const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
+            const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
 
             const calcPiecewiseSpeed = (x) => {
                 if (x >= 1) {
@@ -3114,7 +3123,7 @@ export class SimaiLogicControler {
                 (noteType === "slide" ? t >= middleDistance :
                     noteType === "touch" ? touchT >= -1 :
                         t >= -1)
-                && -noteT <= skipT + (note.isHanabi ? hanabiEffectDecayTime : effectDecayTime);
+                && -noteT <= skipT + (note.isHanabi ? hanabiEffectDecayTime : (note.type === 'slide' ? 0 : effectDecayTime));
 
             const isVisualVisible = noteT >= 0
                 ? Math.abs(noteT) <= V

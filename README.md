@@ -2,61 +2,55 @@
 
 [繁體中文](#繁體中文) | [English](#english)
 
+---
+
 ## 繁體中文
 
-一個簡單易用的的網頁版 maimai 譜面製作工具。
+一個簡單易用的網頁版 maimai 譜面製作工具。
 
-### 🚀 線上網站
+### 🚀 專案網站
 
 [點我前往 Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
 
-### 🔧功能介紹
+### 🔧 功能介紹
+在完善一般編輯器應有的功能的同時，還加入了更加人性化的操作及便捷的功能：
 
-所有之前 MajdataEdit 的功能，這個網站都可以幫你滿足！
+- **直接讀取壓縮檔**：無需解壓即可匯入專案。
+- **專案管理器**：輕鬆管理多個譜面專案。
+- **譜面影片錄製**：方便匯出與分享你的譜面成果。
+- **進階譜面支援**：支援地雷音符 `m` 及變速指令 `<HS*N>`。
 
-更加人性化的操作、還有特殊功能！
-
-- 直接讀取壓縮檔
-
-- 網頁端專案 ( 類似 mai-notes )
-
-- 從 mai-notes 抓取譜面
-
-- 直接匯入影片寫譜
-
-- 支援地雷 (mine) 音符
-
-~~有些功能是 "借鑑" MajdataViewX~~
-
-### ✏️更新日誌
+### ✏️ 更新日誌
 
 [點我查看更新日誌](./CHANGELOG.md)
+
+### 💖 銘謝
+
+本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
+- 音符圖案與音訊素材資源來自 [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
+
+---
 
 ## English
 
 An Easy-to-Use web-based maimai chart tool.
 
-### 🚀 The tool website
+### 🚀 Project website
 [Click me to visit Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
 
 ### 🔧 Features
 
-This website covers all the features previously found in MajdataEdit!  
-With a more user-friendly interface and unique, specialized features:
+While perfecting the functions that a general editor should have, we also added more user-friendly operations and convenient features:
 
-- Direct reading of compressed zip files
+- **Load compressed zip files**: Import projects directly without extracting.
+- **Project manager**: Easily manage multiple chart projects.
+- **Chart video export**: Conveniently export and share your chart previews.
+- **Advanced chart support**: Supports Mine notes `m` and High Speed command `<HS*N>`.
 
-- Web-based projects (similar to mai-notes)
-
-- Fetch charts directly from mai-notes
-
-- Import videos directly for charting
-
-- Support for Mine notes
-
-~~Some features are "borrowed" from MajdataViewX~~
-
-### ✏️Changelog
+### ✏️ Changelog
 [Click me to visit Changelog](./CHANGELOG.md) 
 
-- All Skin resources came from [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView), [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)
+### 💖 Acknowledgements
+
+Special thanks to the open-source community for providing the assets:
+- Skin and media resources are derived from [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).

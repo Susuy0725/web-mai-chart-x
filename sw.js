@@ -1,9 +1,9 @@
 // Basic service worker for offline caching
 // Cache name should be bumped when assets change
 const CACHE_NAME = (() => {
-    const isDev = 
-        self.location.hostname === 'localhost' || 
-        self.location.hostname === '127.0.0.1' || 
+    const isDev =
+        self.location.hostname === 'localhost' ||
+        self.location.hostname === '127.0.0.1' ||
         self.location.hostname.endsWith('.ngrok-free.app');
 
     if (isDev) {
@@ -17,13 +17,13 @@ const ASSETS = [
     './',
     './index.html',
     './main.css',
-    './main.js',
-    './renderer.js',
-    './helper.js',
-    './decode.js',
-    './indexDB.js',
-    './jszip.min.js',
-    './mediabunny.cjs',
+    './Scripts/main.js',
+    './Scripts/renderer.js',
+    './Scripts/helper.js',
+    './Scripts/decode.js',
+    './Scripts/indexDB.js',
+    './Scripts/jszip.min.js',
+    './Scripts/mediabunny.cjs',
     './favicon.ico',
     './Fonts/',
     './Fonts/ShareTechMono-Regular.ttf',

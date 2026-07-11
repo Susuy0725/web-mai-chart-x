@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web mai Chart X (beta)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Noto+Sans+TC:wght@100..900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=chevron_right,edit,help,keyboard,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="Scripts/jszip.min.js"></script>
+    <script src="Scripts/mediabunny.cjs"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"
+        integrity="sha512-YsR46MmyChktsyMMou+Bs74oCa/CDdwft7rJ5wlnmDzMj1mzqncsfJamEEf99Nk7IB0JpTMo5hS8rxB49FUktQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-C-rQFEst.ico">
+  <script type="module" crossorigin src="/assets/index-BipjAbr7.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CpdSQ8GV.css">
+</head>
+
+<body>
+    <!-- <img src="./image.png" alt="refimg" class="a"> -->
+
+    <div id="canvasContainer">
+        <img src="/assets/outline-Cdb5-ZKW.png" alt="outline" onerror="this.style.display = 'none'" id="canvasOutline">
+        <canvas id="main"></canvas>
+        <div class="backgroundContainer">
+            <img src="" alt="" onerror="this.style.display='none'" id="backgroundImage">
+            <video src="" alt="video" onerror="this.style.display = 'none'" id="backgroundVideo" muted></video>
+        </div>
+    </div>
+    <div id="playControls">
+        <div id="miniPreviewContainer">
+            <div class="zoomContainer">
+                <div id="mpzoomIn">+</div>
+                <div id="mpzoomOut">-</div>
+            </div>
+            <canvas id="miniPreview"></canvas>
+        </div>
+        <div id="playControlContainer">
+            <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01">
+            <div class="controlsContainer">
+                <div class="controlButton" data-buttonAction="reset">
+                    <span class="material-symbols-outlined" translate="no">
+                        skip_previous
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="stop">
+                    <span class="material-symbols-outlined" translate="no">
+                        stop
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="play/pause" data-playing="false">
+                    <span class="material-symbols-outlined" translate="no">
+                        play_arrow
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="hide" data-hidden="false">
+                    <span class="material-symbols-outlined" translate="no">
+                        keyboard_arrow_down
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="keyboard">
+                    <span class="material-symbols-outlined" translate="no">
+                        keyboard
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div id="showPlayControlsBtn" style="display: none;">
+            ▲
+        </div>
+    </div>
+    <div id="editorContainer">
+        <div id="highlight-layer" class="editor-layer" inert aria-disabled="true" aria-hidden="true"
+            contenteditable="false"></div>
+        <textarea id="editor-input" class="editor-layer" spellcheck="false" data-i18n="textarea.placeholder"
+            placeholder="在此輸入譜面資料..."></textarea>
+        <canvas id="visualEditor" class="visualEditor-layer" style="display: none;"></canvas>
+    </div>
+    <div id="utilityContainer">
+        <div id="topUtilityBtns">
+            <div class="utilityButton miniButton" data-buttonAction="hideEditor">
+                <span class="material-symbols-outlined" translate="no">
+                    right_panel_close
+                </span>
+            </div>
+            <div class="utilityDropdown">
+                <div class="utilityDropdown-btn utilityButton miniButton">
+                    <span class="material-symbols-outlined" translate="no">menu</span>
+                </div>
+                <div class="utilityDropdown-content">
+                    <div class="utilityButton utilityMenuTitle">
+                        <span data-i18n="menu.file">檔案</span>
+                        <span class="utilityMenuArrow material-symbols-outlined" translate="no">
+                            chevron_right
+                        </span>
+                        <div class="utilitySubmenu">
+                            <div class="utilityButton" data-buttonAction="createNew" data-i18n="menu.fileNew">新建</div>
+                            <div class="utilityButton" data-buttonAction="projectManager"
+                                data-i18n="menu.fileProjectManager">專案總管</div>
+                            <div class="utilityButton" data-buttonAction="readFolder" data-i18n="menu.fileReadFolder">
+                                讀取資料夾
+                                <input type="file" webkitdirectory directory multiple />
+                            </div>
+                            <div class="utilityButton" data-buttonAction="readZip" data-i18n="menu.fileReadZip">讀取壓縮檔
+                            </div>
+                            <div class="utilityButton" data-buttonAction="download" data-i18n="menu.fileDownload">下載
+                            </div>
+                            <hr>
+                            <div class="utilityButton" data-buttonAction="addMusic" data-i18n="menu.fileAddMusic">加入音樂
+                            </div>
+                            <div class="utilityButton" data-buttonAction="addVideo" data-i18n="menu.fileAddVideo">加入影片
+                            </div>
+                            <div class="utilityButton" data-buttonAction="importFromVideo"
+                                data-i18n="menu.fileImportFromVideo">從影片匯入</div>
+                            <div class="utilityButton" data-buttonAction="readMaidata" data-i18n="menu.fileReadMaidata">
+                                讀取maidata</div>
+                        </div>
+                    </div>
+                    <div class="utilityButton utilityMenuTitle">
+                        <span data-i18n="menu.tools">功能/工具</span>
+                        <span class="utilityMenuArrow material-symbols-outlined" translate="no">
+                            chevron_right
+                        </span>
+                        <div class="utilitySubmenu">
+                            <div class="utilityButton" data-buttonAction="getNowNoteIndex"
+                                data-i18n="menu.toolsGetNowNoteIndex">游標移至播放頭</div>
+                            <div class="utilityButton" data-buttonAction="getCursorNoteIndex"
+                                data-i18n="menu.toolsGetCursorNoteIndex">播放頭移至游標</div>
+                            <div class="utilityButton" data-buttonAction="recordVideo"
+                                data-i18n="menu.toolsRecordVideo">錄製影片</div>
+                            <div class="utilityButton" data-buttonAction="editMusic" data-i18n="menu.toolsEditMusic">
+                                編輯音樂開頭</div>
+                            <div class="utilityButton" data-buttonAction="tapBpm" data-i18n="menu.toolsTapBpm">Tap BPM
+                            </div>
+                            <div class="utilityButton" data-buttonAction="quickGenerate"
+                                data-i18n="menu.toolsQuickGenerate">快速生成</div>
+                            <div class="utilityButton" data-buttonAction="fetchFromMainote"
+                                data-i18n="menu.toolsFetchFromMainote">從Mainote抓取資料</div>
+                            <div class="utilityButton" data-buttonAction="popup" data-i18n="menu.toolsPopup">預覽彈出</div>
+                        </div>
+                    </div>
+                    <div class="utilityButton" data-buttonAction="manageResources" data-i18n="menu.manageResources">資源管理
+                    </div>
+                    <div class="utilityButton" data-buttonAction="chartInfo" data-i18n="menu.chartInfo">譜面資訊</div>
+                    <div class="utilityButton" data-buttonAction="settings" data-i18n="menu.settings">設定</div>
+                </div>
+            </div>
+
+            <div class="utilityDropdown">
+                <div class="utilityDropdown-btn utilityButton miniButton">
+                    <span class="material-symbols-outlined" translate="no">edit</span>
+                </div>
+                <div class="utilityDropdown-content">
+                    <div class="utilityButton" data-buttonAction="undo" data-i18n="menu.editUndo">復原</div>
+                    <div class="utilityButton" data-buttonAction="redo" data-i18n="menu.editRedo">重作</div>
+                    <div class="utilityButton" data-buttonAction="rotateClockwise" data-i18n="menu.editRotateClockwise">
+                        順時針旋轉</div>
+                    <div class="utilityButton" data-buttonAction="rotateCounterClockwise"
+                        data-i18n="menu.editRotateCounterClockwise">逆時針旋轉</div>
+                    <div class="utilityButton" data-buttonAction="rotate180" data-i18n="menu.editRotate180">180度旋轉</div>
+                    <div class="utilityButton" data-buttonAction="flipVertical" data-i18n="menu.editFlipVertical">上下反轉
+                    </div>
+                    <div class="utilityButton" data-buttonAction="flipHorizontal" data-i18n="menu.editFlipHorizontal">
+                        左右反轉</div>
+                </div>
+            </div>
+
+            <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
+                <input type="number" step="0.01" value="0" name="d">
+            </div>
+            <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty"
+                data-i18n="menu.changeDifficulty">難度切換
+                <select name="d">
+                    <option value="7">ORIGINAL</option>
+                    <option value="6">Re:MASTER</option>
+                    <option value="5" selected>MASTER</option>
+                    <option value="4">EXPERT</option>
+                    <option value="3">ADVANCED</option>
+                    <option value="2">BASIC</option>
+                    <option value="1">EASY</option>
+                </select>
+            </div>
+            <div class="utilityButton miniButton" data-buttonAction="playbackSpeedMinus">-
+            </div>
+            <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed" data-i18n="menu.playbackSpeed">播放速度
+                <input type="number" step="0.25" value="1" name="d" min="0.25" max="2">
+            </div>
+            <div class="utilityButton miniButton" data-buttonAction="playbackSpeedAdd">+
+            </div>
+            <div class="utilityButton noFixedsize" data-buttonAction="timebase" data-i18n="menu.timeSignature">拍號
+                <input type="number" step="1" value="4" name="tb1">/ <input type="number" step="1" value="4" name="tb2">
+            </div>
+            <div class="utilityButton noFixedsize" data-buttonAction="displayMode" data-i18n="menu.displayMode">顯示模式
+                <select name="d">
+                    <option value="simai" data-i18n="menu.displayModeSimai">simai 語法</option>
+                    <option value="visual" data-i18n="menu.displayModeVisual">軌道</option>
+                </select>
+            </div>
+            <div class="utilityButton noFixedsize" data-buttonAction="readyBeat" data-i18n="menu.readyBeat">預備拍<input
+                    type="checkbox" name="d"><span></span>
+            </div>
+            <div class="utilityButton miniButton" data-buttonAction="help">
+                <span class="material-symbols-outlined" translate="no">
+                    help
+                </span>
+            </div>
+        </div>
+        <div class="closeBtn" data-hidden="false">▲</div>
+        <div class="warnbtn"><span class="material-symbols-outlined" translate="no">warning</span><span
+                class="warnCount">0</span>
+        </div>
+    </div>
+    <div id="quick-panel" class="quick-panel">
+        <div id="center"></div>
+        <div id="select-up"><span class="material-symbols-outlined" translate="no">swap_vert</span></div>
+        <div id="select-down"><span class="material-symbols-outlined" translate="no">swap_horiz</span></div>
+        <div id="select-left"><span class="material-symbols-outlined" translate="no">rotate_left</span></div>
+        <div id="select-right"><span class="material-symbols-outlined" translate="no">rotate_right</span></div>
+        <div id="select-up-left"><span class="material-symbols-outlined" translate="no">sync</span></div>
+        <div id="select-up-right"><span class="material-symbols-outlined" translate="no">redo</span></div>
+        <div id="select-down-left"><span class="material-symbols-outlined" translate="no">keyboard</span></div>
+        <div id="select-down-right"><span class="material-symbols-outlined" translate="no">undo</span></div>
+    </div>
+</body>
+
+</html>

@@ -546,6 +546,7 @@ slide: ${slideCounts},
 touch: ${touchCounts},
 break: ${breakCounts}`
     )
+    console.log(warnpos);
     console.groupEnd();
     return {
         notes,

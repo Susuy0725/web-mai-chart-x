@@ -2438,6 +2438,8 @@ export async function videoRender(audioManager, canvas, renderer, {
     let mediabunnyInput = null;
     let mediabunnyCanvasSink = null;
     let videoTrack = null;
+    let canvasIterator = null;
+    let currentCanvasFrame = null;
 
     const popup = popupWindow({
         title: "渲染影片",
@@ -2473,7 +2475,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         output.addVideoTrack(videoSource, { frameRate: fps });
 
         let exportVideoReady = false;
-        if (editorBackgroundVideo && editorBackgroundVideo.src) {
+        if (editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.videoWidth > 0) {
             try {
                 const { Input, UrlSource, BlobSource, CanvasSink, ALL_FORMATS } = window.Mediabunny;
                 if (Input && CanvasSink) {
@@ -2827,8 +2829,6 @@ export async function videoRender(audioManager, canvas, renderer, {
             });
         };
 
-        let canvasIterator = null;
-        let currentCanvasFrame = null;
         if (mediabunnyCanvasSink) {
             canvasIterator = mediabunnyCanvasSink.canvases(start, end);
         }
@@ -3051,6 +3051,17 @@ export async function videoRender(audioManager, canvas, renderer, {
 
 export class SimaiLogicControler {
     constructor() {
+        this._buckets = { slide: [], tapnhold: [], touch: [] };
+        this._visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
+        this._noteQuantity = { slide: 0, tap: 0, hold: 0, touch: 0, break: 0 };
+        this._result = {
+            buckets: this._buckets,
+            playCombo: 0,
+            playScore: 0,
+            visualBuckets: this._visualBuckets,
+            noteQuantity: this._noteQuantity,
+            nowIndex: 0
+        };
     }
 
     get({
@@ -3096,11 +3107,25 @@ export class SimaiLogicControler {
             }
         }
 
-        // 準備繪製桶子
-        const buckets = { slide: [], tapnhold: [], touch: [] };
-        const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
+        // Clear existing arrays without allocating new ones
+        this._buckets.slide.length = 0;
+        this._buckets.tapnhold.length = 0;
+        this._buckets.touch.length = 0;
 
-        const noteQuantity = { slide: 0, tap: 0, hold: 0, touch: 0, break: 0 };
+        this._visualBuckets.slide.length = 0;
+        this._visualBuckets.tapnhold.length = 0;
+        this._visualBuckets.touch.length = 0;
+        this._visualBuckets.tags.length = 0;
+
+        this._noteQuantity.slide = 0;
+        this._noteQuantity.tap = 0;
+        this._noteQuantity.hold = 0;
+        this._noteQuantity.touch = 0;
+        this._noteQuantity.break = 0;
+
+        const buckets = this._buckets;
+        const visualBuckets = this._visualBuckets;
+        const noteQuantity = this._noteQuantity;
 
         let playCombo = 0;
         let playScore = 0;
@@ -3266,6 +3291,9 @@ export class SimaiLogicControler {
             }
         }
 
-        return { buckets, playCombo, playScore, visualBuckets, noteQuantity, nowIndex };
+        this._result.playCombo = playCombo;
+        this._result.playScore = playScore;
+        this._result.nowIndex = nowIndex;
+        return this._result;
     }
 }

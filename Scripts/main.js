@@ -484,6 +484,7 @@ let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
 let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
+let lastCursorIndex = -1;
 let visualCtx = null;
 let warnings = [], warningPositions = [], warningPositionsConst = [];
 let decodedTags = [];
@@ -1921,6 +1922,7 @@ const getres = ((simaiDataValue) => {
             playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
             playScoreRes.invScore = 1 / playScoreRes.score;
             rawData = splitRespectingLineComments(simaiDataValue);
+            lastCursorIndex = -1;
 
             warnings = result.warnings || [];
             warningPositions = result.errpositions || [];
@@ -4455,7 +4457,8 @@ function update(timestamp) {
             globalTime = realTime - musicDelay;
         }
 
-        if (settings.cursorFollow) {
+        if (settings.cursorFollow && nowIndex !== lastCursorIndex) {
+            lastCursorIndex = nowIndex;
             cursorLastIndexTime = dataIndexToTime[nowIndex] || 0; // 更新游標對應的時間
             const point = rawData.slice(0, nowIndex + 1).join(',').length;
             // 2. 設定游標位置
@@ -5000,13 +5003,9 @@ function draw(dt = 0) {
     const playing = playButton.dataset.playing === 'true';
     const previewVisibleFlag = previewVisible();
     const isVisualModeFlag = isVisualMode();
-    const visualHeight = (() => {
-        if (!previewVisibleFlag) {
-            return visualEditorRenderer.getCanvasWH().height;
-        } else {
-            return previewRender.getCanvasWH().width / 2;
-        }
-    })();
+    const visualHeight = !previewVisibleFlag
+        ? visualEditorRenderer.getCanvasWH().height
+        : previewRender.getCanvasWH().width / 2;
 
     const { buckets, playCombo, playScore, visualBuckets, noteQuantity, nowIndex: nowIndexRender } = simaiLogicControler.get({
         renderer,

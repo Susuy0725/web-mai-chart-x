@@ -389,12 +389,26 @@ class AudioManager {
             'touchHold_riser': { start: 10, end: 11.8 }
         };
         this.scheduledSources = [];
+
+        // 追蹤時間以實施重試節流 (Throttle)
+        this.lastResumeAttemptTime = 0;
+        this.lastReinitTime = 0;
     }
 
     /**
      * 重新初始化 AudioContext，主要用於裝置故障、關閉重啟等防禦性復原
      */
     reinitContext() {
+        const now = Date.now();
+        if (typeof window !== 'undefined') {
+            window.__lastAudioReinitTime = window.__lastAudioReinitTime || 0;
+            // 限制每 5 秒最多只能重建一次 AudioContext，防止在無可用裝置或 HMR 重載時陷入無窮重試
+            if (now - window.__lastAudioReinitTime < 5000) {
+                return;
+            }
+            window.__lastAudioReinitTime = now;
+        }
+
         try {
             if (this.ctx) {
                 try {
@@ -426,12 +440,12 @@ class AudioManager {
 
             // DynamicsCompressorNode
             this.longSoundCompressor = this.ctx.createDynamicsCompressor();
-            const now = this.ctx.currentTime;
-            this.longSoundCompressor.threshold.setValueAtTime(-16, now);
-            this.longSoundCompressor.knee.setValueAtTime(8, now);
-            this.longSoundCompressor.ratio.setValueAtTime(4, now);
-            this.longSoundCompressor.attack.setValueAtTime(0.005, now);
-            this.longSoundCompressor.release.setValueAtTime(0.25, now);
+            const nowTime = this.ctx.currentTime;
+            this.longSoundCompressor.threshold.setValueAtTime(-16, nowTime);
+            this.longSoundCompressor.knee.setValueAtTime(8, nowTime);
+            this.longSoundCompressor.ratio.setValueAtTime(4, nowTime);
+            this.longSoundCompressor.attack.setValueAtTime(0.005, nowTime);
+            this.longSoundCompressor.release.setValueAtTime(0.25, nowTime);
 
             this.longSoundGainNode.connect(this.longSoundCompressor);
             this.longSoundCompressor.connect(this.sfxGainNode);
@@ -451,11 +465,28 @@ class AudioManager {
         if (!this.ctx || this.ctx.state === 'closed') {
             console.warn('[Audio] AudioContext is null or closed. Re-initializing...');
             this.reinitContext();
+            return;
         }
         if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume().catch((err) => {
-                console.warn('[Audio] Failed to resume AudioContext:', err);
-            });
+            const now = Date.now();
+            if (typeof window !== 'undefined') {
+                window.__lastAudioResumeAttemptTime = window.__lastAudioResumeAttemptTime || 0;
+                // 限制每 3 秒最多只能嘗試一次 resume()，防止音訊硬體故障或多實體併發時狀態反覆變更造成無窮迴圈
+                if (now - window.__lastAudioResumeAttemptTime > 3000) {
+                    window.__lastAudioResumeAttemptTime = now;
+                    console.log('[Audio] AudioContext is suspended. Attempting to resume...');
+                    this.ctx.resume().catch((err) => {
+                        console.warn('[Audio] Failed to resume AudioContext:', err);
+                    });
+                }
+            } else {
+                if (!this.lastResumeAttemptTime || now - this.lastResumeAttemptTime > 3000) {
+                    this.lastResumeAttemptTime = now;
+                    this.ctx.resume().catch((err) => {
+                        console.warn('[Audio] Failed to resume AudioContext:', err);
+                    });
+                }
+            }
         }
     }
 

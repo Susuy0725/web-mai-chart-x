@@ -336,15 +336,11 @@ export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
 class AudioManager {
     constructor() {
         this.globalGain = 0.65; // 預設音量
+        this.bgmVolume = 0.8;
+        this.sfxMasterVolume = 0.5;
 
-        // 1. 初始化 Web Audio 上下文
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-        // --- 新增：建立總音量控制節點 ---
-        this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = this.globalGain;
-        this.masterGain.connect(this.ctx.destination); // 最終輸出
-        // ---------------------------
+        // 初始化 Web Audio 上下文與節點
+        this.reinitContext();
 
         this.bufferMap = new Map();
         this.playingSources = new Map();
@@ -355,35 +351,9 @@ class AudioManager {
 
         this.bgmBuffer = null;
         this.bgmSource = null;
-        this.bgmGainNode = this.ctx.createGain();
-        this.bgmGainNode.connect(this.masterGain);
-        this.bgmVolume = 0.8;
-        this.bgmGainNode.gain.value = this.bgmVolume;
         this.bgmStartTime = 0; // 紀錄是在全域時間第幾秒按下播放的
         this.bgmOffset = 0;    // 紀錄是從歌曲的第幾秒開始播的
         this.playbackRate = 1.0;
-
-        this.sfxGainNode = this.ctx.createGain();
-        this.sfxGainNode.connect(this.masterGain);
-        this.sfxMasterVolume = 0.5;
-        this.sfxGainNode.gain.value = this.sfxMasterVolume;
-
-        this.longSoundGainNode = this.ctx.createGain();
-        this.longSoundGainNode.gain.value = 0.25;
-
-        // 建立 DynamicsCompressorNode，避免多個 long sound 疊加造成爆音
-        this.longSoundCompressor = this.ctx.createDynamicsCompressor();
-        const now = this.ctx.currentTime;
-        // 初始參數，可依需求微調
-        this.longSoundCompressor.threshold.setValueAtTime(-16, now);
-        this.longSoundCompressor.knee.setValueAtTime(8, now);
-        this.longSoundCompressor.ratio.setValueAtTime(4, now);
-        this.longSoundCompressor.attack.setValueAtTime(0.005, now);
-        this.longSoundCompressor.release.setValueAtTime(0.25, now);
-
-        // 連線：longGain -> compressor -> sfx master
-        this.longSoundGainNode.connect(this.longSoundCompressor);
-        this.longSoundCompressor.connect(this.sfxGainNode);
 
         this.soundFiles = {
             'clock': './Sounds/clock.wav',
@@ -412,7 +382,7 @@ class AudioManager {
             'break_slide_start': 0.4,
             'touch': 0.4,
             'hanabi': 0.6,
-        }
+        };
 
         this.activeLongSounds = new Map();
         this.loopPoints = {
@@ -422,11 +392,80 @@ class AudioManager {
     }
 
     /**
+     * 重新初始化 AudioContext，主要用於裝置故障、關閉重啟等防禦性復原
+     */
+    reinitContext() {
+        try {
+            if (this.ctx) {
+                try {
+                    this.ctx.close();
+                } catch (e) {}
+            }
+
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContextClass();
+
+            // 建立總音量控制節點
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = this.globalGain;
+            this.masterGain.connect(this.ctx.destination);
+
+            // BGM Gain 節點
+            this.bgmGainNode = this.ctx.createGain();
+            this.bgmGainNode.connect(this.masterGain);
+            this.bgmGainNode.gain.value = this.bgmVolume;
+
+            // SFX Master Gain 節點
+            this.sfxGainNode = this.ctx.createGain();
+            this.sfxGainNode.connect(this.masterGain);
+            this.sfxGainNode.gain.value = this.sfxMasterVolume;
+
+            // Long Sound Gain 節點
+            this.longSoundGainNode = this.ctx.createGain();
+            this.longSoundGainNode.gain.value = 0.25;
+
+            // DynamicsCompressorNode
+            this.longSoundCompressor = this.ctx.createDynamicsCompressor();
+            const now = this.ctx.currentTime;
+            this.longSoundCompressor.threshold.setValueAtTime(-16, now);
+            this.longSoundCompressor.knee.setValueAtTime(8, now);
+            this.longSoundCompressor.ratio.setValueAtTime(4, now);
+            this.longSoundCompressor.attack.setValueAtTime(0.005, now);
+            this.longSoundCompressor.release.setValueAtTime(0.25, now);
+
+            this.longSoundGainNode.connect(this.longSoundCompressor);
+            this.longSoundCompressor.connect(this.sfxGainNode);
+
+            this.ctx.addEventListener('statechange', () => {
+                console.log(`[Audio] AudioContext state changed to: ${this.ctx.state}`);
+            });
+        } catch (e) {
+            console.error('[Audio] Failed to initialize AudioContext:', e);
+        }
+    }
+
+    /**
+     * 防禦性確認 AudioContext 狀態並嘗試重啟或解鎖
+     */
+    ensureContextSync() {
+        if (!this.ctx || this.ctx.state === 'closed') {
+            console.warn('[Audio] AudioContext is null or closed. Re-initializing...');
+            this.reinitContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch((err) => {
+                console.warn('[Audio] Failed to resume AudioContext:', err);
+            });
+        }
+    }
+
+    /**
      * 設定並載入背景音樂 (支援 URL 或 Blob/File)
      * @param {string|Blob} source - 音訊來源
      * @param {File} originalFile - 原始 File 對象 (用於導出時保留檔案名和二進制數據)
      */
     async setBackgroundMusic(source, originalFile = null) {
+        this.ensureContextSync();
         try {
             // 優先保存原始 File 對象，否則保存來源
             this.bgmFile = originalFile || source;
@@ -479,6 +518,7 @@ class AudioManager {
     * 調整 BGM 音量 (0.0 到 1.0)
     */
     setBGMVolume(value) {
+        this.ensureContextSync();
         this.bgmVolume = Math.max(0, Math.min(1, value));
         this.bgmGainNode.gain.setTargetAtTime(this.bgmVolume, this.ctx.currentTime, 0.05);
     }
@@ -488,6 +528,7 @@ class AudioManager {
      * @param {number} rate - 播放速率（例如 1.0、1.5、0.75）
      */
     setPlaybackRate(rate) {
+        this.ensureContextSync();
         this.playbackRate = Math.max(0.1, Math.min(4, Number(rate) || 1));
         if (this.bgmSource) {
             // 使用 .setTargetAtTime 防止速率突變造成耳朵不適
@@ -502,6 +543,7 @@ class AudioManager {
  */
     playBGM(startTime = 0, volume = 1) {
         if (!this.bgmBuffer) return;
+        this.ensureContextSync();
         this.stopBGM();
 
         this.bgmSource = this.ctx.createBufferSource();
@@ -566,12 +608,14 @@ class AudioManager {
      * 動態調整全域音量 (0.0 到 1.0)
      */
     setGlobalVolume(value) {
+        this.ensureContextSync();
         this.globalGain = Math.max(0, Math.min(1, value));
         // 使用 exponentialRamp 讓音量調整聽起來更自然，且防止爆音
         this.masterGain.gain.setTargetAtTime(this.globalGain, this.ctx.currentTime, 0.05);
     }
 
     setSFXVolume(value) {
+        this.ensureContextSync();
         this.sfxMasterVolume = Math.max(0, Math.min(1, value));
         // 使用 exponentialRamp 讓音量調整聽起來更自然，且防止爆音
         this.sfxGainNode.gain.setTargetAtTime(this.sfxMasterVolume, this.ctx.currentTime, 0.05);
@@ -590,6 +634,7 @@ class AudioManager {
      * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)
      */
     async init(onProgress) {
+        this.ensureContextSync();
         const keys = Object.keys(this.soundFiles);
         const total = keys.length;
         let loaded = 0;
@@ -752,11 +797,9 @@ class AudioManager {
      * 執行最終播放 (Web Audio API 核心)
      */
     play(key, isMono = false, volume = 1, playTime = null) {
+        this.ensureContextSync();
         const buffer = this.bufferMap.get(key);
         if (!buffer) return;
-
-        // 解鎖音訊限制
-        if (this.ctx.state === 'suspended') this.ctx.resume();
 
         // Mono 模式處理 (預約在未來新音效開始播放時才中斷舊音效，避免提早中斷產生靜音間隙)
         if (isMono && this.playingSources.has(key)) {

@@ -2970,31 +2970,31 @@ function getGridSlots(maxTime) {
         }
         return slots;
     }
-    
+
     const bpmTags = decodedTags.filter(t => t.type === 'bpm').sort((a, b) => a.time - b.time);
     if (bpmTags.length === 0) {
         bpmTags.push({ time: 0, value: clockBpm || 60 });
     }
-    
+
     const tb2 = settings.tb2 || 4;
-    
+
     for (let i = 0; i < bpmTags.length; i++) {
         const tag = bpmTags[i];
         const nextTag = bpmTags[i + 1];
         const endTimeForTag = nextTag ? nextTag.time : Math.max(endTime, maxTime);
         const beatPeriod = (240 / tag.value) / tb2;
-        
+
         let t = tag.time;
         while (t < endTimeForTag - 0.001) {
             slots.push(t);
             t += beatPeriod;
         }
     }
-    
+
     if (slots.length === 0 || slots[slots.length - 1] < Math.max(endTime, maxTime) - 0.001) {
         slots.push(Math.max(endTime, maxTime));
     }
-    
+
     return slots;
 }
 
@@ -3019,20 +3019,20 @@ const getOrCreateCommaIndex = (snappedTime) => {
         dataIndexToTime = [0];
         return 0;
     }
-    
+
     for (let idx = 0; idx < dataIndexToTime.length; idx++) {
         if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.05) {
             return idx;
         }
     }
-    
+
     const lastIndex = dataIndexToTime.length - 1;
     const lastTime = dataIndexToTime[lastIndex];
     if (snappedTime > lastTime) {
         const currentBpm = clockBpm || 60;
         const currentGrid = settings.tb2 || 4;
         const timeStep = (240 / currentBpm) / currentGrid;
-        
+
         const numCommas = Math.round((snappedTime - lastTime) / timeStep);
         if (numCommas > 0) {
             for (let k = 0; k < numCommas; k++) {
@@ -3044,7 +3044,7 @@ const getOrCreateCommaIndex = (snappedTime) => {
             return lastIndex + numCommas;
         }
     }
-    
+
     return null;
 };
 
@@ -5802,3 +5802,13 @@ function _init() {
         }
     });
 }
+
+// 全域解鎖 AudioContext 監聽器，確保首次使用者互動時能解鎖被瀏覽器掛起的 AudioContext
+const unlockAudio = () => {
+    if (audioManager) {
+        audioManager.ensureContextSync();
+    }
+};
+window.addEventListener('click', unlockAudio, { once: true });
+window.addEventListener('keydown', unlockAudio, { once: true });
+window.addEventListener('touchstart', unlockAudio, { once: true });

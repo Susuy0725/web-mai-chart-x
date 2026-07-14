@@ -110,7 +110,7 @@ export class SimaiRenderer {
             play_score: null,
             backgroundDarkness: null,
         };
-        
+
         // 優化垃圾回收 (GC) 的重用物件與快取
         this._zoneCounts = {};
         this.drawnBorders = new Set();
@@ -349,7 +349,7 @@ export class SimaiRenderer {
             }
         }
         this.drawnBorders.clear();
-        
+
         // 重置 hanabiEffect 狀態，避免每幀分配新物件
         for (const k in this.hanabiEffect) {
             this.hanabiEffect[k].cleared = true;
@@ -516,7 +516,7 @@ export class SimaiRenderer {
                 const dotIdx = trueScore.indexOf(".");
                 const part0 = dotIdx === -1 ? trueScore : trueScore.substring(0, dotIdx);
                 const part1 = dotIdx === -1 ? "" : trueScore.substring(dotIdx + 1);
-                
+
                 let scoreColor = "#4061A8";
                 if (trueScore > 80) {
                     scoreColor = "#9E3D2E";
@@ -1077,18 +1077,96 @@ export class SimaiVisualEditor {
         this._tintCache = new Map();
         this._tempColorConfig = { colorCode: '' };
 
+        // Callbacks & Snapping for editing
+        this.onPlaceNote = null;
+        this.onDeleteNote = null;
+        this.onChangeNote = null;
+        this.quantizeTime = null;
+        this.hoverLane = null;
+
         // 綁定滑鼠事件以切換方塊顏色並更新位置
         if (this.canvas && this.canvas.addEventListener) {
             this._onPointerDown = this._onPointerDown.bind(this);
             this._onPointerUp = this._onPointerUp.bind(this);
+            this._onPointerLeave = this._onPointerLeave.bind(this);
             this._onPointerMove = this._onPointerMove.bind(this);
+            this._onContextMenu = this._onContextMenu.bind(this);
+
             // use capture to ensure marker events are detected before other handlers
             this.canvas.addEventListener('pointerdown', this._onPointerDown, { capture: true, passive: false });
             this.canvas.addEventListener('pointerup', this._onPointerUp, { capture: true });
-            this.canvas.addEventListener('pointercancel', this._onPointerUp, { capture: true });
-            this.canvas.addEventListener('pointerleave', this._onPointerUp, { capture: true });
+            this.canvas.addEventListener('pointercancel', this._onPointerLeave, { capture: true });
+            this.canvas.addEventListener('pointerleave', this._onPointerLeave, { capture: true });
             this.canvas.addEventListener('pointermove', this._onPointerMove, { capture: true, passive: false });
+            this.canvas.addEventListener('contextmenu', this._onContextMenu);
         }
+    }
+
+    setNoteEditCallbacks(onPlace, onDelete, onChange) {
+        this.onPlaceNote = onPlace;
+        this.onDeleteNote = onDelete;
+        this.onChangeNote = onChange;
+    }
+
+    setTimeQuantizer(quantizer) {
+        this.quantizeTime = quantizer;
+    }
+
+    _hitTestLane(mouseX) {
+        let closestLane = null;
+        let minDiff = Infinity;
+        for (let i = 0; i < 8; i++) {
+            const diff = Math.abs(mouseX - visualNoteRefPos[i].x);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestLane = i + 1;
+            }
+        }
+        if (minDiff <= 50) {
+            return closestLane;
+        }
+        return null;
+    }
+
+    _hitTestNote(mouseX, mouseY) {
+        if (!this._state || !this._state.visualBuckets) return null;
+        const tolerance = this.settings.noteBaseSize * 1.5;
+        const zoom = this.zoom;
+        const gt = this.globalTime;
+
+        // Helper check for a candidate note
+        const checkCandidate = (note, noteX) => {
+            const noteY = (note.time - gt) * -zoom;
+            const dx = mouseX - noteX;
+            const dy = mouseY - noteY;
+            return dx * dx + dy * dy <= tolerance * tolerance;
+        };
+
+        // 1. Check tapnhold
+        for (const note of this._state.visualBuckets.tapnhold) {
+            const noteX = visualNoteRefPos[note.pos - 1].x;
+            if (checkCandidate(note, noteX)) {
+                return note;
+            }
+        }
+
+        // 2. Check slide
+        for (const note of this._state.visualBuckets.slide) {
+            const noteX = visualNoteRefPos[note.pos - 1].x;
+            if (checkCandidate(note, noteX)) {
+                return note;
+            }
+        }
+
+        // 3. Check touch
+        for (const note of this._state.visualBuckets.touch) {
+            const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
+            if (checkCandidate(note, posInfo.x)) {
+                return note;
+            }
+        }
+
+        return null;
     }
 
     getMemoizedTintedImage(imgKey, opacity, config) {
@@ -1544,6 +1622,24 @@ export class SimaiVisualEditor {
             else this.drawTap(n);
         });
         visualBuckets.touch.forEach(n => this.drawTouch(n));
+
+        // 繪製 Ghost Note 預覽
+        if (this.hoverLane !== null && this.quantizeTime) {
+            const snappedTime = this.quantizeTime(this.globalTime - this.mouseY / this.zoom);
+            if (snappedTime !== null && snappedTime !== undefined) {
+                const t = snappedTime - this.globalTime;
+                const img = this.images["tap"];
+                if (img && !imgNotExists(img)) {
+                    const size = this.settings.noteBaseSize;
+                    ctx.save();
+                    ctx.translate(visualNoteRefPos[this.hoverLane - 1].x, t * -this.zoom);
+                    ctx.globalAlpha = 0.45;
+                    this.drawImgAtcenter(img, size);
+                    ctx.restore();
+                }
+            }
+        }
+
         // this._drawMarker();
     }
 
@@ -1593,32 +1689,77 @@ export class SimaiVisualEditor {
         ctx.restore();
     }
 
-    _onPointerDown(e) {
-        if (e.button !== 0) return;
-        this.markerPressed = true;
-        this._updMousePos(e);
+    _onContextMenu(e) {
+        e.preventDefault();
+    }
 
-        // 只有在循環沒有執行時才手動重繪
+    _onPointerDown(e) {
+        this._updMousePos(e);
+        const clickedNote = this._hitTestNote(this.mouseX, this.mouseY);
+        const lane = this._hitTestLane(this.mouseX);
+
+        if (e.button === 0) { // 左鍵
+            this.markerPressed = true;
+            if (clickedNote !== null) {
+                e.stopPropagation();
+                if (this.onChangeNote) {
+                    this.onChangeNote(clickedNote);
+                }
+            } else if (lane !== null) {
+                e.stopPropagation();
+                const clickTime = this.globalTime - this.mouseY / this.zoom;
+                if (this.onPlaceNote) {
+                    this.onPlaceNote(lane, clickTime);
+                }
+            }
+        } else if (e.button === 2) { // 右鍵
+            if (clickedNote !== null) {
+                e.stopPropagation();
+                if (this.onDeleteNote) {
+                    this.onDeleteNote(clickedNote);
+                }
+            } else if (lane !== null) {
+                e.stopPropagation();
+            }
+        }
+
         if (!this._isLoopActive()) {
             this._upd();
         }
     }
 
-    _onPointerUp() {
-        this.markerPressed = false;
+    _onPointerUp(e) {
+        if (e.button === 0) {
+            this.markerPressed = false;
+        }
 
+        if (!this._isLoopActive()) {
+            this._upd();
+        }
+    }
+
+    _onPointerLeave() {
+        this.markerPressed = false;
+        this.hoverLane = null;
+        this.canvas.style.cursor = 'grab';
         if (!this._isLoopActive()) {
             this._upd();
         }
     }
 
     _onPointerMove(e) {
-        // 1. 永遠更新座標，以便下一幀渲染時使用新位置
         this._updMousePos(e);
         this.markerX = this.mouseX;
 
-        // 2. 判斷是否需要手動觸發渲染
-        // 如果主循環 (Playing 或 KeepRendering) 正在跑，我們就不手動呼叫 render
+        this.hoverLane = this._hitTestLane(this.mouseX);
+
+        // 如果懸停在有效音軌上，顯示 crosshair 代表可以點擊編輯，否則顯示 grab 代表拖拽滾動
+        if (this.hoverLane !== null) {
+            this.canvas.style.cursor = 'crosshair';
+        } else {
+            this.canvas.style.cursor = 'grab';
+        }
+
         if (!this._isLoopActive()) {
             this._upd();
         }

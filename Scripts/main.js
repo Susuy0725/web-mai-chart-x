@@ -33,8 +33,10 @@ if ('serviceWorker' in navigator) {
                 });
             });
 
-            // 強制立刻檢查更新
-            reg.update();
+            // 強制立刻檢查更新，並捕獲可能發生的錯誤
+            reg.update().catch((err) => {
+                console.warn('Service worker update failed:', err);
+            });
         })
         .catch((err) => {
             console.warn('Service worker registration failed:', err);
@@ -2957,6 +2959,245 @@ helpButton.addEventListener('click', () => {
     });
 });
 
+function getGridSlots(maxTime) {
+    const slots = [];
+    if (!decodedTags || decodedTags.length === 0) {
+        const bpm = clockBpm || 60;
+        const tb2 = settings.tb2 || 4;
+        const beatPeriod = (240 / bpm) / tb2;
+        for (let t = 0; t <= maxTime; t += beatPeriod) {
+            slots.push(t);
+        }
+        return slots;
+    }
+    
+    const bpmTags = decodedTags.filter(t => t.type === 'bpm').sort((a, b) => a.time - b.time);
+    if (bpmTags.length === 0) {
+        bpmTags.push({ time: 0, value: clockBpm || 60 });
+    }
+    
+    const tb2 = settings.tb2 || 4;
+    
+    for (let i = 0; i < bpmTags.length; i++) {
+        const tag = bpmTags[i];
+        const nextTag = bpmTags[i + 1];
+        const endTimeForTag = nextTag ? nextTag.time : Math.max(endTime, maxTime);
+        const beatPeriod = (240 / tag.value) / tb2;
+        
+        let t = tag.time;
+        while (t < endTimeForTag - 0.001) {
+            slots.push(t);
+            t += beatPeriod;
+        }
+    }
+    
+    if (slots.length === 0 || slots[slots.length - 1] < Math.max(endTime, maxTime) - 0.001) {
+        slots.push(Math.max(endTime, maxTime));
+    }
+    
+    return slots;
+}
+
+const quantizeTime = (time) => {
+    const slots = getGridSlots(time + 2.0);
+    let closestTime = 0;
+    let minDiff = Infinity;
+    for (const t of slots) {
+        const diff = Math.abs(t - time);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestTime = t;
+        }
+    }
+    if (minDiff > 2.0) return null;
+    return closestTime;
+};
+
+const getOrCreateCommaIndex = (snappedTime) => {
+    if (!dataIndexToTime || dataIndexToTime.length === 0) {
+        rawData = [""];
+        dataIndexToTime = [0];
+        return 0;
+    }
+    
+    for (let idx = 0; idx < dataIndexToTime.length; idx++) {
+        if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.05) {
+            return idx;
+        }
+    }
+    
+    const lastIndex = dataIndexToTime.length - 1;
+    const lastTime = dataIndexToTime[lastIndex];
+    if (snappedTime > lastTime) {
+        const currentBpm = clockBpm || 60;
+        const currentGrid = settings.tb2 || 4;
+        const timeStep = (240 / currentBpm) / currentGrid;
+        
+        const numCommas = Math.round((snappedTime - lastTime) / timeStep);
+        if (numCommas > 0) {
+            for (let k = 0; k < numCommas; k++) {
+                rawData.push("");
+            }
+            for (let k = 1; k <= numCommas; k++) {
+                dataIndexToTime[lastIndex + k] = lastTime + k * timeStep;
+            }
+            return lastIndex + numCommas;
+        }
+    }
+    
+    return null;
+};
+
+function stripLeadingTags(str) {
+    return str.replace(/^(?:(?:\([^\)]*\))|(?:\{[^\}]*\})|(?:<[^>]*>))+/, '');
+}
+
+function updateEditorAndSave(newContent) {
+    recordEditorHistory();
+    editorInput.value = newContent;
+    recordEditorHistory();
+
+    applyHighlight(newContent);
+    getres(newContent);
+
+    maidata["inote_" + nowDifficulty] = newContent;
+    saveMaidata();
+}
+
+const visualPlaceNote = (lane, clickTime) => {
+    const snappedTime = quantizeTime(clickTime);
+    if (snappedTime === null || snappedTime === undefined) {
+        simpleToast({ content: '點擊位置離最近的節拍線太遠，無法放置音符', type: 'warning', timeout: 1500 });
+        return;
+    }
+
+    const closestIndex = getOrCreateCommaIndex(snappedTime);
+    if (closestIndex === null || closestIndex === undefined) {
+        simpleToast({ content: '無法定位或擴充該時間位置的拍子', type: 'warning', timeout: 1500 });
+        return;
+    }
+
+    const segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
+    if (segment.startsWith("||")) {
+        simpleToast({ content: '無法在註解行內放置音符', type: 'warning', timeout: 1500 });
+        return;
+    }
+
+    const parts = segment === "" ? [] : segment.split('/');
+    const alreadyOccupied = parts.some(p => {
+        const clean = stripLeadingTags(p);
+        return clean.startsWith(String(lane));
+    });
+
+    if (alreadyOccupied) {
+        return;
+    }
+
+    const cleanNotePart = stripLeadingTags(segment);
+    let newSegment = "";
+    if (cleanNotePart === "") {
+        newSegment = segment + String(lane);
+    } else {
+        newSegment = segment + "/" + String(lane);
+    }
+
+    rawData[closestIndex] = newSegment;
+    const newContent = rawData.join(',');
+    updateEditorAndSave(newContent);
+
+    simpleToast({ content: `已在軌道 ${lane} 放置 Tap 音符`, type: 'success', timeout: 1000 });
+};
+
+const visualDeleteNote = (note) => {
+    const commaIndex = note.index;
+    if (commaIndex === undefined || commaIndex === null) return;
+    const lane = note.pos;
+    if (!lane) return;
+
+    const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+    if (segment === "" || segment.startsWith("||")) return;
+
+    const parts = segment.split('/');
+    const partIndex = parts.findIndex(p => {
+        const clean = stripLeadingTags(p);
+        return clean.startsWith(String(lane));
+    });
+
+    if (partIndex === -1) return;
+
+    parts.splice(partIndex, 1);
+    const newSegment = parts.join('/');
+    rawData[commaIndex] = newSegment;
+
+    const newContent = rawData.join(',');
+    updateEditorAndSave(newContent);
+
+    simpleToast({ content: `已刪除軌道 ${lane} 的音符`, type: 'info', timeout: 1000 });
+};
+
+function getNextNoteClean(clean, L) {
+    const isSpecial = /[h\-<>^vpqszVw]/.test(clean);
+    if (isSpecial) {
+        return String(L);
+    }
+
+    const isBreak = clean.includes('b');
+    const isStar = clean.includes('$');
+    const isEx = clean.includes('x');
+
+    if (!isBreak && !isStar && !isEx) {
+        return `${L}$`;
+    } else if (isStar && !isBreak && !isEx) {
+        return `${L}b`;
+    } else if (isBreak && !isStar && !isEx) {
+        return `${L}x`;
+    } else if (isEx && !isBreak && !isStar) {
+        return `${L}b$`;
+    } else if (isBreak && isStar && !isEx) {
+        return `${L}bx`;
+    } else if (isBreak && isEx && !isStar) {
+        return `${L}x$`;
+    } else if (isEx && isStar && !isBreak) {
+        return `${L}bx$`;
+    } else {
+        return String(L);
+    }
+}
+
+const visualChangeNote = (note) => {
+    const commaIndex = note.index;
+    if (commaIndex === undefined || commaIndex === null) return;
+    const lane = note.pos;
+    if (!lane) return;
+
+    const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+    if (segment === "" || segment.startsWith("||")) return;
+
+    const parts = segment.split('/');
+    const partIndex = parts.findIndex(p => {
+        const clean = stripLeadingTags(p);
+        return clean.startsWith(String(lane));
+    });
+
+    if (partIndex === -1) return;
+
+    const originalPart = parts[partIndex];
+    const clean = stripLeadingTags(originalPart);
+    const prefix = originalPart.substring(0, originalPart.length - clean.length);
+
+    const nextClean = getNextNoteClean(clean, lane);
+    const newPart = prefix + nextClean;
+
+    parts[partIndex] = newPart;
+    const newSegment = parts.join('/');
+    rawData[commaIndex] = newSegment;
+
+    const newContent = rawData.join(',');
+    updateEditorAndSave(newContent);
+
+    simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
+};
+
 function recordEditorHistory() {
     if (editorInput.value !== lastEditorValue) {
         const change = computeChange(lastEditorValue, editorInput.value);
@@ -5435,8 +5676,10 @@ function _init() {
                 visualEditorRenderer = new SimaiVisualEditor(visualEditor, settings);
                 visualEditorRenderer.setImages(images);
                 visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
-                audioManager.setBGMVolume(settings.musicVolume);
                 visualEditorRenderer.setZoom(settings.visualZoom);
+                visualEditorRenderer.setNoteEditCallbacks(visualPlaceNote, visualDeleteNote, visualChangeNote);
+                visualEditorRenderer.setTimeQuantizer(quantizeTime);
+                audioManager.setBGMVolume(settings.musicVolume);
                 previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
                 previewRender.setZoom(settings.visualZoom);
                 setPlaybackSpeed(settings.playbackSpeed);

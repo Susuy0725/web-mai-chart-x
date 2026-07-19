@@ -29,6 +29,10 @@
 本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
 - 音符圖案與音訊素材資源來自 [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
 
+### 📖 授權條款
+
+本專案依據 **GNU General Public License v3.0 (GPL-3.0)** 條款開源。詳細內容請參閱專案根目錄下的 `LICENSE` 檔案。
+
 ---
 
 ## English
@@ -54,3 +58,7 @@ While perfecting the functions that a general editor should have, we also added 
 
 Special thanks to the open-source community for providing the assets:
 - Skin and media resources are derived from [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).
+
+### 📖 License
+
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the `LICENSE` file for details.

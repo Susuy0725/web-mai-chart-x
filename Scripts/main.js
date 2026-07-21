@@ -5824,6 +5824,7 @@ async function loadProject(projectId) {
 
     const list = await projectList();
     const proj = list.find(p => p.id === projectId);
+    return proj;
 }
 
 /**
@@ -5963,8 +5964,8 @@ function openProjectManager() {
                     const name = prompt('請輸入專案名稱：', '未命名專案');
                     if (name === null) return;
                     const newId = await projectCreate(t('popup.projectManager.untitled'));
-                    await loadProject(newId);
-                    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
+                    const proj = await loadProject(newId);
+                    simpleToast({ content: `已切換至專案：${proj.name || '未命名'}`, type: 'success', timeout: 1500 });
                     buildList(container);
                 }
             },

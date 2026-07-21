@@ -23,6 +23,7 @@ export const en = {
         toolsFetchFromMainote: "Fetch from Mainote",
         toolsI18nEditor: "i18n Translation Editor",
         toolsPopup: "Popout Preview",
+        toolsPopupOpened: "Opened in external window",
         manageResources: "Resource Manager",
         chartInfo: "Chart Info",
         settings: "Settings",
@@ -323,5 +324,12 @@ export const en = {
                 `<b>Scale Rate</b>: <span class="code-highlight">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity.`
             ]
         }
+    },
+    rpc: {
+        idleDetails: "Staring at a blank page",
+        idleState: "Idle",
+        editingDetails: "Editing: {title}",
+        difficultyState: "Difficulty: {diff}",
+        unknownDiff: "Unknown"
     }
 };

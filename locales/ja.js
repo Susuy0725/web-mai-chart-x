@@ -23,6 +23,7 @@ export const ja = {
         toolsFetchFromMainote: "Mainoteから取得",
         toolsI18nEditor: "i18n翻訳エディタ",
         toolsPopup: "ポップアウトプレビュー",
+        toolsPopupOpened: "外部ウィンドウで開いています",
         manageResources: "リソース管理",
         chartInfo: "譜面情報",
         settings: "設定",
@@ -324,5 +325,12 @@ export const ja = {
                 `<b>スクロール速度変更</b>: <span class="code-highlight">Ctrl</span> + マウスホイールでタイムラインの流速をズームします。`
             ]
         }
+    },
+    rpc: {
+        idleDetails: "白紙を眺めています",
+        idleState: "アイドル中",
+        editingDetails: "編集中: {title}",
+        difficultyState: "難易度: {diff}",
+        unknownDiff: "不明"
     }
 };

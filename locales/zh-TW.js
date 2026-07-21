@@ -23,6 +23,7 @@ export const zhTW = {
         toolsFetchFromMainote: "從Mainote抓取資料",
         toolsI18nEditor: "多語言編輯器",
         toolsPopup: "預覽彈出",
+        toolsPopupOpened: "已在外部視窗開啟",
         manageResources: "資源管理",
         chartInfo: "譜面資訊",
         settings: "設定",
@@ -324,5 +325,12 @@ export const zhTW = {
                 `<b>快速面板</b>：在設定開啟後按<span class="code-highlight">Ctrl</span><span class="code-highlight">Shift</span> 並將滑鼠移向欲執行的功能，再放開<span class="code-highlight">Ctrl</span><span class="code-highlight">Shift</span>。`
             ]
         }
+    },
+    rpc: {
+        idleDetails: "正在對著白紙發呆",
+        idleState: "閒置中",
+        editingDetails: "正在編輯: {title}",
+        difficultyState: "難度: {diff}",
+        unknownDiff: "未知難度"
     }
 };

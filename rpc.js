@@ -1,3 +1,5 @@
+import { t } from './Scripts/i18n.js';
+
 let rpcStartTime = Date.now();
 
 const diffMap = {
@@ -18,13 +20,13 @@ const diffMap = {
 export function updateDiscordRPC(maidata, nowDifficulty) {
     // 確保有被 Electron 包覆，並且有掛載 updateDiscordRPC
     if (window.electronAPI && window.electronAPI.updateDiscordRPC) {
-        let details = '正在對著白紙發呆';
-        let state = '閒置中';
+        let details = t('rpc.idleDetails');
+        let state = t('rpc.idleState');
 
         if (maidata && maidata.title) {
-            details = '正在編輯: ' + maidata.title;
-            const diffName = diffMap[String(nowDifficulty)] || '未知難度';
-            state = '難度: ' + diffName;
+            details = t('rpc.editingDetails', { title: maidata.title });
+            const diffName = diffMap[String(nowDifficulty)] || t('rpc.unknownDiff');
+            state = t('rpc.difficultyState', { diff: diffName });
         }
 
         window.electronAPI.updateDiscordRPC({

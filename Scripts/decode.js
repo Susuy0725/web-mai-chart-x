@@ -57,11 +57,18 @@ export function simaiDecode(data = "", baseOffset = true) {
             if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
             e = result.residue;
             tags.push({ type: 'bpm', value: nowBpm, time: nowTime });
+            let tg;
             if (lastBpmTag !== -1) {
-                let tg = tags[lastBpmTag];
+                tg = tags[lastBpmTag];
                 tg.nextTime = nowTime;
             }
             lastBpmTag = tags.length - 1;
+            if (lastSplitTag !== -1 && tags[lastSplitTag].time !== nowTime && tg.bpm !== nowBpm) {
+                tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime, nohead: true });
+                tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
+                lastSplitTag = tags.length - 1;
+                lastSplitTagCommIndex = noteCommaIndex;
+            }
         }
         if (e.includes('{')) {
             overrideSplitTime = null; // reset overrideSplit at the start of each new tag
@@ -73,7 +80,10 @@ export function simaiDecode(data = "", baseOffset = true) {
                 nowSplit = result.value;
             }
             e = result.residue;
-            tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime });
+            tags.push({
+                type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime,
+                nohead: lastBpmTag !== -1 && tags[lastBpmTag].time === nowTime,
+            });
             lastSplitTag = tags.length - 1;
             lastSplitTagCommIndex = noteCommaIndex;
         }
@@ -546,7 +556,7 @@ slide: ${slideCounts},
 touch: ${touchCounts},
 break: ${breakCounts}`
     )
-    console.log(warnpos);
+    console.log(tags);
     console.groupEnd();
     return {
         notes,
@@ -554,7 +564,7 @@ break: ${breakCounts}`
         tags,
         bpm: firstBpm,
         baseOffset,
-        notesConts: {
+        notesCounts: {
             tap: tapCounts,
             hold: holdCounts,
             slide: slideCounts,

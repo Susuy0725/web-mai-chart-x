@@ -413,7 +413,7 @@ class AudioManager {
             if (this.ctx) {
                 try {
                     this.ctx.close();
-                } catch (e) {}
+                } catch (e) { }
             }
 
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -2506,6 +2506,7 @@ export async function videoRender(audioManager, canvas, renderer, {
     }
 
     const mainCtx = canvas.getContext('2d');
+    const currentContext = renderer?.ctx || mainCtx;
 
     let exportVideo = null;
     let output = null;
@@ -2855,7 +2856,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         }
 
         if (popup.isClosed) {
-            try { renderer.setContext(mainCtx); } catch (e) { }
+            try { renderer.setContext(currentContext); } catch (e) { }
             return;
         }
 
@@ -2919,7 +2920,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         for (let i = 0; i < frameCount; i++) {
             if (popup.isClosed) {
                 console.log('逐幀渲染已取消');
-                try { renderer.setContext(mainCtx); } catch (e) { }
+                try { renderer.setContext(currentContext); } catch (e) { }
                 return;
             }
 
@@ -3091,7 +3092,7 @@ export async function videoRender(audioManager, canvas, renderer, {
 
         simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
 
-        renderer.setContext(mainCtx);
+        renderer.setContext(currentContext);
         popup.setProgress(100);
         popup.setContent('完成');
 
@@ -3102,7 +3103,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         console.error('逐幀渲染失敗', err);
         simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
         try { popup.setContent('錯誤：' + String(err)); } catch (e) { }
-        try { renderer.setContext(mainCtx); } catch (e) { }
+        try { renderer.setContext(currentContext); } catch (e) { }
     } finally {
         if (exportVideo && exportVideo.parentNode) {
             exportVideo.parentNode.removeChild(exportVideo);
@@ -3120,6 +3121,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         if (output && output.state !== 'finalized' && output.state !== 'canceled') {
             output.cancel().catch(e => console.error("Error cancelling output:", e));
         }
+        try { renderer.setContext(currentContext); } catch (e) { }
     }
 }
 

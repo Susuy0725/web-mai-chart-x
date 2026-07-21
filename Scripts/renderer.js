@@ -1482,6 +1482,7 @@ export class SimaiVisualEditor {
                 } else {
                     ctx.strokeStyle = '#ffffff';
                     if (i === 0) {
+                        if (tag.nohead) continue;
                         ctx.globalAlpha = 1; // 起點的線條保持不透明
                         ctx.save(); // 保存當前狀態
                         ctx.fillStyle = '#9c9c9c';
@@ -1832,7 +1833,7 @@ export class SimaiPreviewRenderer {
 
     drawTag(tag) {
         const { ctx } = this;
-        const { width: w, height: h, halfWidth: hw } = this.getCanvasWH();
+        const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
         const zoom = this.zoom || 1;
         const bs = this.settings.noteBaseSize;
         //const lineWidth = bs * (tag.type === 'bpm' ? 6 : 4);
@@ -1878,15 +1879,15 @@ export class SimaiPreviewRenderer {
                     const parts = (tb1 * tb2) / 4;
                     if (parts > 1) {
                         ctx.save();
-                        ctx.strokeStyle = 'rgba(255, 217, 0, 0.4)';
+                        ctx.strokeStyle = 'rgba(255, 217, 0, 0.3)';
                         ctx.lineWidth = 1;
                         for (let b = 1; b < parts; b++) {
                             const subTime = tag.time + i * period + b * beatPeriod;
                             if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
                             const subPosX = (delta + i * period + b * beatPeriod) * zoom + hw;
                             ctx.beginPath();
-                            ctx.moveTo(subPosX, 0);
-                            ctx.lineTo(subPosX, h);
+                            ctx.moveTo(subPosX, h);
+                            ctx.lineTo(subPosX, hh);
                             ctx.stroke();
                         }
                         ctx.restore();
@@ -1894,6 +1895,7 @@ export class SimaiPreviewRenderer {
                 } else {
                     ctx.lineWidth = 1;
                     if (i === 0) {
+                        if (tag.nohead) continue;
                         ctx.strokeStyle = '#ffffff';
                     } else {
                         ctx.strokeStyle = 'rgb(128, 128, 128)';

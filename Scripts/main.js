@@ -129,6 +129,7 @@ const playbackReset = getButton("playbackSpeed", "utility");
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const helpButton = getButton("help", "utility");
+const fullscreenButton = getButton("fullscreen", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
@@ -136,26 +137,168 @@ const previewCanvas = document.getElementById('miniPreview');
 const previewZoomInButton = document.getElementById('mpzoomIn');
 const previewZoomOutButton = document.getElementById('mpzoomOut');
 const editorContainer = document.getElementById('editorContainer');
+const panelSplitter = document.getElementById('panelSplitter');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
 const quickPanel = document.getElementById('quick-panel');
 const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
+const canvasOutline = document.getElementById('canvasOutline');
+const backgroundContainer = document.querySelector('#canvasContainer .backgroundContainer');
+
+function applySplitRatio(ratio) {
+    document.documentElement.style.setProperty('--split-ratio', ratio);
+}
+
+let canvasSnapped = false, noRender = false;
+
+function snapHideCanvas() {
+    canvasSnapped = true;
+    noRender = true;
+    canvasContainer.style.display = 'none';
+    editorContainer.style.left = '0';
+    editorContainer.style.width = '100%';
+    editorContainer.style.marginLeft = '10px';
+    if (panelSplitter) {
+        panelSplitter.style.display = 'block';
+        panelSplitter.classList.add('snapped');
+    }
+    resize(true);
+    settings.canvasSnapped = true;
+    saveSettingsDebounce();
+}
+
+function snapRestoreCanvas() {
+    canvasSnapped = false;
+    noRender = false;
+    canvasContainer.style.display = '';
+    editorContainer.style.left = '';
+    editorContainer.style.width = '';
+    editorContainer.style.marginLeft = '';
+    if (panelSplitter) {
+        panelSplitter.classList.remove('snapped');
+    }
+    applySplitRatio(settings.splitRatio ?? 0.5);
+    resize(true);
+    settings.canvasSnapped = false;
+    saveSettingsDebounce();
+}
+
+if (fullscreenButton) {
+    fullscreenButton.addEventListener('click', () => {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+            const docEl = document.documentElement;
+            if (docEl.requestFullscreen) {
+                docEl.requestFullscreen().catch(err => console.warn('進入全螢幕失敗:', err));
+            } else if (docEl.webkitRequestFullscreen) {
+                docEl.webkitRequestFullscreen();
+            } else if (docEl.msRequestFullscreen) {
+                docEl.msRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(err => console.warn('退出全螢幕失敗:', err));
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    });
+
+    const updateFullscreenIcon = () => {
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+        const iconSpan = fullscreenButton.querySelector('.material-symbols-outlined');
+        if (iconSpan) {
+            iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
+        }
+        fullscreenButton.title = isFullscreen ? '退出全螢幕' : '全螢幕';
+    };
+
+    document.addEventListener('fullscreenchange', updateFullscreenIcon);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+    document.addEventListener('msfullscreenchange', updateFullscreenIcon);
+}
+
+if (panelSplitter) {
+    let isDraggingSplitter = false;
+    let dragStartX = 0;
+    let dragStartRatio = 0.5;
+    let resizeRafId = null;
+
+    panelSplitter.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        isDraggingSplitter = true;
+        dragStartX = e.clientX;
+
+        if (canvasSnapped) {
+            // 從 snap 狀態開始拖動：先還原 canvas，從 0 開始計算 ratio
+            snapRestoreCanvas();
+            dragStartRatio = 0;
+        } else {
+            dragStartRatio = settings.splitRatio ?? 0.5;
+            canvasContainer.style.width = '';
+        }
+
+        panelSplitter.classList.add('dragging');
+        panelSplitter.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    });
+
+    panelSplitter.addEventListener('pointermove', (e) => {
+        if (!isDraggingSplitter) return;
+        const windowWidth = window.innerWidth;
+        if (windowWidth <= 0) return;
+        const deltaX = e.clientX - dragStartX;
+        let newRatio = dragStartRatio + (deltaX / windowWidth);
+        if (newRatio < 0.15) {
+            newRatio = 0;
+        } else {
+            newRatio = Math.min(0.85, newRatio);
+        }
+
+        settings.splitRatio = newRatio;
+        applySplitRatio(newRatio);
+
+        if (!resizeRafId) {
+            resizeRafId = requestAnimationFrame(() => {
+                resizeRafId = null;
+                resize(true);
+            });
+        }
+    });
+
+    const stopDraggingSplitter = (e) => {
+        if (!isDraggingSplitter) return;
+        isDraggingSplitter = false;
+        panelSplitter.classList.remove('dragging');
+        if (e.pointerId !== undefined && panelSplitter.hasPointerCapture(e.pointerId)) {
+            try { panelSplitter.releasePointerCapture(e.pointerId); } catch (_) { }
+        }
+        if ((settings.splitRatio ?? 0.5) < 0.15) {
+            snapHideCanvas();
+        } else {
+            saveSettingsDebounce();
+            resize(true);
+        }
+    };
+
+    panelSplitter.addEventListener('pointerup', stopDraggingSplitter);
+    panelSplitter.addEventListener('pointercancel', stopDraggingSplitter);
+}
 
 function updateTimebase() {
-    settings.tb1 = parseInt(timebaseButton.querySelector('input[name="tb1"]').value, 10);
-    settings.tb2 = parseInt(timebaseButton.querySelector('input[name="tb2"]').value, 10);
+    const v1 = parseInt(timebaseButton.querySelector('input[name="tb1"]').value, 10) || 4;
+    projSet('tb1', v1).catch(console.error);
 }
-function restoreTimebase() {
-    timebaseButton.querySelector('input[name="tb1"]').value = settings.tb1 || 4;
-    timebaseButton.querySelector('input[name="tb2"]').value = settings.tb2 || 4;
+function restoreTimebase(t1 = 4) {
+    const v1 = parseInt(t1, 10) || 4;
+    timebaseButton.querySelector('input[name="tb1"]').value = v1;
 }
 timebaseButton.addEventListener('input', function () {
     updateTimebase();
-    saveSettingsDebounce();
     draw();
 });
-updateTimebase();
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 
@@ -315,6 +458,8 @@ export const defaultSettings = {
     disableVideo: false, // 關閉影片背景（如果有的話）
     renderSurroundingAuxiliaryText: true,
     visualZoom: 200, // 視覺模式下的縮放倍率
+    splitRatio: 0.5, // 左右面板分割比例
+    canvasSnapped: false, // Canvas 是否被 snap 隱藏
     slideIllegalRed: false,
     showUI: false,
     enableQuickPanel: false,
@@ -337,7 +482,6 @@ export const defaultSettings = {
         'touch': 0.4,
         'hanabi': 0.6,
     },
-
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     cursorFollow: true, // 游標跟隨
@@ -346,6 +490,15 @@ export const defaultSettings = {
         settings = { ...defaultSettings };
     }
 };
+
+function applyAudioSettings(s) {
+    if (!audioManager || !s) return;
+    if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
+    if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
+    if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
+    if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
+}
+
 const settingsConfig = [
     {
         label: 'settings.tabs.basic',
@@ -1848,9 +2001,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
 createNewButton.addEventListener('click', async () => {
     if (!confirm(t('popup.createNewProject.confirm'))) return;
     const newId = await projectCreate(t('popup.projectManager.untitled'));
-    currentProjectId = newId;
-    localStorage.setItem('simai_lastProjectId', currentProjectId);
-    setDataEmpty();
+    loadProject(newId);
     simpleToast({ content: t('toast.projectCreated'), type: 'success', timeout: 1200 });
 });
 
@@ -1918,7 +2069,7 @@ const getres = ((simaiDataValue) => {
             dataIndexToTime = result.indexToTime || [];
 
             playScoreRes = {
-                ...result.notesConts,
+                ...result.notesCounts,
                 score: result.score,
             };
             playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
@@ -2018,13 +2169,15 @@ function setElementDisplay(element, visible, value = 'block') {
 }
 
 function animateCanvasWidth(visible) {
+    const targetRatio = settings.splitRatio ?? 0.5;
+    const targetWidth = visible ? `${targetRatio * 100}%` : '100%';
     const canvasAnimation = canvasContainer.animate(
-        [{ width: visible ? '50%' : '100%' }],
+        [{ width: targetWidth }],
         { duration: 400, fill: 'forwards', easing: 'ease' }
     );
 
     let animationRunning = true;
-    const throttledResize = throttle(resize, 16); // 限制每 16ms 最多调用一次（约 60fps）
+    const throttledResize = throttle(() => resize(true), 16); // 限制每 16ms 最多调用一次（约 60fps）
 
     function syncResize() {
         if (animationRunning) {
@@ -2035,7 +2188,13 @@ function animateCanvasWidth(visible) {
 
     canvasAnimation.onfinish = () => {
         animationRunning = false;
-        resize();
+        canvasAnimation.cancel();
+        if (visible) {
+            canvasContainer.style.width = '';
+        } else {
+            canvasContainer.style.width = '100%';
+        }
+        resize(true);
     };
 
     syncResize();
@@ -2048,13 +2207,13 @@ function ensureVisualEditorContext() {
     return visualCtx;
 }
 
-function resizeVisualEditor() {
+function resizeVisualEditor(force = false) {
     const ctx2d = ensureVisualEditorContext();
     const dpr = window.devicePixelRatio || 1;
     const w = editorContainer.clientWidth * dpr;
     const h = editorContainer.clientHeight * dpr;
 
-    if (lastVisualEditorSize.w === w && lastVisualEditorSize.h === h) {
+    if (!force && lastVisualEditorSize.w === w && lastVisualEditorSize.h === h) {
         //resizeVisualEditor();
         return; // 尺寸不變，避免重設畫布造成多餘重排
     }
@@ -2142,6 +2301,30 @@ const setEditorCss = (visible = null) => {
     setElementDisplay(editorInput, editorVisible);
     setElementDisplay(highlightLayer, editorVisible);
     setElementDisplay(visualEditor, visualVisible);
+
+    if (!visible) {
+        // 當隱藏 Editor 時：Editor 隱藏，Canvas 必須顯示，分割線隱藏 (保留 canvasSnapped 狀態)
+        canvasContainer.style.display = '';
+        noRender = false;
+        setElementDisplay(panelSplitter, false);
+    } else {
+        // 當顯示 Editor 時：還原到目前的 Snap 狀態
+        if (canvasSnapped) {
+            noRender = true;
+            canvasContainer.style.display = 'none';
+            editorContainer.style.left = '0';
+            editorContainer.style.width = '100%';
+            setElementDisplay(panelSplitter, true);
+            if (panelSplitter) panelSplitter.classList.add('snapped');
+        } else {
+            noRender = false;
+            canvasContainer.style.display = '';
+            editorContainer.style.left = '';
+            editorContainer.style.width = '';
+            setElementDisplay(panelSplitter, true);
+            if (panelSplitter) panelSplitter.classList.remove('snapped');
+        }
+    }
 
     updatePlaycontrol(visualVisible, !isHidden);
 
@@ -2320,6 +2503,14 @@ settingsButton.addEventListener('click', () => {
         return input;
     };
 
+    function applyAudioSettings(s) {
+        if (!audioManager || !s) return;
+        if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
+        if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
+        if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
+        if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
+    }
+
     const createDropdown = (value, options = []) => {
         const select = document.createElement('select');
         options.forEach(opt => {
@@ -2439,6 +2630,13 @@ settingsButton.addEventListener('click', () => {
 
     switchTab(0);
 
+    const oldAudioSettings = {
+        globalVolume: settings.globalVolume,
+        musicVolume: settings.musicVolume,
+        SfxVolume: settings.SfxVolume,
+        sfxVolumes: settings.sfxVolumes ? { ...settings.sfxVolumes } : null
+    };
+
     popupCtx = popupWindow({
         title: t('settings.title'),
         customContent: container,
@@ -2456,6 +2654,9 @@ settingsButton.addEventListener('click', () => {
             },
             {
                 text: t('popup.cancel'),
+                onClick: () => {
+                    applyAudioSettings(oldAudioSettings);
+                },
                 hideOnClick: true
             },
             {
@@ -3790,6 +3991,7 @@ hideUtilityButton.addEventListener('click', () => {
         }
         canvasContainer.classList.remove('expanded');
         editorContainer.classList.remove('expanded');
+        if (panelSplitter) panelSplitter.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
     } else {
         //utilityBtns.style.display = 'none';
@@ -3801,6 +4003,7 @@ hideUtilityButton.addEventListener('click', () => {
         }
         canvasContainer.classList.add('expanded');
         editorContainer.classList.add('expanded');
+        if (panelSplitter) panelSplitter.classList.add('expanded');
         utilityContainer.classList.add('expanded');
     }
     hideUtilityButton.innerText = isHidden ? '▲' : '▼';
@@ -4751,13 +4954,13 @@ function update(timestamp) {
     }
 }
 
-function resize() {
+function resize(force = false) {
     const dpr = window.devicePixelRatio || 1;
     const w = canvasContainer.clientWidth * dpr;
     const h = canvasContainer.clientHeight * dpr;
 
-    if (lastCanvasSize.w === w && lastCanvasSize.h === h) {
-        resizeVisualEditor();
+    if (!force && lastCanvasSize.w === w && lastCanvasSize.h === h) {
+        resizeVisualEditor(force);
         return; // 尺寸不變，避免重設畫布造成多餘重排
     }
 
@@ -4770,7 +4973,7 @@ function resize() {
     canvas.width = w;
     canvas.height = h;
     if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
-    resizeVisualEditor();
+    resizeVisualEditor(force);
     resizePreviewCanvas();
     draw();
 }
@@ -4783,58 +4986,162 @@ function openSecondWindow() {
         return;
     }
     externalWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
-    // 注入基礎樣式與 Canvas
+
+    // 複製主視窗的 style 與 link 標籤（含字型定義）
+    Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach(node => {
+        externalWindow.document.head.appendChild(node.cloneNode(true));
+    });
+
+    // 注入基礎樣式與 Canvas 結構
     const style = externalWindow.document.createElement('style');
     style.textContent = `
-            body {
-                margin: 0;
-                padding: 0;
-                overflow: hidden;
-                background-color: #000;
-            }
-            #canvasContainer {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                top: 0;
-                left: 0;
-            }
-            #canvasContainer img {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                top: 0;
-                left: 0;
-                object-fit: contain;
-                scale: 0.899;
-            }
-            #secondary {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-            }
-        `;
+        @font-face {
+            font-family: 'combo';
+            src: url('Fonts/Inter.ttf') format('truetype');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'mono';
+            src: url('Fonts/ShareTechMono-Regular.ttf') format('truetype');
+            font-display: swap;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: "Google Sans", sans-serif;
+        }
+        #canvasContainer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #secOutline {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            object-fit: contain;
+            scale: 0.899;
+        }
+        #secondary {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .backgroundContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            z-index: 0;
+        }
+        .backgroundContainer img,
+        .backgroundContainer video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    `;
     externalWindow.document.head.appendChild(style);
     externalWindow.document.body.innerHTML = `
-            <div id="canvasContainer">
-                <img src="./Skin/outline.png" alt="">
-                <canvas id="secondary"></canvas>
+        <div id="canvasContainer">
+            <div class="backgroundContainer" id="secBackgroundContainer">
+                <img id="secBackgroundImage" src="" alt="" onerror="this.style.display='none'">
+                <video id="secBackgroundVideo" src="" alt="" onerror="this.style.display='none'" muted></video>
             </div>
-        `;
+            <img src="./Skin/outline.png" alt="" id="secOutline" onerror="this.style.display='none'">
+            <canvas id="secondary"></canvas>
+        </div>
+    `;
+
     const extCanvas = externalWindow.document.getElementById('secondary');
-    // 這裡需要處理縮放邏輯，建議參考你原有的 resize 函式
+    const secBgImg = externalWindow.document.getElementById('secBackgroundImage');
+    const secBgVideo = externalWindow.document.getElementById('secBackgroundVideo');
+    const secBgContainer = externalWindow.document.getElementById('secBackgroundContainer');
+
     extCanvas.width = 800;
     extCanvas.height = 800;
     secondCtx = extCanvas.getContext('2d');
 
+    syncSecondWindowBackground = function () {
+        if (!externalWindow || externalWindow.closed) return;
+        const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
+        if (secBgContainer) {
+            secBgContainer.style.width = size + 'px';
+            secBgContainer.style.height = size + 'px';
+        }
+
+        const brightnessFilter = `brightness(${1 + 0.1875 * (settings.moviebrightness ?? -4)})`;
+
+        if (secBgImg && editorBackgroundImage) {
+            if (secBgImg.src !== editorBackgroundImage.src) {
+                secBgImg.src = editorBackgroundImage.src;
+            }
+            secBgImg.style.display = editorBackgroundImage.style.display;
+            secBgImg.style.filter = brightnessFilter;
+        }
+
+        if (secBgVideo && editorBackgroundVideo) {
+            if (secBgVideo.src !== editorBackgroundVideo.src) {
+                secBgVideo.src = editorBackgroundVideo.src;
+            }
+            secBgVideo.style.display = editorBackgroundVideo.style.display;
+            secBgVideo.style.filter = brightnessFilter;
+
+            if (editorBackgroundVideo.src) {
+                const playing = playButton.dataset.playing === 'true';
+
+                // 主視窗 Canvas 被隱藏或已開啟外部預覽視窗時，主視窗影片強制暫停以節省資源
+                if (!editorBackgroundVideo.paused) {
+                    try { editorBackgroundVideo.pause(); } catch (_) { }
+                }
+
+                // 獨立視窗影片時間與播放同步
+                if (Math.abs(secBgVideo.currentTime - realTime) > VIDEO_SEEK_THRESHOLD) {
+                    try { secBgVideo.currentTime = realTime; } catch (_) { }
+                }
+
+                if (playing && secBgVideo.paused) {
+                    secBgVideo.play().catch(() => { });
+                } else if (!playing && !secBgVideo.paused) {
+                    secBgVideo.pause();
+                }
+
+                secBgVideo.playbackRate = settings.playbackSpeed || 1;
+            }
+        }
+    };
+
+    // 隱藏主視窗的背景 Containers 與 Canvas Outline (Skin)
+    if (backgroundContainer) backgroundContainer.style.display = 'none';
+    if (canvasOutline) canvasOutline.style.display = 'none';
+    if (editorBackgroundVideo && !editorBackgroundVideo.paused) {
+        try { editorBackgroundVideo.pause(); } catch (_) { }
+    }
+
     externalWindow.addEventListener('beforeunload', () => {
         console.log("警告：外部視窗即將關閉");
-        // 你可以在這裡重置主視窗的某些狀態
+        syncSecondWindowBackground = () => { };
         secondCtx = null;
         ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
-        renderer.setContext(ctx); // 告訴 renderer 使用第二個 Canvas 的上下文
+        renderer.setContext(ctx); // 告訴 renderer 使用主 Canvas 的上下文
+        if (backgroundContainer) backgroundContainer.style.display = '';
+        if (canvasOutline) canvasOutline.style.display = '';
         draw(); // 重新繪製到主 Canvas
     });
 
@@ -4844,17 +5151,23 @@ function openSecondWindow() {
         extCanvas.width = externalWindow.innerWidth * dpr;
         extCanvas.height = externalWindow.innerHeight * dpr;
 
-        // 重新套用你的座標系統 (這點最重要！)
+        // 重新套用座標系統
         const p = size / scaleBase * (renderer?.scale ?? scale) * dpr;
         secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
+        syncSecondWindowBackground();
         draw();
     };
 
     syncResize();
 
     externalWindow.addEventListener('resize', syncResize);
-    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
+    if (externalWindow.document.fonts) {
+        externalWindow.document.fonts.ready.then(() => {
+            syncResize();
+        });
+    }
 
+    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
     draw(); // 重新繪製到第二個 Canvas
 }
 
@@ -5119,6 +5432,8 @@ recordVideoButton.addEventListener('click', async () => {
                     const sfxVolValNum = Number(inputRefs.record_sfx_vol?.value || 1);
                     const bgmLoaded = !!audioManager?.bgmBuffer;
 
+                    if (playButton.dataset.playing === 'true') playButton.click();
+
                     videoRender(audioManager, canvas, renderer, {
                         start: startVal,
                         end: endVal,
@@ -5223,7 +5538,16 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+function closeExternalWindow() {
+    if (externalWindow && !externalWindow.closed) {
+        try {
+            externalWindow.close();
+        } catch (_) { }
+    }
+}
+
 window.addEventListener("beforeunload", (event) => {
+    closeExternalWindow();
     if (isContextEdited) {
         // Cancel the event as stated by the standard.
         event.preventDefault();
@@ -5232,13 +5556,47 @@ window.addEventListener("beforeunload", (event) => {
     }
 });
 
+window.addEventListener("pagehide", closeExternalWindow);
+window.addEventListener("unload", closeExternalWindow);
+
 let playedClock = [false, false, false, false];
 
 import { SimaiLogicControler } from './helper.js';
 const simaiLogicControler = new SimaiLogicControler(audioManager);
 
+let syncSecondWindowBackground = () => { };
+
+function drawMainCanvasOpenedInExternalWindow() {
+    if (!ctx || !canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // 繪製背景深色卡片
+    ctx.fillStyle = '#111116';
+    ctx.fillRect(0, 0, w, h);
+
+    const text = t('menu.toolsPopupOpened') || '已在外部視窗開啟';
+
+    // 繪製居中文字
+    ctx.fillStyle = 'rgba(74, 144, 226, 0.9)';
+    ctx.font = `600 ${Math.max(14, Math.round(18 * dpr))}px "Google Sans", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`🗔 ${text}`, w / 2, h / 2);
+
+    ctx.restore();
+}
+
 function draw(dt = 0) {
     if (!renderer) return;
+    if (secondCtx && externalWindow) {
+        syncSecondWindowBackground();
+    }
 
     // 早期初始化：提取常用值避免重複計算
     const playing = playButton.dataset.playing === 'true';
@@ -5268,18 +5626,36 @@ function draw(dt = 0) {
     nowIndex = nowIndexRender;
 
     // 渲染和更新
-    renderer.drawFrame({
-        globalTime,
-        buckets,
-        dt,
-        showSensor: settings.showSensor,
-        showSensorText: (settings.showSensorTextWhenPaused && !playing),
-        playCombo,
-        playScore,
-        noteQuantity,
-        playScoreRes,
-        nowIndex,
-    });
+    if (secondCtx !== null) {
+        // 獨立外部視窗存在：在外部視窗 Context 上渲染遊戲圓盤，主視窗 Canvas 繪製 i18n 提示
+        renderer.drawFrame({
+            globalTime,
+            buckets,
+            dt,
+            showSensor: settings.showSensor,
+            showSensorText: (settings.showSensorTextWhenPaused && !playing),
+            playCombo,
+            playScore,
+            noteQuantity,
+            playScoreRes,
+            nowIndex,
+        });
+        drawMainCanvasOpenedInExternalWindow();
+    } else if (!noRender) {
+        // 正常狀態：主視窗繪製遊戲圓盤
+        renderer.drawFrame({
+            globalTime,
+            buckets,
+            dt,
+            showSensor: settings.showSensor,
+            showSensorText: (settings.showSensorTextWhenPaused && !playing),
+            playCombo,
+            playScore,
+            noteQuantity,
+            playScoreRes,
+            nowIndex,
+        });
+    }
 
     if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {
         previewRender.drawFrame({
@@ -5324,7 +5700,6 @@ async function loadProjectData(step) {
         hideEditor,
         savedReadyBeat,
         tb1,
-        tb2,
     ] = await Promise.all([
         projGet('timeControl'),
         projGet('resource_bgm'),
@@ -5335,8 +5710,9 @@ async function loadProjectData(step) {
         projGet('hide_editor'),
         projGet('ready_beat'),
         projGet('tb1'),
-        projGet('tb2'),
     ]);
+
+    restoreTimebase(tb1);
 
     readyBeat = savedReadyBeat === true || savedReadyBeat === 'true';
     readyBeatCheckbox.checked = readyBeat;
@@ -5441,12 +5817,13 @@ async function loadProject(projectId) {
     currentProjectId = projectId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
 
+    setDataEmpty();
+
     // 載入專案資料
     await loadProjectData();
 
     const list = await projectList();
     const proj = list.find(p => p.id === projectId);
-    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
 }
 
 /**
@@ -5534,6 +5911,7 @@ function openProjectManager() {
             if (!isCurrent) {
                 btnGroup.appendChild(makeBtn('開啟', async () => {
                     await loadProject(proj.id);
+                    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
                     buildList(container);
                 }, '#2d6e2d'));
             }
@@ -5584,8 +5962,9 @@ function openProjectManager() {
                 onClick: async () => {
                     const name = prompt('請輸入專案名稱：', '未命名專案');
                     if (name === null) return;
-                    const newId = await projectCreate(name.trim() || '未命名專案');
+                    const newId = await projectCreate(t('popup.projectManager.untitled'));
                     await loadProject(newId);
+                    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
                     buildList(container);
                 }
             },
@@ -5659,17 +6038,23 @@ function _init() {
                         await idbSet('simai_settings', JSON.stringify(settings));
                     }
                     playbackSpeedInput.value = settings.playbackSpeed;
-                    restoreTimebase();
                 } else {
                     settings = { ...defaultSettings }
                     await idbSet('simai_settings', JSON.stringify(settings));
                 };
+
+                // 🟢 關鍵修復：初始化完成後立刻將載入的音量設定套用到 audioManager
+                applyAudioSettings(settings);
 
                 // === 載入當前專案資料 ===
                 step(84, t('popup.init.restoringState'));
                 await loadProjectData(step);
 
                 window.settings = settings;
+                applySplitRatio(settings.splitRatio ?? 0.5);
+                if (settings.canvasSnapped) {
+                    snapHideCanvas();
+                }
                 changeDisplayMode.value = settings.displayMode ?? 'simai';
                 renderer = new SimaiRenderer(canvas, settings);
                 renderer.setImages(images);

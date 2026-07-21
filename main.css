@@ -1,4 +1,5 @@
 :root {
+    --split-ratio: 0.5;
     --utility-hidden-height: 16px;
     --const-max-playControls-height: 130px;
     --const-collapsed-playControls-height: 70px;
@@ -45,7 +46,7 @@ body {
 
 #canvasContainer {
     position: absolute;
-    width: 50%;
+    width: calc(var(--split-ratio) * 100%);
     height: calc(100% - var(--playControls-height) - 40px);
     top: 40px;
     left: 0;
@@ -117,6 +118,7 @@ body {
     height: var(--playControls-height);
     bottom: 0;
     left: 0;
+    z-index: 10;
     background: var(--top-utility-bg);
     display: flex;
     flex-direction: column;
@@ -162,7 +164,6 @@ body {
     position: relative;
     width: 100%;
     height: 60px;
-    z-index: 10;
 }
 
 #playControls #showPlayControlsBtn {
@@ -283,7 +284,7 @@ body {
     height: calc(40px + var(--utility-hidden-height));
     top: 0;
     right: 0;
-    z-index: 5;
+    z-index: 10;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -446,11 +447,77 @@ body {
     position: absolute;
     top: 40px;
     bottom: 30px;
-    left: 50%;
-    width: 50%;
+    left: calc(var(--split-ratio) * 100%);
+    width: calc((1 - var(--split-ratio)) * 100%);
     height: calc(100% - var(--playControls-height) - 40px);
     background: var(--editor-bg);
     /* 背景深色 */
+}
+
+#panelSplitter {
+    position: absolute;
+    top: 40px;
+    height: calc(100% - var(--playControls-height) - 40px);
+    left: calc(var(--split-ratio) * 100% - 3px);
+    width: 6px;
+    cursor: col-resize;
+    z-index: 4;
+    background: transparent;
+    transition: background 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+#panelSplitter::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 2px;
+    background: #3a3a3a;
+    transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
+}
+
+#panelSplitter:hover::after,
+#panelSplitter.dragging::after {
+    left: 1px;
+    width: 4px;
+    background: #4a90e2;
+}
+
+#panelSplitter.expanded {
+    top: 0;
+    height: calc(100% - var(--playControls-height));
+}
+
+/* snap 狀態：canvas 被隱藏，splitter 固定在左緣並變粗 */
+#panelSplitter.snapped {
+    left: 0 !important;
+    width: 10px;
+    cursor: e-resize;
+    z-index: 100;
+    background: rgba(74, 144, 226, 0.08);
+    transition: background 0.15s ease;
+}
+
+#panelSplitter.snapped::after {
+    left: 3px;
+    width: 4px;
+    background: #3a3a3a;
+    border-radius: 2px;
+}
+
+#panelSplitter.snapped:hover {
+    background: rgba(74, 144, 226, 0.18);
+}
+
+#panelSplitter.snapped:hover::after,
+#panelSplitter.snapped.dragging::after {
+    left: 2px;
+    width: 8px;
+    background: #6ab0ff;
 }
 
 #visualEditor {

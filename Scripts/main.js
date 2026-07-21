@@ -1680,11 +1680,11 @@ function setDataEmpty() {
     inputDebounce();
     saveMaidata();
 
-    projSet('background_image', null).catch(() => { });
-    projSet('background_video', null).catch(() => { });
-    projSet('now_difficulty', nowDifficulty).catch(() => { });
-    projSet('resource_bgm', null).catch(() => { });
-    projSet('timeControl', 0).catch(() => { });
+    //projSet('background_image', null).catch(() => { });
+    //projSet('background_video', null).catch(() => { });
+    //projSet('now_difficulty', nowDifficulty).catch(() => { });
+    //projSet('resource_bgm', null).catch(() => { });
+    //projSet('timeControl', 0).catch(() => { });
 }
 
 fetchFromMainoteButton.addEventListener('click', () => {

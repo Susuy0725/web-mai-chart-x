@@ -245,25 +245,62 @@ export function toggleNoteFlag(inputStr, flagType) {
         let note = part.trim();
         if (!note) return part;
 
-        // Touch 音符不適用 (如 C, A1, E8)
-        if (/^(?:[ABCDE]\d+|C)(?![a-zA-Z0-9])/.test(note)) {
+        // 1. Touch 音符不適用 (如 C, Cf, A1, E8f)
+        if (/^(?:[ABCDE][1-8]|C)/.test(note)) {
             return part;
+        }
+
+        // 2. 雙打縮寫音符 (如 35, 42, 81)
+        if (/^[1-8]{2}$/.test(note)) {
+            const pos1 = note[0];
+            const pos2 = note[1];
+            if (flagType === 'bk') {
+                return `${pos1}b/${pos2}b`;
+            } else if (flagType === 'ex') {
+                return `${pos1}x/${pos2}x`;
+            }
         }
 
         const isSlide = slideSymbolRegex.test(note);
 
         if (flagType === 'bk') {
             if (isSlide) {
-                const hasAnyB = /b/.test(note);
-                if (hasAnyB) {
-                    return note.replace(/b/g, '');
+                const headHasB = /^\d+b|\*\d+b/.test(note);
+                // 第一個 slide 符號後的所有內容
+                const firstSlideMatch = note.match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
+                const slideBody = firstSlideMatch ? note.slice(firstSlideMatch.index) : '';
+                const endHasB = /b/.test(slideBody);
+
+                let nextHeadB = false;
+                let nextEndB = false;
+
+                if (!headHasB && !endHasB) {
+                    // 全無 -> 轉全有
+                    nextHeadB = true;
+                    nextEndB = true;
+                } else if (headHasB && endHasB) {
+                    // 全有 -> 轉全無
+                    nextHeadB = false;
+                    nextEndB = false;
+                } else if (headHasB && !endHasB) {
+                    // 僅星頭 -> 轉僅路徑尾
+                    nextHeadB = false;
+                    nextEndB = true;
                 } else {
-                    let res = note;
+                    // 僅路徑尾 -> 轉僅星頭
+                    nextHeadB = true;
+                    nextEndB = false;
+                }
+
+                let res = note.replace(/b/g, '');
+                if (nextHeadB) {
                     res = res.replace(/^(\d+)/, '$1b');
                     res = res.replace(/\*(\d+)/g, '*$1b');
-                    res = res.replace(/(\[[^\]]+\])/g, '$1b');
-                    return res;
                 }
+                if (nextEndB) {
+                    res = res.replace(/(\[[^\]]+\])/g, '$1b');
+                }
+                return res;
             } else {
                 const hasB = /b/.test(note);
                 if (hasB) {
@@ -315,22 +352,42 @@ export function toggleNoteFlag(inputStr, flagType) {
 
     function processCodeToken(codeToken) {
         if (!codeToken.trim()) return codeToken;
-        if (/^\s*\([^\)]*\)\s*$/.test(codeToken) || /^\s*\{[^\}]*\}\s*$/.test(codeToken)) {
-            return codeToken;
+
+        const tagMatch = codeToken.match(/^((?:\([^\)]*\)|\{[^\}]*\}|\s+)*)([\s\S]*)$/);
+        if (!tagMatch) return toggleSinglePart(codeToken);
+
+        const prefixTags = tagMatch[1];
+        const noteContent = tagMatch[2];
+
+        // 如果只有前導標籤而無音符內容 (例如 (240){2})，直接返回 prefixTags
+        if (!noteContent.trim()) {
+            return prefixTags;
         }
 
-        const parts = codeToken.split('/');
-        const newParts = parts.map(part => {
-            const tagMatch = part.match(/^((?:\([^\)]*\)|\{[^\}]*\}|\s+)*)(.*)$/);
-            if (tagMatch && tagMatch[2]) {
-                const prefixTags = tagMatch[1];
-                const noteContent = tagMatch[2];
-                return prefixTags + toggleSinglePart(noteContent);
-            }
-            return toggleSinglePart(part);
-        });
+        const parts = noteContent.split('/');
 
-        return newParts.join('/');
+        // 檢查雙壓帶旗標還原情況 (如 4b/8b -> 48 或 4x/8x -> 48)
+        if (parts.length === 2) {
+            const p1 = parts[0].trim();
+            const p2 = parts[1].trim();
+
+            if (flagType === 'bk') {
+                const match1 = p1.match(/^([1-8])b$/);
+                const match2 = p2.match(/^([1-8])b$/);
+                if (match1 && match2) {
+                    return prefixTags + match1[1] + match2[1];
+                }
+            } else if (flagType === 'ex') {
+                const match1 = p1.match(/^([1-8])x$/);
+                const match2 = p2.match(/^([1-8])x$/);
+                if (match1 && match2) {
+                    return prefixTags + match1[1] + match2[1];
+                }
+            }
+        }
+
+        const newParts = parts.map(part => toggleSinglePart(part));
+        return prefixTags + newParts.join('/');
     }
 
     const tokens = inputStr.split(',');

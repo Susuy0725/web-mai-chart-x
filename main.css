@@ -791,3 +791,107 @@ body {
     color: #000000;
     mix-blend-mode: destination-out;
 }
+
+/* 尋找與取代浮動視窗樣式 */
+.find-replace-bar {
+    position: absolute;
+    top: 10px;
+    right: 25px;
+    z-index: 100;
+    background: rgba(22, 22, 28, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: #eee;
+}
+
+.findbar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.findbar-drag-handle {
+    cursor: grab;
+    color: #666;
+    font-size: 18px;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: color 0.15s ease;
+    margin-right: -2px;
+}
+
+.findbar-drag-handle:hover,
+.find-replace-bar.dragging .findbar-drag-handle {
+    color: #4a90e2;
+    cursor: grabbing;
+}
+
+.findbar-input {
+    background: #121216;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #fff;
+    padding: 4px 8px;
+    font-size: 13px;
+    outline: none;
+    width: 170px;
+    transition: border-color 0.15s ease;
+}
+
+.findbar-input:focus {
+    border-color: #4a90e2;
+}
+
+.findbar-count {
+    font-size: 12px;
+    color: #888;
+    min-width: 45px;
+    text-align: center;
+}
+
+.findbar-btn {
+    background: #2a2a35;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #ddd;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.findbar-btn:hover {
+    background: #3b3b4a;
+    color: #fff;
+}
+
+.findbar-btn.close-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 14px;
+    padding: 2px 6px;
+}
+
+.findbar-btn.close-btn:hover {
+    color: #ff5555;
+}
+
+.findbar-btn.action-btn {
+    background: #3a4a60;
+    border-color: #4a5a70;
+}
+
+.findbar-btn.action-btn:hover {
+    background: #4a6080;
+}

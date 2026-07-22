@@ -24,6 +24,9 @@ export const ja = {
         toolsI18nEditor: "i18n翻訳エディタ",
         toolsPopup: "ポップアウトプレビュー",
         toolsPopupOpened: "外部ウィンドウで開いています",
+        toolsFindReplace: "検索と置換",
+        toolsToggleBk: "Break (bk) 切替/追加",
+        toolsToggleEx: "EX (ex) 切替/追加",
         manageResources: "リソース管理",
         chartInfo: "譜面情報",
         settings: "設定",
@@ -311,6 +314,8 @@ export const ja = {
             basicItems: [
                 `<b>読み込み＆新規作成</b>: 左上メニューの「ファイル」をクリックして、新規プロジェクトの作成、フォルダの読み込み、またはZIPアーカイブの読み込みを行います。`,
                 `<b>ダウンロード</b>: 左上メニューの「ファイル > ダウンロード」をクリックして、プロジェクトを圧縮パッケージとしてダウンロードします。`,
+                `<b>パネル分割＆全画面表示</b>: 中央の分割線をドラッグして左右の比率を変更します。左端までドラッグするとプレビューを非表示にし、エディタを全画面化します。`,
+                `<b>ノートフラグ切替</b>: メニューの「Break (bk) 切替/追加」または「EX (ex) 切替/追加」で、選択範囲または全テキストのノートフラグをまとめて切り替えます。`,
                 `<b>ボトムバー</b>: <span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span> で仮想キーボードを非表示に、<span class="material-symbols-outlined" translate="no">keyboard</span> で表示します。`,
                 `<b>自動保存</b>: プロジェクトは自動的に保存されます。または、<span class="code-highlight">Ctrl</span><span class="code-highlight">S</span> を押して手動で保存することもできます。`
             ],
@@ -319,6 +324,7 @@ export const ja = {
             shortcutItems: [
                 `<b>再生 / 一時停止</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">Space</span>。`,
                 `<b>最初から再生</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">Backspace</span>。`,
+                `<b>検索 / 置換</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">F</span> で検索、<span class="code-highlight">Ctrl</span><span class="code-highlight">H</span> で検索と置換。`,
                 `<b>元に戻す / やり直し</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">Z</span> / <span class="code-highlight">Ctrl</span><span class="code-highlight">Y</span>。`,
                 `<b>再生速度を上げる</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">P</span>。`,
                 `<b>再生速度を下げる</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">O</span>。`,
@@ -332,5 +338,17 @@ export const ja = {
         editingDetails: "編集中: {title}",
         difficultyState: "難易度: {diff}",
         unknownDiff: "不明"
+    },
+    findReplace: {
+        findPlaceholder: "検索文字列...",
+        replacePlaceholder: "置換文字列...",
+        noMatches: "一致なし",
+        matchCount: "{current}/{total}",
+        replaceOne: "置換",
+        replaceAll: "すべて置換",
+        toastToggleBkSelection: "選択範囲の Break (bk) 状態を切り替えました",
+        toastToggleBkFull: "全テキストの Break (bk) 状態を切り替えました",
+        toastToggleExSelection: "選択範囲の EX (ex) 状態を切り替えました",
+        toastToggleExFull: "全テキストの EX (ex) 状態を切り替えました"
     }
 };

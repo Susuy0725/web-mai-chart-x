@@ -11,7 +11,7 @@
         href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Noto+Sans+TC:wght@100..900&display=swap"
         rel="stylesheet">
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=chevron_right,edit,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning" />
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=chevron_right,close,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning" />
     <link rel="stylesheet" href="main.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="Scripts/jszip.min.js"></script>
@@ -77,6 +77,21 @@
     </div>
     <div id="panelSplitter" title="拖曳調整面板比例"></div>
     <div id="editorContainer">
+        <div id="findReplaceBar" class="find-replace-bar" style="display: none;">
+            <div class="findbar-row">
+                <span class="findbar-drag-handle material-symbols-outlined" translate="no" title="拖曳移動">drag_indicator</span>
+                <input type="text" id="findInput" class="findbar-input" placeholder="尋找內容..." data-i18n-placeholder="findReplace.findPlaceholder">
+                <span id="findMatchCount" class="findbar-count">0/0</span>
+                <button type="button" id="findPrevBtn" class="findbar-btn" title="上一個">▲</button>
+                <button type="button" id="findNextBtn" class="findbar-btn" title="下一個">▼</button>
+                <button type="button" id="findCloseBtn" class="findbar-btn close-btn" title="關閉">✕</button>
+            </div>
+            <div class="findbar-row" id="replaceRow">
+                <input type="text" id="replaceInput" class="findbar-input" placeholder="取代為..." data-i18n-placeholder="findReplace.replacePlaceholder">
+                <button type="button" id="replaceOneBtn" class="findbar-btn action-btn" data-i18n="findReplace.replaceOne">取代</button>
+                <button type="button" id="replaceAllBtn" class="findbar-btn action-btn" data-i18n="findReplace.replaceAll">全部取代</button>
+            </div>
+        </div>
         <div id="highlight-layer" class="editor-layer" inert aria-disabled="true" aria-hidden="true"
             contenteditable="false"></div>
         <textarea id="editor-input" class="editor-layer" spellcheck="false" data-i18n="textarea.placeholder"
@@ -144,6 +159,9 @@
                             <div class="utilityButton" data-buttonAction="fetchFromMainote"
                                 data-i18n="menu.toolsFetchFromMainote">從Mainote抓取資料</div>
                             <div class="utilityButton" data-buttonAction="popup" data-i18n="menu.toolsPopup">預覽彈出</div>
+                            <div class="utilityButton" data-buttonAction="findReplace" data-i18n="menu.toolsFindReplace">尋找與取代</div>
+                            <div class="utilityButton" data-buttonAction="toggleBk" data-i18n="menu.toolsToggleBk">切換/加入 Break (bk)</div>
+                            <div class="utilityButton" data-buttonAction="toggleEx" data-i18n="menu.toolsToggleEx">切換/加入 EX (ex)</div>
                         </div>
                     </div>
                     <div class="utilityButton" data-buttonAction="manageResources" data-i18n="menu.manageResources">資源管理
@@ -160,6 +178,9 @@
                 <div class="utilityDropdown-content">
                     <div class="utilityButton" data-buttonAction="undo" data-i18n="menu.editUndo">復原</div>
                     <div class="utilityButton" data-buttonAction="redo" data-i18n="menu.editRedo">重作</div>
+                    <div class="utilityButton" data-buttonAction="findReplace" data-i18n="menu.toolsFindReplace">尋找與取代</div>
+                    <div class="utilityButton" data-buttonAction="toggleBk" data-i18n="menu.toolsToggleBk">切換/加入 Break (bk)</div>
+                    <div class="utilityButton" data-buttonAction="toggleEx" data-i18n="menu.toolsToggleEx">切換/加入 EX (ex)</div>
                     <div class="utilityButton" data-buttonAction="rotateClockwise" data-i18n="menu.editRotateClockwise">
                         順時針旋轉</div>
                     <div class="utilityButton" data-buttonAction="rotateCounterClockwise"

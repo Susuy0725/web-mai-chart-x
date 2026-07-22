@@ -130,6 +130,9 @@ const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const helpButton = getButton("help", "utility");
 const fullscreenButton = getButton("fullscreen", "utility");
+const findReplaceButton = getButton("findReplace", "utility");
+const toggleBkButton = getButton("toggleBk", "utility");
+const toggleExButton = getButton("toggleEx", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
@@ -140,6 +143,16 @@ const editorContainer = document.getElementById('editorContainer');
 const panelSplitter = document.getElementById('panelSplitter');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
+const findReplaceBar = document.getElementById('findReplaceBar');
+const findInput = document.getElementById('findInput');
+const replaceInput = document.getElementById('replaceInput');
+const findMatchCount = document.getElementById('findMatchCount');
+const findPrevBtn = document.getElementById('findPrevBtn');
+const findNextBtn = document.getElementById('findNextBtn');
+const findCloseBtn = document.getElementById('findCloseBtn');
+const replaceRow = document.getElementById('replaceRow');
+const replaceOneBtn = document.getElementById('replaceOneBtn');
+const replaceAllBtn = document.getElementById('replaceAllBtn');
 const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
 const quickPanel = document.getElementById('quick-panel');
 const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
@@ -218,6 +231,421 @@ if (fullscreenButton) {
     document.addEventListener('fullscreenchange', updateFullscreenIcon);
     document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
     document.addEventListener('msfullscreenchange', updateFullscreenIcon);
+}
+
+// ==========================================
+// 1. 切換 Break (bk) 與 EX (ex) 音符旗標邏輯
+// ==========================================
+export function toggleNoteFlag(inputStr, flagType) {
+    if (!inputStr) return inputStr;
+
+    const slideSymbolRegex = /(?:pp)|(?:qq)|[-<>^vpqszVw]/;
+
+    function toggleSinglePart(part) {
+        let note = part.trim();
+        if (!note) return part;
+
+        // Touch 音符不適用 (如 C, A1, E8)
+        if (/^(?:[ABCDE]\d+|C)(?![a-zA-Z0-9])/.test(note)) {
+            return part;
+        }
+
+        const isSlide = slideSymbolRegex.test(note);
+
+        if (flagType === 'bk') {
+            if (isSlide) {
+                const hasAnyB = /b/.test(note);
+                if (hasAnyB) {
+                    return note.replace(/b/g, '');
+                } else {
+                    let res = note;
+                    res = res.replace(/^(\d+)/, '$1b');
+                    res = res.replace(/\*(\d+)/g, '*$1b');
+                    res = res.replace(/(\[[^\]]+\])/g, '$1b');
+                    return res;
+                }
+            } else {
+                const hasB = /b/.test(note);
+                if (hasB) {
+                    return note.replace(/b/g, '');
+                } else {
+                    if (/\[[^\]]+\]/.test(note)) {
+                        return note.replace(/(\[[^\]]+\])/, '$1b');
+                    } else {
+                        return note.replace(/^(\d+)/, '$1b');
+                    }
+                }
+            }
+        } else if (flagType === 'ex') {
+            if (isSlide) {
+                const hasStarX = /^\d+b?x|\*\d+b?x/.test(note);
+                if (hasStarX) {
+                    let res = note;
+                    res = res.replace(/^(\d+b?)x/, '$1');
+                    res = res.replace(/\*(\d+b?)x/g, '*$1');
+                    return res;
+                } else {
+                    let res = note;
+                    res = res.replace(/^(\d+b?)/, '$1x');
+                    res = res.replace(/\*(\d+b?)/g, '*$1x');
+                    return res;
+                }
+            } else {
+                const hasX = /x/.test(note);
+                if (hasX) {
+                    return note.replace(/x/g, '');
+                } else {
+                    if (/\[[^\]]+\]/.test(note)) {
+                        if (/\[[^\]]+\]b/.test(note)) {
+                            return note.replace(/(\[[^\]]+\]b)/, '$1x');
+                        }
+                        return note.replace(/(\[[^\]]+\])/, '$1x');
+                    } else {
+                        if (/^\d+b/.test(note)) {
+                            return note.replace(/^(\d+b)/, '$1x');
+                        }
+                        return note.replace(/^(\d+)/, '$1x');
+                    }
+                }
+            }
+        }
+
+        return part;
+    }
+
+    function processCodeToken(codeToken) {
+        if (!codeToken.trim()) return codeToken;
+        if (/^\s*\([^\)]*\)\s*$/.test(codeToken) || /^\s*\{[^\}]*\}\s*$/.test(codeToken)) {
+            return codeToken;
+        }
+
+        const parts = codeToken.split('/');
+        const newParts = parts.map(part => {
+            const tagMatch = part.match(/^((?:\([^\)]*\)|\{[^\}]*\}|\s+)*)(.*)$/);
+            if (tagMatch && tagMatch[2]) {
+                const prefixTags = tagMatch[1];
+                const noteContent = tagMatch[2];
+                return prefixTags + toggleSinglePart(noteContent);
+            }
+            return toggleSinglePart(part);
+        });
+
+        return newParts.join('/');
+    }
+
+    const tokens = inputStr.split(',');
+    const newTokens = tokens.map(token => {
+        if (token.includes('||')) {
+            const parts = token.split('||');
+            const codePart = parts[0];
+            const commentPart = parts.slice(1).join('||');
+            return processCodeToken(codePart) + '||' + commentPart;
+        }
+        return processCodeToken(token);
+    });
+
+    return newTokens.join(',');
+}
+
+function handleToggleBkEx(flagType) {
+    if (!editorInput) return;
+    const start = editorInput.selectionStart;
+    const end = editorInput.selectionEnd;
+    const val = editorInput.value;
+
+    let newVal = '';
+    let isSelection = false;
+
+    if (start !== undefined && end !== undefined && start !== end) {
+        isSelection = true;
+        const selectedText = val.slice(start, end);
+        const transformed = toggleNoteFlag(selectedText, flagType);
+        newVal = val.slice(0, start) + transformed + val.slice(end);
+    } else {
+        newVal = toggleNoteFlag(val, flagType);
+    }
+
+    if (newVal !== val) {
+        editorInput.value = newVal;
+        editorInput.dispatchEvent(new Event('input'));
+
+        if (isSelection) {
+            editorInput.setSelectionRange(start, start + (newVal.length - val.length + (end - start)));
+        }
+
+        const toastKey = flagType === 'bk'
+            ? (isSelection ? 'findReplace.toastToggleBkSelection' : 'findReplace.toastToggleBkFull')
+            : (isSelection ? 'findReplace.toastToggleExSelection' : 'findReplace.toastToggleExFull');
+        simpleToast({ content: t(toastKey), type: 'success', timeout: 1500 });
+    }
+}
+
+if (toggleBkButton) {
+    toggleBkButton.addEventListener('click', () => handleToggleBkEx('bk'));
+}
+if (toggleExButton) {
+    toggleExButton.addEventListener('click', () => handleToggleBkEx('ex'));
+}
+
+// ==========================================
+// 2. 尋找與取代 (Find & Replace) 浮動面板與導覽邏輯
+// ==========================================
+let findMatches = [];
+let currentMatchIndex = -1;
+
+function updateFindMatches() {
+    findMatches = [];
+    currentMatchIndex = -1;
+
+    const searchText = findInput ? findInput.value : '';
+    if (!searchText || !editorInput) {
+        if (findMatchCount) findMatchCount.textContent = '0/0';
+        return;
+    }
+
+    const text = editorInput.value;
+    const searchLower = searchText.toLowerCase();
+    const textLower = text.toLowerCase();
+    let pos = 0;
+
+    while ((pos = textLower.indexOf(searchLower, pos)) !== -1) {
+        findMatches.push({ start: pos, end: pos + searchText.length });
+        pos += Math.max(1, searchText.length);
+    }
+
+    if (findMatches.length > 0) {
+        const cursor = editorInput.selectionStart || 0;
+        let idx = findMatches.findIndex(m => m.start >= cursor);
+        currentMatchIndex = idx !== -1 ? idx : 0;
+    }
+
+    updateFindCountUI();
+}
+
+function updateFindCountUI() {
+    if (!findMatchCount) return;
+    if (findMatches.length === 0) {
+        findMatchCount.textContent = '0/0';
+    } else {
+        findMatchCount.textContent = `${currentMatchIndex + 1}/${findMatches.length}`;
+    }
+}
+
+function jumpToMatch(index, autoFocusEditor = true) {
+    if (findMatches.length === 0) return;
+    currentMatchIndex = (index + findMatches.length) % findMatches.length;
+    const m = findMatches[currentMatchIndex];
+
+    const applyFocusAndScroll = () => {
+        if (!editorInput) return;
+        if (autoFocusEditor) {
+            editorInput.focus();
+        }
+        editorInput.setSelectionRange(m.start, m.end);
+
+        const lineCount = editorInput.value.slice(0, m.start).split('\n').length;
+        const totalLines = editorInput.value.split('\n').length;
+        if (totalLines > 0) {
+            const scrollPct = (lineCount - 1) / totalLines;
+            editorInput.scrollTop = scrollPct * editorInput.scrollHeight;
+        }
+    };
+
+    applyFocusAndScroll();
+    if (autoFocusEditor) {
+        requestAnimationFrame(applyFocusAndScroll);
+    }
+
+    updateFindCountUI();
+}
+
+function openFindBar(showReplace = false) {
+    if (!findReplaceBar) return;
+    findReplaceBar.style.display = 'flex';
+    if (replaceRow) {
+        replaceRow.style.display = showReplace ? 'flex' : 'none';
+    }
+
+    const selStart = editorInput.selectionStart;
+    const selEnd = editorInput.selectionEnd;
+    if (selStart !== selEnd && (selEnd - selStart) < 100) {
+        const selText = editorInput.value.slice(selStart, selEnd);
+        if (selText && !selText.includes('\n')) {
+            findInput.value = selText;
+        }
+    }
+
+    updateFindMatches();
+    findInput.focus();
+    findInput.select();
+}
+
+function closeFindBar() {
+    if (findReplaceBar) {
+        findReplaceBar.style.display = 'none';
+    }
+    if (editorInput) {
+        editorInput.focus();
+    }
+}
+
+if (findReplaceButton) {
+    findReplaceButton.addEventListener('click', () => openFindBar(true));
+}
+
+if (findInput) {
+    findInput.addEventListener('input', () => {
+        updateFindMatches();
+        if (findMatches.length > 0) {
+            jumpToMatch(0, false);
+        }
+    });
+
+    findInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                jumpToMatch(currentMatchIndex - 1, true);
+            } else {
+                jumpToMatch(currentMatchIndex + 1, true);
+            }
+        } else if (e.key === 'Escape') {
+            closeFindBar();
+        }
+    });
+}
+
+if (replaceInput) {
+    replaceInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeFindBar();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            executeReplaceOne();
+        }
+    });
+}
+
+const bindNavBtn = (btn, action) => {
+    if (!btn) return;
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        action();
+    });
+};
+
+bindNavBtn(findPrevBtn, () => jumpToMatch(currentMatchIndex - 1, true));
+bindNavBtn(findNextBtn, () => jumpToMatch(currentMatchIndex + 1, true));
+if (findCloseBtn) findCloseBtn.addEventListener('click', closeFindBar);
+
+function executeReplaceOne() {
+    if (findMatches.length === 0 || currentMatchIndex === -1) return;
+    const m = findMatches[currentMatchIndex];
+    const repText = replaceInput ? replaceInput.value : '';
+    const val = editorInput.value;
+
+    const newVal = val.slice(0, m.start) + repText + val.slice(m.end);
+    editorInput.value = newVal;
+    editorInput.dispatchEvent(new Event('input'));
+
+    updateFindMatches();
+    if (findMatches.length > 0) {
+        jumpToMatch(currentMatchIndex % findMatches.length);
+    }
+}
+
+function executeReplaceAll() {
+    const searchText = findInput ? findInput.value : '';
+    if (!searchText || !editorInput) return;
+
+    const repText = replaceInput ? replaceInput.value : '';
+    const val = editorInput.value;
+
+    const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const newVal = val.replace(regex, repText);
+
+    if (newVal !== val) {
+        editorInput.value = newVal;
+        editorInput.dispatchEvent(new Event('input'));
+        updateFindMatches();
+        simpleToast({ content: t('findReplace.replaceAll'), type: 'success', timeout: 1200 });
+    }
+}
+
+if (replaceOneBtn) replaceOneBtn.addEventListener('click', executeReplaceOne);
+if (replaceAllBtn) replaceAllBtn.addEventListener('click', executeReplaceAll);
+
+// ==========================================
+// 3. 尋找與取代 (Find & Replace) 面板自由拖曳移動邏輯
+// ==========================================
+if (findReplaceBar) {
+    let isDraggingBar = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+
+    findReplaceBar.addEventListener('pointerdown', (e) => {
+        // 當點擊輸入框、按鈕時不觸發拖曳
+        if (['INPUT', 'BUTTON', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+            return;
+        }
+
+        isDraggingBar = true;
+        findReplaceBar.classList.add('dragging');
+        findReplaceBar.setPointerCapture(e.pointerId);
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        const rect = findReplaceBar.getBoundingClientRect();
+        const containerRect = editorContainer ? editorContainer.getBoundingClientRect() : { left: 0, top: 0 };
+
+        initialLeft = rect.left - containerRect.left;
+        initialTop = rect.top - containerRect.top;
+
+        findReplaceBar.style.left = `${initialLeft}px`;
+        findReplaceBar.style.top = `${initialTop}px`;
+        findReplaceBar.style.right = 'auto';
+
+        e.preventDefault();
+    });
+
+    findReplaceBar.addEventListener('pointermove', (e) => {
+        if (!isDraggingBar) return;
+
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        if (editorContainer) {
+            const containerW = editorContainer.clientWidth;
+            const containerH = editorContainer.clientHeight;
+            const barW = findReplaceBar.offsetWidth;
+            const barH = findReplaceBar.offsetHeight;
+
+            newLeft = Math.max(0, Math.min(containerW - barW, newLeft));
+            newTop = Math.max(0, Math.min(containerH - barH, newTop));
+        }
+
+        findReplaceBar.style.left = `${newLeft}px`;
+        findReplaceBar.style.top = `${newTop}px`;
+    });
+
+    const stopDraggingBar = (e) => {
+        if (!isDraggingBar) return;
+        isDraggingBar = false;
+        findReplaceBar.classList.remove('dragging');
+        try {
+            findReplaceBar.releasePointerCapture(e.pointerId);
+        } catch (err) { }
+    };
+
+    findReplaceBar.addEventListener('pointerup', stopDraggingBar);
+    findReplaceBar.addEventListener('pointercancel', stopDraggingBar);
 }
 
 if (panelSplitter) {
@@ -5478,6 +5906,16 @@ window.addEventListener('keydown', (e) => {
         // 🔴 修正：拿掉外面的 e.preventDefault()，改在需要攔截的 case 內個別加上
 
         switch (e.key.toLowerCase()) {
+            case 'f':
+                e.preventDefault();
+                openFindBar(false);
+                break;
+
+            case 'h':
+                e.preventDefault();
+                openFindBar(true);
+                break;
+
             case 's':
                 e.preventDefault(); // 🟢 攔截瀏覽器預設的網頁另存新檔
                 isContextEdited = false;

@@ -279,8 +279,9 @@ export const ja = {
             customFps: "カスタムFPS:",
             bgmVolume: "BGM音量:",
             sfxVolume: "効果音音量:",
-            includeAudio: "BGMを含める:",
-            includeSfx: "効果音を含める:"
+            includeAudio: "オーディオを含める:",
+            includeSfx: "効果音を含める:",
+            includeIntro: "譜面ロードアニメーション:"
         },
         quickGenerate: {
             title: "クイック生成",

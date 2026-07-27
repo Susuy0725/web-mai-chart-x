@@ -12,6 +12,8 @@ import {
     clamp,
     drawImgAtcenter,
     exColor,
+    easeOutQuad,
+    easeInBack,
 } from './helper.js';
 const charWidthCache = {};
 
@@ -385,6 +387,277 @@ export class SimaiRenderer {
         this.drawStaticBackground();
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
         if (this.settings.showUI) this.drawUI(dt, globalTime);
+    }
+
+    /**
+     * 繪製 10 秒影片載入動畫與譜面資訊卡
+     */
+    drawLoadingIntro({
+        t = 0,
+        duration = 5,
+        backgroundImage = null,
+        chartInfo = {},
+    } = {}) {
+        const levelColors = {
+            1: "#248ACA",
+            2: "#43C122",
+            3: "#FFBA01",
+            4: "#FE5963",
+            5: "#A356E9",
+            6: "#E3E6E5",
+            7: "#FF6EFC",
+        }
+        const levels = {
+            1: 'EAZY',
+            2: 'BASIC',
+            3: 'ADVANCED',
+            4: 'EXPERT',
+            5: 'MASTER',
+            6: 'Re:MASTER',
+            7: 'U•TA•GE'
+        }
+        function getAnimation(t = 0, duration = 1, callback = (progress) => { }) {
+            const progress = Math.min(Math.max(t / duration, 0), 1);
+            callback(progress);
+        }
+        function outlineText(ctx, text, x, y) {
+            ctx.strokeText(text, x, y);
+            ctx.fillText(text, x, y);
+        }
+        function darkenHexColor(hex, percent) {
+            // 移除可能帶有的 # 號
+            let cleanHex = hex.replace(/^#/, '');
+
+            // 如果是 3 位數的簡寫 (如 #f00)，擴充成 6 位數 (#ff0000)
+            if (cleanHex.length === 3) {
+                cleanHex = cleanHex.split('').map(char => char + char).join('');
+            }
+
+            // 將 R, G, B 分別轉成十進位數值
+            let num = parseInt(cleanHex, 16);
+            let r = (num >> 16);
+            let g = (num >> 8) & 0x00FF;
+            let b = num & 0x0000FF;
+
+            // 計算調暗後的數值，並確保不會小於 0
+            const factor = 1 - (percent / 100);
+            r = Math.max(0, Math.floor(r * factor));
+            g = Math.max(0, Math.floor(g * factor));
+            b = Math.max(0, Math.floor(b * factor));
+
+            // 轉回 16 進位字串並補足兩位數
+            const toHex = (val) => val.toString(16).padStart(2, '0');
+
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+
+        const ctx = this.ctx;
+        ctx.save();
+        this.updateCanvasMetrics();
+        const { _hw: hw, _hh: hh, canvas: { width: w, height: h } } = this;
+        const dur = (duration - t);
+        const durInv = duration - dur;
+
+        let img = null;
+        if (backgroundImage) {
+            if (backgroundImage instanceof HTMLImageElement || backgroundImage instanceof HTMLCanvasElement || (window.ImageBitmap && backgroundImage instanceof ImageBitmap)) {
+                img = backgroundImage;
+            } else if (backgroundImage instanceof Blob || backgroundImage instanceof File) {
+                if (!this._introBlobImgCache || this._introBlobImgCache._blob !== backgroundImage) {
+                    if (this._introBlobImgCache && this._introBlobImgCache._url) {
+                        URL.revokeObjectURL(this._introBlobImgCache._url);
+                    }
+                    const url = URL.createObjectURL(backgroundImage);
+                    const imgEl = new Image();
+                    imgEl._blob = backgroundImage;
+                    imgEl._url = url;
+                    imgEl.src = url;
+                    this._introBlobImgCache = imgEl;
+                }
+                if (this._introBlobImgCache.complete && this._introBlobImgCache.naturalWidth > 0) {
+                    img = this._introBlobImgCache;
+                }
+            } else if (typeof backgroundImage === 'string') {
+                if (!this._introStrImgCache || this._introStrImgCache.src !== backgroundImage) {
+                    const imgEl = new Image();
+                    imgEl.src = backgroundImage;
+                    this._introStrImgCache = imgEl;
+                }
+                if (this._introStrImgCache.complete && this._introStrImgCache.naturalWidth > 0) {
+                    img = this._introStrImgCache;
+                }
+            }
+        }
+
+        if (!img && this.images && this.images['no_image']) {
+            img = this.images['no_image'];
+        }
+
+        const cardPath = new Path2D();
+        cardPath.arc(16, 25, 2, 0, Math.PI * 0.5);
+        cardPath.arc(-16, 25, 2, Math.PI * 0.5, Math.PI * 1);
+        cardPath.arc(-16, -33.5, 2, Math.PI * 1, Math.PI * 1.5)
+        cardPath.arc(-2, -33.5, 2, Math.PI * 1.5, Math.PI * 2);
+        cardPath.arc(2, -32, 2, Math.PI * 1, Math.PI * 0.5, true);
+        cardPath.arc(16, -28, 2, Math.PI * 1.5, Math.PI * 2);
+        cardPath.closePath();
+        const lvPath = new Path2D();
+        lvPath.arc(16, -0.5, 2, 0, Math.PI * 0.5);
+        lvPath.arc(7.5, 3.5, 2, Math.PI * 1.5, Math.PI * 1, true);
+        lvPath.arc(3.5, 5.5, 2, 0, Math.PI * 0.5);
+        lvPath.lineTo(18, 7.5);
+        lvPath.closePath();
+        const capsulePath = new Path2D();
+        capsulePath.arc(-2.5, -33, 2, Math.PI * 1.5, Math.PI * 0.5);
+        capsulePath.arc(-15.5, -33, 2, Math.PI * 0.5, Math.PI * 1.5);
+        capsulePath.closePath();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
+        ctx.clip('evenodd');
+
+        if (dur > 0.6) {
+
+            ctx.save();
+            ctx.filter = 'blur(10px) brightness(0.8)';
+            this.drawImgAtcenter(img, 110);
+            ctx.restore();
+
+            ctx.save();
+            getAnimation(t, 0.5, (s) => {
+                const p = 1 - easeOutQuad(s);
+                ctx.globalAlpha = 1 - p;
+                ctx.scale(p * 0.3 + 1, p * 0.3 + 1);
+            });
+            const levelColor = levelColors[chartInfo.difficulty ?? 5] || "#A356E9";
+            const levelColorDark = darkenHexColor(levelColor, 40);
+            const lvText = chartInfo.lv.replaceAll('+', '');
+            const isPlus = chartInfo.lv.includes('+');
+            const difficultyText = levels[chartInfo.difficulty];
+            ctx.strokeStyle = levelColorDark;
+            ctx.lineWidth = 0.25;
+            ctx.stroke(cardPath);
+            ctx.clip(cardPath);
+            ctx.fillStyle = levelColor;
+            ctx.fillRect(-20, -50, 40, 100);
+
+            ctx.strokeStyle = "rgba(255,255,255,0.3)";
+            ctx.beginPath();
+            ctx.lineWidth = 1.6;
+            ctx.arc(0, -12.5, 17, Math.PI * 0.25, Math.PI * 0.75, true);
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(255,255,255,0.2)";
+            ctx.arc(0, -12.5, 16, Math.PI * 0.25, Math.PI * 0.75, true);
+            ctx.stroke();
+
+            ctx.fillStyle = "black";
+            ctx.fillRect(-15, -27.5, 30, 30);
+            ctx.fillStyle = "#093F80";
+            ctx.fillRect(-20, 7.5, 40, 5);
+            ctx.fillStyle = "#052E5B";
+            ctx.fillRect(-20, 12.5, 40, 3.5);
+            ctx.fillStyle = "white";
+            ctx.fillRect(-20, 16, 40, 15);
+            ctx.fill(capsulePath);
+
+            ctx.font = "1.9px title";
+            ctx.textAlign = "center";
+            ctx.fillText(chartInfo.title, 0, 11);
+            ctx.font = "1.8px Google Sans";
+            ctx.fillText(chartInfo.artist, 0, 14.8);
+            ctx.fillStyle = "#093F80";
+            ctx.textAlign = "left";
+            ctx.font = "1.2px title";
+            ctx.fillText("NOTES DESIGNER", -17, 23.5);
+            ctx.font = "1.8px Google Sans";
+            ctx.fillText(chartInfo.des, -17, 25.5);
+            ctx.font = "bold 2.5px title";
+            ctx.textAlign = "center";
+            ctx.fillText("CUSTOM", -9, -32);
+
+            getAnimation(t, 0.5, (s) => {
+                const p = 1 - easeOutQuad(s);
+                ctx.globalAlpha = 1 - p;
+                if (img && (img instanceof HTMLImageElement || img instanceof HTMLCanvasElement || (window.ImageBitmap && img instanceof ImageBitmap))) {
+                    this.drawImgAtcenter(img, 29.8 - p * 10, 0, -12.5);
+                }
+                ctx.scale(p * 0.3 + 1, p * 0.3 + 1);
+            });
+            ctx.lineWidth = 0.3;
+            ctx.strokeStyle = levelColor;
+            ctx.stroke(lvPath);
+            ctx.fillStyle = "rgba(255,255,255,0.5)";
+            ctx.fill(lvPath);
+
+            ctx.fillStyle = "white";
+            ctx.shadowColor = "#000000a0";
+            ctx.shadowBlur = 4;
+            ctx.textAlign = "center";
+            ctx.lineWidth = 0.75;
+            ctx.font = "bold 3.5px Google Sans";
+            outlineText(ctx, difficultyText, -6.4, 6);
+            ctx.shadowColor = "";
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = levelColorDark;
+            ctx.textAlign = "left";
+            ctx.lineWidth = 0.4;
+            ctx.font = "bold 2.5px Google Sans";
+            outlineText(ctx, "LV", 6.4, 6);
+            ctx.textAlign = "center";
+            ctx.font = "bold 5.5px Google Sans";
+            ctx.letterSpacing = "-0.5px"
+            ctx.lineWidth = 0.5;
+            outlineText(ctx, lvText, 12, 6.5);
+            ctx.font = "bold 3.6px Google Sans";
+            ctx.textAlign = "left";
+            outlineText(ctx, isPlus ? "+" : "", 13.8 + (lvText.length - 1), 3.5);
+            //outlineText(ctx, chartInfo.lv, 9.5, 6.8);
+            ctx.restore();
+        }
+        function aniCurve1(t) {
+            return Math.pow(1 - 2 * t, 4);
+        }
+        ctx.save();
+        if (t < 0.2) {
+            getAnimation(t, 0.2, (s) => {
+                ctx.rotate(Math.PI * 0.25);
+                ctx.fillStyle = "#FFF";
+                ctx.fillRect(easeInBack(s) * 50, -50, 50, 100);
+                ctx.fillStyle = "#84FEED";
+                ctx.fillRect(easeInBack(s) * 20 + 31, -50, 50, 100);
+                ctx.fillStyle = "#2DD4ED";
+                ctx.fillRect(easeInBack(s) * 10 + 41, -50, 50, 100);
+                ctx.rotate(Math.PI);
+                ctx.fillStyle = "#FFF";
+                ctx.fillRect(easeInBack(s) * 50, -50, 50, 100);
+                ctx.fillStyle = "#84FEED";
+                ctx.fillRect(easeInBack(s) * 20 + 31, -50, 50, 100);
+                ctx.fillStyle = "#2DD4ED";
+                ctx.fillRect(easeInBack(s) * 10 + 41, -50, 50, 100);
+            });
+        }
+        ctx.restore();
+        if (dur < 0.8 && t < duration) {
+            ctx.save();
+            getAnimation(0.8 - dur, 0.4, (s) => {
+                ctx.rotate(Math.PI * 0.25);
+                ctx.fillStyle = "#FFF";
+                ctx.fillRect(aniCurve1(s) * 50, -50, 50, 100);
+                ctx.fillStyle = "#84FEED";
+                ctx.fillRect(aniCurve1(s) * 20 + 31, -50, 50, 100);
+                ctx.fillStyle = "#2DD4ED";
+                ctx.fillRect(aniCurve1(s) * 10 + 41, -50, 50, 100);
+                ctx.rotate(Math.PI);
+                ctx.fillStyle = "#FFF";
+                ctx.fillRect(aniCurve1(s) * 50, -50, 50, 100);
+                ctx.fillStyle = "#84FEED";
+                ctx.fillRect(aniCurve1(s) * 20 + 31, -50, 50, 100);
+                ctx.fillStyle = "#2DD4ED";
+                ctx.fillRect(aniCurve1(s) * 10 + 41, -50, 50, 100);
+            });
+            ctx.restore();
+        }
+        ctx.restore();
     }
 
     drawUI(dt, globalTime) {

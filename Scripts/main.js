@@ -13,7 +13,12 @@ import { updateDiscordRPC } from '../rpc.js';
 // 初始化進行靜態翻譯
 applyI18nToDOM();
 
-if ('serviceWorker' in navigator) {
+const isDev =
+    self.location.hostname === 'localhost' ||
+    self.location.hostname === '127.0.0.1' ||
+    self.location.hostname.endsWith('.ngrok-free.app');
+
+if ('serviceWorker' in navigator && !isDev) {
     navigator.serviceWorker.register('./sw.js')
         .then((reg) => {
             console.log('Service worker registered:', reg);
@@ -72,7 +77,8 @@ _init();
 if (typeof document !== 'undefined' && document.fonts) {
     Promise.all([
         document.fonts.load('10px combo'),
-        document.fonts.load('10px mono')
+        document.fonts.load('10px mono'),
+        document.fonts.load('10px title'),
     ]).then(() => {
         if (renderer) {
             renderer._sensorCacheParams = { w: 0, h: 0, scale: 0 };
@@ -5872,9 +5878,10 @@ recordVideoButton.addEventListener('click', async () => {
         };
     };
 
-    // 實體化兩個帥氣的藍色動態開關
+    // 實體化帥氣的動態開關
     const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
     const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
+    const introSwitch = createCustomSwitch(t('popup.recordVideo.includeIntro'), true);
 
     // 全部塞進彈窗大容器
     container.append(
@@ -5884,7 +5891,8 @@ recordVideoButton.addEventListener('click', async () => {
         bgmVolField.wrapper,
         sfxVolField.wrapper,
         audioSwitch.wrapper, // 塞入外殼
-        sfxSwitch.wrapper   // 塞入外殼
+        sfxSwitch.wrapper,  // 塞入外殼
+        introSwitch.wrapper // 塞入載入動畫外殼
     );
 
     popupWindow({
@@ -5929,11 +5937,20 @@ recordVideoButton.addEventListener('click', async () => {
                         sfxVolume: sfxVolValNum,
                         includeBgm: audioSwitch.checked && bgmLoaded, // 讀取自訂狀態
                         includeSfx: sfxSwitch.checked,                 // 讀取自訂狀態
+                        includeIntro: introSwitch.checked,             // 讀取 10 秒載入動畫開關
                         musicDelay,
                         editorBackgroundImage,
                         editorBackgroundVideo,
                         notes,
                         playScoreRes,
+                        chartInfo: {
+                            title: maidata.title ?? '',
+                            artist: maidata.artist ?? '-',
+                            des: maidata["des_" + nowDifficulty] ?? '-',
+                            lv: maidata["lv_" + nowDifficulty] ?? '0',
+                            difficulty: nowDifficulty,
+                            bpm: maidata.wholebpm ?? 0,
+                        },
                     });
 
                     pwCtx.close();

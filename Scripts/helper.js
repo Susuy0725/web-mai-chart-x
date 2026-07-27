@@ -35,13 +35,18 @@ export const exColor = {
     break: '#EBBA63',
 };
 export function drawImgAtcenter(ctx, img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
-    ctx.drawImage(
-        img,
-        -size / 2 * imgWidthMul + offsetX,
-        -size / 2 * imgHeightMul + offsetY,
-        size * imgWidthMul,
-        size * imgHeightMul
-    );
+    if (!img || typeof img === 'string') return;
+    try {
+        ctx.drawImage(
+            img,
+            -size / 2 * imgWidthMul + offsetX,
+            -size / 2 * imgHeightMul + offsetY,
+            size * imgWidthMul,
+            size * imgHeightMul
+        );
+    } catch (e) {
+        console.warn('drawImgAtcenter 繪製失敗:', e);
+    }
 }
 export function getButton(action, type = "control") {
     return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#topUtilityBtns .utilityButton"}[data-buttonAction="${action}"]`);
@@ -367,7 +372,8 @@ class AudioManager {
             'judge_break_slide': './Sounds/judge_break_slide.wav',
             'touch': './Sounds/touch.wav',
             'hanabi': './Sounds/hanabi.wav',
-            'touchHold_riser': './Sounds/touchHold_riser.wav'
+            'touchHold_riser': './Sounds/touchHold_riser.wav',
+            'track_start': './Sounds/track_start.wav'
         };
 
         this.sfxVolumes = {
@@ -382,6 +388,7 @@ class AudioManager {
             'break_slide_start': 0.4,
             'touch': 0.4,
             'hanabi': 0.6,
+            'track_start': 0.8,
         };
 
         this.activeLongSounds = new Map();
@@ -2460,11 +2467,13 @@ export async function videoRender(audioManager, canvas, renderer, {
     includeAudio = true,
     includeBgm = true,
     includeSfx = true,
+    includeIntro = true,
     musicDelay = 0,
     editorBackgroundImage = null,
     editorBackgroundVideo = null,
     notes = [],
     playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
+    chartInfo = {},
 } = {}) {
     const settings = renderer.settings || window.settings || {};
     const {
@@ -2475,6 +2484,8 @@ export async function videoRender(audioManager, canvas, renderer, {
         AudioBufferSource,
         QUALITY_HIGH
     } = window.Mediabunny;
+
+    const introDuration = includeIntro ? 6 : 0;
 
     const outlineImage = await (async () => {
         try {
@@ -2845,12 +2856,66 @@ export async function videoRender(audioManager, canvas, renderer, {
                 slicedAudio = mixSfxInto(slicedAudio, sfxEvents, longSoundEvents, start, end);
             }
 
+            if (!slicedAudio && includeAudio && includeSfx && introDuration > 0) {
+                const sr = 44100;
+                const totalSec = introDuration + (end - start);
+                const outLen = Math.max(1, Math.ceil(totalSec * sr));
+                slicedAudio = new AudioBuffer({ length: outLen, numberOfChannels: 2, sampleRate: sr });
+            }
+
             if (slicedAudio) {
-                // 🔴 關鍵修正：強制將採樣率轉換為 48000 Hz (Opus 編碼器要求)
+                // 🔴 關鍵修正：強制將採樣率轉換為 44100 Hz (AAC 編碼器要求)
                 slicedAudio = await resampleAudioBuffer(slicedAudio, 44100);
 
+                if (introDuration > 0) {
+                    const padAudioBufferFront = (buf, frontSeconds) => {
+                        if (!buf || frontSeconds <= 0) return buf;
+                        const sr = buf.sampleRate;
+                        const padSamples = Math.floor(frontSeconds * sr);
+                        const newLen = buf.length + padSamples;
+                        const nb = new AudioBuffer({ length: newLen, numberOfChannels: buf.numberOfChannels, sampleRate: sr });
+                        for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+                            const dst = nb.getChannelData(ch);
+                            const src = buf.getChannelData(ch);
+                            dst.set(src, padSamples);
+                        }
+                        return nb;
+                    };
+                    slicedAudio = padAudioBufferFront(slicedAudio, introDuration);
+
+                    // 🔴 在 0.0 秒處 (影片 Intro 動畫登場點) 混入 track_start.wav 音效
+                    const trackStartBuf = audioManager.bufferMap.get('track_start');
+                    if (includeSfx && trackStartBuf && slicedAudio) {
+                        const sr = slicedAudio.sampleRate;
+                        const srcRate = trackStartBuf.sampleRate || sr;
+                        const ratio = srcRate / sr;
+                        const baseVol = audioManager.sfxVolumes['track_start'] ?? 0.8;
+                        const finalVol = baseVol * sfxVolume;
+                        const maxDstSamples = Math.min(
+                            slicedAudio.length,
+                            Math.floor((trackStartBuf.length / srcRate) * sr)
+                        );
+                        for (let ch = 0; ch < slicedAudio.numberOfChannels; ch++) {
+                            const dst = slicedAudio.getChannelData(ch);
+                            const src = trackStartBuf.getChannelData(ch < trackStartBuf.numberOfChannels ? ch : 0);
+                            for (let i = 0; i < maxDstSamples; i++) {
+                                const srcPos = i * ratio;
+                                const idx0 = Math.floor(srcPos);
+                                const idx1 = idx0 + 1;
+                                if (idx0 >= src.length) break;
+                                const frac = srcPos - idx0;
+                                const s0 = src[idx0] || 0;
+                                const s1 = src[idx1] || 0;
+                                const sampleVal = s0 * (1 - frac) + s1 * frac;
+                                dst[i] += sampleVal * finalVol;
+                            }
+                        }
+                    }
+                }
+
                 // 🔴 補上靜音，使音軌長度與視訊精確對齊
-                const targetLen = Math.max(1, Math.ceil((end - start) * slicedAudio.sampleRate));
+                const totalSec = introDuration + (end - start);
+                const targetLen = Math.max(1, Math.ceil(totalSec * slicedAudio.sampleRate));
                 slicedAudio = padAudioBuffer(slicedAudio, targetLen);
             }
         }
@@ -2908,8 +2973,9 @@ export async function videoRender(audioManager, canvas, renderer, {
             canvasIterator = mediabunnyCanvasSink.canvases(start, end);
         }
 
-        const total = end - start;
-        const frameCount = Math.max(1, Math.ceil(total * fps));
+        const introFrameCount = Math.round(introDuration * fps);
+        const gameFrameCount = Math.max(1, Math.ceil((end - start) * fps));
+        const frameCount = introFrameCount + gameFrameCount;
         const step = 1 / fps;
 
         const simaiLogicControler = new SimaiLogicControler();
@@ -2924,7 +2990,9 @@ export async function videoRender(audioManager, canvas, renderer, {
                 return;
             }
 
-            const t = start + i * step;
+            const isIntroFrame = includeIntro && (i < introFrameCount);
+            const gameFrameIdx = i - introFrameCount;
+            const t = start + (isIntroFrame ? gameFrameIdx : i - introFrameCount) * step;
             const globalT = t - (musicDelay || 0);
 
             const {
@@ -3035,6 +3103,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                 }
 
                 if (outlineImage) {
+                    const p = Math.min(width, height) / scaleBase * rs;
                     offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
                     offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
                 }
@@ -3055,6 +3124,15 @@ export async function videoRender(audioManager, canvas, renderer, {
                 noteQuantity,
                 playScoreRes,
             });
+
+            if (isIntroFrame) {
+                renderer.drawLoadingIntro({
+                    t: i * step,
+                    duration: introDuration,
+                    backgroundImage: editorBackgroundImage,
+                    chartInfo,
+                });
+            }
 
             const tsRelative = i * step;
             await videoSource.add(tsRelative, step);
@@ -3116,10 +3194,24 @@ export async function videoRender(audioManager, canvas, renderer, {
             }
         }
         if (mediabunnyInput) {
-            mediabunnyInput.dispose().catch(e => console.error("Error disposing Mediabunny input:", e));
+            try {
+                const res = mediabunnyInput.dispose();
+                if (res && typeof res.catch === 'function') {
+                    res.catch(e => console.error("Error disposing Mediabunny input:", e));
+                }
+            } catch (e) {
+                console.error("Error disposing Mediabunny input:", e);
+            }
         }
         if (output && output.state !== 'finalized' && output.state !== 'canceled') {
-            output.cancel().catch(e => console.error("Error cancelling output:", e));
+            try {
+                const res = output.cancel();
+                if (res && typeof res.catch === 'function') {
+                    res.catch(e => console.error("Error cancelling output:", e));
+                }
+            } catch (e) {
+                console.error("Error cancelling output:", e);
+            }
         }
         try { renderer.setContext(currentContext); } catch (e) { }
     }
@@ -3372,4 +3464,14 @@ export class SimaiLogicControler {
         this._result.nowIndex = nowIndex;
         return this._result;
     }
+}
+
+export function easeOutQuad(x) {
+    return 1 - (1 - x) * (1 - x);
+}
+export function easeInBack(x) {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+
+    return c3 * x * x * x - c1 * x * x;
 }

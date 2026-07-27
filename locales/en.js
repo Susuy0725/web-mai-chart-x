@@ -278,8 +278,9 @@ export const en = {
             customFps: "Custom FPS:",
             bgmVolume: "BGM Volume:",
             sfxVolume: "SFX Volume:",
-            includeAudio: "Include BGM:",
-            includeSfx: "Include SFX:"
+            includeAudio: "Include Audio:",
+            includeSfx: "Include Sound Effects:",
+            includeIntro: "Chart Loading Intro:"
         },
         quickGenerate: {
             title: "Quick Generate",

@@ -279,7 +279,8 @@ export const zhTW = {
             bgmVolume: "BGM 音量:",
             sfxVolume: "SFX 音量:",
             includeAudio: "包含音訊:",
-            includeSfx: "包含打擊音效:"
+            includeSfx: "包含打擊音效:",
+            includeIntro: "譜面載入動畫:"
         },
         quickGenerate: {
             title: "快速生成",

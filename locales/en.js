@@ -23,10 +23,6 @@ export const en = {
         toolsFetchFromMainote: "Fetch from Mainote",
         toolsI18nEditor: "i18n Translation Editor",
         toolsPopup: "Popout Preview",
-        toolsPopupOpened: "Opened in external window",
-        toolsFindReplace: "Find & Replace",
-        toolsToggleBk: "Toggle Break (bk)",
-        toolsToggleEx: "Toggle EX (ex)",
         manageResources: "Resource Manager",
         chartInfo: "Chart Info",
         settings: "Settings",
@@ -44,8 +40,7 @@ export const en = {
         displayMode: "View",
         displayModeSimai: "simai Syntax",
         displayModeVisual: "Timeline",
-        readyBeat: "Prep Beats",
-        timeSignature: "Time signature"
+        readyBeat: "Prep Beats"
     },
     textarea: {
         placeholder: "Enter chart data here..."
@@ -92,8 +87,7 @@ export const en = {
         projectDeleted: "Project deleted",
         durationError: "End time must be greater than start time",
         renderComplete: "Frame-by-frame rendering complete. File downloaded.",
-        renderFailed: "Rendering failed: {error}",
-        moveMouseToOpen: "Move your mouse to access quick panel!"
+        renderFailed: "Rendering failed: {error}"
     },
     settings: {
         title: "Settings",
@@ -106,15 +100,13 @@ export const en = {
         items: {
             speed: "Tap/Hold Speed",
             slideSpeed: "Slide Speed",
+            slideSkip: "Slide Skip-Zone Tolerance",
             touchSpeed: "Touch Speed",
             middleDisplay: "Center Display",
             moviebrightness: "BG Dim",
-            bright: "BRIGHT",
-            normal: "NORMAL",
-            dark: "DARK",
-            veryDark: "VERY DARK",
             pinkStars: "Pink Stars",
             showSensor: "Show Sensors",
+            highlightSensor: "Highlight Touched Sensors",
             showSensorTextWhenPaused: "Show Sensor Text when Paused",
             hideBackgroundWhenPaused: "Hide BG when Paused",
             rotateStars: "Rotating Stars",
@@ -129,7 +121,8 @@ export const en = {
             showUI: "Show FPS Interface",
             autoPauseOnScroll: "Auto Pause on Scroll",
             globalTimeline: "Show Global Timeline",
-            enableQuickPanel: "Enable Quick Panel",
+            autoPlay: "AutoPlay",
+            simulateAutoplay: "Simulate Player Touch (Auto)",
             lang: "Language"
         },
         middleDisplayOpts: {
@@ -278,9 +271,8 @@ export const en = {
             customFps: "Custom FPS:",
             bgmVolume: "BGM Volume:",
             sfxVolume: "SFX Volume:",
-            includeAudio: "Include Audio:",
-            includeSfx: "Include Sound Effects:",
-            includeIntro: "Chart Loading Intro:"
+            includeAudio: "Include BGM:",
+            includeSfx: "Include SFX:"
         },
         quickGenerate: {
             title: "Quick Generate",
@@ -314,8 +306,6 @@ export const en = {
             basicItems: [
                 `<b>Load & New</b>: Click "File" in the top-left menu to create a new project, load a folder, or read a ZIP archive.`,
                 `<b>Download</b>: Click "File > Download" in the top-left menu to download your project as a compressed package.`,
-                `<b>Panel Split & Snap Fullscreen</b>: Drag the center splitter to resize layout ratio; drag left to snap and expand editor to 100% full width.`,
-                `<b>Note Flag Toggle</b>: Use menu options "Toggle Break (bk)" or "Toggle EX (ex)" to batch toggle flags for selection or full text.`,
                 `<b>Bottom Bar</b>: Use <span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span> to hide, and <span class="material-symbols-outlined" translate="no">keyboard</span> to show the virtual keyboard.`,
                 `<b>Autosave</b>: Projects autosave automatically, or you can press <span class="code-highlight">Ctrl</span><span class="code-highlight">S</span> to save.`
             ],
@@ -324,31 +314,11 @@ export const en = {
             shortcutItems: [
                 `<b>Play / Pause</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">Space</span>.`,
                 `<b>Restart</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">Backspace</span>.`,
-                `<b>Find / Replace</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">F</span> to Find, <span class="code-highlight">Ctrl</span><span class="code-highlight">H</span> to Replace.`,
                 `<b>Undo / Redo</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">Z</span> / <span class="code-highlight">Ctrl</span><span class="code-highlight">Y</span>.`,
                 `<b>Speed Up Playback</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">P</span>.`,
                 `<b>Slow Down Playback</b>: <span class="code-highlight">Ctrl</span><span class="code-highlight">O</span>.`,
                 `<b>Scale Rate</b>: <span class="code-highlight">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity.`
             ]
         }
-    },
-    rpc: {
-        idleDetails: "Staring at a blank page",
-        idleState: "Idle",
-        editingDetails: "Editing: {title}",
-        difficultyState: "Difficulty: {diff}",
-        unknownDiff: "Unknown"
-    },
-    findReplace: {
-        findPlaceholder: "Find...",
-        replacePlaceholder: "Replace with...",
-        noMatches: "No matches",
-        matchCount: "{current}/{total}",
-        replaceOne: "Replace",
-        replaceAll: "Replace All",
-        toastToggleBkSelection: "Toggled Break (bk) status for selection",
-        toastToggleBkFull: "Toggled Break (bk) status for all text",
-        toastToggleExSelection: "Toggled EX (ex) status for selection",
-        toastToggleExFull: "Toggled EX (ex) status for all text"
     }
 };

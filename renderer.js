@@ -12,72 +12,8 @@ import {
     clamp,
     drawImgAtcenter,
     exColor,
-    easeOutQuad,
-    easeInBack,
+    getSensorAtPoint,
 } from './helper.js';
-const charWidthCache = {};
-
-function textMonospace(ctx, text, x, y, cellWidth, mode = 'stroke') {
-    ctx.textAlign = 'left';
-    const fontKey = ctx.font;
-    if (!charWidthCache[fontKey]) {
-        charWidthCache[fontKey] = {};
-    }
-    const cache = charWidthCache[fontKey];
-
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        let charWidth = cache[char];
-        if (charWidth === undefined) {
-            charWidth = ctx.measureText(char).width;
-            cache[char] = charWidth;
-        }
-
-        const offsetX = (cellWidth - charWidth) / 2;
-
-        if (mode === 'stroke') {
-            ctx.strokeText(char, x + (i * cellWidth) + offsetX, y);
-        } else {
-            ctx.fillText(char, x + (i * cellWidth) + offsetX, y);
-        }
-    }
-}
-
-function outlineText(ctx, text, x, y, fontSize, outlinePx = 2, {
-    fillStyle = "#FFFFFF",
-    strokeStyle = "#000000",
-    strokeWidth = outlinePx,
-    fontWeight = "bold",
-    fontFamily = "combo",
-    textAlign = "center",
-    textBaseline = "middle",
-    letterSpacing = "0px",
-    shadowHeight = 0.3,
-    cellWidth = fontSize * 0.8,
-} = {}) {
-    cellWidth += letterSpacing ? fontSize * parseFloat(letterSpacing) : 0;
-    cellWidth = Math.max(cellWidth, 0);
-    let calX = x;
-    if (textAlign === "center") {
-        calX = x - ((text.length * cellWidth) / 2);
-    }
-    if (textAlign === "right") {
-        calX = x - (text.length * cellWidth);
-    }
-    ctx.save();
-    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-    ctx.textBaseline = textBaseline;
-    ctx.fillStyle = fillStyle;
-    ctx.lineWidth = strokeWidth;
-    if (strokeWidth > 0) {
-        ctx.strokeStyle = "#000";
-        textMonospace(ctx, text, calX, y + shadowHeight, cellWidth);
-        ctx.strokeStyle = strokeStyle;
-        textMonospace(ctx, text, calX, y, cellWidth);
-    }
-    textMonospace(ctx, text, calX, y, cellWidth, 'fill');
-    ctx.restore();
-}
 
 export class SimaiRenderer {
     constructor(canvas, settings) {
@@ -112,21 +48,72 @@ export class SimaiRenderer {
             play_score: null,
             backgroundDarkness: null,
         };
-
-        // 優化垃圾回收 (GC) 的重用物件與快取
-        this._zoneCounts = {};
-        this.drawnBorders = new Set();
         this.hanabiEffect = {};
-        this._tempColorConfig = { colorCode: '' };
-        this._auxTextList = new Array(12);
 
-        // outlineText / middleDisplay 快取配置
-        this._middleDisplayConfig1 = { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" };
-        this._middleDisplayConfig2 = { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: -0.1 };
-        this._middleDisplayConfigScore = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.1, textAlign: "right" };
-        this._middleDisplayConfigDot = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
-        this._middleDisplayConfigFrac = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
-        this._middleDisplayConfigPercent = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
+        this.activePointers = new Map();
+        this.pointerStrikes = new Set();
+        if (this.canvas && this.canvas.addEventListener) {
+            this._onPointerDown = this._onPointerDown.bind(this);
+            this._onPointerMove = this._onPointerMove.bind(this);
+            this._onPointerUp = this._onPointerUp.bind(this);
+
+            this.canvas.addEventListener('pointerdown', this._onPointerDown, { passive: false });
+            this.canvas.addEventListener('pointermove', this._onPointerMove, { passive: false });
+            this.canvas.addEventListener('pointerup', this._onPointerUp);
+            this.canvas.addEventListener('pointercancel', this._onPointerUp);
+            this.canvas.addEventListener('pointerleave', this._onPointerUp);
+        }
+    }
+
+    transformClickCoords(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX = (clientX - rect.left) * (this.canvas.width / rect.width);
+        const canvasY = (clientY - rect.top) * (this.canvas.height / rect.height);
+
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const p = Math.min(w, h) / scaleBase * this.scale;
+
+        const x = (canvasX - w / 2) / p;
+        const y = (canvasY - h / 2) / p;
+        return { x, y };
+    }
+
+    _onPointerDown(e) {
+        if (this.settings.autoPlay) return;
+        const { x, y } = this.transformClickCoords(e.clientX, e.clientY);
+        const sensorId = getSensorAtPoint(x, y);
+        if (sensorId) {
+            this.activePointers.set(e.pointerId, sensorId);
+            this.pointerStrikes.add(sensorId); // 登記 edge-trigger
+            e.preventDefault();
+        }
+    }
+
+    _onPointerMove(e) {
+        if (this.settings.autoPlay) return;
+        // 如果是滑鼠移動但沒有按下任何按鍵 (Hover)，則不視為觸碰，清空該指標狀態並返回
+        if (e.pointerType === 'mouse' && e.buttons === 0) {
+            this.activePointers.delete(e.pointerId);
+            return;
+        }
+        const { x, y } = this.transformClickCoords(e.clientX, e.clientY);
+        const sensorId = getSensorAtPoint(x, y);
+        const prevSensorId = this.activePointers.get(e.pointerId);
+        if (sensorId) {
+            // 只有滑入新感應器時才登記 edge-trigger
+            if (sensorId !== prevSensorId) {
+                this.pointerStrikes.add(sensorId);
+            }
+            this.activePointers.set(e.pointerId, sensorId);
+            e.preventDefault();
+        } else {
+            this.activePointers.delete(e.pointerId);
+        }
+    }
+
+    _onPointerUp(e) {
+        this.activePointers.delete(e.pointerId);
     }
 
 
@@ -134,14 +121,7 @@ export class SimaiRenderer {
         const w = this.canvas.width;
         const h = this.canvas.height;
         const invP = scaleBase / (Math.min(w, h) * this.scale);
-        if (!this._canvasWH) {
-            this._canvasWH = { width: 0, height: 0, halfWidth: 0, halfHeight: 0 };
-        }
-        this._canvasWH.width = w * invP;
-        this._canvasWH.height = h * invP;
-        this._canvasWH.halfWidth = w * invP * 0.5;
-        this._canvasWH.halfHeight = h * invP * 0.5;
-        return this._canvasWH;
+        return { width: w * invP, height: h * invP, halfWidth: w * invP * 0.5, halfHeight: h * invP * 0.5 };
     }
 
     /**
@@ -199,20 +179,50 @@ export class SimaiRenderer {
 
     // --- 視覺效果 ---
 
-    simpleHitEffect(noteT) {
+    simpleHitEffect(noteT, rot, judgment = null, isBreak = false) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
-        this.ctx.save();
-        const decayAlpha = 1 - Math.max(0, -t);
-        const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
 
-        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
-        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
-        this.ctx.globalCompositeOperation = 'lighter';
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        this.ctx.stroke();
-        this.ctx.restore();
+        const decayAlpha = 1 - Math.max(0, -t);
+
+        if (judgment !== 'MISS') {
+            this.ctx.save();
+            const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
+            this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+            this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
+            this.ctx.globalCompositeOperation = 'lighter';
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.restore();
+        }
+
+        if (judgment) {
+            this.ctx.save();
+            this.ctx.rotate(rot);
+            this.ctx.globalAlpha = decayAlpha;
+
+            let imgKey = null;
+            if (judgment === 'CRITICAL_PERFECT') {
+                imgKey = isBreak ? 'judge_text_cPerfect_break' : 'judge_text_cPerfect';
+            } else if (judgment === 'PERFECT') {
+                imgKey = isBreak ? 'judge_text_perfect_break' : 'judge_text_perfect';
+            } else if (judgment === 'GREAT') {
+                imgKey = 'judge_text_great';
+            } else if (judgment === 'GOOD') {
+                imgKey = 'judge_text_good';
+            } else if (judgment === 'MISS') {
+                imgKey = 'judge_text_miss';
+            }
+
+            const img = this.images[imgKey];
+            if (img) {
+                const imgAspect = img.width / img.height;
+                const drawHeight = 6;
+                this.drawImgAtcenter(img, drawHeight, 0, -1, imgAspect, 1);
+            }
+            this.ctx.restore();
+        }
     }
 
     simpleHanabi(noteT, isCenter) {
@@ -290,45 +300,14 @@ export class SimaiRenderer {
         const currentScale = t < this.settings.middleDistance
             ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance))
             : 1;
-        if (!this._tempTransform) {
-            this._tempTransform = { t: 0, displayT: 0, currentScale: 0 };
-        }
-        this._tempTransform.t = t;
-        this._tempTransform.displayT = displayT;
-        this._tempTransform.currentScale = currentScale;
-        return this._tempTransform;
+        return { t, displayT, currentScale };
     }
 
     // --- 渲染流程 ---
 
     drawFrame(state) {
         const { ctx } = this;
-        const {
-            globalTime,
-            buckets,
-            dt,
-            showSensor,
-            showSensorText,
-            playCombo,
-            playScore,
-            noteQuantity = {
-                tap: 0,
-                hold: 0,
-                slide: 0,
-                touch: 0,
-                break: 0
-            },
-            playScoreRes = {
-                tap: 0,
-                hold: 0,
-                slide: 0,
-                touch: 0,
-                break: 0,
-                score: 0,
-                breakScore: 0, invScore: 0
-            },
-            nowIndex,
-        } = state;
+        const { globalTime, buckets, dt, showSensor, showSensorText, playCombo, playScore, skipClear, nowIndex } = state;
 
         this.globalTime = globalTime;
         this.playCombo = playCombo;
@@ -337,26 +316,8 @@ export class SimaiRenderer {
         if (!this.images) return;
 
         this.currentTouchNotes = buckets.touch || [];
-        // 重置 zoneCounts，避免每幀分配新物件
-        for (const k in this._zoneCounts) {
-            this._zoneCounts[k] = 0;
-        }
-        for (let idx = 0; idx < this.currentTouchNotes.length; idx++) {
-            const n = this.currentTouchNotes[idx];
-            const t = n.time - this.globalTime;
-            const isActive = n.holdDuration ? (-t <= n.holdDuration) : (t > 0);
-            if (isActive) {
-                const zoneKey = n.touchPos + n.pos;
-                this._zoneCounts[zoneKey] = (this._zoneCounts[zoneKey] || 0) + 1;
-            }
-        }
-        this.drawnBorders.clear();
-
-        // 重置 hanabiEffect 狀態，避免每幀分配新物件
-        for (const k in this.hanabiEffect) {
-            this.hanabiEffect[k].cleared = true;
-            this.hanabiEffect[k].time = -99999;
-        }
+        this.drawnBorders = new Set();
+        this.hanabiEffect = {};
 
         // 1. 更新座標指標
         this.updateCanvasMetrics();
@@ -373,8 +334,31 @@ export class SimaiRenderer {
         // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
         this.drawMiddleDisplay();
 
-        for (const n of buckets.touch) this.getTouchHanabi(n);
+        // 5. 處理並繪製 Touch Hanabi (煙火) 特效
+        this.hanabiEffect = {};
+        for (const eff of (buckets.hanabieffects || [])) {
+            const key = eff.touchPos + eff.pos;
+            const posInfo = touchRefPos[eff.touchPos][eff.touchPos === "C" ? 0 : eff.pos - 1];
+            this.hanabiEffect[key] = {
+                time: eff.time,
+                x: posInfo.x,
+                y: posInfo.y,
+                noteT: eff.noteT,
+                isCenter: eff.touchPos === "C"
+            };
+        }
         this.drawHanabiEffects();
+
+        // 6. 繪製 Hold 按壓流動特效
+        for (const eff of (buckets.holdingeffects || [])) {
+            this.ctx.save();
+            const posInfo = noteRefPos[eff.pos - 1];
+            this.ctx.translate(posInfo.x * eff.displayT, posInfo.y * eff.displayT);
+            this.simpleHoldEffect(eff.noteT);
+            this.ctx.restore();
+        }
+
+        // 7. 繪製音符本體
         for (const n of buckets.slide) this.drawSlide(n);
 
         for (const n of buckets.tapnhold) {
@@ -384,350 +368,65 @@ export class SimaiRenderer {
         }
         for (const n of buckets.touch) this.drawTouch(n);
 
+        // 8. 繪製打擊 (Hit) 特效 (在所有音符的最上方，符合圖層順序)
+        for (const eff of (buckets.hiteffects || [])) {
+            this.ctx.save();
+            const posInfo = eff.touchPos
+                ? touchRefPos[eff.touchPos][eff.touchPos === "C" ? 0 : eff.pos - 1]
+                : noteRefPos[eff.pos - 1];
+            this.ctx.translate(posInfo.x, posInfo.y);
+            this.simpleHitEffect(eff.noteT, posInfo.rot, eff.judgment, eff.isBreak);
+            this.ctx.restore();
+        }
+
         this.drawStaticBackground();
-        if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
+        this.drawSimulatedPointers();
         if (this.settings.showUI) this.drawUI(dt, globalTime);
     }
 
-    /**
-     * 繪製 10 秒影片載入動畫與譜面資訊卡
-     */
-    drawLoadingIntro({
-        t = 0,
-        duration = 5,
-        backgroundImage = null,
-        chartInfo = {},
-    } = {}) {
-        const levelColors = {
-            1: "#248ACA",
-            2: "#43C122",
-            3: "#FFBA01",
-            4: "#FE5963",
-            5: "#A356E9",
-            6: "#E3E6E5",
-            7: "#FF6EFC",
+    drawSimulatedPointers() {
+        if (!this.simulatedPointers || this.simulatedPointers.length === 0) return;
+        this.ctx.save();
+        for (const pt of this.simulatedPointers) {
+            this.ctx.save();
+            this.ctx.translate(pt.x, pt.y);
+
+            // 繪製外圈發光圈 (利用 globalAlpha 設定透明度)
+            this.ctx.fillStyle = pt.color || '#00DBF4';
+            
+            this.ctx.globalAlpha = 0.4;
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.settings.noteBaseSize * 0.45, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            this.ctx.globalAlpha = 0.15;
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.settings.noteBaseSize * 0.6, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // 繪製內實心圈
+            this.ctx.globalAlpha = 1.0;
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.settings.noteBaseSize * 0.2, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            this.ctx.restore();
         }
-        const levels = {
-            1: 'EAZY',
-            2: 'BASIC',
-            3: 'ADVANCED',
-            4: 'EXPERT',
-            5: 'MASTER',
-            6: 'Re:MASTER',
-            7: 'U•TA•GE'
-        }
-        function getAnimation(t = 0, duration = 1, callback = (progress) => { }) {
-            const progress = Math.min(Math.max(t / duration, 0), 1);
-            callback(progress);
-        }
-        function outlineText(ctx, text, x, y) {
-            ctx.strokeText(text, x, y);
-            ctx.fillText(text, x, y);
-        }
-        function darkenHexColor(hex, percent) {
-            // 移除可能帶有的 # 號
-            let cleanHex = hex.replace(/^#/, '');
-
-            // 如果是 3 位數的簡寫 (如 #f00)，擴充成 6 位數 (#ff0000)
-            if (cleanHex.length === 3) {
-                cleanHex = cleanHex.split('').map(char => char + char).join('');
-            }
-
-            // 將 R, G, B 分別轉成十進位數值
-            let num = parseInt(cleanHex, 16);
-            let r = (num >> 16);
-            let g = (num >> 8) & 0x00FF;
-            let b = num & 0x0000FF;
-
-            // 計算調暗後的數值，並確保不會小於 0
-            const factor = 1 - (percent / 100);
-            r = Math.max(0, Math.floor(r * factor));
-            g = Math.max(0, Math.floor(g * factor));
-            b = Math.max(0, Math.floor(b * factor));
-
-            // 轉回 16 進位字串並補足兩位數
-            const toHex = (val) => val.toString(16).padStart(2, '0');
-
-            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-        }
-
-        const ctx = this.ctx;
-        ctx.save();
-        this.updateCanvasMetrics();
-        const { _hw: hw, _hh: hh, canvas: { width: w, height: h } } = this;
-        const dur = (duration - t);
-        const durInv = duration - dur;
-
-        let img = null;
-        if (backgroundImage) {
-            if (backgroundImage instanceof HTMLImageElement || backgroundImage instanceof HTMLCanvasElement || (window.ImageBitmap && backgroundImage instanceof ImageBitmap)) {
-                img = backgroundImage;
-            } else if (backgroundImage instanceof Blob || backgroundImage instanceof File) {
-                if (!this._introBlobImgCache || this._introBlobImgCache._blob !== backgroundImage) {
-                    if (this._introBlobImgCache && this._introBlobImgCache._url) {
-                        URL.revokeObjectURL(this._introBlobImgCache._url);
-                    }
-                    const url = URL.createObjectURL(backgroundImage);
-                    const imgEl = new Image();
-                    imgEl._blob = backgroundImage;
-                    imgEl._url = url;
-                    imgEl.src = url;
-                    this._introBlobImgCache = imgEl;
-                }
-                if (this._introBlobImgCache.complete && this._introBlobImgCache.naturalWidth > 0) {
-                    img = this._introBlobImgCache;
-                }
-            } else if (typeof backgroundImage === 'string') {
-                if (!this._introStrImgCache || this._introStrImgCache.src !== backgroundImage) {
-                    const imgEl = new Image();
-                    imgEl.src = backgroundImage;
-                    this._introStrImgCache = imgEl;
-                }
-                if (this._introStrImgCache.complete && this._introStrImgCache.naturalWidth > 0) {
-                    img = this._introStrImgCache;
-                }
-            }
-        }
-
-        if (!img && this.images && this.images['no_image']) {
-            img = this.images['no_image'];
-        }
-
-        const cardPath = new Path2D();
-        cardPath.arc(16, 25, 2, 0, Math.PI * 0.5);
-        cardPath.arc(-16, 25, 2, Math.PI * 0.5, Math.PI * 1);
-        cardPath.arc(-16, -33.5, 2, Math.PI * 1, Math.PI * 1.5)
-        cardPath.arc(-2, -33.5, 2, Math.PI * 1.5, Math.PI * 2);
-        cardPath.arc(2, -32, 2, Math.PI * 1, Math.PI * 0.5, true);
-        cardPath.arc(16, -28, 2, Math.PI * 1.5, Math.PI * 2);
-        cardPath.closePath();
-        const lvPath = new Path2D();
-        lvPath.arc(16, -0.5, 2, 0, Math.PI * 0.5);
-        lvPath.arc(7.5, 3.5, 2, Math.PI * 1.5, Math.PI * 1, true);
-        lvPath.arc(3.5, 5.5, 2, 0, Math.PI * 0.5);
-        lvPath.lineTo(18, 7.5);
-        lvPath.closePath();
-        const capsulePath = new Path2D();
-        capsulePath.arc(-2.5, -33, 2, Math.PI * 1.5, Math.PI * 0.5);
-        capsulePath.arc(-15.5, -33, 2, Math.PI * 0.5, Math.PI * 1.5);
-        capsulePath.closePath();
-
-        ctx.beginPath();
-        ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
-        ctx.clip('evenodd');
-
-        if (dur > 0.6) {
-
-            ctx.save();
-            ctx.filter = 'blur(10px) brightness(0.8)';
-            this.drawImgAtcenter(img, 110);
-            ctx.restore();
-
-            ctx.save();
-            getAnimation(t, 0.5, (s) => {
-                const p = 1 - easeOutQuad(s);
-                ctx.globalAlpha = 1 - p;
-                ctx.scale(p * 0.3 + 1, p * 0.3 + 1);
-            });
-            const levelColor = levelColors[chartInfo.difficulty ?? 5] || "#A356E9";
-            const levelColorDark = darkenHexColor(levelColor, 40);
-            const lvText = chartInfo.lv.replaceAll('+', '');
-            const isPlus = chartInfo.lv.includes('+');
-            const difficultyText = levels[chartInfo.difficulty];
-            ctx.strokeStyle = levelColorDark;
-            ctx.lineWidth = 0.25;
-            ctx.stroke(cardPath);
-            ctx.clip(cardPath);
-            ctx.fillStyle = levelColor;
-            ctx.fillRect(-20, -50, 40, 100);
-
-            ctx.strokeStyle = "rgba(255,255,255,0.3)";
-            ctx.beginPath();
-            ctx.lineWidth = 1.6;
-            ctx.arc(0, -12.5, 17, Math.PI * 0.25, Math.PI * 0.75, true);
-            ctx.stroke();
-            ctx.strokeStyle = "rgba(255,255,255,0.2)";
-            ctx.arc(0, -12.5, 16, Math.PI * 0.25, Math.PI * 0.75, true);
-            ctx.stroke();
-
-            ctx.fillStyle = "black";
-            ctx.fillRect(-15, -27.5, 30, 30);
-            ctx.fillStyle = "#093F80";
-            ctx.fillRect(-20, 7.5, 40, 5);
-            ctx.fillStyle = "#052E5B";
-            ctx.fillRect(-20, 12.5, 40, 3.5);
-            ctx.fillStyle = "white";
-            ctx.fillRect(-20, 16, 40, 15);
-            ctx.fill(capsulePath);
-
-            ctx.font = "1.9px title";
-            ctx.textAlign = "center";
-            ctx.fillText(chartInfo.title, 0, 11);
-            ctx.font = "1.8px Google Sans";
-            ctx.fillText(chartInfo.artist, 0, 14.8);
-            ctx.fillStyle = "#093F80";
-            ctx.textAlign = "left";
-            ctx.font = "1.2px title";
-            ctx.fillText("NOTES DESIGNER", -17, 23.5);
-            ctx.font = "1.8px Google Sans";
-            ctx.fillText(chartInfo.des, -17, 25.5);
-            ctx.font = "bold 2.5px title";
-            ctx.textAlign = "center";
-            ctx.fillText("CUSTOM", -9, -32);
-
-            getAnimation(t, 0.5, (s) => {
-                const p = 1 - easeOutQuad(s);
-                ctx.globalAlpha = 1 - p;
-                if (img && (img instanceof HTMLImageElement || img instanceof HTMLCanvasElement || (window.ImageBitmap && img instanceof ImageBitmap))) {
-                    this.drawImgAtcenter(img, 29.8 - p * 10, 0, -12.5);
-                }
-                ctx.scale(p * 0.3 + 1, p * 0.3 + 1);
-            });
-            ctx.lineWidth = 0.3;
-            ctx.strokeStyle = levelColor;
-            ctx.stroke(lvPath);
-            ctx.fillStyle = "rgba(255,255,255,0.5)";
-            ctx.fill(lvPath);
-
-            ctx.fillStyle = "white";
-            ctx.shadowColor = "#000000a0";
-            ctx.shadowBlur = 4;
-            ctx.textAlign = "center";
-            ctx.lineWidth = 0.75;
-            ctx.font = "bold 3.5px Google Sans";
-            outlineText(ctx, difficultyText, -6.4, 6);
-            ctx.shadowColor = "";
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = levelColorDark;
-            ctx.textAlign = "left";
-            ctx.lineWidth = 0.4;
-            ctx.font = "bold 2.5px Google Sans";
-            outlineText(ctx, "LV", 6.4, 6);
-            ctx.textAlign = "center";
-            ctx.font = "bold 5.5px Google Sans";
-            ctx.letterSpacing = "-0.5px"
-            ctx.lineWidth = 0.5;
-            outlineText(ctx, lvText, 12, 6.5);
-            ctx.font = "bold 3.6px Google Sans";
-            ctx.textAlign = "left";
-            outlineText(ctx, isPlus ? "+" : "", 13.8 + (lvText.length - 1), 3.5);
-            //outlineText(ctx, chartInfo.lv, 9.5, 6.8);
-            ctx.restore();
-        }
-        function aniCurve1(t) {
-            return Math.pow(1 - 2 * t, 4);
-        }
-        ctx.save();
-        if (t < 0.2) {
-            getAnimation(t, 0.2, (s) => {
-                ctx.rotate(Math.PI * 0.25);
-                ctx.fillStyle = "#FFF";
-                ctx.fillRect(easeInBack(s) * 50, -50, 50, 100);
-                ctx.fillStyle = "#84FEED";
-                ctx.fillRect(easeInBack(s) * 20 + 31, -50, 50, 100);
-                ctx.fillStyle = "#2DD4ED";
-                ctx.fillRect(easeInBack(s) * 10 + 41, -50, 50, 100);
-                ctx.rotate(Math.PI);
-                ctx.fillStyle = "#FFF";
-                ctx.fillRect(easeInBack(s) * 50, -50, 50, 100);
-                ctx.fillStyle = "#84FEED";
-                ctx.fillRect(easeInBack(s) * 20 + 31, -50, 50, 100);
-                ctx.fillStyle = "#2DD4ED";
-                ctx.fillRect(easeInBack(s) * 10 + 41, -50, 50, 100);
-            });
-        }
-        ctx.restore();
-        if (dur < 0.8 && t < duration) {
-            ctx.save();
-            getAnimation(0.8 - dur, 0.4, (s) => {
-                ctx.rotate(Math.PI * 0.25);
-                ctx.fillStyle = "#FFF";
-                ctx.fillRect(aniCurve1(s) * 50, -50, 50, 100);
-                ctx.fillStyle = "#84FEED";
-                ctx.fillRect(aniCurve1(s) * 20 + 31, -50, 50, 100);
-                ctx.fillStyle = "#2DD4ED";
-                ctx.fillRect(aniCurve1(s) * 10 + 41, -50, 50, 100);
-                ctx.rotate(Math.PI);
-                ctx.fillStyle = "#FFF";
-                ctx.fillRect(aniCurve1(s) * 50, -50, 50, 100);
-                ctx.fillStyle = "#84FEED";
-                ctx.fillRect(aniCurve1(s) * 20 + 31, -50, 50, 100);
-                ctx.fillStyle = "#2DD4ED";
-                ctx.fillRect(aniCurve1(s) * 10 + 41, -50, 50, 100);
-            });
-            ctx.restore();
-        }
-        ctx.restore();
+        this.ctx.restore();
+        this.simulatedPointers = []; // 繪製完清空
     }
 
     drawUI(dt, globalTime) {
         const { ctx } = this;
         const { width: w, height: h } = this.getCanvasWH();
-
-        const fpsText = `FPS: ${dt === 0 ? 'PAUSE' : (1 / dt).toFixed(2)}`;
-        const timeText = `Time: ${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
-
         ctx.save();
         ctx.font = "3px Google Sans";
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillText(fpsText, -w / 2 + 2, -h / 2 + 2);
-        ctx.fillText(timeText, -w / 2 + 2, -h / 2 + 2 + 4);
-        ctx.restore();
-    }
-
-    drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
-        const { width: w, height: h } = this.getCanvasWH();
-        if (h >= w) return;
-        const { ctx } = this;
-        const allRes = playScoreRes.tap + playScoreRes.hold + playScoreRes.slide + playScoreRes.touch + playScoreRes.break;
-
-        ctx.save();
-        ctx.fillStyle = "white";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "bottom";
-        ctx.font = "9px mono";
-        ctx.letterSpacing = "-1px";
-
-        ctx.fillText(`${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`,
-            scaleBase / -2 - 5, -1);
-
-        ctx.letterSpacing = "0px";
-        ctx.font = "4px Google Sans";
-        ctx.fillText('Powered by', scaleBase / -2 - 3, h / 2 - 5);
-        ctx.font = "2.5px Google Sans";
-        ctx.fillText('susuy0725/web-mai-chart-x', scaleBase / -2 - 3, h / 2 - 2);
-
-        ctx.textAlign = "left";
-        this._auxTextList[0] = `${playCombo}/${allRes}`;
-        this._auxTextList[1] = `ALL:`;
-        this._auxTextList[2] = `${noteQuantity.break}/${playScoreRes.break}`;
-        this._auxTextList[3] = `BRK:`;
-        this._auxTextList[4] = `${noteQuantity.touch}/${playScoreRes.touch}`;
-        this._auxTextList[5] = `TOH:`;
-        this._auxTextList[6] = `${noteQuantity.slide}/${playScoreRes.slide}`;
-        this._auxTextList[7] = `SLD:`;
-        this._auxTextList[8] = `${noteQuantity.hold}/${playScoreRes.hold}`;
-        this._auxTextList[9] = `HOD:`;
-        this._auxTextList[10] = `${noteQuantity.tap}/${playScoreRes.tap}`;
-        this._auxTextList[11] = `TAP:`;
-
-        const sp = 6;
-        const lil = (this._auxTextList.length * sp - Math.floor(this._auxTextList.length / 2)) / 2 + sp;
-        for (let i = 0; i < this._auxTextList.length; i++) {
-            const v = this._auxTextList[i];
-            ctx.font = `${i % 2 == 0 ? "4" : "bold 5"}px mono`;
-            ctx.fillText(v, scaleBase / 2 + 3, lil - i * sp - (i % 2 == 0));
-        }
-        ctx.textBaseline = "top";
-        ctx.textAlign = "right";
-
-        ctx.font = "bold 5px mono";
-        ctx.fillText('DELUXE Rate:', scaleBase / -2 - 3, 1);
-        ctx.font = "7px mono";
-        ctx.fillText(playScore.toFixed(4) + "%", scaleBase / -2 - 3, 8);
-
+        ctx.fillText(`FPS: ${dt === 0 ? 'PAUSE' : (1 / dt).toFixed(2)}`, -w / 2 + 2, -h / 2 + 2);
+        ctx.fillText(`Time: ${Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`, -w / 2 + 2, -h / 2 + 6);
         ctx.restore();
     }
 
@@ -771,25 +470,121 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
+    ensureMiddleDisplayCache() {
+        //const {width: wPx, height: hPx} = this.getCanvasWH();
+        const wPx = this.canvas.width;
+        const hPx = this.canvas.height;
+        const scale = this.scale;
+        if (!wPx || !hPx) return;
+
+        const current = {
+            middleDisplay: this.settings.middleDisplay,
+            play_combo: this.playCombo,
+            play_score: Math.max(this.playScore, 0),
+            backgroundDarkness: this.settings.backgroundDarkness ?? 0,
+        };
+        const params = this._middleDisplayCacheParams;
+        if (this._middleDisplayCache
+            && params.w === wPx
+            && params.h === hPx
+            && params.scale === scale
+            && params.middleDisplay === current.middleDisplay
+            && params.play_combo === current.play_combo
+            && params.play_score === current.play_score
+            && params.backgroundDarkness === current.backgroundDarkness) {
+            return;
+        }
+
+        const cache = document.createElement('canvas');
+        cache.width = wPx;
+        cache.height = hPx;
+        const cctx = cache.getContext('2d');
+        const p = Math.min(wPx, hPx) / scaleBase * scale;
+        cctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+
+        this.renderMiddleDisplayToContext(cctx);
+
+        this._middleDisplayCache = cache;
+        this._middleDisplayCacheParams = { ...current, w: wPx, h: hPx, scale };
+    }
+
     drawMiddleDisplay() {
-        this.renderMiddleDisplayToContext(this.ctx);
+        this.ensureMiddleDisplayCache();
+        if (!this._middleDisplayCache) return;
+
+        const { ctx } = this;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(this._middleDisplayCache, 0, 0);
+        ctx.restore();
     }
 
     renderMiddleDisplayToContext(ctx) {
         ctx.save();
+        function textMonospace(text, x, y, cellWidth, mode = 'stroke') {
+            ctx.textAlign = 'left';
+            const chars = text.split('');
+
+            chars.forEach((char, i) => {
+                // 測量單一字元的實際寬度
+                const charWidth = ctx.measureText(char).width;
+
+                // 計算置中偏移量，讓字元在格子內置中
+                const offsetX = (cellWidth - charWidth) / 2;
+
+                // 繪製
+                if (mode === 'stroke') {
+                    ctx.strokeText(char, x + (i * cellWidth) + offsetX, y);
+                } else {
+                    ctx.fillText(char, x + (i * cellWidth) + offsetX, y);
+                }
+            });
+        }
+        function outlineText(text, x, y, fontSize, outlinePx = 2, {
+            fillStyle = "#FFFFFF",
+            strokeStyle = "#000000",
+            strokeWidth = outlinePx,
+            fontWeight = "bold",
+            fontFamily = "combo",
+            textAlign = "center",
+            textBaseline = "middle",
+            letterSpacing = "0px",
+            shadowHeight = 0.3,
+            cellWidth = fontSize * 0.8,
+        } = {}) {
+            cellWidth += letterSpacing ? fontSize * parseFloat(letterSpacing) : 0;
+            cellWidth = Math.max(cellWidth, 0);
+            let calX = x;
+            if (textAlign === "center") {
+                calX = x - ((text.length * cellWidth) / 2);
+            }
+            if (textAlign === "right") {
+                calX = x - (text.length * cellWidth);
+            }
+            ctx.save();
+            ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+            ctx.textBaseline = textBaseline;
+            ctx.fillStyle = fillStyle;
+            ctx.lineWidth = strokeWidth;
+            if (strokeWidth > 0) {
+                ctx.strokeStyle = "#000";
+                textMonospace(text, calX, y + shadowHeight, cellWidth);
+                ctx.strokeStyle = strokeStyle;
+                textMonospace(text, calX, y, cellWidth);
+            }
+            textMonospace(text, calX, y, cellWidth, 'fill');
+            ctx.restore();
+        }
         switch (this.settings.middleDisplay) {
             case 1:
                 if (this.playCombo != 0) {
-                    outlineText(ctx, "COMBO", 0, -7, 4.4, 0.5, this._middleDisplayConfig1);
-                    outlineText(ctx, `${this.playCombo}`, 0, 0, 7.4, 0.5, this._middleDisplayConfig2);
+                    outlineText("COMBO", 0, -7, 4.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" });
+                    outlineText(`${this.playCombo}`, 0, 0, 7.4, 0.5, { fillStyle: "#A1435D", strokeStyle: "#A6ABAE", letterSpacing: -0.1 });
                 }
                 break;
             case 2:
                 const trueScore = Math.max(this.playScore, 0).toFixed(4);
-                const dotIdx = trueScore.indexOf(".");
-                const part0 = dotIdx === -1 ? trueScore : trueScore.substring(0, dotIdx);
-                const part1 = dotIdx === -1 ? "" : trueScore.substring(dotIdx + 1);
-
+                const sp = trueScore.split(".");
                 let scoreColor = "#4061A8";
                 if (trueScore > 80) {
                     scoreColor = "#9E3D2E";
@@ -797,15 +592,10 @@ export class SimaiRenderer {
                 if (trueScore > 100) {
                     scoreColor = "#99853A";
                 }
-                this._middleDisplayConfigScore.fillStyle = scoreColor;
-                this._middleDisplayConfigDot.fillStyle = scoreColor;
-                this._middleDisplayConfigFrac.fillStyle = scoreColor;
-                this._middleDisplayConfigPercent.fillStyle = scoreColor;
-
-                outlineText(ctx, part0, -1.8, 0, 7.4, 0.5, this._middleDisplayConfigScore);
-                outlineText(ctx, ".", -2.3, 0.6, 5, 0.5, this._middleDisplayConfigDot);
-                outlineText(ctx, part1, 0, 0.5, 5, 0.5, this._middleDisplayConfigFrac);
-                outlineText(ctx, "%", 14.4, 1.2, 3, 0.5, this._middleDisplayConfigPercent);
+                outlineText(`${sp[0]}`, -1.8, 0, 7.4, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.1, textAlign: "right" });
+                outlineText(".", -2.3, 0.6, 5, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" });
+                outlineText(`${sp[1]}`, 0, 0.5, 5, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" });
+                outlineText("%", 14.4, 1.2, 3, 0.5, { fillStyle: scoreColor, strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" });
                 break;
             default:
                 break;
@@ -907,33 +697,63 @@ export class SimaiRenderer {
         } finally {
             ctx.restore();
         }
+
+        // 當開啟「高亮觸摸感應器」且當前有按下的感應器時進行繪製
+        if (this.settings.highlightSensor && this.activePointers && this.activePointers.size > 0) {
+            const wPx = this.canvas.width;
+            const hPx = this.canvas.height;
+            const scale = this.scale;
+            const p = Math.min(wPx, hPx) / scaleBase * scale;
+
+            ctx.save();
+            ctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+
+            // 限制高亮渲染範圍在內圈以保持視覺整潔
+            ctx.beginPath();
+            ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+
+            const pressedSensorIds = new Set(this.activePointers.values());
+
+            // 使用具有未來感的天藍色霓虹填充和描邊
+            ctx.fillStyle = '#06b6d445';
+            ctx.strokeStyle = '#22d3ee';
+            ctx.lineWidth = 0.5;
+
+            touchPaths.forEach(shape => {
+                let isPressed = pressedSensorIds.has(shape.id);
+                // 處理中心 C1 / C2 映射
+                if (shape.id === 'C' && (pressedSensorIds.has('C1') || pressedSensorIds.has('C2'))) {
+                    isPressed = true;
+                }
+
+                if (isPressed) {
+                    ctx.beginPath();
+                    ctx.fill(shape.path);
+                    ctx.stroke(shape.path);
+                }
+            });
+
+            ctx.restore();
+        }
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, hispeed, triggered } = s;
         const noteT = noteTime - this.globalTime;
         const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
-        if (noteT <= 0) {
-            ctx.save();
-            ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(noteT);
-            ctx.restore();
-            return;
-        }
+        if (triggered) return;
 
-        const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"));
-        let img;
-        if (isBreak) {
-            this._tempColorConfig.colorCode = "#fff8a6";
-            img = this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
-        } else {
-            img = this.images[imgKey];
-        }
+        const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const imgKey = isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap");
+        const img = isBreak
+            ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
+            : this.images[imgKey];
 
         const size = this.settings.noteBaseSize * currentScale;
 
@@ -941,7 +761,7 @@ export class SimaiRenderer {
         ctx.save();
 
         // 繪製 Arc
-        const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
+        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
         ctx.save();
         ctx.rotate(posInfo.rot);
         ctx.globalAlpha = currentScale;
@@ -954,8 +774,9 @@ export class SimaiRenderer {
         this.drawImgAtcenter(img, size);
 
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")];
-            const exImg = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
+            const exImg = this.getMemoizedTintedImage("tap_ex", 0.6, {
+                colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")]
+            });
             this.drawImgAtcenter(exImg, size);
         }
 
@@ -963,32 +784,21 @@ export class SimaiRenderer {
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple, hispeed, triggered } = s;
         const noteT = noteTime - this.globalTime;
         const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
-        if (noteT <= 0) {
-            ctx.save();
-            ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(noteT);
-            ctx.restore();
-            return;
-        }
+        if (triggered) return;
 
-        const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isMultiple ?
-            (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))) :
-            (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (this.settings.pinkStars ? "star_pink" : "star"))));
-        let img;
-        if (isBreak) {
-            this._tempColorConfig.colorCode = "#fff8a6";
-            img = this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
-        } else {
-            img = this.images[imgKey];
-        }
+        const br = isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const imgKey = isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))
+            : (isBreak ? "star_break" : (isDouble ? "star_each" : (this.settings.pinkStars ? "star_pink" : "star")));
+        const img = isBreak
+            ? this.getMemoizedTintedImage(imgKey, br, { colorCode: "#fff8a6" })
+            : this.images[imgKey];
 
         const size = this.settings.noteBaseSize * currentScale;
 
@@ -996,7 +806,7 @@ export class SimaiRenderer {
         ctx.save();
 
         // 繪製 Arc
-        const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc"))];
+        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc")];
         ctx.save();
         ctx.rotate(posInfo.rot);
         ctx.globalAlpha = currentScale;
@@ -1005,20 +815,13 @@ export class SimaiRenderer {
 
         // 繪製 Note 本體
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-        let rot = posInfo.rot;
-        if (this.settings.rotateStars) {
-            let speed = 0;
-            if (s.slideDuration && s.slideDuration > 0) {
-                speed = clamp(1.5 / s.slideDuration, 0.5, 6);
-            }
-            rot += this.globalTime * 2 * Math.PI * speed;
-        }
-        ctx.rotate(rot);
+        ctx.rotate(posInfo.rot);
         this.drawImgAtcenter(img, size);
 
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")];
-            const exImg = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.6, this._tempColorConfig);
+            const exImg = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.6, {
+                colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")]
+            });
             this.drawImgAtcenter(exImg, size);
         }
 
@@ -1026,76 +829,61 @@ export class SimaiRenderer {
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration, hispeed, triggered, holding } = s;
         const noteT = (noteTime - this.globalTime);
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const posInfo = noteRefPos[pos - 1];
 
-        if (-noteT > holdDuration) {
+        if (triggered) return;
+
+        if (-Math.max(holdDuration, 0.2) >= noteT) return;
+        const missPoint = (noteTime - this.globalTime) <= -0.375;
+        const isOn = holding;
+        let br = s.isBreak ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const img = getTintedImage(this.images[isOn ?
+            (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on")) :
+            (missPoint ? "hold_off" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")))], br, {
+            colorCode: "#fff8a6"
+        });
+        const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
+        const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
+        const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
+        const size = this.settings.noteBaseSize * currentScale;
+        const sizeOffset = t < this.settings.middleDistance ? 0 :
+            Math.min(Math.max(holdDuration + noteT, 0) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
+                Math.min((1 - this.settings.middleDistance) * 2.45,
+                    Math.min((t - this.settings.middleDistance) * 2.45,
+                        holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
+
+        this.ctx.save();
+        const arcimg = this.images[isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc")];
+        this.ctx.rotate(posInfo.rot);
+        this.ctx.globalAlpha = currentScale;
+        this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
+        this.ctx.restore();
+
+        if (t1 > this.settings.middleDistance) {
             this.ctx.save();
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(holdDuration + noteT);
-            this.ctx.restore();
-        } else {
-            const isOn = (noteTime - this.globalTime) <= -0.1 && !isMine;
-            let br = (s.isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-            const holdImgKey = isOn ?
-                (isMine ? "hold_mine" : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
-                (isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
-            let img;
-            if (isBreak) {
-                this._tempColorConfig.colorCode = "#fff8a6";
-                img = this.getMemoizedTintedImage(holdImgKey, br, this._tempColorConfig);
-            } else {
-                img = this.images[holdImgKey];
-            }
-            const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
-            const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
-            const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
-            const size = this.settings.noteBaseSize * currentScale;
-            const sizeOffset = t < this.settings.middleDistance ? 0 :
-                Math.min((holdDuration + noteT) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
-                    Math.min((1 - this.settings.middleDistance) * 2.45,
-                        Math.min((t - this.settings.middleDistance) * 2.45,
-                            holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
-
-            this.ctx.save();
-            const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
-            this.ctx.rotate(posInfo.rot);
-            this.ctx.globalAlpha = currentScale;
-            this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-            this.ctx.restore();
-
-            if (t1 > this.settings.middleDistance) {
-                this.ctx.save();
-                const endimg = this.images[isMine ? "Hold_Mine_End" : (isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End"))];
-                this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
-                this.drawImgAtcenter(endimg, size * 0.65);
-                this.ctx.restore();
-            }
-
-            this.ctx.save();
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.ctx.rotate(posInfo.rot);
-            this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-            this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-            this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-
-            if (s.isEx) {
-                this._tempColorConfig.colorCode = isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap);
-                const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
-                this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-                this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-                this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-            }
-            this.ctx.restore();
-
-            this.ctx.save();
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.simpleHitEffect(noteT);
-            if (isOn) this.simpleHoldEffect(noteT);
+            const endimg = this.images[isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End")];
+            this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
+            this.drawImgAtcenter(endimg, size * 0.65);
             this.ctx.restore();
         }
+
+        this.ctx.save();
+        this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+        this.ctx.rotate(posInfo.rot);
+        this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+        this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+        this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+
+        if (s.isEx) {
+            const ex = getTintedImage(this.images["hold_ex"], 0.6, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
+            this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+            this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+            this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+        this.ctx.restore();
     }
 
     getTouchHanabi(s) {
@@ -1104,133 +892,147 @@ export class SimaiRenderer {
         if (noteT > 0) return;
 
         const key = touchPos + pos;
-        let existing = this.hanabiEffect[key];
-        if (!existing) {
-            existing = { time: -99999, x: 0, y: 0, noteT: 0, isCenter: false, cleared: true };
-            this.hanabiEffect[key] = existing;
-        }
-        if (existing.cleared === false && existing.time > noteTime) {
+        const existing = this.hanabiEffect[key];
+        if (existing && existing.time > noteTime) {
             return;
         }
 
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
         if (holdDuration) {
-            if (s.isHanabi) {
+            if (s.isHanabi && s.triggered) {
                 const effT = holdDuration + noteT;
-                existing.time = noteTime;
-                existing.x = posInfo.x;
-                existing.y = posInfo.y;
-                existing.noteT = (existing.cleared === false ? Math.max(existing.noteT, effT) : effT);
-                existing.isCenter = touchPos === "C";
-                existing.cleared = false;
+                this.hanabiEffect[key] = {
+                    time: noteTime,
+                    x: posInfo.x,
+                    y: posInfo.y,
+                    noteT: (existing && !existing.cleared ? Math.max(existing.noteT, effT) : effT),
+                    isCenter: touchPos === "C"
+                };
             } else {
-                existing.time = noteTime;
-                existing.cleared = true;
+                this.hanabiEffect[key] = {
+                    time: noteTime,
+                    cleared: true
+                };
             }
             return;
         }
-        if (s.isHanabi) {
-            existing.time = noteTime;
-            existing.x = posInfo.x;
-            existing.y = posInfo.y;
-            existing.noteT = (existing.cleared === false ? Math.max(existing.noteT, noteT) : noteT);
-            existing.isCenter = touchPos === "C";
-            existing.cleared = false;
+        if (s.isHanabi && s.triggered) {
+            this.hanabiEffect[key] = {
+                time: noteTime,
+                x: posInfo.x,
+                y: posInfo.y,
+                noteT: (existing && !existing.cleared ? Math.max(existing.noteT, noteT) : noteT),
+                isCenter: touchPos === "C"
+            };
         } else {
-            existing.time = noteTime;
-            existing.cleared = true;
+            this.hanabiEffect[key] = {
+                time: noteTime,
+                cleared: true
+            };
         }
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration, hispeed, triggered, holding } = s;
+        if (triggered) return;
+
         const zoneKey = touchPos + pos;
 
-        const count = this._zoneCounts[zoneKey] || 0;
+        const sameZoneNotes = (this.currentTouchNotes || []).filter(n => {
+            if (n.touchPos !== touchPos || n.pos !== pos) return false;
+            const t = n.time - this.globalTime;
+            if (n.holdDuration) {
+                return -t <= n.holdDuration;
+            } else {
+                return t > 0;
+            }
+        });
+        const count = sameZoneNotes.length;
 
         const noteT = (noteTime - this.globalTime);
         const t = 1 - this.timeFunction(noteT * (this.settings.touchSpeed * 0.8833 + 0.8167) * hispeed);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
-        const borderImg = this.images[isMine ? "touch_border_2_mine" : (isDouble ? "touch_border_2_each" : "touch_border_2")];
-        const borderImg3 = this.images[isMine ? "touch_border_3_mine" : (isDouble ? "touch_border_3_each" : "touch_border_3")];
-        const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
+        const borderImg = this.images[isDouble ? "touch_border_2_each" : "touch_border_2"];
+        const borderImg3 = this.images[isDouble ? "touch_border_3_each" : "touch_border_3"];
+        const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
 
         if (holdDuration) {
-            const isOn = (noteTime - this.globalTime) <= -0.1;
+            const missPoint = (noteTime - this.globalTime) <= -0.375;
+            const isOn = holding;
             const imgs = [];
             for (let i = 0; i < 4; i++) {
-                const img = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                const img = this.images["touchhold_" + i];
                 imgs.push(img);
             }
-            const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
+            const touchBorder = this.images.touchhold_border;
 
             this.ctx.save();
-            if (-noteT > holdDuration) {
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.simpleHitEffect(holdDuration + noteT);
-            } else {
-                const size = this.settings.noteBaseSize * 0.7;
-                const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
-                const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
-
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.ctx.save();
-                this.ctx.beginPath();
-                this.ctx.moveTo(0, 0);
-                this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
-                this.ctx.closePath();
-                this.ctx.clip();
-                this.drawImgAtcenter(touchBorder, size * 2.6);
-                this.ctx.restore();
-                this.ctx.globalAlpha = 1;
-                this.ctx.rotate(Math.PI * -0.75);
-                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
-                for (let i = 0; i < 4; i++) {
-                    this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
-                    this.ctx.rotate(Math.PI / 2);
-                }
-                this.ctx.globalAlpha = 1;
-                this.drawImgAtcenter(touchPoint, size * 0.4);
-                this.simpleHitEffect(noteT);
-                if (isOn) this.simpleHoldEffect(noteT);
-            }
-            this.ctx.restore();
-            return;
-        }
-        const img = this.images[isMine ? "touch_mine" : isDouble ? "touch_each" : "touch"];
-
-        this.ctx.save();
-        if (noteT <= 0) {
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(noteT);
-        } else {
             const size = this.settings.noteBaseSize * 0.7;
-            const a = this.touchTimeFunction(18 * (1 - t) / 1.5) * 1.6;
+            const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+            const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+
             this.ctx.translate(posInfo.x, posInfo.y);
-            this.ctx.globalAlpha = 1;
-            if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
-                this.drawnBorders.add(zoneKey);
-                this.drawImgAtcenter(borderImg, size * 2.65);
-                if (count > 2)
-                    this.drawImgAtcenter(borderImg3, size * 2.65);
-            }
-            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, 0);
+            this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+            this.ctx.closePath();
+            this.ctx.clip();
+            if (!missPoint || isOn) this.drawImgAtcenter(touchBorder, size * 2.6);
+            else this.drawImgAtcenter(this.images.touchhold_off, size * 2.6);
+            this.ctx.restore();
+            this.ctx.rotate(Math.PI * -0.75);
+            this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
             for (let i = 0; i < 4; i++) {
-                this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
             }
             this.ctx.globalAlpha = 1;
             this.drawImgAtcenter(touchPoint, size * 0.4);
+            this.ctx.restore();
+            return;
         }
+        const img = this.images[isDouble ? "touch_each" : "touch"];
+
+        this.ctx.save();
+        const size = this.settings.noteBaseSize * 0.7;
+        const a = this.touchTimeFunction(18 * (1 - Math.min(t, 1)) / 1.5) * 1.6;
+        this.ctx.translate(posInfo.x, posInfo.y);
+        this.ctx.globalAlpha = 1;
+        if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
+            this.drawnBorders.add(zoneKey);
+            this.drawImgAtcenter(borderImg, size * 2.65);
+            if (count > 2)
+                this.drawImgAtcenter(borderImg3, size * 2.65);
+        }
+        this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
+        for (let i = 0; i < 4; i++) {
+            this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.rotate(Math.PI / 2);
+        }
+        this.ctx.globalAlpha = 1;
+        this.drawImgAtcenter(touchPoint, size * 0.4);
+        if (noteT < 0) this.drawImgAtcenter(this.images["touch_just"], size * 1.65);
         this.ctx.restore();
     }
 
     drawSlide(s) {
-        const prefix = (s.isIllegal && this.settings.slideIllegalRed) ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
-        const standardKey = (s.isIllegal && this.settings.slideIllegalRed) ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
+        const prefix = (s.isIllegal && this.settings.slideIllegalRed) ? "wifi_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_"));
+        const standardKey = (s.isIllegal && this.settings.slideIllegalRed) ? "slide" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"));
 
-        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed } = s;
+        const imgs = [];
+        if (s.slideType === "w") {
+            for (let i = 0; i < 11; i++) {
+                const target = this.images[prefix + i];
+                imgs.push(target);
+            }
+        } else {
+            const target = this.images[standardKey];
+            imgs.push(target);
+        }
+
+        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed, triggered } = s;
         const noteT = noteTime - this.globalTime;
         const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
         const p = path || generatePath(pos, slideEnd);
@@ -1240,30 +1042,33 @@ export class SimaiRenderer {
         const isTaped = -noteT > 0;
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
-        let slideProgress = 0;
+        let starProgress = 0;
         if (-noteT > slideDelay) {
-            slideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
+            starProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
-        let br = ((s.isBreak && !s.isMine) && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const prefixOrKey = s.slideType === "w" ? prefix : standardKey;
-        this.drawPathWithArrows(p, s.isMine ? 0 : slideProgress, prefixOrKey, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
+        let br = (s.isBreak && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        this.drawPathWithArrows(p, starProgress, imgs, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed), {
+            hitSensors: this.settings.autoPlay ? null : s.hitSensors,
+            requiredSensors: s.requiredSensors,
+            currentSensorIdx: s.currentSensorIdx
+        });
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
-        if (noteT <= 0 && slideProgress < 1 && (!s.hideHead || sz >= 1)) {
-            const { x, y, rot } = p.getPointAt(slideProgress);
+        if (noteT <= 0 && (!s.hideHead || sz >= 1) && (s.lastSlide || starProgress < 1)) {
+            const { x, y, rot } = p.getPointAt(starProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
-            const starImg = this.images[s.isMine ? "star_mine" : (s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star"))];
+            const starImg = this.images[s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star")];
             const baseTransform = this.ctx.getTransform();
             if (s.slideType === "w") {
-                const w1Point = wPaths.w1.getPointAt(slideProgress);
+                const w1Point = wPaths.w1.getPointAt(starProgress);
                 this.ctx.translate(w1Point.x, w1Point.y);
                 this.ctx.rotate(w1Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
 
                 this.ctx.setTransform(baseTransform);
 
-                const w2Point = wPaths.w2.getPointAt(slideProgress);
+                const w2Point = wPaths.w2.getPointAt(starProgress);
                 this.ctx.translate(w2Point.x, w2Point.y);
                 this.ctx.rotate(w2Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
@@ -1279,37 +1084,172 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawPathWithArrows(recorder, starProgress, prefixOrKey, typew, br, isIllegal, spacing = 4.36) {
+    drawPathWithArrows(recorder, starProgress, imgs, typew, br, isIllegal, { spacing = 4.36, hitSensors = null, requiredSensors = null, currentSensorIdx = 0 } = {}) {
         const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
         spacing = typew ? 7 : spacing;
         this.ctx.save();
-        for (let i = arrowCount; i > Math.floor(starProgress * arrowCount); i--) {
-            const imgIndex = Math.min(i - 1, typew ? 10 : 0);
-            const imgKey = typew ? (prefixOrKey + imgIndex) : prefixOrKey;
 
-            const opacity = isIllegal ? 1 : br;
-            const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
+        if (hitSensors) {
+            // 手動模式：先掃描一遍所有箭頭，找出已擊中感應器在軌道上最大的箭頭索引 maxHitIdx
+            let maxHitIdx = 0;
+            if (requiredSensors && requiredSensors.length > 0) {
+                for (let i = 1; i <= arrowCount; i++) {
+                    const imgIndex = Math.min(i - 1, imgs.length - 1);
+                    const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                    const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
+                    const arrowSensor = getSensorAtPoint(x, y);
 
-            let img;
-            if (isIllegal || br > 0) {
-                this._tempColorConfig.colorCode = colorCode;
-                img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
+                    if (arrowSensor) {
+                        const arrowRatio = dist / recorder.totalLength;
+                        let seqIdx = -1;
+                        let minDiff = Infinity;
+                        for (let idx = 0; idx < requiredSensors.length; idx++) {
+                            const reqParts = requiredSensors[idx].split('/');
+                            if (reqParts.includes(arrowSensor)) {
+                                const sensorRatio = idx / requiredSensors.length;
+                                const diff = Math.abs(sensorRatio - arrowRatio);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    seqIdx = idx;
+                                }
+                            }
+                        }
+
+                        if (seqIdx !== -1) {
+                            if (seqIdx < currentSensorIdx) {
+                                maxHitIdx = Math.max(maxHitIdx, i);
+                            }
+                        } else {
+                            const progressRatio = currentSensorIdx / requiredSensors.length;
+                            if (arrowRatio <= progressRatio) {
+                                maxHitIdx = Math.max(maxHitIdx, i);
+                            }
+                        }
+                    }
+                }
             } else {
-                img = this.images[imgKey];
+                for (let i = 1; i <= arrowCount; i++) {
+                    const imgIndex = Math.min(i - 1, imgs.length - 1);
+                    const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                    const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
+                    const arrowSensor = getSensorAtPoint(x, y);
+
+                    if (arrowSensor && hitSensors.has(arrowSensor)) {
+                        maxHitIdx = Math.max(maxHitIdx, i);
+                    }
+                }
             }
 
-            if (!img) continue;
+            // 繪製箭頭時：隱藏已滑過的部分
+            for (let i = arrowCount; i > 0; i--) {
+                if (i <= maxHitIdx) {
+                    continue;
+                }
 
-            const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
-            const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
+                const imgIndex = Math.min(i - 1, imgs.length - 1);
+                const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
 
-            this.ctx.save();
-            this.ctx.translate(x, y);
-            this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
-            const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
-            const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
-            this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
-            this.ctx.restore();
+                const arrowSensor = getSensorAtPoint(x, y);
+                if (requiredSensors && requiredSensors.length > 0) {
+                    if (arrowSensor) {
+                        const arrowRatio = dist / recorder.totalLength;
+                        let seqIdx = -1;
+                        let minDiff = Infinity;
+                        for (let idx = 0; idx < requiredSensors.length; idx++) {
+                            const reqParts = requiredSensors[idx].split('/');
+                            if (reqParts.includes(arrowSensor)) {
+                                const sensorRatio = idx / requiredSensors.length;
+                                const diff = Math.abs(sensorRatio - arrowRatio);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    seqIdx = idx;
+                                }
+                            }
+                        }
+                        if (seqIdx !== -1 && seqIdx < currentSensorIdx) {
+                            continue;
+                        }
+                    }
+                } else {
+                    if (arrowSensor && hitSensors.has(arrowSensor)) {
+                        continue;
+                    }
+                }
+
+                const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {
+                    colorCode: isIllegal ? "#ff3838" : "#fff8a6"
+                });
+
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+                const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+                const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+                this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
+                this.ctx.restore();
+            }
+        } else {
+            // 自動模式：由時間軸進度自動消失
+            const passedCount = Math.floor(starProgress * arrowCount);
+
+            // 1. 找出星星當前所在的感應器
+            let starSensor = null;
+            if (starProgress > 0 && starProgress < 1) {
+                const starPoint = recorder.getPointAt(starProgress);
+                if (starPoint) {
+                    starSensor = getSensorAtPoint(starPoint.x, starPoint.y);
+                }
+            }
+
+            // 2. 決定前方哪些箭頭需要因為感應器而隱藏 (僅連續隱藏與星星當前所在相同的感應器區段)
+            const hiddenIndices = new Set();
+            if (starSensor && passedCount < arrowCount) {
+                const nextIdx = passedCount + 1;
+                const nextDist = nextIdx * spacing + (typew ? wSlideRatio[Math.min(nextIdx - 1, imgs.length - 1) * 4 + 2] : 0);
+                const nextPoint = recorder.getPointAt(nextDist / recorder.totalLength);
+                const nextSensor = getSensorAtPoint(nextPoint.x, nextPoint.y);
+
+                // 只有當星星當前所在的感應器與下一個前方的感應器相同時，才執行連續隱藏
+                if (nextSensor === starSensor) {
+                    for (let i = nextIdx; i <= arrowCount; i++) {
+                        const imgIndex = Math.min(i - 1, imgs.length - 1);
+                        const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                        const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
+                        const sensor = getSensorAtPoint(x, y);
+
+                        if (sensor === starSensor) {
+                            hiddenIndices.add(i);
+                        } else {
+                            // 一旦遇到不同的感應器，立即中斷，防止後面重複感應器區段被誤消
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. 繪製前方未滑到的箭頭 (排除已過期 passedCount 以及被連續隱藏的索引)
+            for (let i = arrowCount; i > passedCount; i--) {
+                if (hiddenIndices.has(i)) {
+                    continue;
+                }
+
+                const imgIndex = Math.min(i - 1, imgs.length - 1);
+                const dist = i * spacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+                const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
+
+                const img = getTintedImage(typew ? imgs[imgIndex] : imgs[0], isIllegal ? 1 : br, {
+                    colorCode: isIllegal ? "#ff3838" : "#fff8a6"
+                });
+
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
+                const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 7 * 0.9;
+                const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 9.4 * 0.9;
+                this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
+                this.ctx.restore();
+            }
         }
         this.ctx.restore();
     }
@@ -1347,125 +1287,25 @@ export class SimaiVisualEditor {
         this.mouseY = 0;
         this.markerX = 0;
 
-        this._tintCache = new Map();
-        this._tempColorConfig = { colorCode: '' };
-
-        // Callbacks & Snapping for editing
-        this.onPlaceNote = null;
-        this.onDeleteNote = null;
-        this.onChangeNote = null;
-        this.quantizeTime = null;
-        this.hoverLane = null;
-
         // 綁定滑鼠事件以切換方塊顏色並更新位置
         if (this.canvas && this.canvas.addEventListener) {
             this._onPointerDown = this._onPointerDown.bind(this);
             this._onPointerUp = this._onPointerUp.bind(this);
-            this._onPointerLeave = this._onPointerLeave.bind(this);
             this._onPointerMove = this._onPointerMove.bind(this);
-            this._onContextMenu = this._onContextMenu.bind(this);
-
             // use capture to ensure marker events are detected before other handlers
             this.canvas.addEventListener('pointerdown', this._onPointerDown, { capture: true, passive: false });
             this.canvas.addEventListener('pointerup', this._onPointerUp, { capture: true });
-            this.canvas.addEventListener('pointercancel', this._onPointerLeave, { capture: true });
-            this.canvas.addEventListener('pointerleave', this._onPointerLeave, { capture: true });
+            this.canvas.addEventListener('pointercancel', this._onPointerUp, { capture: true });
+            this.canvas.addEventListener('pointerleave', this._onPointerUp, { capture: true });
             this.canvas.addEventListener('pointermove', this._onPointerMove, { capture: true, passive: false });
-            this.canvas.addEventListener('contextmenu', this._onContextMenu);
         }
-    }
-
-    setNoteEditCallbacks(onPlace, onDelete, onChange) {
-        this.onPlaceNote = onPlace;
-        this.onDeleteNote = onDelete;
-        this.onChangeNote = onChange;
-    }
-
-    setTimeQuantizer(quantizer) {
-        this.quantizeTime = quantizer;
-    }
-
-    _hitTestLane(mouseX) {
-        let closestLane = null;
-        let minDiff = Infinity;
-        for (let i = 0; i < 8; i++) {
-            const diff = Math.abs(mouseX - visualNoteRefPos[i].x);
-            if (diff < minDiff) {
-                minDiff = diff;
-                closestLane = i + 1;
-            }
-        }
-        if (minDiff <= 50) {
-            return closestLane;
-        }
-        return null;
-    }
-
-    _hitTestNote(mouseX, mouseY) {
-        if (!this._state || !this._state.visualBuckets) return null;
-        const tolerance = this.settings.noteBaseSize * 1.5;
-        const zoom = this.zoom;
-        const gt = this.globalTime;
-
-        // Helper check for a candidate note
-        const checkCandidate = (note, noteX) => {
-            const noteY = (note.time - gt) * -zoom;
-            const dx = mouseX - noteX;
-            const dy = mouseY - noteY;
-            return dx * dx + dy * dy <= tolerance * tolerance;
-        };
-
-        // 1. Check tapnhold
-        for (const note of this._state.visualBuckets.tapnhold) {
-            const noteX = visualNoteRefPos[note.pos - 1].x;
-            if (checkCandidate(note, noteX)) {
-                return note;
-            }
-        }
-
-        // 2. Check slide
-        for (const note of this._state.visualBuckets.slide) {
-            const noteX = visualNoteRefPos[note.pos - 1].x;
-            if (checkCandidate(note, noteX)) {
-                return note;
-            }
-        }
-
-        // 3. Check touch
-        for (const note of this._state.visualBuckets.touch) {
-            const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
-            if (checkCandidate(note, posInfo.x)) {
-                return note;
-            }
-        }
-
-        return null;
-    }
-
-    getMemoizedTintedImage(imgKey, opacity, config) {
-        if (!this.images[imgKey]) return null;
-        const cacheKey = `${imgKey}_${opacity.toFixed(2)}_${config.colorCode}`;
-
-        if (this._tintCache.has(cacheKey)) {
-            return this._tintCache.get(cacheKey);
-        }
-
-        const tinted = getTintedImage(this.images[imgKey], opacity, config);
-        if (this._tintCache.size > 200) this._tintCache.clear();
-        this._tintCache.set(cacheKey, tinted);
-        return tinted;
     }
 
     getCanvasWH() {
         const w = this.canvas.clientWidth;
         const h = this.canvas.clientHeight;
         const invP = scaleBase / Math.min(w, h) * 0.5;
-        if (!this._canvasWH) {
-            this._canvasWH = { width: 0, height: 0 };
-        }
-        this._canvasWH.width = w * invP;
-        this._canvasWH.height = h * invP;
-        return this._canvasWH;
+        return { width: w * invP, height: h * invP };
     }
 
     setZoom(zoom) {
@@ -1499,8 +1339,7 @@ export class SimaiVisualEditor {
         }
         this.drawImgAtcenter(img, size);
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")];
-            const ex = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
+            const ex = getTintedImage(this.images["tap_ex"], 0.6, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")] });
             this.drawImgAtcenter(ex, size);
         }
         this.ctx.restore();
@@ -1523,8 +1362,7 @@ export class SimaiVisualEditor {
         }
         this.drawImgAtcenter(img, size);
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")];
-            const ex = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.4, this._tempColorConfig);
+            const ex = getTintedImage(this.images[isMultiple ? "star_ex_double" : "star_ex"], 0.4, { colorCode: this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")] });
             this.drawImgAtcenter(ex, size * 0.95);
         }
         this.ctx.restore();
@@ -1634,8 +1472,7 @@ export class SimaiVisualEditor {
         this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
 
         if (s.isEx) {
-            this._tempColorConfig.colorCode = isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap);
-            const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
+            const ex = getTintedImage(this.images["hold_ex"], 0.6, { colorCode: isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap) });
             this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
             this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
             this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
@@ -1680,17 +1517,13 @@ export class SimaiVisualEditor {
         ctx.save();
         ctx.lineWidth = 0.5;
 
-        const tb1 = this.settings.tb1 || 4;
-        const tb2 = this.settings.tb2 || 4;
-        // period: 小節的長度 (tb1 代表一小節有幾個四分音符)
-        const period = (tag.type === 'bpm') ? ((60 * tb1) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
-        // beatPeriod: 格子線的間距 (tb2 代表幾分音符為一格)
-        const beatPeriod = (tag.type === 'bpm') ? ((240 / tag.value) / tb2) : 0;
+        // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
+        const period = (tag.type === 'bpm') ? (240 / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {
             // 1. 計算螢幕範圍內的索引
-            let minI = Math.ceil((-h / zoom - delta) / period) - 1;
+            let minI = Math.ceil((-h / zoom - delta) / period);
             let maxI = Math.floor((h / zoom - delta) / period);
 
             // 2. 邏輯約束：起點永遠從 0 開始
@@ -1717,27 +1550,6 @@ export class SimaiVisualEditor {
                     ctx.strokeStyle = '#ffe865c0';
                     ctx.setLineDash([]); // 樣式設定移到迴圈外，效能更好
 
-                    // 自動填充小節內的拍號線(以 N 分音符為一拍)
-                    const parts = (tb1 * tb2) / 4;
-                    if (parts > 1) {
-                        ctx.save();
-                        ctx.strokeStyle = '#ffe86540'; // 較淡的顏色
-                        ctx.lineWidth = 0.5; // 較細的線條
-                        for (let b = 1; b < parts; b++) {
-                            const subY = (delta + i * period + b * beatPeriod) * -zoom;
-
-                            // 檢查是否超出下一個 BPM 的範圍 (防止畫出界)
-                            const subTime = tag.time + i * period + b * beatPeriod;
-                            if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
-
-                            ctx.beginPath();
-                            ctx.moveTo(-lineWidth * 0.8, subY);
-                            ctx.lineTo(lineWidth * 0.8, subY);
-                            ctx.stroke();
-                        }
-                        ctx.restore();
-                    }
-
                     // 僅在節拍線起點繪製文字
                     if (i === 0) {
                         ctx.save(); // 保存當前狀態
@@ -1755,7 +1567,6 @@ export class SimaiVisualEditor {
                 } else {
                     ctx.strokeStyle = '#ffffff';
                     if (i === 0) {
-                        if (tag.nohead) continue;
                         ctx.globalAlpha = 1; // 起點的線條保持不透明
                         ctx.save(); // 保存當前狀態
                         ctx.fillStyle = '#9c9c9c';
@@ -1870,6 +1681,8 @@ export class SimaiVisualEditor {
 
     render(isVisualMode, ensureVisualEditorContext, state) {
         if (!isVisualMode || this.canvas.style.display === 'none') return;
+        console.log("rendered");
+
         const ctx = this.ctx/* || (typeof ensureVisualEditorContext === 'function' ? ensureVisualEditorContext() : null)*/;
         if (!ctx) return;
 
@@ -1896,24 +1709,6 @@ export class SimaiVisualEditor {
             else this.drawTap(n);
         });
         visualBuckets.touch.forEach(n => this.drawTouch(n));
-
-        // 繪製 Ghost Note 預覽
-        if (this.hoverLane !== null && this.quantizeTime) {
-            const snappedTime = this.quantizeTime(this.globalTime - this.mouseY / this.zoom);
-            if (snappedTime !== null && snappedTime !== undefined) {
-                const t = snappedTime - this.globalTime;
-                const img = this.images["tap"];
-                if (img && !imgNotExists(img)) {
-                    const size = this.settings.noteBaseSize;
-                    ctx.save();
-                    ctx.translate(visualNoteRefPos[this.hoverLane - 1].x, t * -this.zoom);
-                    ctx.globalAlpha = 0.45;
-                    this.drawImgAtcenter(img, size);
-                    ctx.restore();
-                }
-            }
-        }
-
         // this._drawMarker();
     }
 
@@ -1963,77 +1758,32 @@ export class SimaiVisualEditor {
         ctx.restore();
     }
 
-    _onContextMenu(e) {
-        e.preventDefault();
-    }
-
     _onPointerDown(e) {
+        if (e.button !== 0) return;
+        this.markerPressed = true;
         this._updMousePos(e);
-        const clickedNote = this._hitTestNote(this.mouseX, this.mouseY);
-        const lane = this._hitTestLane(this.mouseX);
 
-        if (e.button === 0) { // 左鍵
-            this.markerPressed = true;
-            if (clickedNote !== null) {
-                e.stopPropagation();
-                if (this.onChangeNote) {
-                    this.onChangeNote(clickedNote);
-                }
-            } else if (lane !== null) {
-                e.stopPropagation();
-                const clickTime = this.globalTime - this.mouseY / this.zoom;
-                if (this.onPlaceNote) {
-                    this.onPlaceNote(lane, clickTime);
-                }
-            }
-        } else if (e.button === 2) { // 右鍵
-            if (clickedNote !== null) {
-                e.stopPropagation();
-                if (this.onDeleteNote) {
-                    this.onDeleteNote(clickedNote);
-                }
-            } else if (lane !== null) {
-                e.stopPropagation();
-            }
-        }
-
+        // 只有在循環沒有執行時才手動重繪
         if (!this._isLoopActive()) {
             this._upd();
         }
     }
 
-    _onPointerUp(e) {
-        if (e.button === 0) {
-            this.markerPressed = false;
-        }
-
-        if (!this._isLoopActive()) {
-            this._upd();
-        }
-    }
-
-    _onPointerLeave() {
+    _onPointerUp() {
         this.markerPressed = false;
-        this.hoverLane = null;
-        this.canvas.style.cursor = 'grab';
+
         if (!this._isLoopActive()) {
             this._upd();
         }
     }
 
     _onPointerMove(e) {
+        // 1. 永遠更新座標，以便下一幀渲染時使用新位置
         this._updMousePos(e);
         this.markerX = this.mouseX;
 
-        this.hoverLane = this._hitTestLane(this.mouseX);
-
-        // 如果懸停在有效音軌上，顯示 crosshair 代表可以點擊編輯，否則顯示 grab 代表拖拽滾動
-        if (this.hoverLane !== null) {
-            this.canvas.style.cursor = 'crosshair';
-        } else {
-            this.canvas.style.cursor = 'grab';
-        }
-
+        // 2. 判斷是否需要手動觸發渲染
+        // 如果主循環 (Playing 或 KeepRendering) 正在跑，我們就不手動呼叫 render
         if (!this._isLoopActive()) {
             this._upd();
         }
@@ -2071,7 +1821,6 @@ export class SimaiPreviewRenderer {
             double: '#FFDF00',
             break: '#FF640D',
             slide: '#00FBFC',
-            mine: '#737373',
         };
         this.RENDER_LIMET = 1000;
     }
@@ -2083,14 +1832,12 @@ export class SimaiPreviewRenderer {
     getCanvasWH() {
         const w = this.canvas.width || 0;
         const h = this.canvas.height || 0;
-        if (!this._canvasWH) {
-            this._canvasWH = { width: 0, height: 0, halfWidth: 0, halfHeight: 0 };
-        }
-        this._canvasWH.width = w;
-        this._canvasWH.height = h;
-        this._canvasWH.halfWidth = w * 0.5;
-        this._canvasWH.halfHeight = h * 0.5;
-        return this._canvasWH;
+        return {
+            width: w,
+            height: h,
+            halfWidth: w * 0.5,
+            halfHeight: h * 0.5,
+        };
     }
 
     drawLine(x1, y1, x2, y2, color = '#fff', width = 1) {
@@ -2106,22 +1853,20 @@ export class SimaiPreviewRenderer {
 
     drawTag(tag) {
         const { ctx } = this;
-        const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
+        const { width: w, height: h, halfWidth: hw } = this.getCanvasWH();
         const zoom = this.zoom || 1;
         const bs = this.settings.noteBaseSize;
         //const lineWidth = bs * (tag.type === 'bpm' ? 6 : 4);
 
         ctx.save();
 
-        const tb1 = this.settings.tb1 || 4;
-        const tb2 = this.settings.tb2 || 4;
-        const period = (tag.type === 'bpm') ? ((60 * tb1) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
-        const beatPeriod = (tag.type === 'bpm') ? ((240 / tag.value) / tb2) : 0;
+        // 計算時間週期 (BPM 通常建議用 60/tag.value 代表每拍一條線)
+        const period = (tag.type === 'bpm') ? (240 / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {
             // 1. 計算螢幕範圍內的索引
-            let minI = Math.ceil((-hw / zoom - delta) / period) - 1;
+            let minI = Math.ceil((-hw / zoom - delta) / period);
             let maxI = Math.floor((hw / zoom - delta) / period);
 
             // 2. 邏輯約束：起點永遠從 0 開始
@@ -2148,27 +1893,9 @@ export class SimaiPreviewRenderer {
                 if (tag.type === 'bpm') {
                     ctx.strokeStyle = 'rgb(255, 217, 0)';
                     ctx.lineWidth = 2;
-
-                    const parts = (tb1 * tb2) / 4;
-                    if (parts > 1) {
-                        ctx.save();
-                        ctx.strokeStyle = 'rgba(255, 217, 0, 0.3)';
-                        ctx.lineWidth = 1;
-                        for (let b = 1; b < parts; b++) {
-                            const subTime = tag.time + i * period + b * beatPeriod;
-                            if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
-                            const subPosX = (delta + i * period + b * beatPeriod) * zoom + hw;
-                            ctx.beginPath();
-                            ctx.moveTo(subPosX, h);
-                            ctx.lineTo(subPosX, hh);
-                            ctx.stroke();
-                        }
-                        ctx.restore();
-                    }
                 } else {
                     ctx.lineWidth = 1;
                     if (i === 0) {
-                        if (tag.nohead) continue;
                         ctx.strokeStyle = '#ffffff';
                     } else {
                         ctx.strokeStyle = 'rgb(128, 128, 128)';
@@ -2185,7 +1912,7 @@ export class SimaiPreviewRenderer {
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
+        const { time: noteTime, pos, isBreak, isDouble } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -2193,18 +1920,17 @@ export class SimaiPreviewRenderer {
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
-
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
         ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
-        ctx.lineWidth = size * 0.35;
-        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap));
         ctx.stroke();
         ctx.restore();
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
+        const { time: noteTime, pos, isBreak, isDouble } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -2212,7 +1938,8 @@ export class SimaiPreviewRenderer {
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
-
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star);
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
         for (let i = 0; i < 10; i++) {
@@ -2227,21 +1954,25 @@ export class SimaiPreviewRenderer {
             else ctx.lineTo(px, py);
         }
         ctx.closePath();
-        ctx.lineWidth = size * 0.35;
-        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star));
         ctx.stroke();
         ctx.restore();
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration } = s;
+        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
         const ctx = this.ctx;
+        const { height: h } = this.getCanvasWH(); // h 為中心到邊緣的距離
         const t = (noteTime - this.globalTime);
 
         const size = this.settings.noteBaseSize * this.h * 0.01;
         const y = (pos - 0.5) / 8 * this.h;
 
         ctx.save();
+
+        // 3. 樣式設定
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap);
+
         ctx.translate(this.hw + t * this.zoom, y);
 
         // 4. 繪製正六角形
@@ -2260,15 +1991,12 @@ export class SimaiPreviewRenderer {
             else ctx.lineTo(px, py);
         }
         ctx.closePath();
-        ctx.lineWidth = size * 0.35;
-        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.tap));
         ctx.stroke();
-
         ctx.restore();
     }
 
     drawSlide(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, slideDelay, slideDuration } = s;
+        const { time: noteTime, pos, isBreak, isDouble, slideDelay, slideDuration } = s;
         const t = (noteTime + slideDelay - this.globalTime);
         const ctx = this.ctx;
 
@@ -2277,7 +2005,7 @@ export class SimaiPreviewRenderer {
 
         ctx.save();
         ctx.lineWidth = size;
-        ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.slide));
+        ctx.strokeStyle = isBreak ? this.color.break : (isDouble ? this.color.double : this.color.slide);
         ctx.setLineDash([size * 0.4, size * 0.3]);
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
@@ -2288,7 +2016,7 @@ export class SimaiPreviewRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, isHanabi } = s;
+        const { time: noteTime, pos, touchPos, isDouble, holdDuration, isHanabi } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -2296,71 +2024,83 @@ export class SimaiPreviewRenderer {
         const y = touchPos === "C" ? this.hh : ((pos - 0.5 * !(touchPos === "E" || touchPos === "D")) / 8 * this.h);
 
         ctx.save();
+        ctx.lineWidth = size * 0.4;
+        ctx.strokeStyle = isDouble ? this.color.double : this.color.star;
         ctx.translate(this.hw + t * this.zoom, y);
         ctx.beginPath();
-        if (isHanabi) {
-            const h = holdDuration ?? 0;
-            const color = this.ctx.createLinearGradient((h * this.zoom), -y, (h * this.zoom) + size * 4, this.h - y);
-            color.addColorStop(0, "#00D5FF");
-            color.addColorStop(0.4, "#FF00FF");
-            color.addColorStop(0.8, "#FFD823");
-            color.addColorStop(1, "#FFD823");
-
-            const width = Math.round(size * 4);
-            const height = this.h + y;
-
-            this.ctx.save();
-            this.ctx.fillStyle = color;
-
-            for (let x = 0; x < width; x += 4) {
-                // 從左到右透明度由 1.0 降至 0.0
-                this.ctx.globalAlpha = 1 - (x / width);
-                // 繪製 1px 寬的垂直色條
-                this.ctx.fillRect((h * this.zoom) + x, -y, 4, height);
-            }
-
-            this.ctx.restore();
-        }
         if (holdDuration) {
+            const hp = (holdDuration * this.zoom) / 4;
             ctx.lineWidth = size * 0.8;
-            if (isMine) {
-                ctx.globalAlpha = 1;
-                ctx.globalCompositeOperation = "source-over";
-                const hp = Math.max(4, holdDuration * this.zoom);
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = 0.8;
+            for (let i = 0; i < 4; i++) {
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, 0);
-                this.ctx.lineTo(hp, 0);
+                this.ctx.moveTo(hp * i, 0);
+                this.ctx.lineTo(hp * (i + 1), 0);
                 this.ctx.closePath();
-                this.ctx.stroke();
-            } else {
-                ctx.globalCompositeOperation = "lighter";
-                ctx.globalAlpha = 0.8;
-                const hp = Math.max(4, holdDuration * this.zoom) / 4;
-                for (let i = 0; i < 4; i++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(hp * i, 0);
-                    this.ctx.lineTo(hp * (i + 1), 0);
-                    this.ctx.closePath();
-                    switch (i) {
-                        case 0:
-                            this.ctx.strokeStyle = "#EC4402";
-                            break;
-                        case 1:
-                            this.ctx.strokeStyle = "#F6EE01";
-                            break;
-                        case 2:
-                            this.ctx.strokeStyle = "#0CA163";
-                            break;
-                        case 3:
-                            this.ctx.strokeStyle = "#0197F5";
-                            break;
-                    }
-                    this.ctx.stroke();
+                switch (i) {
+                    case 0:
+                        this.ctx.strokeStyle = "#EC4402";
+                        break;
+                    case 1:
+                        this.ctx.strokeStyle = "#F6EE01";
+                        break;
+                    case 2:
+                        this.ctx.strokeStyle = "#0CA163";
+                        break;
+                    case 3:
+                        this.ctx.strokeStyle = "#0197F5";
+                        break;
                 }
+                this.ctx.stroke();
+            }
+            if (isHanabi) {
+                const color = this.ctx.createLinearGradient((holdDuration * this.zoom), -y, (holdDuration * this.zoom) + size * 4, this.h - y);
+                color.addColorStop(0, "#00D5FF");
+                color.addColorStop(0.4, "#FF00FF");
+                color.addColorStop(0.8, "#FFD823");
+                color.addColorStop(1, "#FFD823");
+
+                const width = Math.round(size * 4);
+                const height = this.h + y;
+
+                this.ctx.save();
+                this.ctx.fillStyle = color;
+
+                for (let x = 0; x < width; x += 4) {
+                    // 從左到右透明度由 1.0 降至 0.0
+                    this.ctx.globalAlpha = 1 - (x / width);
+                    // 繪製 1px 寬的垂直色條
+                    this.ctx.fillRect((holdDuration * this.zoom) + x, -y, 4, height);
+                }
+
+                this.ctx.restore();
             }
         } else {
-            ctx.lineWidth = size * 0.35;
-            ctx.strokeStyle = isMine ? this.color.mine : (isDouble ? this.color.double : this.color.star);
+            if (isHanabi) {
+                ctx.globalCompositeOperation = "lighter";
+                // 沿用你原本定義的垂直/斜向漸層
+                const color = this.ctx.createLinearGradient(0, -y, size * 4, this.h - y);
+                color.addColorStop(0, "#00D5FF");
+                color.addColorStop(0.4, "#FF00FF");
+                color.addColorStop(0.8, "#FFD823");
+                color.addColorStop(1, "#FFD823");
+
+                const width = Math.round(size * 4);
+                const height = this.h + y; // 確保延伸到底部
+
+                this.ctx.save();
+                this.ctx.fillStyle = color;
+
+                for (let x = 0; x < width; x += 4) {
+                    // 從左到右透明度由 1.0 降至 0.0
+                    this.ctx.globalAlpha = 1 - (x / width);
+                    // 繪製 1px 寬的垂直色條
+                    this.ctx.fillRect(x, -y, 4, height);
+                }
+
+                this.ctx.restore();
+            }
             ctx.strokeRect(-size * 0.5, -size * 0.5, size, size);
         }
         ctx.restore();
@@ -2475,12 +2215,12 @@ export class SimaiPreviewRenderer {
         this.drawAudioWaveform(audioBuffer, offset);
         visualBuckets.tags.forEach(t => this.drawTag(t));
         visualBuckets.slide.forEach(n => this.drawSlide(n));
+        visualBuckets.touch.forEach(n => this.drawTouch(n));
         visualBuckets.tapnhold.forEach(n => {
             if (n.type === "hold") this.drawHold(n);
             else if (n.isStar) this.drawStar(n);
             else this.drawTap(n);
         });
-        visualBuckets.touch.forEach(n => this.drawTouch(n));
         const ct = hw + (cursorIndexTime - globalTime) * this.zoom;
         this.drawTriangle(
             ct - h * 0.1, 0,

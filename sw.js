@@ -1,38 +1,23 @@
 // Basic service worker for offline caching
 // Cache name should be bumped when assets change
-const CACHE_NAME = (() => {
-    const isDev =
-        self.location.hostname === 'localhost' ||
-        self.location.hostname === '127.0.0.1' ||
-        self.location.hostname.endsWith('.ngrok-free.app');
-
-    if (isDev) {
-        return 'web-mai-chart-cache-' + Date.now();
-    } else {
-        return 'web-mai-chart-cache-__CACHE_VERSION__';
-    }
-})();
-
+const CACHE_NAME = 'web-mai-chart-cache-v7';
 const ASSETS = [
     './',
     './index.html',
     './main.css',
-    './Scripts/main.js',
-    './Scripts/renderer.js',
-    './Scripts/helper.js',
-    './Scripts/decode.js',
-    './Scripts/indexDB.js',
-    './Scripts/jszip.min.js',
-    './Scripts/mediabunny.cjs',
+    './main.js',
+    './renderer.js',
+    './helper.js',
+    './decode.js',
+    './indexDB.js',
+    './jszip.min.js',
+    './mediabunny.cjs',
     './favicon.ico',
-    './Fonts/ShareTechMono-Regular.ttf',
-    './Fonts/Inter.ttf',
     './Skin/outline.png',
-    './Scripts/i18n.js',
+    './i18n.js',
     './locales/en.js',
     './locales/ja.js',
     './locales/zh-TW.js',
-    './rpc.js',
 ];
 
 self.addEventListener('install', (event) => {

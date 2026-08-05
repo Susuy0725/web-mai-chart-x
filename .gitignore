@@ -2,4 +2,3 @@
 .vite/deps
 .vite/deps/_metadata.json
 .vite/deps/package.json
-dist/*

@@ -57,18 +57,11 @@ export function simaiDecode(data = "", baseOffset = true) {
             if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
             e = result.residue;
             tags.push({ type: 'bpm', value: nowBpm, time: nowTime });
-            let tg;
             if (lastBpmTag !== -1) {
-                tg = tags[lastBpmTag];
+                let tg = tags[lastBpmTag];
                 tg.nextTime = nowTime;
             }
             lastBpmTag = tags.length - 1;
-            if (lastSplitTag !== -1 && tags[lastSplitTag].time !== nowTime && tg.bpm !== nowBpm) {
-                tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime, nohead: true });
-                tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
-                lastSplitTag = tags.length - 1;
-                lastSplitTagCommIndex = noteCommaIndex;
-            }
         }
         if (e.includes('{')) {
             overrideSplitTime = null; // reset overrideSplit at the start of each new tag
@@ -80,15 +73,12 @@ export function simaiDecode(data = "", baseOffset = true) {
                 nowSplit = result.value;
             }
             e = result.residue;
-            tags.push({
-                type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime,
-                nohead: lastBpmTag !== -1 && tags[lastBpmTag].time === nowTime,
-            });
+            tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime });
             lastSplitTag = tags.length - 1;
             lastSplitTagCommIndex = noteCommaIndex;
         }
-        if (lastSplitTag !== -1) {
-            tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
+        if (tags[tags.length - 1]?.type == 'split') {
+            tags[tags.length - 1].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
         }
         /*if (overrideSplitTime === null && (nowBpm === null || nowSplit === null)) {
             console.log("BPM or Split not defined before notes\n",(nowBpm === null || nowSplit === null));
@@ -123,6 +113,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                 const rawsub = e.split('`').map(s => s.trim());
                 if (rawsub.some(s => s === '')) {
                     pushWarn("Empty note detected in backticks, ", { errpos: noteCommaIndex });
+                    continue;
                 }
                 const subNotes = e.split('`').filter(n => n.trim() !== '');
                 notesToProcess = subNotes.map((raw, i) => ({ raw, time: nowTime + i * 0.001 }));
@@ -180,6 +171,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                 })();
                 if (splitr.some(s => s === '')) {
                     pushWarn("Empty note detected in split, ", { errpos: noteCommaIndex });
+                    return;
                 }
                 if (splitr.length === 1 && !isNaN(splitr[0]) && splitr[0].length === 2) {
                     if (splitr[0].charAt(0) === splitr[0].charAt(1)) {
@@ -241,8 +233,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                     tempCheck = tempCheck.replace(/\[[^\]]*\]/g, '');
 
                     // 4. 處理單一字元的 Flags
-                    // b(break), $(star), x(EX), f(煙火), h(hold), @(無星滑), ?(無頭), !(隱頭), m(地雷)
-                    const validFlags = /[bx\$fh@?!m]/g;
+                    // b(break), $(star), x(EX), f(hanabi), h(hold), @(無星滑), ?(無頭), !(隱頭)
+                    const validFlags = /[bx\$fh@?!]/g;
                     tempCheck = tempCheck.replace(validFlags, '');
 
                     // 🔥 關鍵檢查：如果現在 tempCheck 還剩下任何字元，代表有非法輸入！
@@ -296,10 +288,6 @@ export function simaiDecode(data = "", baseOffset = true) {
                         breakCounts++;
                         tapCounts--;
                         noteStr = noteStr.replace(/b/g, '');
-                    };
-                    if (noteStr.includes('m') && !slideMatch) {
-                        noteObj.isMine = true
-                        noteStr = noteStr.replace(/m/g, '');
                     };
                     if (noteStr.includes('$')) {
                         if (slideMatch) pushWarn("Slide already have a star! This is unnecessary,", { errpos: noteCommaIndex });
@@ -407,10 +395,6 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 breakCounts++;
                                 tapCounts--;
                             }
-                            if (p[0].includes('m')) {
-                                noteObj.isMine = true;
-                                p[0] = p[0].replace(/m/g, '');
-                            }
                             if (p[0].includes('@')) {
                                 noteObj.isStar = false;
                                 p[0] = p[0].replace(/@/g, '');
@@ -434,17 +418,10 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 p[0] = p[0].replace(/!/g, '');
                             }
                             const isSlideBreak = p.some(part => part.includes('b'));
-                            const isSlideMine = p.some(part => part.includes('m'));
                             if (isSlideBreak) {
                                 p.forEach((c, i) => {
                                     if (c.startsWith('b')) pushWarn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", { errpos: noteCommaIndex });
                                     p[i] = p[i].replace(/b/g, '');
-                                });
-                            }
-                            if (isSlideMine) {
-                                p.forEach((c, i) => {
-                                    if (c.startsWith('m')) pushWarn("Not recommand write mine flag like this since it may cause confusion, please put mine flag at the end of the slide part!! :", { errpos: noteCommaIndex });
-                                    p[i] = p[i].replace(/m/g, '');
                                 });
                             }
 
@@ -484,15 +461,10 @@ export function simaiDecode(data = "", baseOffset = true) {
                             if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) return pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
                             const totalLen = segments.reduce((sum, s) => sum + s.len, 0);
                             let currentDelay = dlay;
-                            let cullSkipSum = 0;
 
                             segments.forEach((seg, index) => {
                                 // 如果長度為 0 則平分時間，否則依長度比例分配
                                 const segmentDuration = totalLen > 0 ? d * (seg.len / totalLen) : d / segments.length;
-                                if (index === 0) {
-                                    noteObj.slideDuration = segmentDuration;
-                                }
-                                cullSkipSum += segmentDuration;
 
                                 tempNotes.push({
                                     type: 'slide',
@@ -503,7 +475,6 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     hideHead: (hideHeadSlide ? true : index !== 0),
                                     isDouble: sameTimeSlide || doubleSlide,
                                     isBreak: isSlideBreak,
-                                    isMine: isSlideMine,
                                     slideEnd: seg.end,
                                     slideMid: seg.mid,
                                     slideType: seg.type,
@@ -514,7 +485,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                                     slideDuration: segmentDuration,
                                     isIllegal: seg.illegal,
                                     hispeed: hispeed,
-                                    cullSkipExtend: d - cullSkipSum
+                                    chainSkipT: dlay + d,
                                 });
                                 if (index === segments.length - 1) {
                                     if (isSlideBreak) { breakCounts++ } else { slideCounts++ }
@@ -539,7 +510,6 @@ export function simaiDecode(data = "", baseOffset = true) {
             ...n,
             isBreak: n.isBreak || false,
             isHold: n.isHold || false,
-            isMine: n.isMine || false,
             isEx: n.isEx || false,
         });
     }
@@ -556,7 +526,6 @@ slide: ${slideCounts},
 touch: ${touchCounts},
 break: ${breakCounts}`
     )
-    console.log(tags);
     console.groupEnd();
     return {
         notes,
@@ -564,7 +533,7 @@ break: ${breakCounts}`
         tags,
         bpm: firstBpm,
         baseOffset,
-        notesCounts: {
+        notesConts: {
             tap: tapCounts,
             hold: holdCounts,
             slide: slideCounts,

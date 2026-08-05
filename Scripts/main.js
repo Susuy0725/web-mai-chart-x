@@ -1,13 +1,24 @@
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from './indexDB.js';
-import { scaleBase, getButton, debounce, throttle, audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages, simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText, clamp, createLabeledInput1, createCustomSlider, getSensorAtPoint, wSlideRatio } from './helper.js';
+import {
+    scaleBase, getButton, debounce, throttle,
+    audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages,
+    simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText,
+    clamp, createLabeledInput1, createCustomSlider, videoRender
+} from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
+import { updateDiscordRPC } from '../rpc.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
 
-if ('serviceWorker' in navigator) {
+const isDev =
+    self.location.hostname === 'localhost' ||
+    self.location.hostname === '127.0.0.1' ||
+    self.location.hostname.endsWith('.ngrok-free.app');
+
+if ('serviceWorker' in navigator && !isDev) {
     navigator.serviceWorker.register('./sw.js')
         .then((reg) => {
             console.log('Service worker registered:', reg);
@@ -27,8 +38,10 @@ if ('serviceWorker' in navigator) {
                 });
             });
 
-            // 強制立刻檢查更新
-            reg.update();
+            // 強制立刻檢查更新，並捕獲可能發生的錯誤
+            reg.update().catch((err) => {
+                console.warn('Service worker update failed:', err);
+            });
         })
         .catch((err) => {
             console.warn('Service worker registration failed:', err);
@@ -36,6 +49,7 @@ if ('serviceWorker' in navigator) {
 }
 
 let
+    isInitComplete = false,
     images,
     readyBeat = false,
     maidata = {},
@@ -61,7 +75,11 @@ window.simpleToast = simpleToast;
 _init();
 
 if (typeof document !== 'undefined' && document.fonts) {
-    document.fonts.load('10px combo').then(() => {
+    Promise.all([
+        document.fonts.load('10px combo'),
+        document.fonts.load('10px mono'),
+        document.fonts.load('10px title'),
+    ]).then(() => {
         if (renderer) {
             renderer._sensorCacheParams = { w: 0, h: 0, scale: 0 };
             renderer._middleDisplayCacheParams = { w: 0, h: 0, scale: 0 };
@@ -117,6 +135,10 @@ const playbackReset = getButton("playbackSpeed", "utility");
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const helpButton = getButton("help", "utility");
+const fullscreenButton = getButton("fullscreen", "utility");
+const findReplaceButton = getButton("findReplace", "utility");
+const toggleBkButton = getButton("toggleBk", "utility");
+const toggleExButton = getButton("toggleEx", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
@@ -124,13 +146,780 @@ const previewCanvas = document.getElementById('miniPreview');
 const previewZoomInButton = document.getElementById('mpzoomIn');
 const previewZoomOutButton = document.getElementById('mpzoomOut');
 const editorContainer = document.getElementById('editorContainer');
+const panelSplitter = document.getElementById('panelSplitter');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
+const findReplaceBar = document.getElementById('findReplaceBar');
+const findInput = document.getElementById('findInput');
+const replaceInput = document.getElementById('replaceInput');
+const findMatchCount = document.getElementById('findMatchCount');
+const findPrevBtn = document.getElementById('findPrevBtn');
+const findNextBtn = document.getElementById('findNextBtn');
+const findCloseBtn = document.getElementById('findCloseBtn');
+const replaceRow = document.getElementById('replaceRow');
+const replaceOneBtn = document.getElementById('replaceOneBtn');
+const replaceAllBtn = document.getElementById('replaceAllBtn');
 const showPlayControlsBtn = document.getElementById('showPlayControlsBtn');
+const quickPanel = document.getElementById('quick-panel');
+const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
+const canvasOutline = document.getElementById('canvasOutline');
+const backgroundContainer = document.querySelector('#canvasContainer .backgroundContainer');
+
+function applySplitRatio(ratio) {
+    document.documentElement.style.setProperty('--split-ratio', ratio);
+}
+
+let canvasSnapped = false, noRender = false;
+
+function snapHideCanvas() {
+    canvasSnapped = true;
+    noRender = true;
+    canvasContainer.style.display = 'none';
+    editorContainer.style.left = '0';
+    editorContainer.style.width = '100%';
+    editorContainer.style.marginLeft = '10px';
+    if (panelSplitter) {
+        panelSplitter.style.display = 'block';
+        panelSplitter.classList.add('snapped');
+    }
+    resize(true);
+    settings.canvasSnapped = true;
+    saveSettingsDebounce();
+}
+
+function snapRestoreCanvas() {
+    canvasSnapped = false;
+    noRender = false;
+    canvasContainer.style.display = '';
+    editorContainer.style.left = '';
+    editorContainer.style.width = '';
+    editorContainer.style.marginLeft = '';
+    if (panelSplitter) {
+        panelSplitter.classList.remove('snapped');
+    }
+    applySplitRatio(settings.splitRatio ?? 0.5);
+    resize(true);
+    settings.canvasSnapped = false;
+    saveSettingsDebounce();
+}
+
+if (fullscreenButton) {
+    fullscreenButton.addEventListener('click', () => {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+            const docEl = document.documentElement;
+            if (docEl.requestFullscreen) {
+                docEl.requestFullscreen().catch(err => console.warn('進入全螢幕失敗:', err));
+            } else if (docEl.webkitRequestFullscreen) {
+                docEl.webkitRequestFullscreen();
+            } else if (docEl.msRequestFullscreen) {
+                docEl.msRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(err => console.warn('退出全螢幕失敗:', err));
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    });
+
+    const updateFullscreenIcon = () => {
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+        const iconSpan = fullscreenButton.querySelector('.material-symbols-outlined');
+        if (iconSpan) {
+            iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
+        }
+        fullscreenButton.title = isFullscreen ? '退出全螢幕' : '全螢幕';
+    };
+
+    document.addEventListener('fullscreenchange', updateFullscreenIcon);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+    document.addEventListener('msfullscreenchange', updateFullscreenIcon);
+}
+
+// ==========================================
+// 1. 切換 Break (bk) 與 EX (ex) 音符旗標邏輯
+// ==========================================
+export function toggleNoteFlag(inputStr, flagType) {
+    if (!inputStr) return inputStr;
+
+    const slideSymbolRegex = /(?:pp)|(?:qq)|[-<>^vpqszVw]/;
+
+    function toggleSinglePart(part) {
+        let note = part.trim();
+        if (!note) return part;
+
+        // 1. Touch 音符不適用 (如 C, Cf, A1, E8f)
+        if (/^(?:[ABCDE][1-8]|C)/.test(note)) {
+            return part;
+        }
+
+        // 2. 雙打縮寫音符 (如 35, 42, 81)
+        if (/^[1-8]{2}$/.test(note)) {
+            const pos1 = note[0];
+            const pos2 = note[1];
+            if (flagType === 'bk') {
+                return `${pos1}b/${pos2}b`;
+            } else if (flagType === 'ex') {
+                return `${pos1}x/${pos2}x`;
+            }
+        }
+
+        const isSlide = slideSymbolRegex.test(note);
+
+        if (flagType === 'bk') {
+            if (isSlide) {
+                const headHasB = /^\d+b|\*\d+b/.test(note);
+                // 第一個 slide 符號後的所有內容
+                const firstSlideMatch = note.match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
+                const slideBody = firstSlideMatch ? note.slice(firstSlideMatch.index) : '';
+                const endHasB = /b/.test(slideBody);
+
+                let nextHeadB = false;
+                let nextEndB = false;
+
+                if (!headHasB && !endHasB) {
+                    // 全無 -> 轉全有
+                    nextHeadB = true;
+                    nextEndB = true;
+                } else if (headHasB && endHasB) {
+                    // 全有 -> 轉全無
+                    nextHeadB = false;
+                    nextEndB = false;
+                } else if (headHasB && !endHasB) {
+                    // 僅星頭 -> 轉僅路徑尾
+                    nextHeadB = false;
+                    nextEndB = true;
+                } else {
+                    // 僅路徑尾 -> 轉僅星頭
+                    nextHeadB = true;
+                    nextEndB = false;
+                }
+
+                let res = note.replace(/b/g, '');
+                if (nextHeadB) {
+                    res = res.replace(/^(\d+)/, '$1b');
+                    res = res.replace(/\*(\d+)/g, '*$1b');
+                }
+                if (nextEndB) {
+                    res = res.replace(/(\[[^\]]+\])/g, '$1b');
+                }
+                return res;
+            } else {
+                const hasB = /b/.test(note);
+                if (hasB) {
+                    return note.replace(/b/g, '');
+                } else {
+                    if (/\[[^\]]+\]/.test(note)) {
+                        return note.replace(/(\[[^\]]+\])/, '$1b');
+                    } else {
+                        return note.replace(/^(\d+)/, '$1b');
+                    }
+                }
+            }
+        } else if (flagType === 'ex') {
+            if (isSlide) {
+                const hasStarX = /^\d+b?x|\*\d+b?x/.test(note);
+                if (hasStarX) {
+                    let res = note;
+                    res = res.replace(/^(\d+b?)x/, '$1');
+                    res = res.replace(/\*(\d+b?)x/g, '*$1');
+                    return res;
+                } else {
+                    let res = note;
+                    res = res.replace(/^(\d+b?)/, '$1x');
+                    res = res.replace(/\*(\d+b?)/g, '*$1x');
+                    return res;
+                }
+            } else {
+                const hasX = /x/.test(note);
+                if (hasX) {
+                    return note.replace(/x/g, '');
+                } else {
+                    if (/\[[^\]]+\]/.test(note)) {
+                        if (/\[[^\]]+\]b/.test(note)) {
+                            return note.replace(/(\[[^\]]+\]b)/, '$1x');
+                        }
+                        return note.replace(/(\[[^\]]+\])/, '$1x');
+                    } else {
+                        if (/^\d+b/.test(note)) {
+                            return note.replace(/^(\d+b)/, '$1x');
+                        }
+                        return note.replace(/^(\d+)/, '$1x');
+                    }
+                }
+            }
+        }
+
+        return part;
+    }
+
+    function processCodeToken(codeToken) {
+        if (!codeToken.trim()) return codeToken;
+
+        const tagMatch = codeToken.match(/^((?:\([^\)]*\)|\{[^\}]*\}|\s+)*)([\s\S]*)$/);
+        if (!tagMatch) return toggleSinglePart(codeToken);
+
+        const prefixTags = tagMatch[1];
+        const noteContent = tagMatch[2];
+
+        // 如果只有前導標籤而無音符內容 (例如 (240){2})，直接返回 prefixTags
+        if (!noteContent.trim()) {
+            return prefixTags;
+        }
+
+        const parts = noteContent.split('/');
+
+        // 檢查雙壓帶旗標還原情況 (如 4b/8b -> 48 或 4x/8x -> 48)
+        if (parts.length === 2) {
+            const p1 = parts[0].trim();
+            const p2 = parts[1].trim();
+
+            if (flagType === 'bk') {
+                const match1 = p1.match(/^([1-8])b$/);
+                const match2 = p2.match(/^([1-8])b$/);
+                if (match1 && match2) {
+                    return prefixTags + match1[1] + match2[1];
+                }
+            } else if (flagType === 'ex') {
+                const match1 = p1.match(/^([1-8])x$/);
+                const match2 = p2.match(/^([1-8])x$/);
+                if (match1 && match2) {
+                    return prefixTags + match1[1] + match2[1];
+                }
+            }
+        }
+
+        const newParts = parts.map(part => toggleSinglePart(part));
+        return prefixTags + newParts.join('/');
+    }
+
+    const tokens = inputStr.split(',');
+    const newTokens = tokens.map(token => {
+        if (token.includes('||')) {
+            const parts = token.split('||');
+            const codePart = parts[0];
+            const commentPart = parts.slice(1).join('||');
+            return processCodeToken(codePart) + '||' + commentPart;
+        }
+        return processCodeToken(token);
+    });
+
+    return newTokens.join(',');
+}
+
+function handleToggleBkEx(flagType) {
+    if (!editorInput) return;
+    const start = editorInput.selectionStart;
+    const end = editorInput.selectionEnd;
+    const val = editorInput.value;
+
+    let newVal = '';
+    let isSelection = false;
+
+    if (start !== undefined && end !== undefined && start !== end) {
+        isSelection = true;
+        const selectedText = val.slice(start, end);
+        const transformed = toggleNoteFlag(selectedText, flagType);
+        newVal = val.slice(0, start) + transformed + val.slice(end);
+    } else {
+        newVal = toggleNoteFlag(val, flagType);
+    }
+
+    if (newVal !== val) {
+        editorInput.value = newVal;
+        editorInput.dispatchEvent(new Event('input'));
+
+        if (isSelection) {
+            editorInput.setSelectionRange(start, start + (newVal.length - val.length + (end - start)));
+        }
+
+        const toastKey = flagType === 'bk'
+            ? (isSelection ? 'findReplace.toastToggleBkSelection' : 'findReplace.toastToggleBkFull')
+            : (isSelection ? 'findReplace.toastToggleExSelection' : 'findReplace.toastToggleExFull');
+        simpleToast({ content: t(toastKey), type: 'success', timeout: 1500 });
+    }
+}
+
+if (toggleBkButton) {
+    toggleBkButton.addEventListener('click', () => handleToggleBkEx('bk'));
+}
+if (toggleExButton) {
+    toggleExButton.addEventListener('click', () => handleToggleBkEx('ex'));
+}
+
+// ==========================================
+// 2. 尋找與取代 (Find & Replace) 浮動面板與導覽邏輯
+// ==========================================
+let findMatches = [];
+let currentMatchIndex = -1;
+
+function updateFindMatches() {
+    findMatches = [];
+    currentMatchIndex = -1;
+
+    const searchText = findInput ? findInput.value : '';
+    if (!searchText || !editorInput) {
+        if (findMatchCount) findMatchCount.textContent = '0/0';
+        return;
+    }
+
+    const text = editorInput.value;
+    const searchLower = searchText.toLowerCase();
+    const textLower = text.toLowerCase();
+    let pos = 0;
+
+    while ((pos = textLower.indexOf(searchLower, pos)) !== -1) {
+        findMatches.push({ start: pos, end: pos + searchText.length });
+        pos += Math.max(1, searchText.length);
+    }
+
+    if (findMatches.length > 0) {
+        const cursor = editorInput.selectionStart || 0;
+        let idx = findMatches.findIndex(m => m.start >= cursor);
+        currentMatchIndex = idx !== -1 ? idx : 0;
+    }
+
+    updateFindCountUI();
+}
+
+function updateFindCountUI() {
+    if (!findMatchCount) return;
+    if (findMatches.length === 0) {
+        findMatchCount.textContent = '0/0';
+    } else {
+        findMatchCount.textContent = `${currentMatchIndex + 1}/${findMatches.length}`;
+    }
+}
+
+function jumpToMatch(index, autoFocusEditor = true) {
+    if (findMatches.length === 0) return;
+    currentMatchIndex = (index + findMatches.length) % findMatches.length;
+    const m = findMatches[currentMatchIndex];
+
+    const applyFocusAndScroll = () => {
+        if (!editorInput) return;
+        if (autoFocusEditor) {
+            editorInput.focus();
+        }
+        editorInput.setSelectionRange(m.start, m.end);
+
+        const lineCount = editorInput.value.slice(0, m.start).split('\n').length;
+        const totalLines = editorInput.value.split('\n').length;
+        if (totalLines > 0) {
+            const scrollPct = (lineCount - 1) / totalLines;
+            editorInput.scrollTop = scrollPct * editorInput.scrollHeight;
+        }
+    };
+
+    applyFocusAndScroll();
+    if (autoFocusEditor) {
+        requestAnimationFrame(applyFocusAndScroll);
+    }
+
+    updateFindCountUI();
+}
+
+function openFindBar(showReplace = false) {
+    if (!findReplaceBar) return;
+    findReplaceBar.style.display = 'flex';
+    if (replaceRow) {
+        replaceRow.style.display = showReplace ? 'flex' : 'none';
+    }
+
+    const selStart = editorInput.selectionStart;
+    const selEnd = editorInput.selectionEnd;
+    if (selStart !== selEnd && (selEnd - selStart) < 100) {
+        const selText = editorInput.value.slice(selStart, selEnd);
+        if (selText && !selText.includes('\n')) {
+            findInput.value = selText;
+        }
+    }
+
+    updateFindMatches();
+    findInput.focus();
+    findInput.select();
+}
+
+function closeFindBar() {
+    if (findReplaceBar) {
+        findReplaceBar.style.display = 'none';
+    }
+    if (editorInput) {
+        editorInput.focus();
+    }
+}
+
+if (findReplaceButton) {
+    findReplaceButton.addEventListener('click', () => openFindBar(true));
+}
+
+if (findInput) {
+    findInput.addEventListener('input', () => {
+        updateFindMatches();
+        if (findMatches.length > 0) {
+            jumpToMatch(0, false);
+        }
+    });
+
+    findInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                jumpToMatch(currentMatchIndex - 1, true);
+            } else {
+                jumpToMatch(currentMatchIndex + 1, true);
+            }
+        } else if (e.key === 'Escape') {
+            closeFindBar();
+        }
+    });
+}
+
+if (replaceInput) {
+    replaceInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeFindBar();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            executeReplaceOne();
+        }
+    });
+}
+
+const bindNavBtn = (btn, action) => {
+    if (!btn) return;
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        action();
+    });
+};
+
+bindNavBtn(findPrevBtn, () => jumpToMatch(currentMatchIndex - 1, true));
+bindNavBtn(findNextBtn, () => jumpToMatch(currentMatchIndex + 1, true));
+if (findCloseBtn) findCloseBtn.addEventListener('click', closeFindBar);
+
+function executeReplaceOne() {
+    if (findMatches.length === 0 || currentMatchIndex === -1) return;
+    const m = findMatches[currentMatchIndex];
+    const repText = replaceInput ? replaceInput.value : '';
+    const val = editorInput.value;
+
+    const newVal = val.slice(0, m.start) + repText + val.slice(m.end);
+    editorInput.value = newVal;
+    editorInput.dispatchEvent(new Event('input'));
+
+    updateFindMatches();
+    if (findMatches.length > 0) {
+        jumpToMatch(currentMatchIndex % findMatches.length);
+    }
+}
+
+function executeReplaceAll() {
+    const searchText = findInput ? findInput.value : '';
+    if (!searchText || !editorInput) return;
+
+    const repText = replaceInput ? replaceInput.value : '';
+    const val = editorInput.value;
+
+    const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const newVal = val.replace(regex, repText);
+
+    if (newVal !== val) {
+        editorInput.value = newVal;
+        editorInput.dispatchEvent(new Event('input'));
+        updateFindMatches();
+        simpleToast({ content: t('findReplace.replaceAll'), type: 'success', timeout: 1200 });
+    }
+}
+
+if (replaceOneBtn) replaceOneBtn.addEventListener('click', executeReplaceOne);
+if (replaceAllBtn) replaceAllBtn.addEventListener('click', executeReplaceAll);
+
+// ==========================================
+// 3. 尋找與取代 (Find & Replace) 面板自由拖曳移動邏輯
+// ==========================================
+if (findReplaceBar) {
+    let isDraggingBar = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+
+    findReplaceBar.addEventListener('pointerdown', (e) => {
+        // 當點擊輸入框、按鈕時不觸發拖曳
+        if (['INPUT', 'BUTTON', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+            return;
+        }
+
+        isDraggingBar = true;
+        findReplaceBar.classList.add('dragging');
+        findReplaceBar.setPointerCapture(e.pointerId);
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        const rect = findReplaceBar.getBoundingClientRect();
+        const containerRect = editorContainer ? editorContainer.getBoundingClientRect() : { left: 0, top: 0 };
+
+        initialLeft = rect.left - containerRect.left;
+        initialTop = rect.top - containerRect.top;
+
+        findReplaceBar.style.left = `${initialLeft}px`;
+        findReplaceBar.style.top = `${initialTop}px`;
+        findReplaceBar.style.right = 'auto';
+
+        e.preventDefault();
+    });
+
+    findReplaceBar.addEventListener('pointermove', (e) => {
+        if (!isDraggingBar) return;
+
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        if (editorContainer) {
+            const containerW = editorContainer.clientWidth;
+            const containerH = editorContainer.clientHeight;
+            const barW = findReplaceBar.offsetWidth;
+            const barH = findReplaceBar.offsetHeight;
+
+            newLeft = Math.max(0, Math.min(containerW - barW, newLeft));
+            newTop = Math.max(0, Math.min(containerH - barH, newTop));
+        }
+
+        findReplaceBar.style.left = `${newLeft}px`;
+        findReplaceBar.style.top = `${newTop}px`;
+    });
+
+    const stopDraggingBar = (e) => {
+        if (!isDraggingBar) return;
+        isDraggingBar = false;
+        findReplaceBar.classList.remove('dragging');
+        try {
+            findReplaceBar.releasePointerCapture(e.pointerId);
+        } catch (err) { }
+    };
+
+    findReplaceBar.addEventListener('pointerup', stopDraggingBar);
+    findReplaceBar.addEventListener('pointercancel', stopDraggingBar);
+}
+
+if (panelSplitter) {
+    let isDraggingSplitter = false;
+    let dragStartX = 0;
+    let dragStartRatio = 0.5;
+    let resizeRafId = null;
+
+    panelSplitter.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        isDraggingSplitter = true;
+        dragStartX = e.clientX;
+
+        if (canvasSnapped) {
+            // 從 snap 狀態開始拖動：先還原 canvas，從 0 開始計算 ratio
+            snapRestoreCanvas();
+            dragStartRatio = 0;
+        } else {
+            dragStartRatio = settings.splitRatio ?? 0.5;
+            canvasContainer.style.width = '';
+        }
+
+        panelSplitter.classList.add('dragging');
+        panelSplitter.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    });
+
+    panelSplitter.addEventListener('pointermove', (e) => {
+        if (!isDraggingSplitter) return;
+        const windowWidth = window.innerWidth;
+        if (windowWidth <= 0) return;
+        const deltaX = e.clientX - dragStartX;
+        let newRatio = dragStartRatio + (deltaX / windowWidth);
+        if (newRatio < 0.15) {
+            newRatio = 0;
+        } else {
+            newRatio = Math.min(0.85, newRatio);
+        }
+
+        settings.splitRatio = newRatio;
+        applySplitRatio(newRatio);
+
+        if (!resizeRafId) {
+            resizeRafId = requestAnimationFrame(() => {
+                resizeRafId = null;
+                resize(true);
+            });
+        }
+    });
+
+    const stopDraggingSplitter = (e) => {
+        if (!isDraggingSplitter) return;
+        isDraggingSplitter = false;
+        panelSplitter.classList.remove('dragging');
+        if (e.pointerId !== undefined && panelSplitter.hasPointerCapture(e.pointerId)) {
+            try { panelSplitter.releasePointerCapture(e.pointerId); } catch (_) { }
+        }
+        if ((settings.splitRatio ?? 0.5) < 0.15) {
+            snapHideCanvas();
+        } else {
+            saveSettingsDebounce();
+            resize(true);
+        }
+    };
+
+    panelSplitter.addEventListener('pointerup', stopDraggingSplitter);
+    panelSplitter.addEventListener('pointercancel', stopDraggingSplitter);
+}
+
+function updateTimebase() {
+    const v1 = parseInt(timebaseButton.querySelector('input[name="tb1"]').value, 10) || 4;
+    projSet('tb1', v1).catch(console.error);
+}
+function restoreTimebase(t1 = 4) {
+    const v1 = parseInt(t1, 10) || 4;
+    timebaseButton.querySelector('input[name="tb1"]').value = v1;
+}
+timebaseButton.addEventListener('input', function () {
+    updateTimebase();
+    draw();
+});
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 
 let ctx = canvas.getContext('2d');
+
+//-----Quick panel-----
+
+let isCtrlShiftPressed = false;
+
+let directionOfPointer = '0'; // middle, left, right, up, down
+let positionOfQuickPanel = { x: 0, y: 0 };
+let positionOfPointer = { x: 0, y: 0, moved: false };
+let dirBuffer = '';
+
+// 1. 滑鼠移動事件：同時負責「更新位置」與「計算方向」
+document.addEventListener('mousemove', function (event) {
+    positionOfPointer.moved = true;
+    positionOfPointer.x = event.clientX;
+    positionOfPointer.y = event.clientY;
+
+    // 只有當 Ctrl+Shift 被按住時，才計算相對方向
+    if (isCtrlShiftPressed && quickPanel) {
+        const dx = positionOfPointer.x - positionOfQuickPanel.x;
+        const dy = positionOfPointer.y - positionOfQuickPanel.y;
+        const distanceSq = dx * dx + dy * dy;
+
+        let currentDirection = "";
+
+        if (distanceSq < 900) {
+            currentDirection = "middle";
+        } else {
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            if (angle > -22.5 && angle <= 22.5) {
+                currentDirection = "right";
+            } else if (angle > 22.5 && angle <= 67.5) {
+                currentDirection = "down-right";
+            } else if (angle > 67.5 && angle <= 112.5) {
+                currentDirection = "down";
+            } else if (angle > 112.5 && angle <= 157.5) {
+                currentDirection = "down-left";
+            } else if (angle > 157.5 || angle <= -157.5) {
+                currentDirection = "left";
+            } else if (angle > -157.5 && angle <= -112.5) {
+                currentDirection = "up-left";
+            } else if (angle > -112.5 && angle <= -67.5) {
+                currentDirection = "up";
+            } else if (angle > -67.5 && angle <= -22.5) {
+                currentDirection = "up-right";
+            }
+        }
+
+        // 當方向改變時才更新，避免效能浪費
+        if (dirBuffer !== currentDirection) {
+            dirBuffer = currentDirection;
+            directionOfPointer = currentDirection;
+            quickPanel.setAttribute('data-active-dir', directionOfPointer);
+        }
+    }
+});
+
+// 2. 鍵盤按下事件：只負責啟用狀態、鎖定中心點
+window.addEventListener('keydown', (e) => {
+    if (!isInitComplete || !settings.enableQuickPanel || !quickPanel) return;
+
+    // 檢查是否同時按下 Ctrl 和 Shift，且目前還沒被標記為按下
+    if (e.ctrlKey && e.shiftKey && !isCtrlShiftPressed) {
+        if (!positionOfPointer.moved) {
+            simpleToast({
+                content: t("toast.moveMouseToOpen"),
+                type: "info",
+            });
+            return;
+        }
+
+        isCtrlShiftPressed = true;
+
+        // 鎖定當前滑鼠位置為 QuickPanel 的中心點
+        positionOfQuickPanel.x = positionOfPointer.x;
+        positionOfQuickPanel.y = positionOfPointer.y;
+
+        // 顯示並定位面板
+        quickPanel.style.left = positionOfPointer.x + 'px';
+        quickPanel.style.top = positionOfPointer.y + 'px';
+        quickPanel.style.display = 'grid';
+
+        // 初始化狀態為 middle
+        dirBuffer = 'middle';
+        directionOfPointer = 'middle';
+        quickPanel.setAttribute('data-active-dir', 'middle');
+    } else if (isCtrlShiftPressed && e.key !== 'Control' && e.key !== 'Shift') {
+        isCtrlShiftPressed = false;
+        quickPanel.style.display = 'none';
+        quickPanel.removeAttribute('data-active-dir');
+        directionOfPointer = 'middle';
+        dirBuffer = 'middle';
+    }
+});
+
+// 3. 鍵盤放開事件：精準解除狀態
+window.addEventListener('keyup', (e) => {
+    // 💡 改用 e.key 判斷：只要放開的是 Control 或 Shift 鍵，就關閉面板
+    if ((e.key === 'Control' || e.key === 'Shift') && isCtrlShiftPressed) {
+        isCtrlShiftPressed = false;
+        if (directionOfPointer === 'right') {
+            applySelectedRotation(1);
+        } else if (directionOfPointer === 'left') {
+            applySelectedRotation(-1);
+        } else if (directionOfPointer === 'up') {
+            applyVerticalFlip();
+        } else if (directionOfPointer === 'down') {
+            applyHorizontalFlip();
+        } else if (directionOfPointer === 'up-left') {
+            applySelectedRotation(4);
+        } else if (directionOfPointer === 'up-right') {
+            redoButton.click();
+        } else if (directionOfPointer === 'down-left') {
+            getCursorNoteIndex.click();
+        } else if (directionOfPointer === 'down-right') {
+            undoButton.click();
+        }
+        dirBuffer = ''; // 清空緩衝
+
+        if (quickPanel) {
+            quickPanel.style.display = 'none';
+            quickPanel.removeAttribute('data-active-dir');
+        }
+    }
+});
+
+// -----
 const scale = 0.98;
 const
     MAX_ZOOM = 1000,
@@ -142,13 +931,11 @@ export const defaultSettings = {
     speed: 6.5,
     touchSpeed: 7,
     slideSpeed: 0,
-    slideSkip: true,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
     moviebrightness: -4,
     showSensor: true,
-    highlightSensor: true,
+    rotateStars: true,
     pinkStars: false,
-    rotateStars: false,
     // Misc
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
@@ -160,13 +947,14 @@ export const defaultSettings = {
     showSensorTextWhenPaused: true,
     hideBackgroundWhenPaused: false,
     disableVideo: false, // 關閉影片背景（如果有的話）
+    renderSurroundingAuxiliaryText: true,
     visualZoom: 200, // 視覺模式下的縮放倍率
+    splitRatio: 0.5, // 左右面板分割比例
+    canvasSnapped: false, // Canvas 是否被 snap 隱藏
     slideIllegalRed: false,
     showUI: false,
+    enableQuickPanel: false,
     // Sound & Playback
-    autoPlay: true,
-    simulateAutoplay: false,
-
     notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
     globalVolume: 0.65, // 全局音量，0 到 1 之間
@@ -185,7 +973,6 @@ export const defaultSettings = {
         'touch': 0.4,
         'hanabi': 0.6,
     },
-
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     cursorFollow: true, // 游標跟隨
@@ -194,20 +981,33 @@ export const defaultSettings = {
         settings = { ...defaultSettings };
     }
 };
+
+function applyAudioSettings(s) {
+    if (!audioManager || !s) return;
+    if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
+    if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
+    if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
+    if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
+}
+
 const settingsConfig = [
     {
         label: 'settings.tabs.basic',
         items: [
             { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
-            { id: 'slideSkip', type: 'checkbox', label: 'settings.items.slideSkip', def: defaultSettings.slideSkip },
             { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
             { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.score' }], def: defaultSettings.middleDisplay },
             {
                 id: 'moviebrightness',
-                type: 'number',
+                type: 'dropdown',
                 label: 'settings.items.moviebrightness',
-                step: 1, min: -4, max: 0,
+                options: [
+                    { value: '0', label: 'settings.items.bright' },
+                    { value: '-1', label: 'settings.items.normal' },
+                    { value: '-2', label: 'settings.items.dark' },
+                    { value: '-3', label: 'settings.items.veryDark' },
+                ],
                 def: defaultSettings.moviebrightness || 0,
                 apply: (val) => {
                     if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * val})`;
@@ -245,12 +1045,6 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.showSensor',
                 def: defaultSettings.showSensor
-            },
-            {
-                id: 'highlightSensor',
-                type: 'checkbox',
-                label: 'settings.items.highlightSensor',
-                def: defaultSettings.highlightSensor
             },
             {
                 id: 'showSensorTextWhenPaused',
@@ -321,10 +1115,7 @@ const settingsConfig = [
                 id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
             },
             {
-                id: 'autoPlay', type: 'checkbox', label: 'settings.items.autoPlay', def: defaultSettings.autoPlay
-            },
-            {
-                id: 'simulateAutoplay', type: 'checkbox', label: 'settings.items.simulateAutoplay', def: defaultSettings.simulateAutoplay
+                id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
             }
         ]
     }
@@ -339,8 +1130,9 @@ let externalWindow = null;
 let timeControlSliding = false; // 新增滑動狀態標記
 let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
 let nowIndex = 0;
+let lastCursorIndex = -1;
 let visualCtx = null;
-let warnings = [], warningPositions = [];
+let warnings = [], warningPositions = [], warningPositionsConst = [];
 let decodedTags = [];
 let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
 
@@ -353,8 +1145,6 @@ const VIDEO_MIN_SEEK_INTERVAL = 0.8; // 最短 seek 間隔（秒）
 const VIDEO_SEEK_THRESHOLD = 0.3; // 當差距超過此值才執行 seek（秒）
 
 let clockBpm = 60;
-
-let playCombo = 0, playScore = 0;
 
 const isVisualMode = () => settings.displayMode === 'visual';
 const previewVisible = () => (previewContainer.style.display !== 'none' && document.getElementById('playControls').style.display !== 'none');
@@ -1381,11 +2171,11 @@ function setDataEmpty() {
     inputDebounce();
     saveMaidata();
 
-    projSet('background_image', null).catch(() => { });
-    projSet('background_video', null).catch(() => { });
-    projSet('now_difficulty', nowDifficulty).catch(() => { });
-    projSet('resource_bgm', null).catch(() => { });
-    projSet('timeControl', 0).catch(() => { });
+    //projSet('background_image', null).catch(() => { });
+    //projSet('background_video', null).catch(() => { });
+    //projSet('now_difficulty', nowDifficulty).catch(() => { });
+    //projSet('resource_bgm', null).catch(() => { });
+    //projSet('timeControl', 0).catch(() => { });
 }
 
 fetchFromMainoteButton.addEventListener('click', () => {
@@ -1702,9 +2492,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
 createNewButton.addEventListener('click', async () => {
     if (!confirm(t('popup.createNewProject.confirm'))) return;
     const newId = await projectCreate(t('popup.projectManager.untitled'));
-    currentProjectId = newId;
-    localStorage.setItem('simai_lastProjectId', currentProjectId);
-    setDataEmpty();
+    loadProject(newId);
     simpleToast({ content: t('toast.projectCreated'), type: 'success', timeout: 1200 });
 });
 
@@ -1722,34 +2510,6 @@ const getres = ((simaiDataValue) => {
             simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
         } else {
             notes = result.notes;
-            const notesLen = notes.length;
-            const findImmediatePrevSegment = (currentNote) => {
-                let best = null;
-                for (let j = 0; j < notesLen; j++) {
-                    const n = notes[j];
-                    if (n !== currentNote &&
-                        n.type === 'slide' &&
-                        n.time === currentNote.time &&
-                        n.slideEnd == currentNote.pos &&
-                        (n.slideDelay ?? 0) < (currentNote.slideDelay ?? 0)) {
-                        if (!best || (n.slideDelay ?? 0) > (best.slideDelay ?? 0)) {
-                            best = n;
-                        }
-                    }
-                }
-                return best;
-            };
-            for (const note of notes) {
-                if (note.type === 'slide') {
-                    note.requiredSensors = getSpecialRequiredSensors(note) || getSlideSensors(note.path, note.slideType === "w");
-                    note.prevSegment = findImmediatePrevSegment(note);
-                    note.starNote = notes.find(n =>
-                        n.time === note.time &&
-                        n.pos == note.pos &&
-                        (n.type === 'tap' && n.isStar)
-                    );
-                }
-            }
             decodedTags = result.tags || [];
 
             setEndtime(result.endTime);
@@ -1800,15 +2560,17 @@ const getres = ((simaiDataValue) => {
             dataIndexToTime = result.indexToTime || [];
 
             playScoreRes = {
-                ...result.notesConts,
+                ...result.notesCounts,
                 score: result.score,
             };
             playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
             playScoreRes.invScore = 1 / playScoreRes.score;
             rawData = splitRespectingLineComments(simaiDataValue);
+            lastCursorIndex = -1;
 
             warnings = result.warnings || [];
             warningPositions = result.errpositions || [];
+            warningPositionsConst = warningPositions;
             if (result.warnings && result.warnings.length > 0) {
                 warnEl.style.visibility = 'visible';
                 warnEl.querySelector('.warnCount').textContent = result.warnings.length;
@@ -1822,9 +2584,34 @@ const getres = ((simaiDataValue) => {
 });
 
 warnEl.addEventListener('click', () => {
-    popupWindow({
+    console.log(dataIndexToTime);
+    const contentHTML = warnings.map((w, i) => {
+        const errpos = warningPositionsConst[i];
+        console.log(warningPositionsConst, i, errpos);
+        if (errpos !== undefined) {
+            return `<div class="warning-item" style="cursor: pointer; color: #ccc; text-decoration: underline; margin-bottom: 8px; font-family: Google Sans; font-size: 13px;" data-errpos="${errpos}">• ${w}</div>`;
+        }
+        return `<div style="margin-bottom: 8px; color: #ccc; font-family: sans-serif; font-size: 13px;">• ${w}</div>`;
+    }).join('');
+
+    const popupCtx = popupWindow({
         title: t('popup.warning.title'),
-        content: warnings.map((w, i) => `• ${w}`).join('<br>'),
+        content: contentHTML,
+    });
+
+    popupCtx.elements.content.addEventListener('click', (e) => {
+        console.log(e.target);
+        const item = e.target.closest('.warning-item');
+        if (item) {
+            const errpos = parseInt(item.dataset.errpos, 10);
+            if (!isNaN(errpos)) {
+                const charIdx = findCommaCharIndex(editorInput.value, errpos);
+                editorInput.selectionStart = charIdx;
+                editorInput.selectionEnd = charIdx;
+                editorInput.focus();
+            }
+            popupCtx.close();
+        }
     });
 });
 
@@ -1852,6 +2639,9 @@ const saveMaidata = debounce(() => {
         projectTouch(currentProjectId).catch(() => { });
         if (name) projectUpdateName(currentProjectId, name).catch(() => { });
     }
+
+    // 更新 Discord RPC 狀態
+    updateDiscordRPC(maidata, nowDifficulty);
 }, 2000);
 
 const inputDebounce = debounce(() => {
@@ -1870,13 +2660,15 @@ function setElementDisplay(element, visible, value = 'block') {
 }
 
 function animateCanvasWidth(visible) {
+    const targetRatio = settings.splitRatio ?? 0.5;
+    const targetWidth = visible ? `${targetRatio * 100}%` : '100%';
     const canvasAnimation = canvasContainer.animate(
-        [{ width: visible ? '50%' : '100%' }],
+        [{ width: targetWidth }],
         { duration: 400, fill: 'forwards', easing: 'ease' }
     );
 
     let animationRunning = true;
-    const throttledResize = throttle(resize, 16); // 限制每 16ms 最多调用一次（约 60fps）
+    const throttledResize = throttle(() => resize(true), 16); // 限制每 16ms 最多调用一次（约 60fps）
 
     function syncResize() {
         if (animationRunning) {
@@ -1887,7 +2679,13 @@ function animateCanvasWidth(visible) {
 
     canvasAnimation.onfinish = () => {
         animationRunning = false;
-        resize();
+        canvasAnimation.cancel();
+        if (visible) {
+            canvasContainer.style.width = '';
+        } else {
+            canvasContainer.style.width = '100%';
+        }
+        resize(true);
     };
 
     syncResize();
@@ -1900,13 +2698,13 @@ function ensureVisualEditorContext() {
     return visualCtx;
 }
 
-function resizeVisualEditor() {
+function resizeVisualEditor(force = false) {
     const ctx2d = ensureVisualEditorContext();
     const dpr = window.devicePixelRatio || 1;
     const w = editorContainer.clientWidth * dpr;
     const h = editorContainer.clientHeight * dpr;
 
-    if (lastVisualEditorSize.w === w && lastVisualEditorSize.h === h) {
+    if (!force && lastVisualEditorSize.w === w && lastVisualEditorSize.h === h) {
         //resizeVisualEditor();
         return; // 尺寸不變，避免重設畫布造成多餘重排
     }
@@ -1994,6 +2792,30 @@ const setEditorCss = (visible = null) => {
     setElementDisplay(editorInput, editorVisible);
     setElementDisplay(highlightLayer, editorVisible);
     setElementDisplay(visualEditor, visualVisible);
+
+    if (!visible) {
+        // 當隱藏 Editor 時：Editor 隱藏，Canvas 必須顯示，分割線隱藏 (保留 canvasSnapped 狀態)
+        canvasContainer.style.display = '';
+        noRender = false;
+        setElementDisplay(panelSplitter, false);
+    } else {
+        // 當顯示 Editor 時：還原到目前的 Snap 狀態
+        if (canvasSnapped) {
+            noRender = true;
+            canvasContainer.style.display = 'none';
+            editorContainer.style.left = '0';
+            editorContainer.style.width = '100%';
+            setElementDisplay(panelSplitter, true);
+            if (panelSplitter) panelSplitter.classList.add('snapped');
+        } else {
+            noRender = false;
+            canvasContainer.style.display = '';
+            editorContainer.style.left = '';
+            editorContainer.style.width = '';
+            setElementDisplay(panelSplitter, true);
+            if (panelSplitter) panelSplitter.classList.remove('snapped');
+        }
+    }
 
     updatePlaycontrol(visualVisible, !isHidden);
 
@@ -2172,6 +2994,14 @@ settingsButton.addEventListener('click', () => {
         return input;
     };
 
+    function applyAudioSettings(s) {
+        if (!audioManager || !s) return;
+        if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
+        if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
+        if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
+        if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
+    }
+
     const createDropdown = (value, options = []) => {
         const select = document.createElement('select');
         options.forEach(opt => {
@@ -2291,6 +3121,13 @@ settingsButton.addEventListener('click', () => {
 
     switchTab(0);
 
+    const oldAudioSettings = {
+        globalVolume: settings.globalVolume,
+        musicVolume: settings.musicVolume,
+        SfxVolume: settings.SfxVolume,
+        sfxVolumes: settings.sfxVolumes ? { ...settings.sfxVolumes } : null
+    };
+
     popupCtx = popupWindow({
         title: t('settings.title'),
         customContent: container,
@@ -2308,6 +3145,9 @@ settingsButton.addEventListener('click', () => {
             },
             {
                 text: t('popup.cancel'),
+                onClick: () => {
+                    applyAudioSettings(oldAudioSettings);
+                },
                 hideOnClick: true
             },
             {
@@ -2811,6 +3651,245 @@ helpButton.addEventListener('click', () => {
     });
 });
 
+function getGridSlots(maxTime) {
+    const slots = [];
+    if (!decodedTags || decodedTags.length === 0) {
+        const bpm = clockBpm || 60;
+        const tb2 = settings.tb2 || 4;
+        const beatPeriod = (240 / bpm) / tb2;
+        for (let t = 0; t <= maxTime; t += beatPeriod) {
+            slots.push(t);
+        }
+        return slots;
+    }
+
+    const bpmTags = decodedTags.filter(t => t.type === 'bpm').sort((a, b) => a.time - b.time);
+    if (bpmTags.length === 0) {
+        bpmTags.push({ time: 0, value: clockBpm || 60 });
+    }
+
+    const tb2 = settings.tb2 || 4;
+
+    for (let i = 0; i < bpmTags.length; i++) {
+        const tag = bpmTags[i];
+        const nextTag = bpmTags[i + 1];
+        const endTimeForTag = nextTag ? nextTag.time : Math.max(endTime, maxTime);
+        const beatPeriod = (240 / tag.value) / tb2;
+
+        let t = tag.time;
+        while (t < endTimeForTag - 0.001) {
+            slots.push(t);
+            t += beatPeriod;
+        }
+    }
+
+    if (slots.length === 0 || slots[slots.length - 1] < Math.max(endTime, maxTime) - 0.001) {
+        slots.push(Math.max(endTime, maxTime));
+    }
+
+    return slots;
+}
+
+const quantizeTime = (time) => {
+    const slots = getGridSlots(time + 2.0);
+    let closestTime = 0;
+    let minDiff = Infinity;
+    for (const t of slots) {
+        const diff = Math.abs(t - time);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestTime = t;
+        }
+    }
+    if (minDiff > 2.0) return null;
+    return closestTime;
+};
+
+const getOrCreateCommaIndex = (snappedTime) => {
+    if (!dataIndexToTime || dataIndexToTime.length === 0) {
+        rawData = [""];
+        dataIndexToTime = [0];
+        return 0;
+    }
+
+    for (let idx = 0; idx < dataIndexToTime.length; idx++) {
+        if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.05) {
+            return idx;
+        }
+    }
+
+    const lastIndex = dataIndexToTime.length - 1;
+    const lastTime = dataIndexToTime[lastIndex];
+    if (snappedTime > lastTime) {
+        const currentBpm = clockBpm || 60;
+        const currentGrid = settings.tb2 || 4;
+        const timeStep = (240 / currentBpm) / currentGrid;
+
+        const numCommas = Math.round((snappedTime - lastTime) / timeStep);
+        if (numCommas > 0) {
+            for (let k = 0; k < numCommas; k++) {
+                rawData.push("");
+            }
+            for (let k = 1; k <= numCommas; k++) {
+                dataIndexToTime[lastIndex + k] = lastTime + k * timeStep;
+            }
+            return lastIndex + numCommas;
+        }
+    }
+
+    return null;
+};
+
+function stripLeadingTags(str) {
+    return str.replace(/^(?:(?:\([^\)]*\))|(?:\{[^\}]*\})|(?:<[^>]*>))+/, '');
+}
+
+function updateEditorAndSave(newContent) {
+    recordEditorHistory();
+    editorInput.value = newContent;
+    recordEditorHistory();
+
+    applyHighlight(newContent);
+    getres(newContent);
+
+    maidata["inote_" + nowDifficulty] = newContent;
+    saveMaidata();
+}
+
+const visualPlaceNote = (lane, clickTime) => {
+    const snappedTime = quantizeTime(clickTime);
+    if (snappedTime === null || snappedTime === undefined) {
+        simpleToast({ content: '點擊位置離最近的節拍線太遠，無法放置音符', type: 'warning', timeout: 1500 });
+        return;
+    }
+
+    const closestIndex = getOrCreateCommaIndex(snappedTime);
+    if (closestIndex === null || closestIndex === undefined) {
+        simpleToast({ content: '無法定位或擴充該時間位置的拍子', type: 'warning', timeout: 1500 });
+        return;
+    }
+
+    const segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
+    if (segment.startsWith("||")) {
+        simpleToast({ content: '無法在註解行內放置音符', type: 'warning', timeout: 1500 });
+        return;
+    }
+
+    const parts = segment === "" ? [] : segment.split('/');
+    const alreadyOccupied = parts.some(p => {
+        const clean = stripLeadingTags(p);
+        return clean.startsWith(String(lane));
+    });
+
+    if (alreadyOccupied) {
+        return;
+    }
+
+    const cleanNotePart = stripLeadingTags(segment);
+    let newSegment = "";
+    if (cleanNotePart === "") {
+        newSegment = segment + String(lane);
+    } else {
+        newSegment = segment + "/" + String(lane);
+    }
+
+    rawData[closestIndex] = newSegment;
+    const newContent = rawData.join(',');
+    updateEditorAndSave(newContent);
+
+    simpleToast({ content: `已在軌道 ${lane} 放置 Tap 音符`, type: 'success', timeout: 1000 });
+};
+
+const visualDeleteNote = (note) => {
+    const commaIndex = note.index;
+    if (commaIndex === undefined || commaIndex === null) return;
+    const lane = note.pos;
+    if (!lane) return;
+
+    const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+    if (segment === "" || segment.startsWith("||")) return;
+
+    const parts = segment.split('/');
+    const partIndex = parts.findIndex(p => {
+        const clean = stripLeadingTags(p);
+        return clean.startsWith(String(lane));
+    });
+
+    if (partIndex === -1) return;
+
+    parts.splice(partIndex, 1);
+    const newSegment = parts.join('/');
+    rawData[commaIndex] = newSegment;
+
+    const newContent = rawData.join(',');
+    updateEditorAndSave(newContent);
+
+    simpleToast({ content: `已刪除軌道 ${lane} 的音符`, type: 'info', timeout: 1000 });
+};
+
+function getNextNoteClean(clean, L) {
+    const isSpecial = /[h\-<>^vpqszVw]/.test(clean);
+    if (isSpecial) {
+        return String(L);
+    }
+
+    const isBreak = clean.includes('b');
+    const isStar = clean.includes('$');
+    const isEx = clean.includes('x');
+
+    if (!isBreak && !isStar && !isEx) {
+        return `${L}$`;
+    } else if (isStar && !isBreak && !isEx) {
+        return `${L}b`;
+    } else if (isBreak && !isStar && !isEx) {
+        return `${L}x`;
+    } else if (isEx && !isBreak && !isStar) {
+        return `${L}b$`;
+    } else if (isBreak && isStar && !isEx) {
+        return `${L}bx`;
+    } else if (isBreak && isEx && !isStar) {
+        return `${L}x$`;
+    } else if (isEx && isStar && !isBreak) {
+        return `${L}bx$`;
+    } else {
+        return String(L);
+    }
+}
+
+const visualChangeNote = (note) => {
+    const commaIndex = note.index;
+    if (commaIndex === undefined || commaIndex === null) return;
+    const lane = note.pos;
+    if (!lane) return;
+
+    const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+    if (segment === "" || segment.startsWith("||")) return;
+
+    const parts = segment.split('/');
+    const partIndex = parts.findIndex(p => {
+        const clean = stripLeadingTags(p);
+        return clean.startsWith(String(lane));
+    });
+
+    if (partIndex === -1) return;
+
+    const originalPart = parts[partIndex];
+    const clean = stripLeadingTags(originalPart);
+    const prefix = originalPart.substring(0, originalPart.length - clean.length);
+
+    const nextClean = getNextNoteClean(clean, lane);
+    const newPart = prefix + nextClean;
+
+    parts[partIndex] = newPart;
+    const newSegment = parts.join('/');
+    rawData[commaIndex] = newSegment;
+
+    const newContent = rawData.join(',');
+    updateEditorAndSave(newContent);
+
+    simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
+};
+
 function recordEditorHistory() {
     if (editorInput.value !== lastEditorValue) {
         const change = computeChange(lastEditorValue, editorInput.value);
@@ -2846,23 +3925,10 @@ document.addEventListener('selectionchange', () => {
             const note = notes[i];
             const noteT = note.time - globalTime;
             const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-            const cullingSkipT = (note.type === "slide" && note.chainSkipT !== undefined) ? note.chainSkipT : skipT;
-            const noteType = note.type;
-
-            if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
-                note.holding = (globalTime >= note.time && globalTime <= note.time + (note.holdDuration ?? 0));
-                note.triggered = (globalTime > note.time + (note.holdDuration ?? 0));
-            } else if (noteType === 'slide') {
-                note.triggered = (globalTime > note.time + cullingSkipT);
-                note.holding = false;
-            } else {
-                note.triggered = (globalTime >= note.time);
-                note.holding = false;
-            }
 
             const isVisualVisible = noteT >= 0
                 ? Math.abs(noteT) <= V
-                : -noteT <= V + cullingSkipT;
+                : -noteT <= V + skipT;
 
             if (isVisualVisible) {
                 const noteType = note.type;
@@ -3416,6 +4482,7 @@ hideUtilityButton.addEventListener('click', () => {
         }
         canvasContainer.classList.remove('expanded');
         editorContainer.classList.remove('expanded');
+        if (panelSplitter) panelSplitter.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
     } else {
         //utilityBtns.style.display = 'none';
@@ -3427,6 +4494,7 @@ hideUtilityButton.addEventListener('click', () => {
         }
         canvasContainer.classList.add('expanded');
         editorContainer.classList.add('expanded');
+        if (panelSplitter) panelSplitter.classList.add('expanded');
         utilityContainer.classList.add('expanded');
     }
     hideUtilityButton.innerText = isHidden ? '▲' : '▼';
@@ -4127,17 +5195,10 @@ getNowNoteIndex.addEventListener('click', () => {
     editorInput.focus();
 });
 
-function indexFromCursor(text, point) {
-    const textBefore = text.substring(0, point);
-    const cleanedText = textBefore.replace(/\|\|.*$/gm, "");
-    return (cleanedText.match(/,/g) || []).length;
-}
-
-getCursorNoteIndex.addEventListener('click', () => {
-    const point = editorInput.selectionStart;
-    const targetTime = dataIndexToTime[indexFromCursor(editorInput.value, point)];
+function seekToTime(targetTime) {
+    if (targetTime === undefined || isNaN(targetTime)) return;
     const value = targetTime + musicDelay;
-    globalTime = value - musicDelay;
+    globalTime = targetTime;
     realTime = value;
     updateSlider(realTime);
     slideInputDebounce();
@@ -4149,7 +5210,39 @@ getCursorNoteIndex.addEventListener('click', () => {
     } else {
         draw();
     }
+}
 
+function findCommaCharIndex(text, commaIndex) {
+    let count = 0;
+    let i = 0;
+    while (i < text.length && count < commaIndex) {
+        const a = text[i];
+        const b = text[i + 1];
+        if (a === '|' && b === '|') {
+            i += 2;
+            while (i < text.length && text[i] !== '\n' && text[i] !== '\r') {
+                i++;
+            }
+            continue;
+        }
+        if (a === ',') {
+            count++;
+        }
+        i++;
+    }
+    return i;
+}
+
+function indexFromCursor(text, point) {
+    const textBefore = text.substring(0, point);
+    const cleanedText = textBefore.replace(/\|\|.*$/gm, "");
+    return (cleanedText.match(/,/g) || []).length;
+}
+
+getCursorNoteIndex.addEventListener('click', () => {
+    const point = editorInput.selectionStart;
+    const targetTime = dataIndexToTime[indexFromCursor(editorInput.value, point)];
+    seekToTime(targetTime);
     editorInput.focus();
 });
 
@@ -4299,7 +5392,8 @@ function update(timestamp) {
             globalTime = realTime - musicDelay;
         }
 
-        if (settings.cursorFollow) {
+        if (settings.cursorFollow && nowIndex !== lastCursorIndex) {
+            lastCursorIndex = nowIndex;
             cursorLastIndexTime = dataIndexToTime[nowIndex] || 0; // 更新游標對應的時間
             const point = rawData.slice(0, nowIndex + 1).join(',').length;
             // 2. 設定游標位置
@@ -4351,13 +5445,13 @@ function update(timestamp) {
     }
 }
 
-function resize() {
+function resize(force = false) {
     const dpr = window.devicePixelRatio || 1;
     const w = canvasContainer.clientWidth * dpr;
     const h = canvasContainer.clientHeight * dpr;
 
-    if (lastCanvasSize.w === w && lastCanvasSize.h === h) {
-        resizeVisualEditor();
+    if (!force && lastCanvasSize.w === w && lastCanvasSize.h === h) {
+        resizeVisualEditor(force);
         return; // 尺寸不變，避免重設畫布造成多餘重排
     }
 
@@ -4370,7 +5464,7 @@ function resize() {
     canvas.width = w;
     canvas.height = h;
     if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
-    resizeVisualEditor();
+    resizeVisualEditor(force);
     resizePreviewCanvas();
     draw();
 }
@@ -4383,58 +5477,162 @@ function openSecondWindow() {
         return;
     }
     externalWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
-    // 注入基礎樣式與 Canvas
+
+    // 複製主視窗的 style 與 link 標籤（含字型定義）
+    Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach(node => {
+        externalWindow.document.head.appendChild(node.cloneNode(true));
+    });
+
+    // 注入基礎樣式與 Canvas 結構
     const style = externalWindow.document.createElement('style');
     style.textContent = `
-            body {
-                margin: 0;
-                padding: 0;
-                overflow: hidden;
-                background-color: #000;
-            }
-            #canvasContainer {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                top: 0;
-                left: 0;
-            }
-            #canvasContainer img {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                top: 0;
-                left: 0;
-                object-fit: contain;
-                scale: 0.899;
-            }
-            #secondary {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-            }
-        `;
+        @font-face {
+            font-family: 'combo';
+            src: url('Fonts/Inter.ttf') format('truetype');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'mono';
+            src: url('Fonts/ShareTechMono-Regular.ttf') format('truetype');
+            font-display: swap;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: "Google Sans", sans-serif;
+        }
+        #canvasContainer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #secOutline {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            object-fit: contain;
+            scale: 0.899;
+        }
+        #secondary {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .backgroundContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            z-index: 0;
+        }
+        .backgroundContainer img,
+        .backgroundContainer video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    `;
     externalWindow.document.head.appendChild(style);
     externalWindow.document.body.innerHTML = `
-            <div id="canvasContainer">
-                <img src="./Skin/outline.png" alt="">
-                <canvas id="secondary"></canvas>
+        <div id="canvasContainer">
+            <div class="backgroundContainer" id="secBackgroundContainer">
+                <img id="secBackgroundImage" src="" alt="" onerror="this.style.display='none'">
+                <video id="secBackgroundVideo" src="" alt="" onerror="this.style.display='none'" muted></video>
             </div>
-        `;
+            <img src="./Skin/outline.png" alt="" id="secOutline" onerror="this.style.display='none'">
+            <canvas id="secondary"></canvas>
+        </div>
+    `;
+
     const extCanvas = externalWindow.document.getElementById('secondary');
-    // 這裡需要處理縮放邏輯，建議參考你原有的 resize 函式
+    const secBgImg = externalWindow.document.getElementById('secBackgroundImage');
+    const secBgVideo = externalWindow.document.getElementById('secBackgroundVideo');
+    const secBgContainer = externalWindow.document.getElementById('secBackgroundContainer');
+
     extCanvas.width = 800;
     extCanvas.height = 800;
     secondCtx = extCanvas.getContext('2d');
 
+    syncSecondWindowBackground = function () {
+        if (!externalWindow || externalWindow.closed) return;
+        const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
+        if (secBgContainer) {
+            secBgContainer.style.width = size + 'px';
+            secBgContainer.style.height = size + 'px';
+        }
+
+        const brightnessFilter = `brightness(${1 + 0.1875 * (settings.moviebrightness ?? -4)})`;
+
+        if (secBgImg && editorBackgroundImage) {
+            if (secBgImg.src !== editorBackgroundImage.src) {
+                secBgImg.src = editorBackgroundImage.src;
+            }
+            secBgImg.style.display = editorBackgroundImage.style.display;
+            secBgImg.style.filter = brightnessFilter;
+        }
+
+        if (secBgVideo && editorBackgroundVideo) {
+            if (secBgVideo.src !== editorBackgroundVideo.src) {
+                secBgVideo.src = editorBackgroundVideo.src;
+            }
+            secBgVideo.style.display = editorBackgroundVideo.style.display;
+            secBgVideo.style.filter = brightnessFilter;
+
+            if (editorBackgroundVideo.src) {
+                const playing = playButton.dataset.playing === 'true';
+
+                // 主視窗 Canvas 被隱藏或已開啟外部預覽視窗時，主視窗影片強制暫停以節省資源
+                if (!editorBackgroundVideo.paused) {
+                    try { editorBackgroundVideo.pause(); } catch (_) { }
+                }
+
+                // 獨立視窗影片時間與播放同步
+                if (Math.abs(secBgVideo.currentTime - realTime) > VIDEO_SEEK_THRESHOLD) {
+                    try { secBgVideo.currentTime = realTime; } catch (_) { }
+                }
+
+                if (playing && secBgVideo.paused) {
+                    secBgVideo.play().catch(() => { });
+                } else if (!playing && !secBgVideo.paused) {
+                    secBgVideo.pause();
+                }
+
+                secBgVideo.playbackRate = settings.playbackSpeed || 1;
+            }
+        }
+    };
+
+    // 隱藏主視窗的背景 Containers 與 Canvas Outline (Skin)
+    if (backgroundContainer) backgroundContainer.style.display = 'none';
+    if (canvasOutline) canvasOutline.style.display = 'none';
+    if (editorBackgroundVideo && !editorBackgroundVideo.paused) {
+        try { editorBackgroundVideo.pause(); } catch (_) { }
+    }
+
     externalWindow.addEventListener('beforeunload', () => {
         console.log("警告：外部視窗即將關閉");
-        // 你可以在這裡重置主視窗的某些狀態
+        syncSecondWindowBackground = () => { };
         secondCtx = null;
         ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
-        renderer.setContext(ctx); // 告訴 renderer 使用第二個 Canvas 的上下文
+        renderer.setContext(ctx); // 告訴 renderer 使用主 Canvas 的上下文
+        if (backgroundContainer) backgroundContainer.style.display = '';
+        if (canvasOutline) canvasOutline.style.display = '';
         draw(); // 重新繪製到主 Canvas
     });
 
@@ -4444,17 +5642,23 @@ function openSecondWindow() {
         extCanvas.width = externalWindow.innerWidth * dpr;
         extCanvas.height = externalWindow.innerHeight * dpr;
 
-        // 重新套用你的座標系統 (這點最重要！)
+        // 重新套用座標系統
         const p = size / scaleBase * (renderer?.scale ?? scale) * dpr;
         secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
+        syncSecondWindowBackground();
         draw();
     };
 
     syncResize();
 
     externalWindow.addEventListener('resize', syncResize);
-    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
+    if (externalWindow.document.fonts) {
+        externalWindow.document.fonts.ready.then(() => {
+            syncResize();
+        });
+    }
 
+    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
     draw(); // 重新繪製到第二個 Canvas
 }
 
@@ -4674,9 +5878,10 @@ recordVideoButton.addEventListener('click', async () => {
         };
     };
 
-    // 實體化兩個帥氣的藍色動態開關
+    // 實體化帥氣的動態開關
     const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
     const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
+    const introSwitch = createCustomSwitch(t('popup.recordVideo.includeIntro'), true);
 
     // 全部塞進彈窗大容器
     container.append(
@@ -4686,7 +5891,8 @@ recordVideoButton.addEventListener('click', async () => {
         bgmVolField.wrapper,
         sfxVolField.wrapper,
         audioSwitch.wrapper, // 塞入外殼
-        sfxSwitch.wrapper   // 塞入外殼
+        sfxSwitch.wrapper,  // 塞入外殼
+        introSwitch.wrapper // 塞入載入動畫外殼
     );
 
     popupWindow({
@@ -4719,7 +5925,9 @@ recordVideoButton.addEventListener('click', async () => {
                     const sfxVolValNum = Number(inputRefs.record_sfx_vol?.value || 1);
                     const bgmLoaded = !!audioManager?.bgmBuffer;
 
-                    videoRender({
+                    if (playButton.dataset.playing === 'true') playButton.click();
+
+                    videoRender(audioManager, canvas, renderer, {
                         start: startVal,
                         end: endVal,
                         fps: fpsVal,
@@ -4728,7 +5936,21 @@ recordVideoButton.addEventListener('click', async () => {
                         bgmVolume: bgmVolValNum,
                         sfxVolume: sfxVolValNum,
                         includeBgm: audioSwitch.checked && bgmLoaded, // 讀取自訂狀態
-                        includeSfx: sfxSwitch.checked                 // 讀取自訂狀態
+                        includeSfx: sfxSwitch.checked,                 // 讀取自訂狀態
+                        includeIntro: introSwitch.checked,             // 讀取 10 秒載入動畫開關
+                        musicDelay,
+                        editorBackgroundImage,
+                        editorBackgroundVideo,
+                        notes,
+                        playScoreRes,
+                        chartInfo: {
+                            title: maidata.title ?? '',
+                            artist: maidata.artist ?? '-',
+                            des: maidata["des_" + nowDifficulty] ?? '-',
+                            lv: maidata["lv_" + nowDifficulty] ?? '0',
+                            difficulty: nowDifficulty,
+                            bpm: maidata.wholebpm ?? 0,
+                        },
                     });
 
                     pwCtx.close();
@@ -4758,6 +5980,16 @@ window.addEventListener('keydown', (e) => {
         // 🔴 修正：拿掉外面的 e.preventDefault()，改在需要攔截的 case 內個別加上
 
         switch (e.key.toLowerCase()) {
+            case 'f':
+                e.preventDefault();
+                openFindBar(false);
+                break;
+
+            case 'h':
+                e.preventDefault();
+                openFindBar(true);
+                break;
+
             case 's':
                 e.preventDefault(); // 🟢 攔截瀏覽器預設的網頁另存新檔
                 isContextEdited = false;
@@ -4818,7 +6050,16 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+function closeExternalWindow() {
+    if (externalWindow && !externalWindow.closed) {
+        try {
+            externalWindow.close();
+        } catch (_) { }
+    }
+}
+
 window.addEventListener("beforeunload", (event) => {
+    closeExternalWindow();
     if (isContextEdited) {
         // Cancel the event as stated by the standard.
         event.preventDefault();
@@ -4827,1098 +6068,106 @@ window.addEventListener("beforeunload", (event) => {
     }
 });
 
-let playClock = [false, false, false, false];
+window.addEventListener("pagehide", closeExternalWindow);
+window.addEventListener("unload", closeExternalWindow);
 
-function getSectorSensorsString(sector) {
-    return `A${sector}/B${sector}/D${sector}/E${sector}`;
+let playedClock = [false, false, false, false];
+
+import { SimaiLogicControler } from './helper.js';
+const simaiLogicControler = new SimaiLogicControler(audioManager);
+
+let syncSecondWindowBackground = () => { };
+
+function drawMainCanvasOpenedInExternalWindow() {
+    if (!ctx || !canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // 繪製背景深色卡片
+    ctx.fillStyle = '#111116';
+    ctx.fillRect(0, 0, w, h);
+
+    const text = t('menu.toolsPopupOpened') || '已在外部視窗開啟';
+
+    // 繪製居中文字
+    ctx.fillStyle = 'rgba(74, 144, 226, 0.9)';
+    ctx.font = `600 ${Math.max(14, Math.round(18 * dpr))}px "Google Sans", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`🗔 ${text}`, w / 2, h / 2);
+
+    ctx.restore();
 }
 
-function isArcCounterClockwise(start, end, type) {
-    if (type === '^') {
-        return (end - start + 8) % 8 > 4;
-    } else if (type === '>') {
-        return (start >= 3 && start <= 6);
-    } else if (type === '<') {
-        return !(start >= 3 && start <= 6);
-    }
-    return false;
-}
-
-function getReflectPart2(M, E) {
-    const c2 = (E - M + 8) % 8;
-    if (c2 === 3) {
-        return [
-            `B${(M) % 8 + 1}`,
-            `B${(M + 1) % 8 + 1}`,
-            `A${E}`
-        ];
-    } else if (c2 === 5) {
-        return [
-            `B${(M + 6) % 8 + 1}`,
-            `B${(M + 5) % 8 + 1}`,
-            `A${E}`
-        ];
-    } else if (c2 === 4) {
-        return [
-            `B${M}`,
-            `C1/C2`,
-            `B${E}`,
-            `A${E}`
-        ];
-    } else if (c2 === 2) {
-        const M_next = (M) % 8 + 1;
-        return [
-            `A${M_next}/B${M_next}`,
-            `A${E}`
-        ];
-    } else if (c2 === 6) {
-        const M_prev = (M + 6) % 8 + 1;
-        return [
-            `A${M_prev}/B${M_prev}`,
-            `A${E}`
-        ];
-    }
-    return [];
-}
-
-function rotateAndMirrorSensor(sensor, S, isQQ) {
-    const parts = sensor.split('/');
-    const mappedParts = parts.map(part => {
-        const match = part.match(/^([A-E])([1-8])$/);
-        if (match) {
-            const zone = match[1];
-            const sector = parseInt(match[2], 10);
-            let newSector;
-            if (isQQ) {
-                newSector = (sector - 1 + (S - 1)) % 8 + 1;
-            } else {
-                const mirrored = (1 - sector + 8) % 8 + 1;
-                newSector = (mirrored - 1 + (S - 1)) % 8 + 1;
-            }
-            return `${zone}${newSector}`;
-        }
-        return part;
-    });
-    return mappedParts.join('/');
-}
-
-function getOuterLoopSensors(S, E, isQQ) {
-    const relativeE = isQQ ? ((E - S + 8) % 8 + 1) : ((S - E + 8) % 8 + 1);
-    let seq = [];
-    switch (relativeE) {
-        case 7:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7"];
-            break;
-        case 8:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8"];
-            break;
-        case 1:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8", "A1"];
-            break;
-        case 2:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8", "A1/B1", "A2"];
-            break;
-        case 3:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8", "B1", "B2", "A3"];
-            break;
-        case 4:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8", "B1", "B2/C1/C2", "B3/B4", "A4"];
-            break;
-        case 5:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8", "B1", "C1/C2", "B5", "A5"];
-            break;
-        case 6:
-            seq = ["A1", "B1", "C1/C2", "B6", "A7", "A8", "B1", "C1/C2", "B6", "A6"];
-            break;
-    }
-    return seq.map(sensor => rotateAndMirrorSensor(sensor, S, isQQ));
-}
-
-function getWSlideTracks(note) {
-    const S = parseInt(note.pos, 10);
-    const E = parseInt(note.slideEnd, 10);
-    const L3 = (S - 3 + 8 - 1) % 8 + 1;
-    const L2 = (S - 2 + 8 - 1) % 8 + 1;
-    const L1 = (S - 1 + 8 - 1) % 8 + 1;
-    const R3 = (S + 3 - 1) % 8 + 1;
-    const R2 = (S + 2 - 1) % 8 + 1;
-    const R1 = (S + 1 - 1) % 8 + 1;
-    return [
-        [`A${S}`, `B${L1}`, `B${L2}`, `A${L3}/D${L3}`],
-        [`A${S}`, `B${S}`, `C1/C2`, `B${E}/A${E}`],
-        [`A${S}`, `B${R1}`, `B${R2}`, `A${R3}/D${E}`]
-    ];
-}
-
-function getSpecialRequiredSensors(note) {
-    if (note.type !== 'slide') return null;
-
-    const S = parseInt(note.pos, 10);
-    const E = parseInt(note.slideEnd, 10);
-    if (isNaN(S) || isNaN(E)) return null;
-
-    const c = (E - S + 8) % 8;
-
-    switch (note.slideType) {
-        case '-':
-            if (c === 2) {
-                const M = S % 8 + 1;
-                return [`A${S}`, `A${M}/B${M}`, `A${E}`];
-            } else if (c === 6) {
-                const M = (S + 6) % 8 + 1;
-                return [`A${S}`, `A${M}/B${M}`, `A${E}`];
-            } else if (c === 3) {
-                const M1 = S % 8 + 1;
-                const M2 = (S + 1) % 8 + 1;
-                return [`A${S}`, `B${M1}`, `B${M2}`, `A${E}`];
-            } else if (c === 5) {
-                const M1 = (S + 6) % 8 + 1;
-                const M2 = (S + 5) % 8 + 1;
-                return [`A${S}`, `B${M1}`, `B${M2}`, `A${E}`];
-            } else if (c === 4) {
-                return [`A${S}`, `B${S}`, `C1/C2`, `B${E}`, `A${E}`];
-            }
-            break;
-
-        case 'v':
-            return [`A${S}`, `B${S}`, `C1/C2`, `B${E}`, `A${E}`];
-
-        case '>':
-        case '<':
-        case '^': {
-            const isCCW = isArcCounterClockwise(S, E, note.slideType);
-            const seq = [];
-            let curr = S;
-            seq.push(`A${curr}`);
-            do {
-                curr = isCCW ? ((curr + 6) % 8 + 1) : (curr % 8 + 1);
-                seq.push(`A${curr}`);
-            } while (curr !== E);
-            return seq;
-        }
-
-        case 'V': {
-            const M_vertex = parseInt(note.slideMid, 10);
-            if (isNaN(M_vertex)) return null;
-            const c1 = (M_vertex - S + 8) % 8;
-            const M1 = (c1 === 2) ? (S % 8 + 1) : ((S + 6) % 8 + 1);
-            const part1 = [`A${S}`, `A${M1}/B${M1}`, `A${M_vertex}`];
-            const part2 = getReflectPart2(M_vertex, E);
-            return part1.concat(part2);
-        }
-
-        case 'q':
-        case 'p': {
-            const isCW = (note.slideType === 'q');
-            const dist = isCW ? ((E - S + 8) % 8) : ((S - E + 8) % 8);
-            const numSectors = (dist >= 4) ? dist : (dist + 8);
-            const seq = [];
-            seq.push(`A${S}`);
-            for (let j = 1; j < numSectors; j++) {
-                const sector = isCW ? ((S + j - 1) % 8 + 1) : ((S - j + 8 - 1) % 8 + 1);
-                seq.push(`B${sector}`);
-            }
-            seq.push(`A${E}`);
-            return seq;
-        }
-
-        case 'qq':
-        case 'pp': {
-            const isQQ = (note.slideType === 'qq');
-            return getOuterLoopSensors(S, E, isQQ);
-        }
-
-        case 's':
-            return [`A${S}`, `B${S}`, `B${(S) % 8 + 1}`, `B${(E + 1) % 8 + 1}`, `B${(E) % 8 + 1}`, `B${E}`, `A${E}`];
-
-        case 'z':
-            return [`A${S}`, `B${S}`, `B${(S + 6) % 8 + 1}`, `B${(E + 5) % 8 + 1}`, `B${(E + 6) % 8 + 1}`, `B${E}`, `A${E}`];
-
-        case 'w':
-            return [`A${S}`, `B${S}`, `C1/C2`, `B${E}/A${E}`];
-    }
-    return null;
-}
-
-function getSlideSensors(recorder, typew, spacing = 4.36) {
-    const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
-    const useSpacing = typew ? 7 : spacing;
-    const sensors = [];
-    for (let i = 1; i <= arrowCount; i++) {
-        const imgIndex = Math.min(i - 1, 10);
-        const dist = i * useSpacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
-        const pt = recorder.getPointAt(dist / recorder.totalLength);
-        if (pt) {
-            const sensor = getSensorAtPoint(pt.x, pt.y);
-            if (sensor && !sensors.includes(sensor)) {
-                sensors.push(sensor);
-            }
-        }
-    }
-    return sensors;
-}
-import { noteRefPos, touchRefPos } from "./helper.js";
 function draw(dt = 0) {
     if (!renderer) return;
+    if (secondCtx && externalWindow) {
+        syncSecondWindowBackground();
+    }
 
     // 早期初始化：提取常用值避免重複計算
     const playing = playButton.dataset.playing === 'true';
     const previewVisibleFlag = previewVisible();
     const isVisualModeFlag = isVisualMode();
-    const visualHeight = (() => {
-        if (!previewVisibleFlag) {
-            return visualEditorRenderer.getCanvasWH().height;
-        } else {
-            return previewRender.getCanvasWH().width / 2;
-        }
-    })();
-    const V = visualHeight / settings.visualZoom;
-    const effectDecayTime = settings.effectDecayTime;
-    const hanabiEffectDecayTime = settings.hanabiEffectDecayTime;
-    const maxSlideCount = settings.maxSlideCount;
-    const middleDistance = settings.middleDistance;
-    const notesLength = notes.length;
-
-    // 初始化 index
-    if (notesLength > 0 && notes[0] && realTime < notes[0].time) {
-        nowIndex = 0;
-    }
-
-    // 準備繪製桶子
-    const buckets = { slide: [], tapnhold: [], touch: [], hiteffects: [], hanabieffects: [], holdingeffects: [] };
-    const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
-
-    // 節拍器邏輯
-    if (playing && readyBeat) {
-        const beatDuration = 240 / clockBpm;
-        for (let i = 0; i < 4; i++) {
-            const clockT = (i / 4) * beatDuration - globalTime;
-            if (clockT > 0) {
-                playClock[i] = false;
-            } else if (!playClock[i]) {
-                audioManager.queueSoundSingle('clock', clockT);
-                playClock[i] = true;
-            }
-        }
-    }
-
-    playCombo = 0;
-    playScore = 0;
-    let slideOnScreenCount = 0;
-    let foundIndexForThisFrame = false;
-    let pressedSensors = new Set();
-    const pointerStrikes = new Set();
-
-    if (settings.autoPlay && settings.simulateAutoplay) {
-        // 虛擬玩家手勢輸入模擬（Auto 且開啟模擬玩家遊玩觸控時）
-        if (!renderer.simulatedPointers) {
-            renderer.simulatedPointers = [];
-        } else {
-            renderer.simulatedPointers.length = 0; // 高效清除陣列
-        }
-
-        const activeNotes = notes.filter(n => {
-            const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0);
-            return globalTime >= n.time - 1.5 && globalTime <= n.time + skipT + 1.5;
-        });
-        const activeLength = activeNotes.length;
-        for (let i = 0; i < activeLength; i++) {
-            const note = activeNotes[i];
-            const noteType = note.type;
-
-            let sensorKey = "";
-            let ptPos = null;
-            let ptrColor = '#00DBF4'; // 預設青藍色
-
-            if (noteType === 'tap' || noteType === 'hold') {
-                sensorKey = "A" + note.pos;
-                ptPos = noteRefPos[note.pos - 1];
-                ptrColor = note.isBreak ? '#EBBA63' : (note.isEx ? '#D8A2C9' : '#00DBF4');
-            } else if (noteType === 'touch') {
-                const tPos = note.touchPos || "C";
-                sensorKey = tPos === "C" ? ("C" + (note.pos || "1")) : tPos + note.pos;
-                if (tPos === "C") {
-                    ptPos = touchRefPos.C[0];
-                } else {
-                    ptPos = touchRefPos[tPos][note.pos - 1];
-                }
-                ptrColor = '#8DFF7A'; // 綠色代表 Touch
-            }
-
-            if (noteType === 'tap' || noteType === 'touch' || noteType === 'hold') {
-                const isTouchHold = (noteType === 'touch' && note.holdDuration > 0);
-                const dur = (noteType === 'hold' || isTouchHold) ? note.holdDuration : 0.1;
-                const tStart = note.time;
-                const tEnd = note.time + dur;
-
-                // 模擬擊中時的觸摸
-                if (globalTime >= tStart && globalTime <= tEnd) {
-                    pressedSensors.add(sensorKey);
-                    if (!note.triggered && !note.holding && !note._isMissed) {
-                        pointerStrikes.add(sensorKey);
-                    }
-                    if (ptPos) {
-                        renderer.simulatedPointers.push({ x: ptPos.x, y: ptPos.y, color: ptrColor });
-                    }
-                }
-            } else if (noteType === 'slide') {
-                const startT = note.time + (note.slideDelay ?? 0);
-                const endT = startT + (note.slideDuration ?? 0);
-                if (globalTime >= startT && globalTime <= endT) {
-                    // 若 requiredSensors 尚未初始化，在此為其提前解析，確保滑行模擬取得序列
-                    if (!note.requiredSensors) {
-                        note.requiredSensors = getSpecialRequiredSensors(note) || getSlideSensors(note.path, note.slideType === "w");
-                    }
-                    if (!note.hitSensors) {
-                        note.hitSensors = new Set();
-                    }
-                    if (note.slideType === 'w' && !note.wTracks) {
-                        note.wTracks = getWSlideTracks(note);
-                    }
-
-                    ptrColor = note.isBreak ? '#EBBA63' : '#FF7AD5'; // 粉色/黃色代表 Slide
-
-                    if (note.slideType === 'w' && note.wTracks) {
-                        const progress = (globalTime - startT) / note.slideDuration;
-                        for (let tIdx = 0; tIdx < 3; tIdx++) {
-                            const track = note.wTracks[tIdx];
-                            const L = track.length;
-                            const currentIdx = Math.min(L - 1, Math.floor(progress * L));
-                            const currentSensor = track[currentIdx];
-                            if (currentSensor) {
-                                const sensorsToPress = currentSensor.split('/');
-                                for (const s of sensorsToPress) {
-                                    pressedSensors.add(s);
-                                }
-                                if (note.wLastAutoplayIdxs === undefined) {
-                                    note.wLastAutoplayIdxs = [-1, -1, -1];
-                                }
-                                if (note.wLastAutoplayIdxs[tIdx] !== currentIdx) {
-                                    for (const s of sensorsToPress) {
-                                        pointerStrikes.add(s);
-                                    }
-                                    note.wLastAutoplayIdxs[tIdx] = currentIdx;
-                                }
-                            }
-                            if (note.wPaths) {
-                                const wPath = tIdx === 0 ? note.wPaths.w1 : (tIdx === 2 ? note.wPaths.w2 : note.path);
-                                if (wPath) {
-                                    const pt = wPath.getPointAt(progress);
-                                    if (pt) {
-                                        renderer.simulatedPointers.push({ x: pt.x, y: pt.y, color: ptrColor });
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        const L = note.requiredSensors?.length ?? 0;
-                        if (L > 0) {
-                            const progress = (globalTime - startT) / note.slideDuration;
-                            const currentIdx = Math.min(L - 1, Math.floor(progress * L));
-                            const currentSensor = note.requiredSensors[currentIdx];
-                            if (currentSensor) {
-                                const sensorsToPress = currentSensor.split('/');
-                                for (const s of sensorsToPress) {
-                                    pressedSensors.add(s);
-                                }
-                                if (note.lastAutoplayIdx === undefined || note.lastAutoplayIdx !== currentIdx) {
-                                    for (const s of sensorsToPress) {
-                                        pointerStrikes.add(s);
-                                    }
-                                    note.lastAutoplayIdx = currentIdx;
-                                }
-                            }
-                            if (note.path) {
-                                const pt = note.path.getPointAt(progress);
-                                if (pt) {
-                                    renderer.simulatedPointers.push({ x: pt.x, y: pt.y, color: ptrColor });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 回填給 renderer.activePointers，以便高亮繪製與手動箭頭消失過濾
-        if (renderer.activePointers) {
-            renderer.activePointers.clear();
-            let pId = 0;
-            for (const s of pressedSensors) {
-                renderer.activePointers.set(pId++, s);
-            }
-        }
-    } else {
-        // 原有手動點按輸入
-        if (renderer.activePointers) {
-            for (const s of renderer.activePointers.values()) {
-                pressedSensors.add(s);
-            }
-        }
-        if (renderer.pointerStrikes) {
-            for (const s of renderer.pointerStrikes) {
-                pointerStrikes.add(s);
-            }
-            renderer.pointerStrikes.clear();
-        }
-    }
-    const consumedStrikes = new Set();
-
-    const strikeMap = new Map(); // sensorKey -> { consumed: false, time: strikeTime? }
-    for (const s of pointerStrikes) {
-        strikeMap.set(s, { consumed: false });
-    }
-
-    // 核心音符迴圈
-    let comboBroken = false;
-    for (let i = notesLength - 1; i >= 0; i--) {
-        const note = notes[i];
-        const noteT = note.time - globalTime;
-        const noteType = note.type;
-        const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-        const cullingSkipT = (noteType === "slide" && note.chainSkipT !== undefined) ? note.chainSkipT : skipT;
-
-        // 時間軸未到判定窗口前（或倒退時）重置判定狀態，防止窗口內提早點擊的判定狀態被後續幀抹除
-        if (noteT > 0.25) {
-            note.triggered = false;
-            note.holding = false;
-            note.holdBroken = false;
-            note.hitStartTime = undefined;
-            note._isMissed = false;
-            note.slideStarted = false;
-            note.hitSensors = null;
-            note._startEffectPlayed = false;
-            note._endEffectPlayed = false;
-            note._riserActive = false;
-            note._enteredWindow = false;
-            note.autoplayStrucked = false;
-            note.lastAutoplayIdx = undefined;
-            note.currentSensorIdx = 0;
-            note.wTracks = null;
-            note.wTrackIdxs = null;
-            note.wLastAutoplayIdxs = undefined;
-            note._sensorsDone = false;
-            note.judgment = null;
-        }
-
-        // Autoplay logic: update triggered and holding states based on globalTime
-        if (settings.autoPlay && !settings.simulateAutoplay) {
-            if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
-                note.holding = (globalTime >= note.time && globalTime <= note.time + (note.holdDuration ?? 0));
-                const wasTriggered = note.triggered;
-                note.triggered = (globalTime > note.time + (note.holdDuration ?? 0));
-                if (note.triggered && !wasTriggered) {
-                    note.judgment = 'CRITICAL_PERFECT';
-                }
-            } else if (noteType === 'slide') {
-                // 只往 true 推進，不覆蓋已被手動完成的 triggered=true 狀態
-                if (!note.triggered) {
-                    const shouldTrigger = (globalTime > note.time + cullingSkipT);
-                    if (shouldTrigger) {
-                        note.triggered = true;
-                        if (!note.judgment) note.judgment = 'CRITICAL_PERFECT';
-                    }
-                }
-                note.holding = false;
-            } else {
-                const wasTriggered = note.triggered;
-                note.triggered = (globalTime >= note.time);
-                if (note.triggered && !wasTriggered) {
-                    note.judgment = 'CRITICAL_PERFECT';
-                }
-                note.holding = false;
-            }
-        } else {
-            // 手動遊玩判定邏輯 (非 autoplay)
-            const dtHit = globalTime - note.time;
-
-            if (noteType === 'tap' || noteType === 'hold' || noteType === 'touch') {
-                // Tap, Star, Hold, TouchHold 的判定
-                const sensorKey = (noteType === 'touch')
-                    ? (note.touchPos === "C" ? ("C" + (note.pos || "1")) : note.touchPos + note.pos)
-                    : ("A" + note.pos);
-
-                const isSensorPressed = pressedSensors.has(sensorKey);
-                const hasStrike = pointerStrikes.has(sensorKey);
-
-                // 檢查是否有同位置且時間更早的未判定 Tap/Hold
-                const hasEarlierPendingNote = notes.some((n, idx) =>
-                    idx < i &&
-                    (n.type === 'touch' ? (n.pos == note.pos && n.touchPos === note.touchPos) :
-                        ((n.type === 'tap' || n.type === 'hold') && n.pos == note.pos)
-                    ) &&
-                    !n.triggered &&
-                    !n._isMissed &&
-                    !n.holding &&
-                    (globalTime - n.time >= -0.25)
-                );
-
-                if (!note.triggered && !note._isMissed && !note.holding && !note.holdBroken) {
-                    // 放寬時間窗口到 ±0.25s
-                    if (hasStrike && !consumedStrikes.has(sensorKey) && !hasEarlierPendingNote && dtHit >= -0.25 && dtHit <= 0.25) {
-                        note.triggered = true;
-                        consumedStrikes.add(sensorKey);
-                        audioManager.queueSound(note, globalTime);
-                        note._startEffectPlayed = true;
-
-                        const isHoldType = (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0));
-                        if (isHoldType) {
-                            note.triggered = false;
-                            note.holding = true;
-                            note.hitStartTime = Math.max(note.time, globalTime);
-                        }
-                        const absDt = Math.abs(dtHit);
-                        if (absDt <= 0.033) {
-                            note.judgment = 'CRITICAL_PERFECT';
-                        } else if (absDt <= 0.050) {
-                            note.judgment = 'PERFECT';
-                        } else if (absDt <= 0.100) {
-                            note.judgment = 'GREAT';
-                        } else {
-                            note.judgment = 'GOOD';
-                        }
-                        console.log(`[Hit] ${noteType} at ${note.time.toFixed(2)} pos:${note.pos} dt:${(dtHit * 1000).toFixed(1)}ms`);
-                    } else if (dtHit > 0.25) { // 延後 Miss 判定
-                        note._isMissed = true;
-                        note.judgment = 'MISS';
-                        playCombo = 0;
-                    }
-                }
-
-                // 如果 Hold 已經在按壓中
-                if (note.holding) {
-                    if (globalTime <= note.time + (note.holdDuration ?? 0)) {
-                        if (!isSensorPressed) {
-                            // 玩家中途放開了！不能再補
-                            note.holding = false;
-                            note.holdBroken = true;
-                            note.triggered = true;
-
-                            // 尾判計算：計算實際按壓時間比例
-                            const heldDuration = Math.max(0, globalTime - (note.hitStartTime ?? note.time));
-                            const ratio = heldDuration / (note.holdDuration ?? 1);
-
-                            let finalJudg = 'MISS';
-                            if (ratio >= 0.95) {
-                                finalJudg = note.judgment || 'PERFECT';
-                            } else if (ratio >= 0.85) {
-                                finalJudg = (note.judgment === 'CRITICAL_PERFECT' || note.judgment === 'PERFECT') ? 'GREAT' : (note.judgment || 'GREAT');
-                            } else if (ratio >= 0.50) {
-                                finalJudg = 'GOOD';
-                            } else {
-                                finalJudg = 'MISS';
-                            }
-
-                            note.judgment = finalJudg;
-                            if (finalJudg === 'MISS') {
-                                note._isMissed = true;
-                                playCombo = 0;
-                            }
-                            console.log(`[Hold Broken] pos:${note.pos} ratio:${ratio.toFixed(2)} finalJudg:${finalJudg}`);
-                        }
-                    } else {
-                        // Hold 順利完成！播放 Hold 結尾音效
-                        note.triggered = true;
-                        note.holding = false;
-                        // 按滿時，保留頭判等級 (note.judgment)
-                        const shouldPlayEndSound = !settings.notPlayHoldEnd || note.isBreak;
-                        if (shouldPlayEndSound) {
-                            audioManager.queueSound(note, globalTime);
-                        }
-                        note._endEffectPlayed = true;
-                        console.log(`[Hold Completed] pos:${note.pos} finalJudg:${note.judgment}`);
-                    }
-                }
-            } else if (noteType === 'slide') {
-                // Slide 軌道手動滑過判定
-                // 找出同時間同起點的 Star note
-                const starNote = note.starNote;
-
-                // Chain slide: 找出前一個同時間的 slide 段（其 slideEnd == 本段起點）
-                const prevSegment = note.prevSegment;
-
-                const canProcessSensors = !prevSegment || prevSegment.triggered || prevSegment._sensorsDone;
-
-                if (!note.triggered && !note._isMissed) {
-                    if (prevSegment && prevSegment._isMissed) {
-                        // 前段 miss，後段也 miss
-                        note._isMissed = true;
-                        playCombo = 0;
-                    } else if (prevSegment && !canProcessSensors) {
-                        // 前段尚未完成：不開放本段的感應器偵測
-                    } else if (!starNote || starNote.triggered || globalTime >= note.time) {
-                        // 無頭 Slide 或星頭已擊中，或已過時間點
-                        note.slideStarted = true;
-                        if (prevSegment) {
-                            console.log(`[Chain Slide Started] ${note.pos}-${note.slideEnd}, requiredSensors: ${JSON.stringify(note.requiredSensors)}`);
-                        }
-                    } else if (starNote && starNote._isMissed) {
-                        note._isMissed = true;
-                        playCombo = 0;
-                    }
-                }
-
-                if (note.slideStarted) {
-                    const p = note.path;
-                    if (note.slideType === 'w') {
-                        if (!note.wTracks) {
-                            note.wTracks = getWSlideTracks(note);
-                            note.wTrackIdxs = [0, 0, 0];
-                        }
-                        if (!note.hitSensors) {
-                            note.hitSensors = new Set();
-                        }
-
-                        // Chain 後段：第一個感應器可用 pressedSensors（持續按押）觸發，
-                        // 因為玩家完成前段後手指就已停在接合點上
-                        const isChainSegment = !!prevSegment;
-
-                        const isSensorStruck = (sensorName, isFirstSensor = false) => {
-                            const parts = sensorName.split('/');
-                            for (const part of parts) {
-                                let struck = false;
-                                if (part === "C" || part === "C1" || part === "C2") {
-                                    struck = pointerStrikes.has("C1") || pointerStrikes.has("C2")
-                                        || (isChainSegment && isFirstSensor && (pressedSensors.has("C1") || pressedSensors.has("C2")));
-                                } else {
-                                    struck = pointerStrikes.has(part)
-                                        || (isChainSegment && isFirstSensor && pressedSensors.has(part));
-                                }
-                                if (struck) return true;
-                            }
-                            return false;
-                        };
-
-                        for (let tIdx = 0; tIdx < 3; tIdx++) {
-                            const track = note.wTracks[tIdx];
-                            let advanced = true;
-                            while (advanced) {
-                                advanced = false;
-                                const nextIdx = note.wTrackIdxs[tIdx];
-                                if (nextIdx >= track.length) break;
-
-                                const nextSensor = track[nextIdx];
-                                if (isSensorStruck(nextSensor, nextIdx === 0)) {
-                                    const parts = nextSensor.split('/');
-                                    for (const p of parts) {
-                                        note.hitSensors.add(p);
-                                    }
-                                    note.wTrackIdxs[tIdx] = nextIdx + 1;
-                                    advanced = true;
-                                    continue;
-                                }
-
-                                if (settings.slideSkip && nextIdx + 1 < track.length) {
-                                    const skipSensor = track[nextIdx + 1];
-                                    if (isSensorStruck(skipSensor)) {
-                                        const parts1 = nextSensor.split('/');
-                                        for (const p of parts1) {
-                                            note.hitSensors.add(p);
-                                        }
-                                        const parts2 = skipSensor.split('/');
-                                        for (const p of parts2) {
-                                            note.hitSensors.add(p);
-                                        }
-                                        note.wTrackIdxs[tIdx] = nextIdx + 2;
-                                        advanced = true;
-                                    }
-                                }
-                            }
-                        }
-
-                        // W-slide 開始滑行音效觸發 (當任意一軌滑到第二個感應器且尚未播放開始音效時)
-                        if (!note._startEffectPlayed && (note.wTrackIdxs[0] >= 2 || note.wTrackIdxs[1] >= 2 || note.wTrackIdxs[2] >= 2)) {
-                            if (note.firstSlide !== false) {
-                                audioManager.queueSound(note, globalTime);
-                            }
-                            note._startEffectPlayed = true;
-                        }
-
-                        const allCompleted = note.wTrackIdxs[0] >= note.wTracks[0].length &&
-                            note.wTrackIdxs[1] >= note.wTracks[1].length &&
-                            note.wTrackIdxs[2] >= note.wTracks[2].length;
-
-                        if (allCompleted) {
-                            const slideTotalTime = (note.slideDelay ?? 0) + (note.slideDuration ?? 0);
-                            const elapsed = globalTime - note.time;
-                            let slideJudg = 'GREAT';
-                            if (elapsed <= slideTotalTime + 0.2) {
-                                slideJudg = 'CRITICAL_PERFECT';
-                            } else if (elapsed <= slideTotalTime + 0.4) {
-                                slideJudg = 'PERFECT';
-                            }
-                            note.judgment = slideJudg;
-
-                            if (note.lastSlide) {
-                                // 最後一段完成：把整個 chain 的所有段一起標為 triggered
-                                note.triggered = true;
-                                // 回溯所有前面的 chain 段
-                                let chainPrev = note.prevSegment;
-                                while (chainPrev) {
-                                    chainPrev.triggered = true;
-                                    chainPrev.judgment = slideJudg;
-                                    chainPrev = chainPrev.prevSegment;
-                                }
-                            } else {
-                                // 中間段完成：僅標記 _sensorsDone，保留在畫面上
-                                note._sensorsDone = true;
-                            }
-                            if (!note._endEffectPlayed) {
-                                note._endEffectPlayed = true;
-                                const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
-                                if (shouldPlayEndSound) {
-                                    audioManager.queueSound(note, globalTime);
-                                }
-                            }
-                        } else if (dtHit > cullingSkipT + 0.5) {
-                            note._isMissed = true;
-                            note.judgment = 'MISS';
-                            playCombo = 0;
-                        }
-                    } else {
-                        // 初始化感應器序列（不重複的有序清單）
-                        if (!note.requiredSensors) {
-                            note.requiredSensors = getSpecialRequiredSensors(note) || getSlideSensors(p, note.slideType === "w");
-                        }
-                        if (!note.hitSensors) {
-                            note.hitSensors = new Set();
-                        }
-
-                        // Chain 後段：第一個感應器可用 pressedSensors（持續按押）觸發
-                        const isChainSegment2 = !!prevSegment;
-
-                        const isSensorStruck2 = (sensorName, isFirstSensor = false) => {
-                            const parts = sensorName.split('/');
-                            for (const part of parts) {
-                                let struck = false;
-                                if (part === "C" || part === "C1" || part === "C2") {
-                                    struck = pointerStrikes.has("C1") || pointerStrikes.has("C2")
-                                        || (isChainSegment2 && isFirstSensor && (pressedSensors.has("C1") || pressedSensors.has("C2")));
-                                } else {
-                                    struck = pointerStrikes.has(part)
-                                        || (isChainSegment2 && isFirstSensor && pressedSensors.has(part));
-                                }
-                                if (struck) return true;
-                            }
-                            return false;
-                        };
-
-                        // 2. 依序推進感應器，並允許最多跳過 1 個感應器自動補齊
-                        let advanced = true;
-                        while (advanced) {
-                            advanced = false;
-                            const nextIdx = note.currentSensorIdx ?? 0;
-                            if (nextIdx >= note.requiredSensors.length) break;
-
-                            const nextSensor = note.requiredSensors[nextIdx];
-                            if (isSensorStruck2(nextSensor, nextIdx === 0)) {
-                                const parts = nextSensor.split('/');
-                                for (const p of parts) {
-                                    note.hitSensors.add(p);
-                                }
-                                note.currentSensorIdx = nextIdx + 1;
-                                console.log(`[Slide Hit] ${nextSensor} (${note.currentSensorIdx}/${note.requiredSensors.length})`);
-                                advanced = true;
-                                continue;
-                            }
-
-                            if (settings.slideSkip && nextIdx + 1 < note.requiredSensors.length) {
-                                const skipSensor = note.requiredSensors[nextIdx + 1];
-                                if (isSensorStruck2(skipSensor)) {
-                                    const parts1 = nextSensor.split('/');
-                                    for (const p of parts1) {
-                                        note.hitSensors.add(p);
-                                    }
-                                    const parts2 = skipSensor.split('/');
-                                    for (const p of parts2) {
-                                        note.hitSensors.add(p);
-                                    }
-                                    note.currentSensorIdx = nextIdx + 2;
-                                    console.log(`[Slide Hit Skip] Auto-filled ${nextSensor}, activated ${skipSensor} (${note.currentSensorIdx}/${note.requiredSensors.length})`);
-                                    advanced = true;
-                                }
-                            }
-                        }
-
-                        // Slide 開始滑行音效觸發 (當滑到第二個感應器且尚未播放開始音效時)
-                        if (!note._startEffectPlayed && (note.currentSensorIdx ?? 0) >= 2) {
-                            if (note.firstSlide !== false) {
-                                audioManager.queueSound(note, globalTime);
-                            }
-                            note._startEffectPlayed = true;
-                        }
-
-                        // 全部滑完 → 觸發
-                        if ((note.currentSensorIdx ?? 0) >= note.requiredSensors.length) {
-                            if (prevSegment) {
-                                console.log(`[Chain Slide Completed] ${note.pos}-${note.slideEnd}, hitSensors: ${note.hitSensors ? Array.from(note.hitSensors).join(',') : 'none'}`);
-                            }
-                            const slideTotalTime = (note.slideDelay ?? 0) + (note.slideDuration ?? 0);
-                            const elapsed = globalTime - note.time;
-                            let slideJudg = 'GREAT';
-                            if (elapsed <= slideTotalTime + 0.2) {
-                                slideJudg = 'CRITICAL_PERFECT';
-                            } else if (elapsed <= slideTotalTime + 0.4) {
-                                slideJudg = 'PERFECT';
-                            }
-                            note.judgment = slideJudg;
-
-                            if (note.lastSlide) {
-                                // 最後一段完成：把整個 chain 的所有段一起標為 triggered
-                                note.triggered = true;
-                                let chainPrev = note.prevSegment;
-                                while (chainPrev) {
-                                    chainPrev.triggered = true;
-                                    chainPrev.judgment = slideJudg;
-                                    chainPrev = chainPrev.prevSegment;
-                                }
-                            } else {
-                                // 中間段：僅標記 _sensorsDone，保留在畫面上
-                                note._sensorsDone = true;
-                            }
-                            if (!note._endEffectPlayed) {
-                                note._endEffectPlayed = true;
-                                const shouldPlayEndSound = (note.lastSlide && note.isBreak) || note.isHanabi;
-                                if (shouldPlayEndSound) {
-                                    audioManager.queueSound(note, globalTime);
-                                }
-                            }
-                        } else if (dtHit > cullingSkipT + 0.5) {
-                            note._isMissed = true;
-                            note.judgment = 'MISS';
-                            playCombo = 0;
-                        }
-                    }
-                } else if (!prevSegment && dtHit > 0.15) {
-                    // 起點 Star 未被點中且超期（只適用於第一段；後段由 prevSegment 管控）
-                    note._isMissed = true;
-                    note.judgment = 'MISS';
-                    playCombo = 0;
-                } else if (prevSegment && globalTime > note.time + (note.slideDelay ?? 0) + 0.5) {
-                    // Chain 後段：以自身 slideDelay 為基準，超過 0.5s 後才判定 miss
-                    note._isMissed = true;
-                    note.judgment = 'MISS';
-                    playCombo = 0;
-                }
-            }
-        }
-
-        const calcPiecewiseSpeed = (x) => {
-            if (x >= 1) {
-                return x * 0.8833 + 0.8167;
-            } else if (x <= -1) {
-                return x * 0.8833 - 0.8167;
-            } else {
-                return x * 1.7;
-            }
-        };
-        const noteHispeed = note.hispeed ?? 1;
-        // 2. 精準套用至常規速度與 Touch 速度
-        const speedCoeff = calcPiecewiseSpeed(settings.speed * noteHispeed);
-        const touchSpeedCoeff = calcPiecewiseSpeed(settings.touchSpeed * noteHispeed);
-
-
-        // 索引追蹤（早期完成以減少迴圈計算）
-        if (!foundIndexForThisFrame && realTime >= (note.time + musicDelay) && noteType !== "slide") {
-            nowIndex = note.index ?? nowIndex;
-            foundIndexForThisFrame = true;
-        }
-
-        // Combo 計算：提前計算避免重複條件檢查
-        if (noteT < 0) {
-            const isNoteHit = (settings.autoPlay && !settings.simulateAutoplay) ? true : (note.triggered && !note._isMissed);
-            const shouldCountCombo =
-                (noteType === "slide" ? (note.lastSlide && skipT + noteT < 0) :
-                    noteType === "hold" ? (skipT + noteT < 0) :
-                        noteType === "touch" && note.holdDuration !== undefined ? (skipT + noteT < 0) :
-                            noteType !== "slide");
-            if (shouldCountCombo) {
-                if (isNoteHit) {
-                    if (!comboBroken) {
-                        playCombo++;
-                    }
-                    playScore += ((note.isBreak ? 5 :
-                        (noteType === "slide" ? 3 :
-                            note.holdDuration !== undefined ? 2 : 1)
-                    ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
-                } else {
-                    comboBroken = true;
-                }
-            }
-        }
-
-        // 音效和狀態管理
-        if (playing && !timeControlSliding) {
-            if (settings.autoPlay && !settings.simulateAutoplay) {
-                // Riser 邏輯
-                if (noteType === "touch" && note.holdDuration > 0) {
-                    const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
-                    const noteId = `riser_${note.pos}_${note.time}`;
-                    if (isInsideHold && !note._riserActive) {
-                        audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
-                        note._riserActive = true;
-                    } else if (!isInsideHold && note._riserActive) {
-                        audioManager.stopLongSound(noteId);
-                        note._riserActive = false;
-                    }
-                }
-
-                const lookAhead = 0.1; // 100ms look-ahead
-
-                // 開始音效 (含前瞻)
-                const startTargetT = note.time + (note.slideDelay ?? 0);
-                const startNoteT = startTargetT - globalTime;
-                if (startNoteT <= lookAhead && !note._startEffectPlayed) {
-                    if (!(noteType === "slide" && !note.firstSlide)) {
-                        audioManager.queueSound(note, startTargetT);
-                    }
-                    note._startEffectPlayed = true;
-                }
-                // 結束音效 (含前瞻)
-                const endTargetT = note.time + skipT;
-                const endNoteT = endTargetT - globalTime;
-                if (endNoteT <= lookAhead && !note._endEffectPlayed) {
-                    const shouldPlayEndSound =
-                        (noteType === "slide" && note.lastSlide && note.isBreak) ||
-                        (noteType !== "slide" && note.isBreak) ||
-                        note.isHanabi ||
-                        (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
-                    if (shouldPlayEndSound) {
-                        audioManager.queueSound(note, endTargetT);
-                    }
-                    note._endEffectPlayed = true;
-                }
-            } else {
-                // 非 Autoplay (手動) 模式下的音效
-                if (noteType === "touch" && note.holdDuration > 0) {
-                    const noteId = `riser_${note.pos}_${note.time}`;
-                    if (note.holding && !note._riserActive) {
-                        audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
-                        note._riserActive = true;
-                    } else if (!note.holding && note._riserActive) {
-                        audioManager.stopLongSound(noteId);
-                        note._riserActive = false;
-                    }
-                }
-            }
-        } else {
-            // 倒帶或拖動時重置狀態
-            const lookAhead = 0.1;
-            const startTargetT = note.time + (note.slideDelay ?? 0);
-            const endTargetT = note.time + skipT;
-            if (startTargetT - globalTime > lookAhead) {
-                note._startEffectPlayed = false;
-            }
-            if (endTargetT - globalTime > lookAhead) {
-                note._endEffectPlayed = false;
-            }
-            if (note.time - globalTime > 0) {
-                if (note._riserActive) {
-                    audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
-                    note._riserActive = false;
-                }
-            }
-        }
-
-        // 繪製可見性判斷 (只針對音符本體)
-        const speedCoeffLocal = noteType === "touch" ? touchSpeedCoeff : speedCoeff;
-        const tval = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeffLocal));
-
-        const isNoteVisible =
-            (noteType === "slide" ? tval >= middleDistance : tval >= -1)
-            && -noteT <= cullingSkipT + 0.375
-            && !note.triggered;
-
-        const isVisualVisible = noteT >= 0
-            ? Math.abs(noteT) <= V
-            : -noteT <= V + cullingSkipT;
-
-        // 快速分類音符本體到桶子
-        if (isNoteVisible) {
-            if (noteType === 'slide') {
-                if (slideOnScreenCount < maxSlideCount) {
-                    buckets.slide.push(note);
-                    slideOnScreenCount++;
-                }
-            } else if (noteType === 'hold' || noteType === 'tap') {
-                buckets.tapnhold.push(note);
-            } else if (noteType === 'touch') {
-                buckets.touch.push(note);
-            }
-        }
-
-        // 特效收集邏輯
-        if (note.triggered || note._isMissed) {
-            const isHoldType = noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0);
-            const duration = isHoldType ? note.holdDuration : 0;
-
-            // 1. 打擊特效 (Hit Effect)
-            const isWithinHitEffect = -noteT >= duration && -noteT <= duration + effectDecayTime;
-            if (isWithinHitEffect) {
-                buckets.hiteffects.push({
-                    pos: note.pos,
-                    touchPos: note.touchPos,
-                    noteT: isHoldType ? (note.holdDuration + noteT) : noteT,
-                    judgment: note.judgment,
-                    isBreak: note.isBreak
-                });
-            }
-
-            // 2. 煙火特效 (Hanabi Effect)
-            if (note.isHanabi) {
-                const isWithinHanabi = -noteT >= duration && -noteT <= duration + hanabiEffectDecayTime;
-                if (isWithinHanabi) {
-                    buckets.hanabieffects.push({
-                        pos: note.pos,
-                        touchPos: note.touchPos,
-                        time: note.time,
-                        noteT: isHoldType ? (note.holdDuration + noteT) : noteT
-                    });
-                }
-            }
-        }
-
-        // 3. Hold 按壓流動特效
-        if (note.holding) {
-            buckets.holdingeffects.push({
-                pos: note.pos,
-                displayT: tval,
-                noteT: noteT
-            });
-        }
-
-        if (isVisualVisible) {
-            if (noteType === 'slide') {
-                visualBuckets.slide.push(note);
-            } else if (noteType === 'hold' || noteType === 'tap') {
-                visualBuckets.tapnhold.push(note);
-            } else if (noteType === 'touch') {
-                visualBuckets.touch.push(note);
-            }
-        }
-    }
-
-    // 標籤分類
-    const tagsLength = decodedTags.length;
-    for (let i = 0; i < tagsLength; i++) {
-        const tag = decodedTags[i];
-        visualBuckets.tags.push(tag);
-        if (Math.abs(tag.time - globalTime) <= V) {
-            // 標籤邏輯保留（如果需要額外處理）
-        }
-    }
-
-    // 渲染和更新
-    renderer.drawFrame({
+    const visualHeight = !previewVisibleFlag
+        ? visualEditorRenderer.getCanvasWH().height
+        : previewRender.getCanvasWH().width / 2;
+
+    const { buckets, playCombo, playScore, visualBuckets, noteQuantity, nowIndex: nowIndexRender } = simaiLogicControler.get({
+        renderer,
         globalTime,
-        buckets,
-        dt,
-        showSensor: settings.showSensor,
-        showSensorText: (settings.showSensorTextWhenPaused && !playing),
-        playCombo,
-        playScore,
+        realTime,
+        musicDelay,
+        playing,
+        timeControlSliding,
+        readyBeat,
+        playedClock,
+        settings,
+        visualHeight,
+        notes,
+        decodedTags,
+        playScoreRes,
         nowIndex
     });
+
+    nowIndex = nowIndexRender;
+
+    // 渲染和更新
+    if (secondCtx !== null) {
+        // 獨立外部視窗存在：在外部視窗 Context 上渲染遊戲圓盤，主視窗 Canvas 繪製 i18n 提示
+        renderer.drawFrame({
+            globalTime,
+            buckets,
+            dt,
+            showSensor: settings.showSensor,
+            showSensorText: (settings.showSensorTextWhenPaused && !playing),
+            playCombo,
+            playScore,
+            noteQuantity,
+            playScoreRes,
+            nowIndex,
+        });
+        drawMainCanvasOpenedInExternalWindow();
+    } else if (!noRender) {
+        // 正常狀態：主視窗繪製遊戲圓盤
+        renderer.drawFrame({
+            globalTime,
+            buckets,
+            dt,
+            showSensor: settings.showSensor,
+            showSensorText: (settings.showSensorTextWhenPaused && !playing),
+            playCombo,
+            playScore,
+            noteQuantity,
+            playScoreRes,
+            nowIndex,
+        });
+    }
 
     if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {
         previewRender.drawFrame({
@@ -5939,7 +6188,6 @@ function draw(dt = 0) {
         audioBuffer: audioManager.bgmBuffer,
         offset: musicDelay,
     });
-
 }
 
 // ============================================================
@@ -5963,6 +6211,7 @@ async function loadProjectData(step) {
         bgVideo,
         hideEditor,
         savedReadyBeat,
+        tb1,
     ] = await Promise.all([
         projGet('timeControl'),
         projGet('resource_bgm'),
@@ -5972,7 +6221,10 @@ async function loadProjectData(step) {
         projGet('background_video'),
         projGet('hide_editor'),
         projGet('ready_beat'),
+        projGet('tb1'),
     ]);
+
+    restoreTimebase(tb1);
 
     readyBeat = savedReadyBeat === true || savedReadyBeat === 'true';
     readyBeatCheckbox.checked = readyBeat;
@@ -6077,12 +6329,14 @@ async function loadProject(projectId) {
     currentProjectId = projectId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
 
+    setDataEmpty();
+
     // 載入專案資料
     await loadProjectData();
 
     const list = await projectList();
     const proj = list.find(p => p.id === projectId);
-    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
+    return proj;
 }
 
 /**
@@ -6170,6 +6424,7 @@ function openProjectManager() {
             if (!isCurrent) {
                 btnGroup.appendChild(makeBtn('開啟', async () => {
                     await loadProject(proj.id);
+                    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
                     buildList(container);
                 }, '#2d6e2d'));
             }
@@ -6220,8 +6475,9 @@ function openProjectManager() {
                 onClick: async () => {
                     const name = prompt('請輸入專案名稱：', '未命名專案');
                     if (name === null) return;
-                    const newId = await projectCreate(name.trim() || '未命名專案');
-                    await loadProject(newId);
+                    const newId = await projectCreate(t('popup.projectManager.untitled'));
+                    const proj = await loadProject(newId);
+                    simpleToast({ content: `已切換至專案：${proj.name || '未命名'}`, type: 'success', timeout: 1500 });
                     buildList(container);
                 }
             },
@@ -6300,19 +6556,28 @@ function _init() {
                     await idbSet('simai_settings', JSON.stringify(settings));
                 };
 
+                // 🟢 關鍵修復：初始化完成後立刻將載入的音量設定套用到 audioManager
+                applyAudioSettings(settings);
+
                 // === 載入當前專案資料 ===
                 step(84, t('popup.init.restoringState'));
                 await loadProjectData(step);
 
                 window.settings = settings;
+                applySplitRatio(settings.splitRatio ?? 0.5);
+                if (settings.canvasSnapped) {
+                    snapHideCanvas();
+                }
                 changeDisplayMode.value = settings.displayMode ?? 'simai';
                 renderer = new SimaiRenderer(canvas, settings);
                 renderer.setImages(images);
                 visualEditorRenderer = new SimaiVisualEditor(visualEditor, settings);
                 visualEditorRenderer.setImages(images);
                 visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
-                audioManager.setBGMVolume(settings.musicVolume);
                 visualEditorRenderer.setZoom(settings.visualZoom);
+                visualEditorRenderer.setNoteEditCallbacks(visualPlaceNote, visualDeleteNote, visualChangeNote);
+                visualEditorRenderer.setTimeQuantizer(quantizeTime);
+                audioManager.setBGMVolume(settings.musicVolume);
                 previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
                 previewRender.setZoom(settings.visualZoom);
                 setPlaybackSpeed(settings.playbackSpeed);
@@ -6321,6 +6586,8 @@ function _init() {
                 setEditorCss(!await projGet('hide_editor'));
                 step(100, "完成！正在渲染畫面...");
                 resize(); ctx.close();
+                isInitComplete = true;
+                updateDiscordRPC(maidata, nowDifficulty);
             } catch (e) {
                 console.error("初始化失敗:", e);
                 ctx.setContent(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
@@ -6434,680 +6701,12 @@ function _init() {
     });
 }
 
-
-async function resampleAudioBuffer(audioBuffer, targetSampleRate = 44100) {
-    if (audioBuffer.sampleRate === targetSampleRate) {
-        return audioBuffer;
+// 全域解鎖 AudioContext 監聽器，確保首次使用者互動時能解鎖被瀏覽器掛起的 AudioContext
+const unlockAudio = () => {
+    if (audioManager) {
+        audioManager.ensureContextSync();
     }
-    const numberOfChannels = audioBuffer.numberOfChannels;
-    const duration = audioBuffer.duration;
-    const offlineCtx = new OfflineAudioContext(
-        numberOfChannels,
-        Math.max(1, Math.ceil(targetSampleRate * duration)),
-        targetSampleRate
-    );
-    const bufferSource = offlineCtx.createBufferSource();
-    bufferSource.buffer = audioBuffer;
-    bufferSource.connect(offlineCtx.destination);
-    bufferSource.start();
-    return await offlineCtx.startRendering();
-}
-
-function padAudioBuffer(audioBuffer, targetLength) {
-    if (audioBuffer.length >= targetLength) {
-        return audioBuffer;
-    }
-    const nb = new AudioBuffer({
-        length: targetLength,
-        numberOfChannels: audioBuffer.numberOfChannels,
-        sampleRate: audioBuffer.sampleRate
-    });
-    for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
-        nb.getChannelData(ch).set(audioBuffer.getChannelData(ch));
-    }
-    return nb;
-}
-
-async function videoRender({
-    start = 0,
-    end = 0,
-    fps = 30,
-    width = 1080,
-    height = 720,
-    bgmVolume = 0.8,
-    sfxVolume = 1.0,
-    includeAudio = true,
-    includeBgm = true,
-    includeSfx = true,
-} = {}) {
-    const {
-        Output,
-        BufferTarget,
-        Mp4OutputFormat,
-        CanvasSource,
-        AudioBufferSource,
-        QUALITY_HIGH
-    } = window.Mediabunny;
-
-    const outlineImage = await (async () => {
-        try {
-            const response = await fetch('./Skin/outline.png');
-            if (!response.ok) throw new Error('fetch failed: ' + response.status);
-            const blob = await response.blob();
-            try {
-                if (window.createImageBitmap) return await createImageBitmap(blob);
-            } catch (e) {
-                console.warn('createImageBitmap 失敗，改用 Image element', e);
-            }
-            return await new Promise((res, rej) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
-                img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
-                img.src = URL.createObjectURL(blob);
-            });
-        } catch (e) {
-            console.error(`外框圖片載入失敗`, e);
-            return null;
-        }
-    })();
-
-    if (end <= start) {
-        console.log(end, start);
-        simpleToast({ content: '結束時間需大於開始時間', type: 'error' });
-        return;
-    }
-
-    const mainCtx = canvas.getContext('2d');
-
-    let exportVideo = null;
-    let output = null;
-
-    const popup = popupWindow({
-        title: "渲染影片",
-        content: "準備中...",
-        unclosable: true,
-        buttons: [{ text: '取消', hideOnClick: true }],
-    })
-    try {
-        if (popup.isClosed) return;
-
-        const off = document.createElement('canvas');
-        off.width = width;
-        off.height = height;
-        const offCtx = off.getContext('2d');
-
-        const scaleValue = renderer?.scale ?? scale;
-        const p = Math.min(width, height) / scaleBase * scaleValue;
-        offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
-
-        const target = new BufferTarget();
-        const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
-        output = new Output({ format, target });
-
-        // 視訊軌設定
-        const encodingConfig = {
-            codec: 'avc',
-            bitrate: QUALITY_HIGH,
-            keyFrameInterval: 0.5,
-            latencyMode: 'quality'
-        };
-
-        const videoSource = new CanvasSource(off, encodingConfig);
-        output.addVideoTrack(videoSource, { frameRate: fps });
-
-        let exportVideoReady = false;
-        if (editorBackgroundVideo && editorBackgroundVideo.src) {
-            try {
-                exportVideo = document.createElement('video');
-                exportVideo.src = editorBackgroundVideo.src;
-                exportVideo.muted = true;
-                exportVideo.crossOrigin = 'anonymous';
-                exportVideo.preload = 'auto';
-                exportVideo.style.position = 'fixed';
-                exportVideo.style.left = '-9999px';
-                exportVideo.style.top = '0';
-                exportVideo.style.width = '1px';
-                exportVideo.style.height = '1px';
-                exportVideo.style.opacity = '0.01';
-                exportVideo.style.pointerEvents = 'none';
-                document.body.appendChild(exportVideo);
-                await new Promise((res) => {
-                    let done = false;
-                    const onloaded = () => { if (done) return; done = true; res(); };
-                    exportVideo.addEventListener('loadedmetadata', onloaded);
-                    setTimeout(() => { if (done) return; done = true; res(); }, 1500);
-                });
-                exportVideoReady = true;
-            } catch (e) {
-                console.warn('建立匯出用背景影片失敗', e);
-            }
-        }
-
-        if (popup.isClosed) return;
-
-        let audioSource = null;
-        let slicedAudio = null;
-
-        // 🔴 核心重構：先完整合成好音訊，拿到規格後再向 output 註冊音軌
-        if (includeAudio) {
-            if (includeBgm) {
-                const t = audioManager.getBGMDuration();
-                if (start < t && start < end) {
-                    const sliceAudioBuffer = (buf, s, e) => {
-                        const sr = buf.sampleRate;
-                        const startSample = Math.max(0, Math.floor(s * sr));
-                        const endSample = Math.min(buf.length, Math.floor(e * sr));
-                        const len = Math.max(0, endSample - startSample);
-                        if (len <= 0) return null;
-                        const nb = new AudioBuffer({ length: len, numberOfChannels: buf.numberOfChannels, sampleRate: sr });
-                        for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-                            const data = buf.getChannelData(ch).subarray(startSample, endSample);
-                            nb.getChannelData(ch).set(data);
-                        }
-                        return nb;
-                    };
-
-                    const bgmBuf = audioManager.bgmBuffer;
-                    slicedAudio = bgmBuf ? sliceAudioBuffer(bgmBuf, start, end) : null;
-                }
-            }
-
-            if (includeSfx) {
-                const sfxEvents = [];
-                const longSoundEvents = [];
-                const sfxFrameSet = new Set();
-
-                for (let ni = 0; ni < notes.length; ni++) {
-                    const note = notes[ni];
-                    const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-                    const startT = note.time + musicDelay;
-                    const endT = note.time + skipT + musicDelay;
-
-                    if (startT >= start && startT <= end) {
-                        note._startEffectPlayed = false;
-                        const evs = audioManager.getSfxEventsForNote(note, startT + (note.slideDelay ?? 0));
-                        if (!(note.type === "slide" && !note.firstSlide)) {
-                            for (const ev of evs) {
-                                // 改為毫秒級去重（避免以 fps 為單位而濾掉高頻觸發）
-                                const timeMs = Math.floor(ev.time * 1000);
-                                const dedupeKey = `${timeMs}_${ev.key}`;
-                                if (sfxFrameSet.has(dedupeKey)) continue;
-                                sfxFrameSet.add(dedupeKey);
-
-                                sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
-                            }
-                            note._startEffectPlayed = true;
-                        }
-                    }
-                    if (endT >= start && endT <= end) {
-                        note._startEffectPlayed = true;
-                        const shouldPlayEndSound =
-                            (note.type === "slide" && note.lastSlide && note.isBreak) ||
-                            (note.type !== "slide" && note.isBreak) ||
-                            note.isHanabi ||
-                            (note.holdDuration !== undefined && note.type !== "tap");
-                        if (shouldPlayEndSound) {
-                            const evsEnd = audioManager.getSfxEventsForNote(note, endT);
-                            for (const ev of evsEnd) {
-                                // 改為毫秒級去重（避免以 fps 為單位而濾掉高頻觸發）
-                                const timeMs = Math.floor(ev.time * 1000);
-                                const dedupeKey = `${timeMs}_${ev.key}`;
-                                if (sfxFrameSet.has(dedupeKey)) continue;
-                                sfxFrameSet.add(dedupeKey);
-
-                                sfxEvents.push({ key: ev.key, time: ev.time, isMono: ev.isMono, volume: ev.volume });
-                            }
-                        }
-                        note._endEffectPlayed = true;
-                    }
-                    if (note.type === 'touch' && note.holdDuration > 0) {
-                        if (startT < end && endT > start) {
-                            longSoundEvents.push({ key: 'touchHold_riser', startSec: startT, endSec: endT });
-                        }
-                    }
-                }
-
-                sfxEvents.sort((a, b) => a.time - b.time);
-
-                // 內部核心混音工廠
-                const mixSfxInto = (baseBuf, events, longEvents, s, e) => {
-                    const sr = baseBuf ? baseBuf.sampleRate : (audioManager.ctx.sampleRate || 48000);
-                    const outLen = Math.max(1, Math.ceil((e - s) * sr));
-                    const bgmChannels = baseBuf ? baseBuf.numberOfChannels : 0;
-
-                    let sfxMaxCh = 1;
-                    for (const [k, b] of audioManager.bufferMap.entries()) {
-                        if (b && b.numberOfChannels > sfxMaxCh) sfxMaxCh = b.numberOfChannels;
-                    }
-                    const outCh = Math.max(bgmChannels || 0, sfxMaxCh || 1);
-                    const out = new AudioBuffer({ length: outLen, numberOfChannels: outCh, sampleRate: sr });
-
-                    if (baseBuf) {
-                        for (let ch = 0; ch < outCh; ch++) {
-                            const dst = out.getChannelData(ch);
-                            const src = baseBuf.getChannelData(ch < baseBuf.numberOfChannels ? ch : 0);
-                            const copyLen = Math.min(src.length, outLen);
-                            for (let i = 0; i < copyLen; i++) {
-                                dst[i] = src[i] * bgmVolume;
-                            }
-                        }
-                    }
-
-                    const addLoopingBufferAt = (key, eventStartSec, eventEndSec) => {
-                        const sfxBuf = audioManager.bufferMap.get(key);
-                        if (!sfxBuf) return;
-                        const loop = audioManager.loopPoints[key];
-                        const finalVol = 0.5 * sfxVolume;
-                        const sfxRate = sfxBuf.sampleRate || sr;
-
-                        const audibleStartSec = Math.max(s, eventStartSec);
-                        const audibleEndSec = Math.min(e, eventEndSec);
-                        if (audibleStartSec >= audibleEndSec) return;
-
-                        const startIdx = Math.floor((audibleStartSec - s) * sr);
-                        const endIdx = Math.floor((audibleEndSec - s) * sr);
-
-                        for (let ch = 0; ch < sfxBuf.numberOfChannels; ch++) {
-                            const src = sfxBuf.getChannelData(ch);
-                            const dst = out.getChannelData(ch < outCh ? ch : 0);
-
-                            for (let idx = startIdx; idx < endIdx; idx++) {
-                                if (idx < 0 || idx >= outLen) continue;
-                                const timeSinceEventStart = (s + idx / sr) - eventStartSec;
-                                let sampleSec = timeSinceEventStart;
-
-                                if (loop) {
-                                    if (sampleSec >= loop.end) {
-                                        sampleSec = loop.start + ((sampleSec - loop.end) % (loop.end - loop.start));
-                                    }
-                                } else if (sampleSec >= sfxBuf.length / sfxRate) {
-                                    continue;
-                                }
-
-                                const srcPos = sampleSec * sfxRate;
-                                const srcIdx0 = Math.floor(srcPos);
-                                const srcIdx1 = srcIdx0 + 1;
-                                const frac = srcPos - srcIdx0;
-                                const s0 = (srcIdx0 >= 0 && srcIdx0 < src.length) ? src[srcIdx0] : 0;
-                                const s1 = (srcIdx1 >= 0 && srcIdx1 < src.length) ? src[srcIdx1] : 0;
-                                const sampleVal = s0 * (1 - frac) + s1 * frac;
-                                dst[idx] += sampleVal * finalVol;
-                            }
-                        }
-                    };
-
-                    for (const lev of longEvents) {
-                        addLoopingBufferAt(lev.key, lev.startSec, lev.endSec);
-                    }
-
-                    const addBufferAt = (sfxBuf, atSec, baseVol, isMono, cutoffSec) => {
-                        if (!sfxBuf) return;
-                        const finalVol = (baseVol ?? 1) * sfxVolume;
-                        const dstRate = sr;
-                        const srcRate = sfxBuf.sampleRate || sr;
-                        const dstStart = Math.floor((atSec - s) * dstRate);
-                        const ratio = srcRate / dstRate;
-
-                        let maxDurationSec = sfxBuf.length / srcRate;
-                        if (isMono && cutoffSec !== undefined) {
-                            maxDurationSec = Math.min(maxDurationSec, cutoffSec - atSec);
-                        }
-                        const maxDstSamples = Math.floor(maxDurationSec * dstRate);
-
-                        for (let ch = 0; ch < outCh; ch++) {
-                            const src = sfxBuf.getChannelData(ch < sfxBuf.numberOfChannels ? ch : 0);
-                            const dst = out.getChannelData(ch);
-
-                            for (let i = 0; i < maxDstSamples; i++) {
-                                const dstIdx = dstStart + i;
-                                if (dstIdx < 0) continue;
-                                if (dstIdx >= outLen) break;
-
-                                const srcPos = i * ratio;
-                                const srcIdx0 = Math.floor(srcPos);
-                                const srcIdx1 = srcIdx0 + 1;
-                                if (srcIdx0 >= src.length) break;
-
-                                const frac = srcPos - srcIdx0;
-                                const s0 = src[srcIdx0] || 0;
-                                const s1 = src[srcIdx1] || 0;
-                                const sample = s0 * (1 - frac) + s1 * frac;
-
-                                dst[dstIdx] += sample * finalVol;
-                            }
-                        }
-                    };
-
-                    const lastTriggerTimes = new Map();
-
-                    for (let i = 0; i < events.length; i++) {
-                        const ev = events[i];
-                        if (lastTriggerTimes.has(ev.key)) {
-                            const lastTime = lastTriggerTimes.get(ev.key);
-                            if (ev.time - lastTime == 0) {
-                                continue;
-                            }
-                        }
-                        lastTriggerTimes.set(ev.key, ev.time);
-
-                        const sfxBuf = audioManager.bufferMap.get(ev.key);
-                        if (!sfxBuf) continue;
-
-                        let cutoffSec = undefined;
-                        if (ev.isMono) {
-                            for (let j = i + 1; j < events.length; j++) {
-                                if (events[j].key === ev.key && events[j].isMono) {
-                                    cutoffSec = events[j].time;
-                                    break;
-                                }
-                            }
-                        }
-                        addBufferAt(sfxBuf, ev.time, ev.volume, ev.isMono, cutoffSec);
-                    }
-
-                    let peak = 0;
-                    for (let ch = 0; ch < outCh; ch++) {
-                        const d = out.getChannelData(ch);
-                        for (let i = 0; i < d.length; i++) {
-                            const v = Math.abs(d[i]);
-                            if (v > peak) peak = v;
-                        }
-                    }
-                    if (peak > 1) {
-                        const scale = 1 / peak;
-                        for (let ch = 0; ch < outCh; ch++) {
-                            const d = out.getChannelData(ch);
-                            for (let i = 0; i < d.length; i++) {
-                                d[i] *= scale;
-                            }
-                        }
-                    }
-                    return out;
-                };
-
-                slicedAudio = mixSfxInto(slicedAudio, sfxEvents, longSoundEvents, start, end);
-            }
-
-            if (slicedAudio) {
-                // 🔴 關鍵修正：強制將採樣率轉換為 48000 Hz (Opus 編碼器要求)
-                slicedAudio = await resampleAudioBuffer(slicedAudio, 44100);
-
-                // 🔴 補上靜音，使音軌長度與視訊精確對齊
-                const targetLen = Math.max(1, Math.ceil((end - start) * slicedAudio.sampleRate));
-                slicedAudio = padAudioBuffer(slicedAudio, targetLen);
-            }
-        }
-
-        if (popup.isClosed) {
-            try { renderer.setContext(mainCtx); } catch (e) { }
-            return;
-        }
-
-        if (slicedAudio) {
-            audioSource = new AudioBufferSource({
-                codec: 'aac',
-                bitrate: QUALITY_HIGH,
-                sampleRate: slicedAudio.sampleRate,
-                numberOfChannels: slicedAudio.numberOfChannels
-            });
-            output.addAudioTrack(audioSource);
-        }
-
-        // 🔴 順序修正：此時音、視訊軌皆已配置完整，安心啟動
-        await output.start();
-
-        // 啟動後，將音訊資料塞入
-        if (includeAudio && audioSource && slicedAudio) {
-            await audioSource.add(slicedAudio);
-        }
-
-        renderer.setContext(offCtx);
-
-        const seekVideoTo = (video, time) => {
-            if (!video) return Promise.resolve();
-            return new Promise((res) => {
-                let done = false;
-                const onseek = () => {
-                    if (done) return;
-                    done = true;
-                    video.removeEventListener('seeked', onseek);
-                    res();
-                };
-                video.addEventListener('seeked', onseek);
-                try {
-                    video.currentTime = time;
-                } catch (e) {
-                    console.error("seek video failed", e);
-                }
-                setTimeout(() => {
-                    if (done) return;
-                    done = true;
-                    res();
-                }, 150);
-            });
-        };
-
-        const total = end - start;
-        const frameCount = Math.max(1, Math.ceil(total * fps));
-        const step = 1 / fps;
-
-        popup.setContent(`開始逐幀渲染：${frameCount} 幀`);
-        for (let i = 0; i < frameCount; i++) {
-            if (popup.isClosed) {
-                console.log('逐幀渲染已取消');
-                try { renderer.setContext(mainCtx); } catch (e) { }
-                return;
-            }
-
-            const t = start + i * step;
-            const globalT = t - (musicDelay || 0);
-
-            const speedCoeff = settings.speed * 0.8833 + 0.8167;
-            const touchSpeedCoeff = settings.touchSpeed * 0.8833 + 0.8167;
-
-            const buckets = { slide: [], tapnhold: [], touch: [], hiteffects: [], hanabieffects: [], holdingeffects: [] };
-            let playComboLocal = 0;
-            let playScoreLocal = 0;
-            let slideOnScreenCount = 0;
-            let nowIndexLocal = 0;
-
-            for (let j = notes.length - 1; j >= 0; j--) {
-                const note = notes[j];
-                const noteT = note.time - globalT;
-                const noteType = note.type;
-                const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0);
-                const cullingSkipT = (noteType === 'slide' && note.chainSkipT !== undefined) ? note.chainSkipT : skipT;
-
-                // Autoplay logic: update triggered and holding states based on globalT
-                if (noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0)) {
-                    note.holding = (globalT >= note.time && globalT <= note.time + (note.holdDuration ?? 0));
-                    note.triggered = (globalT > note.time + (note.holdDuration ?? 0));
-                } else if (noteType === 'slide') {
-                    note.triggered = (globalT > note.time + cullingSkipT);
-                    note.holding = false;
-                } else {
-                    note.triggered = (globalT >= note.time);
-                    note.holding = false;
-                }
-
-                if (noteT < 0) {
-                    const shouldCountCombo =
-                        (noteType === 'slide' ? (note.lastSlide && skipT + noteT < 0) :
-                            noteType === 'hold' ? (skipT + noteT < 0) :
-                                noteType === 'touch' && note.holdDuration !== undefined ? (skipT + noteT < 0) :
-                                    noteType !== 'slide');
-                    if (shouldCountCombo) {
-                        playComboLocal++;
-                        playScoreLocal += ((note.isBreak ? 5 :
-                            (noteType === "slide" ? 3 :
-                                note.holdDuration !== undefined ? 2 : 1)
-                        ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
-                    }
-                }
-
-                const speedCoeffLocal = noteType === "touch" ? touchSpeedCoeff : speedCoeff;
-                const tval = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeffLocal));
-
-                const isNoteVisible =
-                    (noteType === 'slide' ? (tval >= (settings.middleDistance || 0.25)) : tval >= -1)
-                    && -noteT <= cullingSkipT + 0.375
-                    && !note.triggered;
-
-                if (isNoteVisible) {
-                    if (noteType === 'slide') {
-                        if (slideOnScreenCount < (settings.maxSlideCount || 500)) {
-                            buckets.slide.push(note);
-                            slideOnScreenCount++;
-                        }
-                    } else if (noteType === 'hold' || noteType === 'tap') {
-                        buckets.tapnhold.push(note);
-                    } else if (noteType === 'touch') {
-                        buckets.touch.push(note);
-                    }
-                }
-
-                // 特效收集邏輯
-                const effectDecayTime = settings.effectDecayTime || 0.4;
-                const hanabiEffectDecayTime = settings.hanabiEffectDecayTime || 0.8;
-
-                if (note.triggered) {
-                    const isHoldType = noteType === 'hold' || (noteType === 'touch' && note.holdDuration > 0);
-                    const duration = isHoldType ? note.holdDuration : 0;
-
-                    // 1. 打擊特效 (Hit Effect)
-                    const isWithinHitEffect = -noteT >= duration && -noteT <= duration + effectDecayTime;
-                    if (isWithinHitEffect) {
-                        buckets.hiteffects.push({
-                            pos: note.pos,
-                            touchPos: note.touchPos,
-                            noteT: isHoldType ? (note.holdDuration + noteT) : noteT
-                        });
-                    }
-
-                    // 2. 煙火特效 (Hanabi Effect)
-                    if (note.isHanabi) {
-                        const isWithinHanabi = -noteT >= duration && -noteT <= duration + hanabiEffectDecayTime;
-                        if (isWithinHanabi) {
-                            buckets.hanabieffects.push({
-                                pos: note.pos,
-                                touchPos: note.touchPos,
-                                time: note.time,
-                                noteT: isHoldType ? (note.holdDuration + noteT) : noteT
-                            });
-                        }
-                    }
-                }
-
-                // 3. Hold 按壓流動特效
-                if (note.holding) {
-                    buckets.holdingeffects.push({
-                        pos: note.pos,
-                        displayT: tval,
-                        noteT: noteT
-                    });
-                }
-            }
-
-            try {
-                offCtx.save();
-                offCtx.setTransform(1, 0, 0, 1, 0, 0);
-                offCtx.fillStyle = settings.backgroundColor || '#000';
-                offCtx.fillRect(0, 0, off.width, off.height);
-                const rs = renderer.scale || scale;
-
-                const boxSize = Math.min(off.width, off.height);
-                const boxX = Math.round((off.width - boxSize) / 2);
-                const boxY = Math.round((off.height - boxSize) / 2);
-                const boxW = boxSize, boxH = boxSize;
-
-                const drawContain = (srcW, srcH, drawFn) => {
-                    if (!srcW || !srcH) return drawFn(0, 0, srcW, srcH, boxX, boxY, boxW, boxH);
-                    const scale = Math.min(boxW / srcW, boxH / srcH) * rs;
-                    const dw = Math.round(srcW * scale);
-                    const dh = Math.round(srcH * scale);
-                    const dx = Math.round(boxX + (boxW - dw) / 2);
-                    const dy = Math.round(boxY + (boxH - dh) / 2);
-                    return drawFn(0, 0, srcW, srcH, dx, dy, dw, dh);
-                };
-
-                if (exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
-                    const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
-                    await seekVideoTo(exportVideo, bgTarget);
-                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
-                    const vw = exportVideo.videoWidth || exportVideo.width || boxW;
-                    const vh = exportVideo.videoHeight || exportVideo.height || boxH;
-                    drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(exportVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh));
-                    offCtx.filter = 'none';
-                } else if (editorBackgroundImage && editorBackgroundImage.src && editorBackgroundImage.complete) {
-                    const img = editorBackgroundImage;
-                    const iw = img.naturalWidth || img.width || boxW;
-                    const ih = img.naturalHeight || img.height || boxH;
-                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
-                    drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(img, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh));
-                    offCtx.filter = 'none';
-                }
-
-                if (outlineImage) {
-                    offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
-                    offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
-                }
-            } finally {
-                offCtx.restore();
-            }
-
-            renderer.drawFrame({
-                globalTime: globalT,
-                buckets,
-                dt: step,
-                showSensor: settings.showSensor,
-                showSensorText: false,
-                playCombo: playComboLocal,
-                playScore: playScoreLocal,
-                nowIndex: nowIndexLocal,
-                skipClear: true
-            });
-
-            const tsRelative = i * step;
-            await videoSource.add(tsRelative, step);
-
-            popup.setProgress(((i + 1) / frameCount) * 100);
-            popup.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀 (${(((i + 1) / frameCount) * 100).toFixed(2)}%)`);
-
-            // 讓出主執行緒，供瀏覽器重繪 UI 與處理點擊取消事件
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-
-        await output.finalize();
-        const mime = await output.getMimeType();
-        const ext = output.format?.fileExtension || '.mp4';
-        const buf = target.buffer;
-        if (!buf) throw new Error('未取得輸出 buffer');
-
-        const blob = new Blob([buf], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `simai_render${ext}`; document.body.appendChild(a); a.click(); a.remove();
-
-        simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
-
-        renderer.setContext(mainCtx);
-        popup.setProgress(100);
-        popup.setContent('完成');
-
-        setTimeout(() => {
-            popup.close();
-        }, 3000);
-    } catch (err) {
-        console.error('逐幀渲染失敗', err);
-        simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
-        try { popup.setContent('錯誤：' + String(err)); } catch (e) { }
-        try { renderer.setContext(mainCtx); } catch (e) { }
-    } finally {
-        if (exportVideo && exportVideo.parentNode) {
-            exportVideo.parentNode.removeChild(exportVideo);
-        }
-        if (output && output.state !== 'finalized' && output.state !== 'canceled') {
-            output.cancel().catch(e => console.error("Error cancelling output:", e));
-        }
-    }
-}
+};
+window.addEventListener('click', unlockAudio, { once: true });
+window.addEventListener('keydown', unlockAudio, { once: true });
+window.addEventListener('touchstart', unlockAudio, { once: true });

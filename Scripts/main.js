@@ -780,15 +780,146 @@ if (panelSplitter) {
 
 function updateTimebase() {
     const v1 = parseInt(timebaseButton.querySelector('input[name="tb1"]').value, 10) || 4;
+    const v2 = parseInt(timebaseButton.querySelector('input[name="tb2"]').value, 10) || 4;
     projSet('tb1', v1).catch(console.error);
+    projSet('tb2', v2).catch(console.error);
+    visualEditorRenderer.setTimebase(v1, v2);
+    previewRender.setTimebase(v1, v2);
 }
-function restoreTimebase(t1 = 4) {
+function restoreTimebase(t1 = 4, t2 = 4) {
     const v1 = parseInt(t1, 10) || 4;
+    const v2 = parseInt(t2, 10) || 4;
     timebaseButton.querySelector('input[name="tb1"]').value = v1;
+    timebaseButton.querySelector('input[name="tb2"]').value = v2;
 }
 timebaseButton.addEventListener('input', function () {
     updateTimebase();
     draw();
+});
+
+const gridDivisionBtn = document.querySelector('.utilityButton[data-buttonAction="gridDivision"]');
+const gridDivisionSelect = gridDivisionBtn ? gridDivisionBtn.querySelector('select[name="gridDivision"]') : null;
+
+const visualToolModeBtn = document.querySelector('.utilityButton[data-buttonAction="visualToolMode"]');
+const visualToolModeSelect = visualToolModeBtn ? visualToolModeBtn.querySelector('select[name="visualToolMode"]') : null;
+
+function updateGridDivisionVisibility() {
+    const isVis = isVisualMode();
+    if (gridDivisionBtn) {
+        gridDivisionBtn.style.display = isVis ? '' : 'none';
+    }
+    if (visualToolModeBtn) {
+        visualToolModeBtn.style.display = isVis ? '' : 'none';
+    }
+}
+
+function setGridDivisionUI(val) {
+    if (!gridDivisionSelect) return;
+    const strVal = String(val);
+    let opt = Array.from(gridDivisionSelect.options).find(o => o.value === strVal);
+    if (!opt && val > 0) {
+        const customOpt = document.createElement('option');
+        customOpt.value = strVal;
+        customOpt.textContent = `1/${val}`;
+        const lastOpt = gridDivisionSelect.options[gridDivisionSelect.options.length - 1];
+        if (lastOpt && lastOpt.value === 'custom') {
+            gridDivisionSelect.insertBefore(customOpt, lastOpt);
+        } else {
+            gridDivisionSelect.appendChild(customOpt);
+        }
+    }
+    gridDivisionSelect.value = strVal;
+}
+
+if (gridDivisionSelect) {
+    gridDivisionSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'custom') {
+            const input = prompt('請輸入切分數值 (正整數，例如 7, 14, 42 等)：', settings.gridDivision || 4);
+            if (input === null) {
+                setGridDivisionUI(settings.gridDivision || 4);
+                return;
+            }
+            const val = parseInt(input.trim(), 10);
+            if (!isNaN(val) && val > 0) {
+                settings.gridDivision = val;
+                setGridDivisionUI(val);
+                saveSettingsDebounce();
+                draw();
+            } else {
+                alert('請輸入有效的正整數切分數值。');
+                setGridDivisionUI(settings.gridDivision || 4);
+            }
+        } else {
+            const val = parseInt(e.target.value, 10) || 4;
+            settings.gridDivision = val;
+            saveSettingsDebounce();
+            draw();
+        }
+    });
+}
+
+if (visualToolModeSelect) {
+    visualToolModeSelect.addEventListener('change', (e) => {
+        const mode = e.target.value;
+        settings.visualToolMode = mode;
+        if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+            visualEditorRenderer.setEditMode(mode);
+        }
+        saveSettingsDebounce();
+        draw();
+    });
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+
+    // 支援 Ctrl+Z / Cmd+Z (復原) 與 Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (重做)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'z') {
+            if (isVisualMode() || e.target !== editorInput) {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redoButton.click();
+                } else {
+                    undoButton.click();
+                }
+                return;
+            }
+        } else if (key === 'y') {
+            if (isVisualMode() || e.target !== editorInput) {
+                e.preventDefault();
+                redoButton.click();
+                return;
+            }
+        }
+    }
+
+    if (e.target.tagName === 'TEXTAREA') return;
+
+    if (isVisualMode()) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (visualEditorRenderer && visualEditorRenderer.selectedNotes && visualEditorRenderer.selectedNotes.size > 0) {
+                const selectedList = Array.from(visualEditorRenderer.selectedNotes);
+                visualDeleteNote(selectedList);
+                visualEditorRenderer.clearSelection();
+            }
+        } else if (e.key === 'Escape') {
+            if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
+                visualEditorRenderer.clearSelection();
+            }
+        } else if (e.key === 'e' || e.key === 'E') {
+            if (visualToolModeSelect) {
+                visualToolModeSelect.value = 'edit';
+                visualToolModeSelect.dispatchEvent(new Event('change'));
+            }
+        } else if (e.key === 'v' || e.key === 'V' || e.key === 's' || e.key === 'S') {
+            if (visualToolModeSelect) {
+                visualToolModeSelect.value = 'select';
+                visualToolModeSelect.dispatchEvent(new Event('change'));
+            }
+        }
+    }
 });
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
@@ -949,9 +1080,14 @@ export const defaultSettings = {
     disableVideo: false, // 關閉影片背景（如果有的話）
     renderSurroundingAuxiliaryText: true,
     visualZoom: 200, // 視覺模式下的縮放倍率
+    gridDivision: 4, // SimaiVisualEditor 的網格切分 (4, 8, 12, 16, 24, 32...)
+    visualToolMode: 'edit', // SimaiVisualEditor 工具模式: 'edit' (編輯) 或 'select' (選擇)
     splitRatio: 0.5, // 左右面板分割比例
     canvasSnapped: false, // Canvas 是否被 snap 隱藏
     slideIllegalRed: false,
+    slideArrowHideBySensor: true, // 滑星依感應器消失
+    hideOutline: false, // 隱藏判定圈
+    showCoverWhenPaused: false, // 暫停時顯示封面圖
     showUI: false,
     enableQuickPanel: false,
     // Sound & Playback
@@ -1009,10 +1145,7 @@ const settingsConfig = [
                     { value: '-3', label: 'settings.items.veryDark' },
                 ],
                 def: defaultSettings.moviebrightness || 0,
-                apply: (val) => {
-                    if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * val})`;
-                    if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
-                },
+                apply: (val) => applyMovieBrightness(val),
             },
             {
                 id: 'pinkStars',
@@ -1063,6 +1196,27 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.rotateStars',
                 def: defaultSettings.rotateStars || false
+            },
+            {
+                id: 'slideArrowHideBySensor',
+                type: 'checkbox',
+                label: 'settings.items.slideArrowHideBySensor',
+                def: defaultSettings.slideArrowHideBySensor ?? true
+            },
+            {
+                id: 'hideOutline',
+                type: 'checkbox',
+                label: 'settings.items.hideOutline',
+                def: defaultSettings.hideOutline || false,
+                apply: (val) => {
+                    if (canvasOutline) canvasOutline.style.display = val ? 'none' : '';
+                }
+            },
+            {
+                id: 'showCoverWhenPaused',
+                type: 'checkbox',
+                label: 'settings.items.showCoverWhenPaused',
+                def: defaultSettings.showCoverWhenPaused || false
             }
         ]
     },
@@ -1121,6 +1275,11 @@ const settingsConfig = [
     }
 ];
 
+function applyMovieBrightness(val) {
+    if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * val})`;
+    if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
+}
+
 let globalTime = 0, realTime = 0;
 let lastTimestamp = null;
 let playStartTimestamp = null;
@@ -1164,9 +1323,11 @@ const setEndtime = (e) => {
 const updateSlider = (time) => {
     const min = parseFloat(slider.min) || 0;
     const max = parseFloat(slider.max) || 100;
-    const progressPercent = ((time - min) / (max - min)) * 100;
+    const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
     slider.value = time;
-    slider.style.background = `linear-gradient(90deg, #962d2d 0%, #962d2d ${progressPercent}%, #222 ${progressPercent}%, #222 100%)`;
+    const thumbWidth = 16;
+    const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
+    slider.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
 };
 
 manageResourcesButton.addEventListener('click', async () => {
@@ -2164,10 +2325,9 @@ function setDataEmpty() {
     changeDifficulty.value = nowDifficulty;
     editorBackgroundImage.src = "";
     editorBackgroundImage.style.display = 'none';
-    editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
     editorBackgroundVideo.src = "";
     editorBackgroundVideo.style.display = 'none';
-    editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
+    applyMovieBrightness(settings.moviebrightness);
     inputDebounce();
     saveMaidata();
 
@@ -2179,6 +2339,8 @@ function setDataEmpty() {
 }
 
 fetchFromMainoteButton.addEventListener('click', () => {
+    let mainctx = null;
+
     // 以 globalThis 取得 Supabase，避免在 module/非 module 環境中直接存取未宣告的全域變數導致錯誤
     const createClient = globalThis.supabase?.createClient;
     if (typeof createClient !== 'function') {
@@ -2368,106 +2530,240 @@ fetchFromMainoteButton.addEventListener('click', () => {
             return;
         }
 
-        // 建立結果列表 (此部分維持原樣)
+        // 1. 難度顏色與排序對照
+        const diffOrder = { 'EASY': 0, 'BASIC': 1, 'ADVANCED': 2, 'EXPERT': 3, 'MASTER': 4, 'RE:MASTER': 5, 'REMASTER': 5, 'UTAGE': 6 };
+        const diffColors = {
+            'EASY': { bg: '#00c2ff', text: '#fff' },
+            'BASIC': { bg: '#22b14c', text: '#fff' },
+            'ADVANCED': { bg: '#ff9800', text: '#fff' },
+            'EXPERT': { bg: '#f44336', text: '#fff' },
+            'MASTER': { bg: '#9c27b0', text: '#fff' },
+            'RE:MASTER': { bg: '#e040fb', text: '#fff' },
+            'REMASTER': { bg: '#e040fb', text: '#fff' },
+            'UTAGE': { bg: '#ff5722', text: '#fff' }
+        };
+
+        // 2. 依 (title + chartType) 聚合歌曲列表
+        const songGroupsMap = new Map();
+
+        result.forEach((chart) => {
+            const songTitle = chart.songs?.title || t('popup.fetchMainote.unknownSong');
+            const rawType = (chart.type || chart.chart_type || chart.songs?.type || chart.songs?.chart_type || '').toUpperCase();
+            let chartType = '';
+            if (rawType.includes('DX') || chart.is_dx || chart.songs?.is_dx) {
+                chartType = 'DX';
+            } else if (rawType.includes('STD') || rawType.includes('STANDARD') || chart.is_std || chart.songs?.is_std) {
+                chartType = 'STD';
+            } else {
+                chartType = rawType;
+            }
+
+            const groupKey = `${songTitle}___${chartType}`;
+            if (!songGroupsMap.has(groupKey)) {
+                songGroupsMap.set(groupKey, {
+                    title: songTitle,
+                    chartType: chartType,
+                    song: chart.songs || {},
+                    charts: []
+                });
+            }
+            songGroupsMap.get(groupKey).charts.push(chart);
+        });
+
+        const songGroups = Array.from(songGroupsMap.values());
+
+        // 建立結果列表
         const resultContainer = document.createElement('div');
-        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;padding-right:4px;';
+        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding-right:4px;';
 
         let resultPopupCtx = null;
-        result.forEach((chart) => {
-            const item = document.createElement('div');
-            item.style.cssText = 'padding:10px;background:#2a2a2a;border:1px solid #444;border-radius:4px;cursor:pointer;transition:all 0.2s;';
 
-            const songTitle = chart.songs?.title || t('popup.fetchMainote.unknownSong');
-            item.innerHTML = `
-                <div style="font-weight:500;color:#fff;margin-bottom:4px;">${songTitle}</div>
-                <div style="font-size:12px;color:#bbb;">
-                    ${t('popup.fetchMainote.chartDifficulty')}: <strong>${chart.difficulty || 'N/A'}</strong> | ${t('popup.fetchMainote.chartLevel')}: <strong>${chart.level || 'N/A'}</strong>
-                </div>
-            `;
+        // 通用選擇/載入 chart 處理函式
+        const selectAndLoadChart = (targetChart) => {
+            const songTitle = targetChart.songs?.title || targetChart.title || t('popup.fetchMainote.unknownSong');
+            const maidataHaveContext = (() => {
+                if (audioManager.haveBGM && audioManager.haveBGM()) return true;
+                for (let i = 1; i <= 7; i++) {
+                    if (maidata && maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") return true;
+                }
+                return false;
+            })();
 
-            item.onclick = () => {
-                const maidataHaveContext = (() => {
-                    if (audioManager.haveBGM && audioManager.haveBGM()) return true;
-                    for (let i = 1; i <= 7; i++) {
-                        if (maidata && maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") return true;
-                    }
-                    return false;
-                })();
+            const loadChart = async (mode) => {
+                if (mode === 'new') {
+                    const newId = await projectCreate(t('popup.projectManager.untitled'));
+                    currentProjectId = newId;
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                    console.log(`[Project] 已建立新專案: ${newId}`);
+                }
 
-                const loadChart = async (mode) => {
-                    if (mode === 'new') {
-                        const newId = await projectCreate(t('popup.projectManager.untitled'));
-                        currentProjectId = newId;
-                        localStorage.setItem('simai_lastProjectId', currentProjectId);
-                        console.log(`[Project] 已建立新專案: ${newId}`);
-                    }
+                setDataEmpty();
 
-                    setDataEmpty();
+                const diffKey = (targetChart.difficulty || 'MASTER').toUpperCase();
+                const diffMap = { 'EASY': 1, 'BASIC': 2, 'ADVANCED': 3, 'EXPERT': 4, 'MASTER': 5, 'RE:MASTER': 6, 'REMASTER': 6, 'UTAGE': 7 };
+                const targetDiff = diffMap[diffKey] || 5;
 
-                    // chart_data 是純 simai note 資料，需手動組裝 maidata 物件
-                    const diffKey = (chart.difficulty || 'MASTER').toUpperCase();
-                    const diffMap = { 'EASY': 1, 'BASIC': 2, 'ADVANCED': 3, 'EXPERT': 4, 'MASTER': 5, 'RE:MASTER': 6, 'UTAGE': 7 };
-                    const targetDiff = diffMap[diffKey] || 5;
+                maidata = {};
+                maidata.title = songTitle;
+                maidata[`inote_${targetDiff}`] = targetChart.chart_data || '';
 
-                    maidata = {};
-                    maidata.title = chart.songs?.title || songTitle || '';
-                    maidata[`inote_${targetDiff}`] = chart.chart_data || '';
+                nowDifficulty = targetDiff;
+                changeDifficulty.value = nowDifficulty;
+                projSet('now_difficulty', nowDifficulty).catch(() => { });
 
-                    // 設定難度
-                    nowDifficulty = targetDiff;
-                    changeDifficulty.value = nowDifficulty;
-                    projSet('now_difficulty', nowDifficulty).catch(() => { });
+                editorInput.value = maidata[`inote_${targetDiff}`] || '';
+                getres(editorInput.value);
+                applyHighlight(editorInput.value);
 
-                    // 填入編輯器
-                    editorInput.value = maidata[`inote_${targetDiff}`] || '';
-                    getres(editorInput.value);
-                    applyHighlight(editorInput.value);
+                undoStack = [];
+                redoStack = [];
+                historyMap = {};
+                lastEditorValue = editorInput.value || '';
 
-                    // 重置編輯歷史
-                    undoStack = [];
-                    redoStack = [];
-                    historyMap = {};
-                    lastEditorValue = editorInput.value || '';
+                saveMaidata();
 
-                    saveMaidata();
+                const displayName = maidata.title || songTitle;
+                if (displayName && currentProjectId) {
+                    projectUpdateName(currentProjectId, displayName).catch(() => { });
+                }
 
-                    // 嘗試以歌曲標題更新專案名稱
-                    const displayName = maidata.title || songTitle;
-                    if (displayName && currentProjectId) {
-                        projectUpdateName(currentProjectId, displayName).catch(() => { });
-                    }
+                simpleToast({ content: t('toast.chartLoaded', { title: songTitle }), type: 'success', timeout: 1500 });
+                if (resultPopupCtx) resultPopupCtx.close();
+                if (mainctx) mainctx.close();
+            };
 
-                    simpleToast({ content: t('toast.chartLoaded', { title: songTitle }), type: 'success', timeout: 1500 });
-                    if (resultPopupCtx) resultPopupCtx.close();
+            if (maidataHaveContext) {
+                popupWindow({
+                    title: t('popup.fetchMainote.loadChartTitle'),
+                    content: t('popup.fetchMainote.loadChartConfirm'),
+                    buttons: [
+                        {
+                            text: t('popup.fetchMainote.overwriteProject'),
+                            onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
+                        },
+                        {
+                            text: t('popup.fetchMainote.openNewProject'),
+                            onClick: (ctx) => { ctx.close(); loadChart('new'); }
+                        },
+                        {
+                            text: t('popup.fetchMainote.cancel'),
+                            hideOnClick: true
+                        }
+                    ]
+                });
+            } else {
+                loadChart('overwrite');
+            }
+        };
+
+        // 彈出二級難度選擇子視窗 (點擊整張歌曲卡片時)
+        const openDifficultySelectPopup = (group) => {
+            const diffListContainer = document.createElement('div');
+            diffListContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px 0;';
+
+            group.charts.forEach((c) => {
+                const diffKey = (c.difficulty || 'MASTER').toUpperCase();
+                const col = diffColors[diffKey] || { bg: '#555', text: '#fff' };
+                const btn = document.createElement('button');
+                btn.style.cssText = `padding:10px 14px;background:${col.bg};color:${col.text};border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;transition:transform 0.1s, filter 0.1s;`;
+                btn.innerHTML = `<span>${diffKey}</span><span>Lv ${c.level || 'N/A'}</span>`;
+                btn.onmouseover = () => { btn.style.filter = 'brightness(1.15)'; btn.style.transform = 'scale(1.02)'; };
+                btn.onmouseout = () => { btn.style.filter = 'none'; btn.style.transform = 'none'; };
+
+                btn.onclick = () => {
+                    if (diffPopupCtx) diffPopupCtx.close();
+                    selectAndLoadChart(c);
+                };
+                diffListContainer.appendChild(btn);
+            });
+
+            const diffPopupCtx = popupWindow({
+                title: `${group.title} ${group.chartType ? `[${group.chartType}]` : ''} - 選擇難度`,
+                customContent: diffListContainer,
+                buttons: [
+                    { text: t('popup.fetchMainote.cancel'), hideOnClick: true }
+                ]
+            });
+        };
+
+        // 渲染聚合結果卡片
+        songGroups.forEach((group) => {
+            // 排序該歌曲下的難度
+            group.charts.sort((a, b) => {
+                const orderA = diffOrder[(a.difficulty || '').toUpperCase()] ?? 99;
+                const orderB = diffOrder[(b.difficulty || '').toUpperCase()] ?? 99;
+                return orderA - orderB;
+            });
+
+            const card = document.createElement('div');
+            card.style.cssText = 'padding:10px 12px;background:#26262a;border:1px solid #3d3d45;border-radius:6px;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;gap:8px;';
+
+            // Header 區域: Title + Type Badge
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+
+            const titleEl = document.createElement('div');
+            titleEl.style.cssText = 'font-weight:600;color:#fff;font-size:14px;word-break:break-word;';
+            titleEl.textContent = group.title;
+
+            header.appendChild(titleEl);
+
+            if (group.chartType) {
+                const typeBadge = document.createElement('span');
+                const isDx = group.chartType === 'DX';
+                typeBadge.style.cssText = `font-size:11px;font-weight:bold;padding:2px 6px;border-radius:4px;background:${isDx ? 'linear-gradient(135deg, #7b2cbf, #3a0ca3)' : '#344e41'};color:#fff;border:1px solid ${isDx ? '#9d4edd' : '#588157'};letter-spacing:0.5px;`;
+                typeBadge.textContent = group.chartType;
+                header.appendChild(typeBadge);
+            }
+
+            // 難度等級 Badge 列
+            const badgesRow = document.createElement('div');
+            badgesRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;';
+
+            group.charts.forEach((chart) => {
+                const diffKey = (chart.difficulty || 'MASTER').toUpperCase();
+                const col = diffColors[diffKey] || { bg: '#555', text: '#fff' };
+                const badge = document.createElement('button');
+                badge.style.cssText = `padding:3px 8px;background:${col.bg};color:${col.text};border:none;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;transition:transform 0.15s, filter 0.15s;`;
+                badge.textContent = `[${chart.level || '?'}]`;
+                badge.title = `${diffKey} (Lv ${chart.level || '?'})`;
+
+                badge.onmouseover = (e) => {
+                    e.stopPropagation();
+                    badge.style.transform = 'scale(1.12)';
+                    badge.style.filter = 'brightness(1.2)';
+                };
+                badge.onmouseout = (e) => {
+                    e.stopPropagation();
+                    badge.style.transform = 'none';
+                    badge.style.filter = 'none';
                 };
 
-                if (maidataHaveContext) {
-                    popupWindow({
-                        title: t('popup.fetchMainote.loadChartTitle'),
-                        content: t('popup.fetchMainote.loadChartConfirm'),
-                        buttons: [
-                            {
-                                text: t('popup.fetchMainote.overwriteProject'),
-                                onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
-                            },
-                            {
-                                text: t('popup.fetchMainote.openNewProject'),
-                                onClick: (ctx) => { ctx.close(); loadChart('new'); }
-                            },
-                            {
-                                text: t('popup.fetchMainote.cancel'),
-                                hideOnClick: true
-                            }
-                        ]
-                    });
+                // 點擊特定難度 Badge 直接載入
+                badge.onclick = (e) => {
+                    e.stopPropagation();
+                    selectAndLoadChart(chart);
+                };
+
+                badgesRow.appendChild(badge);
+            });
+
+            card.appendChild(header);
+            card.appendChild(badgesRow);
+
+            // 點擊卡片空白處 -> 彈出難度選擇
+            card.onclick = () => {
+                if (group.charts.length === 1) {
+                    selectAndLoadChart(group.charts[0]);
                 } else {
-                    loadChart('overwrite');
+                    openDifficultySelectPopup(group);
                 }
             };
 
-            item.onmouseenter = () => { item.style.borderColor = '#0066cc'; item.style.background = '#333'; };
-            item.onmouseleave = () => { item.style.borderColor = '#444'; item.style.background = '#2a2a2a'; };
-            resultContainer.appendChild(item);
+            card.onmouseenter = () => { card.style.borderColor = '#0066cc'; card.style.background = '#303036'; };
+            card.onmouseleave = () => { card.style.borderColor = '#3d3d45'; card.style.background = '#26262a'; };
+
+            resultContainer.appendChild(card);
         });
 
         resultPopupCtx = popupWindow({
@@ -2482,7 +2778,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
 
     container.appendChild(searchBtn);
 
-    popupWindow({
+    mainctx = popupWindow({
         title: t('popup.fetchMainote.title'),
         customContent: container,
         buttons: [{ text: t('popup.close'), hideOnClick: true }]
@@ -3499,6 +3795,9 @@ undoButton.addEventListener('click', () => {
     getres(newContent);
     inputDebounce();
     lastEditorValue = newContent;
+    if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
+        visualEditorRenderer.clearSelection();
+    }
 });
 
 redoButton.addEventListener('click', () => {
@@ -3511,6 +3810,9 @@ redoButton.addEventListener('click', () => {
     getres(newContent);
     inputDebounce();
     lastEditorValue = newContent;
+    if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
+        visualEditorRenderer.clearSelection();
+    }
 });
 
 helpButton.addEventListener('click', () => {
@@ -3653,45 +3955,71 @@ helpButton.addEventListener('click', () => {
 
 function getGridSlots(maxTime) {
     const slots = [];
+    let gridDiv = parseInt(settings.gridDivision, 10);
+    if (isNaN(gridDiv) || gridDiv <= 0) gridDiv = 4;
+
+    if (maxTime === null || maxTime === undefined || isNaN(maxTime) || !isFinite(maxTime) || maxTime < 0) {
+        maxTime = (endTime && isFinite(endTime) && endTime > 0) ? endTime + 2.0 : 100.0;
+    }
+
+    const limitMaxTime = Math.min(maxTime, 7200.0);
+
     if (!decodedTags || decodedTags.length === 0) {
-        const bpm = clockBpm || 60;
-        const tb2 = settings.tb2 || 4;
-        const beatPeriod = (240 / bpm) / tb2;
-        for (let t = 0; t <= maxTime; t += beatPeriod) {
+        const bpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
+        const beatPeriod = (240 / bpm) / gridDiv;
+        if (!isFinite(beatPeriod) || beatPeriod <= 0.0001) return [0];
+
+        let count = 0;
+        for (let t = 0; t <= limitMaxTime + 0.001 && count < 20000; t += beatPeriod) {
             slots.push(t);
+            count++;
         }
         return slots;
     }
 
-    const bpmTags = decodedTags.filter(t => t.type === 'bpm').sort((a, b) => a.time - b.time);
+    const bpmTags = decodedTags.filter(t => t.type === 'bpm' && t.value > 0).sort((a, b) => a.time - b.time);
     if (bpmTags.length === 0) {
-        bpmTags.push({ time: 0, value: clockBpm || 60 });
+        bpmTags.push({ time: 0, value: (clockBpm && clockBpm > 0) ? clockBpm : 60 });
     }
 
-    const tb2 = settings.tb2 || 4;
+    const fallbackEndTime = (endTime && isFinite(endTime) && endTime > 0) ? Math.max(endTime, limitMaxTime) : limitMaxTime;
 
     for (let i = 0; i < bpmTags.length; i++) {
         const tag = bpmTags[i];
         const nextTag = bpmTags[i + 1];
-        const endTimeForTag = nextTag ? nextTag.time : Math.max(endTime, maxTime);
-        const beatPeriod = (240 / tag.value) / tb2;
+        let endTimeForTag = nextTag ? nextTag.time : fallbackEndTime;
+
+        if (!isFinite(endTimeForTag) || isNaN(endTimeForTag) || endTimeForTag > fallbackEndTime) {
+            endTimeForTag = fallbackEndTime;
+        }
+
+        const bpmVal = (tag.value && tag.value > 0) ? tag.value : 60;
+        const beatPeriod = (240 / bpmVal) / gridDiv;
+
+        if (!isFinite(beatPeriod) || beatPeriod <= 0.0001) continue;
 
         let t = tag.time;
-        while (t < endTimeForTag - 0.001) {
+        let count = 0;
+        while (t < endTimeForTag - 0.001 && count < 20000) {
             slots.push(t);
             t += beatPeriod;
+            count++;
         }
+        if (slots.length > 50000) break;
     }
 
-    if (slots.length === 0 || slots[slots.length - 1] < Math.max(endTime, maxTime) - 0.001) {
-        slots.push(Math.max(endTime, maxTime));
+    if (slots.length === 0 || slots[slots.length - 1] < fallbackEndTime - 0.001) {
+        slots.push(fallbackEndTime);
     }
 
     return slots;
 }
 
 const quantizeTime = (time) => {
+    if (time === null || time === undefined || isNaN(time) || !isFinite(time)) return null;
     const slots = getGridSlots(time + 2.0);
+    if (!slots || slots.length === 0) return null;
+
     let closestTime = 0;
     let minDiff = Infinity;
     for (const t of slots) {
@@ -3712,17 +4040,20 @@ const getOrCreateCommaIndex = (snappedTime) => {
         return 0;
     }
 
+    // 1. 檢查是否有現成的拍點可以直接使用 (誤差在 0.02 秒內)
     for (let idx = 0; idx < dataIndexToTime.length; idx++) {
-        if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.05) {
+        if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.02) {
             return idx;
         }
     }
 
     const lastIndex = dataIndexToTime.length - 1;
     const lastTime = dataIndexToTime[lastIndex];
-    if (snappedTime > lastTime) {
+
+    // 2. 如果點擊的時間在現有音符之後，在尾端擴充逗號
+    if (snappedTime > lastTime + 0.02) {
         const currentBpm = clockBpm || 60;
-        const currentGrid = settings.tb2 || 4;
+        const currentGrid = settings.gridDivision || 4;
         const timeStep = (240 / currentBpm) / currentGrid;
 
         const numCommas = Math.round((snappedTime - lastTime) / timeStep);
@@ -3735,6 +4066,82 @@ const getOrCreateCommaIndex = (snappedTime) => {
             }
             return lastIndex + numCommas;
         }
+        return null;
+    }
+
+    // 3. 如果點擊的時間在現有音符中間 (中間插拍/細分拍數)
+    let k = -1;
+    for (let i = 0; i < dataIndexToTime.length - 1; i++) {
+        if (snappedTime > dataIndexToTime[i] + 0.005 && snappedTime < dataIndexToTime[i + 1] - 0.005) {
+            k = i;
+            break;
+        }
+    }
+
+    if (k !== -1) {
+        const tK = dataIndexToTime[k];
+        const tKNext = dataIndexToTime[k + 1];
+
+        // 尋找在 tK 時刻有效的 BPM
+        let currentBpm = clockBpm || 60;
+        if (decodedTags) {
+            const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= tK + 0.001).sort((a, b) => b.time - a.time)[0];
+            if (bpmTag) currentBpm = bpmTag.value;
+        }
+
+        const origDuration = tKNext - tK;
+        if (origDuration <= 0.001) return null;
+        const origDiv = Math.round((240 / currentBpm) / origDuration);
+
+        const duration1 = snappedTime - tK;
+        const duration2 = tKNext - snappedTime;
+        if (duration1 <= 0.001 || duration2 <= 0.001) return null;
+
+        const newDiv1 = Math.round((240 / currentBpm) / duration1);
+        const newDiv2 = Math.round((240 / currentBpm) / duration2);
+
+        if (isNaN(newDiv1) || newDiv1 <= 0 || isNaN(newDiv2) || newDiv2 <= 0) return null;
+
+        // 1. 更新 rawData[k]: 將其拍號/切分標籤替換為 {newDiv1}
+        let segK = rawData[k] ? rawData[k].trim() : "";
+        if (segK.includes('{')) {
+            segK = segK.replace(/\{[^\}]*\}/g, `{${newDiv1}}`);
+        } else {
+            const match = segK.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
+            if (match) {
+                segK = match[1] + `{${newDiv1}}` + match[2];
+            } else {
+                segK = `{${newDiv1}}` + segK;
+            }
+        }
+        rawData[k] = segK;
+
+        // 2. 插入新的段落至 k + 1 位置
+        // 若 newDiv2 !== newDiv1，填入 {newDiv2} 標籤以補足至下一個音符之間的殘餘時間
+        let newSegKNext1 = "";
+        if (newDiv2 !== newDiv1) {
+            newSegKNext1 = `{${newDiv2}}`;
+        }
+        rawData.splice(k + 1, 0, newSegKNext1);
+
+        // 3. 處理原本在 k+1 的段落 (現移至 k+2)
+        // 若 k+2 本身沒有獨立的 {} 標籤，則幫它補上 {origDiv} 以維持原有拍速
+        let segKNext2 = rawData[k + 2] ? rawData[k + 2].trim() : "";
+        if (!segKNext2.includes('{') && origDiv > 0) {
+            const match = segKNext2.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
+            if (match) {
+                segKNext2 = match[1] + `{${origDiv}}` + match[2];
+            } else {
+                segKNext2 = `{${origDiv}}` + segKNext2;
+            }
+            rawData[k + 2] = segKNext2;
+        }
+
+        // 重新更新編輯器與解碼資料
+        const newContent = rawData.join(',');
+        updateEditorAndSave(newContent);
+
+        return k + 1;
     }
 
     return null;
@@ -3800,60 +4207,140 @@ const visualPlaceNote = (lane, clickTime) => {
     simpleToast({ content: `已在軌道 ${lane} 放置 Tap 音符`, type: 'success', timeout: 1000 });
 };
 
-const visualDeleteNote = (note) => {
-    const commaIndex = note.index;
-    if (commaIndex === undefined || commaIndex === null) return;
-    const lane = note.pos;
-    if (!lane) return;
+const visualPlaceHoldNote = (lane, clickTime, durationTime, originalNote = null) => {
+    const snappedTime = quantizeTime(clickTime);
+    if (snappedTime === null || snappedTime === undefined) return;
 
-    const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
-    if (segment === "" || segment.startsWith("||")) return;
+    const closestIndex = getOrCreateCommaIndex(snappedTime);
+    if (closestIndex === null || closestIndex === undefined) return;
 
-    const parts = segment.split('/');
-    const partIndex = parts.findIndex(p => {
+    // 尋找在 snappedTime 時刻有效的 BPM
+    let currentBpm = clockBpm || 60;
+    if (decodedTags) {
+        const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
+        if (bpmTag) currentBpm = bpmTag.value;
+    }
+
+    const gridDiv = settings.gridDivision || 4;
+    const tickPeriod = (240 / currentBpm) / gridDiv;
+
+    let numTicks = Math.max(0, Math.round(durationTime / tickPeriod));
+
+    let noteStr = `${lane}h[${gridDiv}:${numTicks}]`;
+
+    if (numTicks == 0) {
+        noteStr = `${lane}h`;
+    }
+
+    if (originalNote) {
+        if (originalNote.isBreak) {
+            noteStr = `${lane}bh[${gridDiv}:${numTicks}]`;
+            if (numTicks == 0) {
+                noteStr = `${lane}bh`;
+            }
+        }
+    }
+
+    const segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
+    if (segment.startsWith("||")) return;
+
+    let parts = segment === "" ? [] : segment.split('/');
+
+    const existingIndex = parts.findIndex(p => {
         const clean = stripLeadingTags(p);
         return clean.startsWith(String(lane));
     });
 
-    if (partIndex === -1) return;
+    if (existingIndex !== -1) {
+        const targetPart = parts[existingIndex];
+        const clean = stripLeadingTags(targetPart);
+        const leadingTags = targetPart.substring(0, targetPart.length - clean.length);
+        parts[existingIndex] = leadingTags + noteStr;
+    } else {
+        const cleanNotePart = stripLeadingTags(segment);
+        if (cleanNotePart === "") {
+            parts = [segment + noteStr];
+        } else {
+            parts.push(noteStr);
+        }
+    }
 
-    parts.splice(partIndex, 1);
-    const newSegment = parts.join('/');
-    rawData[commaIndex] = newSegment;
-
+    rawData[closestIndex] = parts.join('/');
     const newContent = rawData.join(',');
     updateEditorAndSave(newContent);
 
-    simpleToast({ content: `已刪除軌道 ${lane} 的音符`, type: 'info', timeout: 1000 });
+    simpleToast({ content: `已將軌道 ${lane} 設定為 Hold [${gridDiv}:${numTicks}]`, type: 'success', timeout: 1000 });
+};
+
+const visualDeleteNote = (noteOrNotes) => {
+    const list = Array.isArray(noteOrNotes) ? noteOrNotes : (noteOrNotes instanceof Set ? Array.from(noteOrNotes) : (noteOrNotes ? [noteOrNotes] : []));
+    if (list.length === 0) return;
+
+    let deletedCount = 0;
+    for (const note of list) {
+        if (!note) continue;
+        const commaIndex = note.index;
+        if (commaIndex === undefined || commaIndex === null) continue;
+        const lane = note.pos;
+        if (!lane) continue;
+
+        const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+        if (segment === "" || segment.startsWith("||")) continue;
+
+        const parts = segment.split('/');
+        const partIndex = parts.findIndex(p => {
+            const clean = stripLeadingTags(p);
+            return clean.startsWith(String(lane));
+        });
+
+        if (partIndex === -1) continue;
+
+        const targetPart = parts[partIndex];
+        const clean = stripLeadingTags(targetPart);
+        const leadingTags = targetPart.substring(0, targetPart.length - clean.length);
+
+        if (leadingTags) {
+            if (parts.length === 1) {
+                parts[0] = leadingTags;
+            } else if (partIndex + 1 < parts.length) {
+                parts[partIndex + 1] = leadingTags + parts[partIndex + 1];
+                parts.splice(partIndex, 1);
+            } else if (partIndex > 0) {
+                parts[partIndex - 1] = leadingTags + parts[partIndex - 1];
+                parts.splice(partIndex, 1);
+            }
+        } else {
+            parts.splice(partIndex, 1);
+        }
+
+        rawData[commaIndex] = parts.join('/');
+        deletedCount++;
+    }
+
+    if (deletedCount > 0) {
+        const newContent = rawData.join(',');
+        updateEditorAndSave(newContent);
+        if (deletedCount === 1) {
+            const firstLane = list[0]?.pos;
+            simpleToast({ content: `已刪除軌道 ${firstLane || ''} 的音符`, type: 'info', timeout: 1000 });
+        } else {
+            simpleToast({ content: `已刪除 ${deletedCount} 個音符`, type: 'info', timeout: 1000 });
+        }
+    }
 };
 
 function getNextNoteClean(clean, L) {
-    const isSpecial = /[h\-<>^vpqszVw]/.test(clean);
-    if (isSpecial) {
-        return String(L);
-    }
+    const slide = clean.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+    const hold = clean.includes('h');
+    const touch = clean.match(/^([ABCDE])(\d+)|C/)
 
     const isBreak = clean.includes('b');
-    const isStar = clean.includes('$');
     const isEx = clean.includes('x');
 
-    if (!isBreak && !isStar && !isEx) {
-        return `${L}$`;
-    } else if (isStar && !isBreak && !isEx) {
-        return `${L}b`;
-    } else if (isBreak && !isStar && !isEx) {
-        return `${L}x`;
-    } else if (isEx && !isBreak && !isStar) {
-        return `${L}b$`;
-    } else if (isBreak && isStar && !isEx) {
-        return `${L}bx`;
-    } else if (isBreak && isEx && !isStar) {
-        return `${L}x$`;
-    } else if (isEx && isStar && !isBreak) {
-        return `${L}bx$`;
-    } else {
-        return String(L);
-    }
+    console.log(`isBreak=${isBreak}, isEx=${isEx}, slide=${slide}, hold=${hold}, touch=${touch}`)
+
+    return String(clean);
+
 }
 
 const visualChangeNote = (note) => {
@@ -3875,6 +4362,7 @@ const visualChangeNote = (note) => {
 
     const originalPart = parts[partIndex];
     const clean = stripLeadingTags(originalPart);
+
     const prefix = originalPart.substring(0, originalPart.length - clean.length);
 
     const nextClean = getNextNoteClean(clean, lane);
@@ -4194,7 +4682,6 @@ async function handleFolderInput(files) {
                 backgroundVideo = file;
                 editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
                 editorBackgroundVideo.style.display = 'none';
-                editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
                 projSet('background_video', file).catch((error) => {
                     console.error('儲存背景圖到 IndexedDB 失敗:', error);
                 });
@@ -4205,7 +4692,6 @@ async function handleFolderInput(files) {
                 backgroundImage = file;
                 editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
                 editorBackgroundImage.style.display = 'block';
-                editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
                 projSet('background_image', file).catch((error) => {
                     console.error('儲存背景圖到 IndexedDB 失敗:', error);
                 });
@@ -4229,6 +4715,7 @@ async function handleFolderInput(files) {
             console.warn('選擇的背景影片檔案不是影片類型：', file.name);
         }
     }
+    applyMovieBrightness(settings.moviebrightness);
 }
 
 readMaidataButton.addEventListener('click', () => {
@@ -4389,6 +4876,7 @@ changeDifficulty.addEventListener('change', (e) => {
 
 changeDisplayMode.addEventListener('change', (e) => {
     settings.displayMode = e.target.value;
+    updateGridDivisionVisibility();
     visualEditorRenderer.setZoom(settings.visualZoom);
     previewRender.setZoom(settings.visualZoom);
     saveSettingsDebounce();
@@ -4834,12 +5322,12 @@ addVideoButton.addEventListener('click', () => {
             backgroundVideo = file;
             editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
             editorBackgroundVideo.style.display = 'none';
-            editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
             projSet('background_video', file).then(() => {
                 simpleToast({ content: '已儲存背景影片', type: 'success' });
             }).catch((error) => {
                 console.error('儲存背景影片失敗:', error);
             });
+            applyMovieBrightness(settings.moviebrightness);
         }
     };
     input.click();
@@ -4856,7 +5344,6 @@ importFromVideoButton.addEventListener('click', () => {
             backgroundVideo = file;
             editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
             editorBackgroundVideo.style.display = 'none';
-            editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
             await projSet('background_video', file);
 
             // 2. 載入背景音樂 (直接使用影片檔案作為音訊來源解碼)
@@ -4864,6 +5351,7 @@ importFromVideoButton.addEventListener('click', () => {
             await audioManager.setBackgroundMusic(url, file);
             setEndtime(endTime);
             await projSet('resource_bgm', file);
+            applyMovieBrightness(settings.moviebrightness);
 
             simpleToast({ content: t('toast.videoImportSuccess'), type: 'success' });
         }
@@ -5022,12 +5510,22 @@ const slideInputDebounce = debounce(() => {
     });
 }, 300);
 
+const videoSeekDebounce = debounce((time) => {
+    if (editorBackgroundVideo && editorBackgroundVideo.readyState >= 1) {
+        if (Math.abs(editorBackgroundVideo.currentTime - time) > 0.05) {
+            try { editorBackgroundVideo.currentTime = time; } catch (_) { }
+        }
+    }
+}, 50);
+
 slider.addEventListener('input', () => {
     timeControlSliding = true;
     const value = parseFloat(slider.value);
     globalTime = value - musicDelay;
     realTime = value;
     audioManager.stopAllLongSounds();
+
+    videoSeekDebounce(realTime);
 
     if (playButton.dataset.playing === 'true') {
         editorBackgroundVideo.pause();
@@ -5055,15 +5553,34 @@ let bgmUpdateTimer = null;
 
 if (keepRenderingWhilePause) requestAnimationFrame(update);
 
+function updatePauseBackgroundDisplay() {
+    const hideBg = !!settings.hideBackgroundWhenPaused;
+    const showCover = !!settings.showCoverWhenPaused;
+
+    const hasVideo = !!(backgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1);
+    const hasImage = !!(backgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
+
+    if (hideBg) {
+        // [v] 暫停時隱藏背景 -> 以隱藏為優先
+        editorBackgroundImage.style.display = 'none';
+        editorBackgroundVideo.style.display = 'none';
+    } else if (showCover) {
+        // [ ] 隱藏 + [v] 顯示封面圖 -> 優先顯示封面圖
+        editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
+        editorBackgroundVideo.style.display = 'none';
+    } else {
+        // [ ] 隱藏 + [ ] 顯示封面圖 -> 顯示影片，無影片直接全部隱藏
+        editorBackgroundImage.style.display = 'none';
+        editorBackgroundVideo.style.display = hasVideo ? 'block' : 'none';
+    }
+}
+
 let lastStartTime = 0;
 
 playButton.addEventListener('click', () => {
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
-        editorBackgroundImage.style.display =
-            settings.hideBackgroundWhenPaused ? 'none' :
-                ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
-        editorBackgroundVideo.style.display = 'none';
+        updatePauseBackgroundDisplay();
         editorBackgroundVideo.pause();
 
         playButton.dataset.playing = 'false';
@@ -5102,8 +5619,7 @@ playButton.addEventListener('click', () => {
 });
 
 resetButton.addEventListener('click', () => {
-    editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
-    editorBackgroundVideo.style.display = 'none';
+    updatePauseBackgroundDisplay();
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;
@@ -5123,7 +5639,7 @@ resetButton.addEventListener('click', () => {
 });
 
 stopButton.addEventListener('click', () => {
-    editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : ((editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none');
+    updatePauseBackgroundDisplay();
     editorBackgroundVideo.style.display = 'none';
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
@@ -5632,7 +6148,7 @@ function openSecondWindow() {
         ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
         renderer.setContext(ctx); // 告訴 renderer 使用主 Canvas 的上下文
         if (backgroundContainer) backgroundContainer.style.display = '';
-        if (canvasOutline) canvasOutline.style.display = '';
+        if (canvasOutline) canvasOutline.style.display = settings.hideOutline ? 'none' : '';
         draw(); // 重新繪製到主 Canvas
     });
 
@@ -5882,6 +6398,7 @@ recordVideoButton.addEventListener('click', async () => {
     const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
     const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
     const introSwitch = createCustomSwitch(t('popup.recordVideo.includeIntro'), true);
+    const allPerfectSwitch = createCustomSwitch(t('popup.recordVideo.includeAllPerfect'), false);
 
     // 全部塞進彈窗大容器
     container.append(
@@ -5892,7 +6409,8 @@ recordVideoButton.addEventListener('click', async () => {
         sfxVolField.wrapper,
         audioSwitch.wrapper, // 塞入外殼
         sfxSwitch.wrapper,  // 塞入外殼
-        introSwitch.wrapper // 塞入載入動畫外殼
+        introSwitch.wrapper, // 塞入載入動畫外殼
+        // allPerfectSwitch.wrapper // 塞入 ALL PERFECT 外殼
     );
 
     popupWindow({
@@ -5938,6 +6456,7 @@ recordVideoButton.addEventListener('click', async () => {
                         includeBgm: audioSwitch.checked && bgmLoaded, // 讀取自訂狀態
                         includeSfx: sfxSwitch.checked,                 // 讀取自訂狀態
                         includeIntro: introSwitch.checked,             // 讀取 10 秒載入動畫開關
+                        includeAllPerfect: allPerfectSwitch.checked,   // 結尾 ALL PERFECT 開關
                         musicDelay,
                         editorBackgroundImage,
                         editorBackgroundVideo,
@@ -6212,6 +6731,7 @@ async function loadProjectData(step) {
         hideEditor,
         savedReadyBeat,
         tb1,
+        tb2,
     ] = await Promise.all([
         projGet('timeControl'),
         projGet('resource_bgm'),
@@ -6222,9 +6742,10 @@ async function loadProjectData(step) {
         projGet('hide_editor'),
         projGet('ready_beat'),
         projGet('tb1'),
+        projGet('tb2'),
     ]);
 
-    restoreTimebase(tb1);
+    restoreTimebase(tb1, tb2);
 
     readyBeat = savedReadyBeat === true || savedReadyBeat === 'true';
     readyBeatCheckbox.checked = readyBeat;
@@ -6274,7 +6795,6 @@ async function loadProjectData(step) {
         backgroundVideo = bgVideo;
         editorBackgroundVideo.src = URL.createObjectURL(bgVideo);
         editorBackgroundVideo.style.display = 'none';
-        editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
     } else {
         backgroundVideo = null;
         editorBackgroundVideo.src = "";
@@ -6285,12 +6805,12 @@ async function loadProjectData(step) {
         backgroundImage = bg;
         editorBackgroundImage.src = URL.createObjectURL(bg);
         editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
-        editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
     } else {
         backgroundImage = null;
         editorBackgroundImage.src = "";
         editorBackgroundImage.style.display = 'none';
     }
+    applyMovieBrightness(settings.moviebrightness);
 
     if (savedBgm) {
         s(95, "正在還原背景音樂...");
@@ -6569,18 +7089,29 @@ function _init() {
                     snapHideCanvas();
                 }
                 changeDisplayMode.value = settings.displayMode ?? 'simai';
+                if (visualToolModeSelect) {
+                    visualToolModeSelect.value = settings.visualToolMode ?? 'edit';
+                }
+                setGridDivisionUI(settings.gridDivision ?? 4);
+                updateGridDivisionVisibility();
                 renderer = new SimaiRenderer(canvas, settings);
                 renderer.setImages(images);
                 visualEditorRenderer = new SimaiVisualEditor(visualEditor, settings);
+                visualEditorRenderer.setEditMode(settings.visualToolMode ?? 'edit');
                 visualEditorRenderer.setImages(images);
                 visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
                 visualEditorRenderer.setZoom(settings.visualZoom);
-                visualEditorRenderer.setNoteEditCallbacks(visualPlaceNote, visualDeleteNote, visualChangeNote);
+                visualEditorRenderer.setNoteEditCallbacks(visualPlaceNote, visualDeleteNote, visualChangeNote, visualPlaceHoldNote);
                 visualEditorRenderer.setTimeQuantizer(quantizeTime);
-                audioManager.setBGMVolume(settings.musicVolume);
+                const v1 = timebaseButton.querySelector('input[name="tb1"]').value;
+                const v2 = timebaseButton.querySelector('input[name="tb2"]').value;
+                visualEditorRenderer.setTimebase(v1, v2);
                 previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
                 previewRender.setZoom(settings.visualZoom);
+                previewRender.setTimebase(v1, v2);
                 setPlaybackSpeed(settings.playbackSpeed);
+                if (canvasOutline) canvasOutline.style.display = settings.hideOutline ? 'none' : '';
+                applyMovieBrightness(settings.moviebrightness);
                 draw();
                 updateSlider(realTime);
                 setEditorCss(!await projGet('hide_editor'));

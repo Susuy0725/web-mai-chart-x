@@ -1,0 +1,239 @@
+:root {
+    --playControls-height-max: 80px;
+    --playControls-height: var(--playControls-height-max);
+    --timeline-color: #c22;
+    --timeline-color-background: #111;
+}
+
+@font-face {
+    font-family: 'combo';
+    src: url('../Fonts/Inter.ttf') format('truetype');
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'mono';
+    src: url('../Fonts/ShareTechMono-Regular.ttf') format('truetype');
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'title';
+    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
+    font-display: swap;
+}
+
+body {
+    background-color: #222;
+}
+
+#canvasContainer {
+    position: absolute;
+    width: 100%;
+    height: calc(100% - var(--playControls-height));
+    top: 0;
+    left: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#canvasContainer #canvasOutline {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    object-fit: contain;
+    scale: 0.89;
+}
+
+#canvasContainer .backgroundContainer {
+    z-index: -1;
+    position: absolute;
+}
+
+#canvasContainer #backgroundImage {
+    z-index: -1;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    object-fit: contain;
+    scale: 0.98;
+}
+
+#canvasContainer #backgroundVideo {
+    z-index: 0;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    object-fit: contain;
+    scale: 0.98;
+    background: black;
+}
+
+#main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+}
+
+
+#playControls {
+    user-select: none;
+    -webkit-user-select: none;
+    position: absolute;
+    width: 100%;
+    height: var(--playControls-height);
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    background: var(--top-utility-bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+#playControls #timeControl {
+    appearance: none;
+    -webkit-appearance: none;
+    width: calc(100% - 16px);
+    height: 10px;
+    background: var(--timeline-color-background);
+    margin: 0 8px;
+    margin-bottom: 12px;
+    border-radius: 7px;
+    border: none;
+    outline: none;
+    transition: background 0.3s ease;
+}
+
+#timeControl:hover::-webkit-slider-thumb {
+    scale: 1.3;
+}
+
+#timeControl::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--timeline-color);
+    border-radius: 10px;
+    cursor: pointer;
+    scale: 1;
+    transition: scale 200ms ease;
+}
+
+#timeControl::-moz-range-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 8px;
+    height: 15px;
+    background: #962d2d;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+#playControls #miniPreviewContainer {
+    position: relative;
+    width: 100%;
+    height: 60px;
+}
+
+#playControls #showPlayControlsBtn {
+    background-color: #222;
+    overflow: hidden;
+    width: 50px;
+    height: 50px;
+    position: absolute;
+    margin: 16px;
+    bottom: 0;
+    right: 0;
+    color: white;
+    display: flex;
+    align-content: center;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+    border-radius: 25px;
+    transition: background-color 100ms ease;
+}
+
+#playControls #showPlayControlsBtn:hover {
+    background-color: #333;
+}
+
+#playControls #playControlContainer {
+    position: relative;
+    width: 100%;
+    height: 60px;
+    top: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#playControls .controlsContainer {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    transition: transform 200ms ease;
+}
+
+#playControls.hide #playControlContainer {
+    display: none;
+}
+
+#playControls #showPlayControlsBtn {
+    display: none;
+}
+
+#playControls.hide #showPlayControlsBtn {
+    display: block;
+}
+
+.controlsContainer .controlButton {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    padding: 5px;
+    border-radius: 5px;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.controlsContainer .controlButton::before {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: 20px;
+    transition: background-color 150ms ease, border-radius 200ms ease;
+}
+
+.controlsContainer .controlButton:hover::before {
+    background-color: #ffffff20;
+    border-radius: 5px;
+}
+
+.controlsContainer .controlButton:active::before {
+    background-color: #ffffff60;
+}

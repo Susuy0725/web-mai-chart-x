@@ -45,7 +45,12 @@ export const en = {
         displayModeSimai: "simai Syntax",
         displayModeVisual: "Timeline",
         readyBeat: "Prep Beats",
-        timeSignature: "Time signature"
+        timeSignature: "Time signature",
+        gridDivision: "Division",
+        gridDivisionCustom: "Custom...",
+        visualToolMode: "Tool",
+        visualToolModeEdit: "Edit ✏️",
+        visualToolModeSelect: "Select ↖️"
     },
     textarea: {
         placeholder: "Enter chart data here..."
@@ -118,6 +123,9 @@ export const en = {
             showSensorTextWhenPaused: "Show Sensor Text when Paused",
             hideBackgroundWhenPaused: "Hide BG when Paused",
             rotateStars: "Rotating Stars",
+            slideArrowHideBySensor: "Hide Slide Arrows by Sensor",
+            hideOutline: "Hide Judgment Ring",
+            showCoverWhenPaused: "Show Cover Image when Paused",
             globalVolume: "Global Volume",
             musicVolume: "Music Volume",
             SfxVolume: "SFX Volume",
@@ -280,7 +288,8 @@ export const en = {
             sfxVolume: "SFX Volume:",
             includeAudio: "Include Audio:",
             includeSfx: "Include Sound Effects:",
-            includeIntro: "Chart Loading Intro:"
+            includeIntro: "Chart Loading Intro:",
+            includeAllPerfect: "Show ALL PERFECT at End:"
         },
         quickGenerate: {
             title: "Quick Generate",

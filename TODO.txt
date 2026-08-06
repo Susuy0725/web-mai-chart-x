@@ -1,4 +1,4 @@
 visual editor
-滑星依感應器消失
+[x] 滑星依感應器消失
 按鍵錄製功能
 vertical mode

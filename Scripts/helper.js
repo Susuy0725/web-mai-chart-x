@@ -16,7 +16,7 @@ const baseURL = './Skin/', baseImageKeys = [
     'tap', 'tap_break', 'tap_each', 'tap_ex', 'tap_mine',
     'NormalArc', 'BreakArc', 'EachArc', 'SlideArc', 'MineArc',
     'hold', 'hold_break', 'hold_each', 'hold_ex', 'hold_mine',
-    'hold_break_on', 'hold_each_on', 'hold_on',
+    'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End', 'Hold_Mine_End',
     'touch', 'touch_each', 'touch_mine', 'touch_point', 'touch_point_each', 'touch_point_mine',
     'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each', 'touch_border_2_mine', 'touch_border_3_mine',
@@ -24,6 +24,7 @@ const baseURL = './Skin/', baseImageKeys = [
     'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
     'slide', 'slide_each', 'slide_break', 'slide_mine',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
+    'touch_just', 'touchhold_off',
     'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine',
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
@@ -373,7 +374,8 @@ class AudioManager {
             'touch': './Sounds/touch.wav',
             'hanabi': './Sounds/hanabi.wav',
             'touchHold_riser': './Sounds/touchHold_riser.wav',
-            'track_start': './Sounds/track_start.wav'
+            'track_start': './Sounds/track_start.wav',
+            'all_perfect': './Sounds/all_perfect.wav'
         };
 
         this.sfxVolumes = {
@@ -389,6 +391,7 @@ class AudioManager {
             'touch': 0.4,
             'hanabi': 0.6,
             'track_start': 0.8,
+            'all_perfect': 1.0,
         };
 
         this.activeLongSounds = new Map();
@@ -960,7 +963,7 @@ for (let i = 1; i <= 8; i++) {
     // 這裡我們把 A/B 設在中心，D/E 設在間隔處
     const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 2, E: i - 2 };
 
-    ['A', 'B', 'D', 'E'].forEach(type => {
+    ['B', 'E', 'A', 'D'].forEach(type => {
         const path = new Path2D();
         const config = touchPathConfigs[type];
         const len = config.points.length;
@@ -2456,6 +2459,80 @@ function padAudioBuffer(audioBuffer, targetLength) {
     return nb;
 }
 
+function drawAllPerfectOverlay(ctx, apT, w, h) {
+    if (apT <= 0) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const cx = w / 2;
+    const cy = h / 2;
+
+    const alpha = Math.min(1, apT * 3);
+    const easeScale = Math.min(1, Math.sin(Math.min(1, apT * 2.5) * Math.PI * 0.5) * 1.1 - Math.max(0, apT * 2.5 - 1) * 0.1);
+
+    ctx.globalAlpha = alpha;
+
+    // 1. 金色背景放射光環與耀斑
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(easeScale, easeScale);
+
+    const glowGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, Math.min(w, h) * 0.45);
+    glowGrad.addColorStop(0, 'rgba(255, 230, 0, 0.4)');
+    glowGrad.addColorStop(0.5, 'rgba(255, 120, 0, 0.15)');
+    glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.min(w, h) * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.rotate(apT * 0.5);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255, 220, 100, 0.15)';
+    for (let k = 0; k < 8; k++) {
+        ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-15, -Math.min(w, h) * 0.35, 30, Math.min(w, h) * 0.7);
+    }
+    ctx.restore();
+
+    // 2. ALL PERFECT 金色金屬立體字樣
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(easeScale, easeScale);
+
+    const fontSize = Math.min(w, h) * 0.13;
+    ctx.font = `italic 900 ${fontSize}px "title", "combo", "Inter", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const text = "ALL PERFECT";
+
+    ctx.lineWidth = fontSize * 0.15;
+    ctx.strokeStyle = '#220800';
+    ctx.strokeText(text, 0, fontSize * 0.05);
+
+    ctx.lineWidth = fontSize * 0.08;
+    ctx.strokeStyle = '#fff';
+    ctx.strokeText(text, 0, 0);
+
+    const textGrad = ctx.createLinearGradient(0, -fontSize * 0.5, 0, fontSize * 0.5);
+    textGrad.addColorStop(0, '#FFFFFF');
+    textGrad.addColorStop(0.25, '#FFF275');
+    textGrad.addColorStop(0.5, '#FFB300');
+    textGrad.addColorStop(0.85, '#FF6000');
+    textGrad.addColorStop(1, '#FFE000');
+
+    ctx.fillStyle = textGrad;
+    ctx.fillText(text, 0, 0);
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fillText(text, 0, -fontSize * 0.03);
+
+    ctx.restore();
+    ctx.restore();
+}
+
 export async function videoRender(audioManager, canvas, renderer, {
     start = 0,
     end = 0,
@@ -2468,6 +2545,7 @@ export async function videoRender(audioManager, canvas, renderer, {
     includeBgm = true,
     includeSfx = true,
     includeIntro = true,
+    includeAllPerfect = true,
     musicDelay = 0,
     editorBackgroundImage = null,
     editorBackgroundVideo = null,
@@ -2913,6 +2991,44 @@ export async function videoRender(audioManager, canvas, renderer, {
                     }
                 }
 
+                // 🔴 在 end 結尾處 (最後約 2.5 秒) 混入 all_perfect.wav 音效
+                const allPerfectBuf = audioManager.bufferMap.get('all_perfect');
+                if (includeAllPerfect && includeSfx && allPerfectBuf && slicedAudio) {
+                    const sr = slicedAudio.sampleRate;
+                    const srcRate = allPerfectBuf.sampleRate || sr;
+                    const ratio = srcRate / sr;
+                    const baseVol = audioManager.sfxVolumes['all_perfect'] ?? 1.0;
+                    const finalVol = baseVol * sfxVolume;
+
+                    const bufDuration = allPerfectBuf.length / srcRate;
+                    const apStartSec = introDuration + (end - start) - Math.min(bufDuration, 2.5);
+                    const startSample = Math.max(0, Math.floor(apStartSec * sr));
+                    const maxDstSamples = Math.min(
+                        slicedAudio.length - startSample,
+                        Math.floor(bufDuration * sr)
+                    );
+
+                    if (maxDstSamples > 0) {
+                        for (let ch = 0; ch < slicedAudio.numberOfChannels; ch++) {
+                            const dst = slicedAudio.getChannelData(ch);
+                            const src = allPerfectBuf.getChannelData(ch < allPerfectBuf.numberOfChannels ? ch : 0);
+                            for (let i = 0; i < maxDstSamples; i++) {
+                                const srcPos = i * ratio;
+                                const idx0 = Math.floor(srcPos);
+                                const idx1 = idx0 + 1;
+                                if (idx0 >= src.length) break;
+                                const frac = srcPos - idx0;
+                                const s0 = src[idx0] || 0;
+                                const s1 = src[idx1] || 0;
+                                const sampleVal = s0 * (1 - frac) + s1 * frac;
+                                if (startSample + i < dst.length) {
+                                    dst[startSample + i] += sampleVal * finalVol;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 🔴 補上靜音，使音軌長度與視訊精確對齊
                 const totalSec = introDuration + (end - start);
                 const targetLen = Math.max(1, Math.ceil(totalSec * slicedAudio.sampleRate));
@@ -3132,6 +3248,9 @@ export async function videoRender(audioManager, canvas, renderer, {
                     backgroundImage: editorBackgroundImage,
                     chartInfo,
                 });
+            } else if (includeAllPerfect && t >= end - 2.5) {
+                const apT = (t - (end - 2.5)) / 2.5;
+                drawAllPerfectOverlay(offCtx, apT, width, height);
             }
 
             const tsRelative = i * step;

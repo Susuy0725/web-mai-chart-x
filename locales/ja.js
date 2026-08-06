@@ -45,7 +45,12 @@ export const ja = {
         displayModeSimai: "Simai",
         displayModeVisual: "タイムライン",
         readyBeat: "予備拍",
-        timeSignature: "拍子記号"
+        timeSignature: "拍子記号",
+        gridDivision: "分割",
+        gridDivisionCustom: "カスタム...",
+        visualToolMode: "モード",
+        visualToolModeEdit: "編集 ✏️",
+        visualToolModeSelect: "選択 ↖️"
     },
     textarea: {
         placeholder: "ここに譜面データを入力してください..."
@@ -117,7 +122,10 @@ export const ja = {
             showSensor: "センサーを表示",
             showSensorTextWhenPaused: "一時停止時にセンサーテキストを表示",
             hideBackgroundWhenPaused: "一時停止時に背景を非表示",
-            rotateStars: "星を回転",
+            rotateStars: "スターの回転",
+            slideArrowHideBySensor: "センサーによるスライド矢印消去",
+            hideOutline: "判定リングを非表示",
+            showCoverWhenPaused: "一時停止時にジャケット画像を表示",
             globalVolume: "全体の音量",
             musicVolume: "楽曲の音量",
             SfxVolume: "SFX音量",
@@ -281,7 +289,8 @@ export const ja = {
             sfxVolume: "効果音音量:",
             includeAudio: "オーディオを含める:",
             includeSfx: "効果音を含める:",
-            includeIntro: "譜面ロードアニメーション:"
+            includeIntro: "譜面ロードアニメーション:",
+            includeAllPerfect: "動画の最後にALL PERFECTを表示:"
         },
         quickGenerate: {
             title: "クイック生成",

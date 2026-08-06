@@ -45,7 +45,12 @@ export const zhTW = {
         displayModeSimai: "simai 語法",
         displayModeVisual: "軌道",
         readyBeat: "預備拍",
-        timeSignature: "拍號"
+        timeSignature: "拍號",
+        gridDivision: "切分",
+        gridDivisionCustom: "自訂...",
+        visualToolMode: "模式",
+        visualToolModeEdit: "編輯 ✏️",
+        visualToolModeSelect: "選擇 ↖️"
     },
     textarea: {
         placeholder: "在此輸入譜面資料..."
@@ -118,6 +123,9 @@ export const zhTW = {
             showSensorTextWhenPaused: "暫停時顯示感應器文字",
             hideBackgroundWhenPaused: "暫停時隱藏背景",
             rotateStars: "星星旋轉",
+            slideArrowHideBySensor: "滑星依感應器消失",
+            hideOutline: "隱藏判定圈",
+            showCoverWhenPaused: "暫停時顯示封面圖",
             globalVolume: "全局音量",
             musicVolume: "音樂音量",
             SfxVolume: "音效音量",
@@ -207,7 +215,7 @@ export const zhTW = {
             title: "從 Mainote 抓取譜面",
             songTitle: "歌曲名稱",
             songTitlePlaceholder: "模糊搜尋...",
-            level: "難度等級",
+            level: "等級",
             difficulty: "難度",
             version: "版本",
             category: "分類",
@@ -280,7 +288,8 @@ export const zhTW = {
             sfxVolume: "SFX 音量:",
             includeAudio: "包含音訊:",
             includeSfx: "包含打擊音效:",
-            includeIntro: "譜面載入動畫:"
+            includeIntro: "譜面載入動畫:",
+            includeAllPerfect: "影片結尾顯示 ALL PERFECT:"
         },
         quickGenerate: {
             title: "快速生成",

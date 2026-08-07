@@ -16,6 +16,7 @@ import {
     easeInBack,
 } from './helper.js';
 const charWidthCache = {};
+const RICH_HANABI_COLOR_MAP = ['#ff009dff', '#ff4800', '#ffe100', '#ddff00', '#00bbff'];
 
 function textMonospace(ctx, text, x, y, cellWidth, mode = 'stroke') {
     ctx.textAlign = 'left';
@@ -147,12 +148,20 @@ export class SimaiRenderer {
     /**
      * 預算座標縮放比例，減少重複計算
      */
+    /**
+     * 預算座標縮放比例與速度因子，減少重複計算
+     */
     updateCanvasMetrics() {
         const { width: w, height: h } = this.canvas;
         this._p = Math.min(w, h) / scaleBase * this.scale;
         this._invP = scaleBase / (Math.min(w, h) * this.scale);
         this._hw = w * this._invP * 0.5;
         this._hh = h * this._invP * 0.5;
+
+        const speed = this.settings.speed || 1;
+        const touchSpeed = this.settings.touchSpeed || 1;
+        this._speedFactor = speed * 0.8833 + 0.8167;
+        this._touchSpeedFactor = touchSpeed * 0.8833 + 0.8167;
     }
 
     setImages(images) {
@@ -160,11 +169,12 @@ export class SimaiRenderer {
     }
 
     /**
-     * 優化染色圖片取得方式
+     * 優化染色圖片取得方式，採用整數化透明度快取 Key
      */
     getMemoizedTintedImage(imgKey, opacity, config) {
-        if (!this.images[imgKey]) return null;
-        const cacheKey = `${imgKey}_${opacity.toFixed(2)}_${config.colorCode}`;
+        if (!this.images || !this.images[imgKey]) return null;
+        const intOpacity = Math.round(opacity * 100);
+        const cacheKey = `${imgKey}_${intOpacity}_${config.colorCode}`;
 
         if (this._tintCache.has(cacheKey)) {
             return this._tintCache.get(cacheKey);
@@ -175,6 +185,72 @@ export class SimaiRenderer {
         if (this._tintCache.size > 200) this._tintCache.clear();
         this._tintCache.set(cacheKey, tinted);
         return tinted;
+    }
+
+    // --- 圖片與皮膚樣式分離選擇器 (Image Selection Helpers) ---
+
+    getArcImage(isMine, isBreak, isDouble, isStar = false) {
+        if (isMine) return this.images["MineArc"];
+        if (isBreak) return this.images["BreakArc"];
+        if (isDouble) return this.images["EachArc"];
+        return this.images[isStar ? "SlideArc" : "NormalArc"];
+    }
+
+    getTapImage(isMine, isBreak, isDouble, br) {
+        if (isMine) return this.images["tap_mine"];
+        if (isBreak) {
+            this._tempColorConfig.colorCode = "#fff8a6";
+            return this.getMemoizedTintedImage("tap_break", br, this._tempColorConfig);
+        }
+        if (isDouble) return this.images["tap_each"];
+        return this.images["tap"];
+    }
+
+    getStarImage(isMine, isBreak, isDouble, isMultiple, br) {
+        const isPink = this.settings.pinkStars;
+        const imgKey = isMultiple ?
+            (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))) :
+            (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))));
+
+        if (isBreak) {
+            this._tempColorConfig.colorCode = "#fff8a6";
+            return this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
+        }
+        return this.images[imgKey];
+    }
+
+    getHoldImage(isMine, isBreak, isDouble, isOn, br) {
+        const holdImgKey = isOn ?
+            (isMine ? "hold_mine" : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
+            (isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
+
+        if (isBreak) {
+            this._tempColorConfig.colorCode = "#fff8a6";
+            return this.getMemoizedTintedImage(holdImgKey, br, this._tempColorConfig);
+        }
+        return this.images[holdImgKey];
+    }
+
+    getHoldEndImage(isMine, isBreak, isDouble) {
+        if (isMine) return this.images["Hold_Mine_End"];
+        if (isBreak) return this.images["Hold_Break_End"];
+        if (isDouble) return this.images["Hold_Each_End"];
+        return this.images["Hold_End"];
+    }
+
+    getTouchBorderImages(isMine, isDouble) {
+        return {
+            borderImg: this.images[isMine ? "touch_border_2_mine" : (isDouble ? "touch_border_2_each" : "touch_border_2")],
+            borderImg3: this.images[isMine ? "touch_border_3_mine" : (isDouble ? "touch_border_3_each" : "touch_border_3")],
+            touchPoint: this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")],
+            touchImg: this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")]
+        };
+    }
+
+    getEXColor(isBreak, isDouble, noteType) {
+        if (isBreak) return this.exColor.break;
+        if (isDouble) return this.exColor.double;
+        return this.exColor[noteType] || this.exColor.tap;
     }
 
     setContext(ctx) {
@@ -254,49 +330,37 @@ export class SimaiRenderer {
     richHanabi(noteT, isCenter) {
         const t = noteT / this.settings.hanabiEffectDecayTime;
         if (t < -1) return;
-        const colorMap = ['#FF44AA', '#FF6020', '#FFE000', '#E0FF11', '#00BBFF'];
 
         const ctx = this.ctx;
-        ctx.save();
-        const ease = (x) => 1 - Math.pow(1 - x, 2);
         const decayAlpha = Math.max(0, 1 - Math.max(0, -t));
         const decay1 = Math.max(0, 1 - Math.max(0, -t) * 4.5);
-        const radius = (3 + isCenter * 1) * this.settings.noteBaseSize * ease(1 - decay1);
-        const color = ctx.createLinearGradient(-radius, -radius, radius, radius);
-        color.addColorStop(0, "#00D5FF");
-        color.addColorStop(0.4, "#FF00FF");
-        color.addColorStop(0.8, "#FFD823");
-        color.addColorStop(1, "#FFD823");
+        const easeDecay = 1 - Math.pow(Math.max(0, -decay1), 2);
+        const radius = (3 + isCenter * 1) * this.settings.noteBaseSize * easeDecay;
+
         const white = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.3);
         white.addColorStop(0, "#ffffff00");
         white.addColorStop(0.4, "#ffffff00");
         white.addColorStop(0.8, "#ffffff8b");
         white.addColorStop(1, "#ffffff00");
 
-        //ctx.globalAlpha = decayAlpha;
-        ctx.globalCompositeOperation = 'lighter';
+        ctx.save();
         ctx.fillStyle = white;
         ctx.globalAlpha = decayAlpha * 0.8;
         ctx.beginPath();
         ctx.arc(0, 0, radius * 1.3, 0, Math.PI * 2);
         ctx.fill();
-        ctx.beginPath();
-        /*ctx.lineWidth = 1.4 * decayAlpha * this.settings.noteBaseSize * (1 - ease(Math.max(0, -t)));
-        ctx.strokeStyle = color;
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = color;
-        ctx.globalAlpha = decayAlpha * 0.5;
-        ctx.fill();*/
 
         ctx.save();
-        ctx.rotate(t * Math.PI * 0.25);
-        ctx.globalAlpha = decayAlpha;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = decayAlpha * 0.5;
         const slices = 30;
-        for (let slice = 0; slice < slices; slice++) {
-            if (slice % 2 === 0) continue;
-            const angle = (slice - 0.5) / slices * Math.PI * 2;
-            const angle1 = (slice + 0.5) / slices * Math.PI * 2;
+        const slicePath = new Path2D();
+        const tOffset = t * 0.1;
+        const tFive = t * 5 + 5;
+
+        for (let slice = 1; slice < slices; slice += 2) {
+            const angle = ((slice - 0.5) / slices + tOffset) * Math.PI * 2;
+            const angle1 = ((slice + 0.5) / slices + tOffset) * Math.PI * 2;
 
             const cosA = Math.cos(angle);
             const sinA = Math.sin(angle);
@@ -305,30 +369,48 @@ export class SimaiRenderer {
 
             ctx.beginPath();
             ctx.lineWidth = 1.5;
-            ctx.fillStyle = colorMap[Math.floor((slice + t * 5 + 5) % 5)];
+            ctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
             ctx.moveTo(0, 0);
             ctx.lineTo(cosA * 50, sinA * 50);
             ctx.lineTo(cosA1 * 50, sinA1 * 50);
             ctx.closePath();
             ctx.fill();
+
+            slicePath.moveTo(0, 0);
+            slicePath.lineTo(cosA * 50, sinA * 50);
+            slicePath.lineTo(cosA1 * 50, sinA1 * 50);
+            slicePath.closePath();
         }
+
         ctx.restore();
+        ctx.save();
+        ctx.clip(slicePath);
         ctx.fillStyle = "white";
+
+        const tPhase = t * Math.PI * 2.2;
+        const distFactor = Math.PI * 0.08;
+
+        ctx.beginPath();
+        ctx.globalAlpha = 0.3;
         for (let y = -50; y < 50; y += 2) {
+            const y2 = y * y;
+            ctx.lineTo(-50, y - 2);
             for (let x = -50; x < 50; x += 1) {
-                const dist = Math.sqrt(x * x + y * y);
-                if (dist >= 20 && dist <= 60) {
-                    const p = (dist - 20) / (60 - 20);
-                    const size = Math.sin(p * Math.PI * 0.9);
-
-                    ctx.beginPath();
-                    ctx.ellipse(x, y, size * 0.5, size, 0, 0, 2 * Math.PI)
-                    ctx.fill();
-
+                const distSq = x * x + y2;
+                if (distSq > 2500) continue;
+                const dist = Math.sqrt(distSq);
+                const size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.2;
+                if (size > 0) {
+                    ctx.ellipse(x, y, size * 0.5, size, 0, 0, Math.PI * 2);
                 }
             }
+            ctx.lineTo(50, y + 2);
+            ctx.lineTo(50, y);
+            ctx.lineTo(-50, y);
         }
-        //ctx.restore();
+        ctx.fill();
+
+        ctx.restore();
         ctx.restore();
     }
 
@@ -965,7 +1047,6 @@ export class SimaiRenderer {
             this._sensorTextCache = texts;
             this._sensorCacheParams = { w: wPx, h: hPx, scale };
         } catch (e) {
-            // 快取建立失敗時回退到原本的即時繪製
             console.error('建立傳感器靜態快取失敗:', e);
             this._sensorShapeCache = null;
             this._sensorTextCache = null;
@@ -973,14 +1054,12 @@ export class SimaiRenderer {
         }
     }
 
-    // 使用靜態快取繪製傳感器（會依 flag 決定畫 shapes / text）
     drawSensors(showSensor, showSensorText) {
         this.ensureSensorCaches();
         if (!this._sensorShapeCache && !this._sensorTextCache) return;
 
         const { ctx } = this;
         ctx.save();
-        // 快取是以 pixel canvas 儲存，因此臨時重設 transform 以直接 draw 到畫布
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         try {
             if (showSensor && this._sensorShapeCache) ctx.drawImage(this._sensorShapeCache, 0, 0);
@@ -993,8 +1072,6 @@ export class SimaiRenderer {
     drawTap(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMine, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
-
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
@@ -1006,36 +1083,26 @@ export class SimaiRenderer {
             return;
         }
 
+        const { displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
         const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"));
-        let img;
-        if (isBreak) {
-            this._tempColorConfig.colorCode = "#fff8a6";
-            img = this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
-        } else {
-            img = this.images[imgKey];
-        }
-
+        const img = this.getTapImage(isMine, isBreak, isDouble, br);
+        const arcimg = this.getArcImage(isMine, isBreak, isDouble, false);
         const size = this.settings.noteBaseSize * currentScale;
 
-        // 合併繪製，減少 save/restore
         ctx.save();
 
-        // 繪製 Arc
-        const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
         ctx.save();
         ctx.rotate(posInfo.rot);
         ctx.globalAlpha = currentScale;
         this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
         ctx.restore();
 
-        // 繪製 Note 本體
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         ctx.rotate(posInfo.rot);
         this.drawImgAtcenter(img, size);
 
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")];
+            this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "tap");
             const exImg = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
             this.drawImgAtcenter(exImg, size);
         }
@@ -1046,8 +1113,6 @@ export class SimaiRenderer {
     drawStar(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
-
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
 
@@ -1059,32 +1124,20 @@ export class SimaiRenderer {
             return;
         }
 
+        const { displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
         const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const imgKey = isMultiple ?
-            (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (this.settings.pinkStars ? "star_pink_double" : "star_double")))) :
-            (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (this.settings.pinkStars ? "star_pink" : "star"))));
-        let img;
-        if (isBreak) {
-            this._tempColorConfig.colorCode = "#fff8a6";
-            img = this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
-        } else {
-            img = this.images[imgKey];
-        }
-
+        const img = this.getStarImage(isMine, isBreak, isDouble, isMultiple, br);
+        const arcimg = this.getArcImage(isMine, isBreak, isDouble, true);
         const size = this.settings.noteBaseSize * currentScale;
 
-        // 合併繪製，減少 save/restore
         ctx.save();
 
-        // 繪製 Arc
-        const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "SlideArc"))];
         ctx.save();
         ctx.rotate(posInfo.rot);
         ctx.globalAlpha = currentScale;
         this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
         ctx.restore();
 
-        // 繪製 Note 本體
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         let rot = posInfo.rot;
         if (this.settings.rotateStars) {
@@ -1098,7 +1151,7 @@ export class SimaiRenderer {
         this.drawImgAtcenter(img, size);
 
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")];
+            this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "star");
             const exImg = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.6, this._tempColorConfig);
             this.drawImgAtcenter(exImg, size);
         }
@@ -1109,7 +1162,8 @@ export class SimaiRenderer {
     drawHold(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration, hispeed } = s;
         const noteT = (noteTime - this.globalTime);
-        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
+        const speedMult = this._speedFactor * (hispeed || 1);
+        const t = 1 - this.timeFunction(noteT * speedMult);
         const posInfo = noteRefPos[pos - 1];
 
         if (-noteT > holdDuration) {
@@ -1119,29 +1173,22 @@ export class SimaiRenderer {
             this.ctx.restore();
         } else {
             const isOn = (noteTime - this.globalTime) <= -0.1 && !isMine;
-            let br = (s.isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-            const holdImgKey = isOn ?
-                (isMine ? "hold_mine" : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
-                (isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
-            let img;
-            if (isBreak) {
-                this._tempColorConfig.colorCode = "#fff8a6";
-                img = this.getMemoizedTintedImage(holdImgKey, br, this._tempColorConfig);
-            } else {
-                img = this.images[holdImgKey];
-            }
-            const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * (this.settings.speed * 0.8833 + 0.8167));
+            const br = (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+            const img = this.getHoldImage(isMine, isBreak, isDouble, isOn, br);
+            const arcimg = this.getArcImage(isMine, isBreak, isDouble, false);
+            const endimg = this.getHoldEndImage(isMine, isBreak, isDouble);
+
+            const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * speedMult);
             const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
             const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
             const size = this.settings.noteBaseSize * currentScale;
             const sizeOffset = t < this.settings.middleDistance ? 0 :
-                Math.min((holdDuration + noteT) * 0.9 * (this.settings.speed * 0.8833 + 0.8167),
+                Math.min((holdDuration + noteT) * 0.9 * speedMult,
                     Math.min((1 - this.settings.middleDistance) * 2.45,
                         Math.min((t - this.settings.middleDistance) * 2.45,
-                            holdDuration * 0.9 * (this.settings.speed * 0.8833 + 0.8167))));
+                            holdDuration * 0.9 * speedMult)));
 
             this.ctx.save();
-            const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
             this.ctx.rotate(posInfo.rot);
             this.ctx.globalAlpha = currentScale;
             this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
@@ -1149,7 +1196,6 @@ export class SimaiRenderer {
 
             if (t1 > this.settings.middleDistance) {
                 this.ctx.save();
-                const endimg = this.images[isMine ? "Hold_Mine_End" : (isBreak ? "Hold_Break_End" : (isDouble ? "Hold_Each_End" : "Hold_End"))];
                 this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
                 this.drawImgAtcenter(endimg, size * 0.65);
                 this.ctx.restore();
@@ -1163,7 +1209,7 @@ export class SimaiRenderer {
             this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
 
             if (s.isEx) {
-                this._tempColorConfig.colorCode = isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap);
+                this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "tap");
                 const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
                 this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
                 this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
@@ -1230,20 +1276,13 @@ export class SimaiRenderer {
         const count = this._zoneCounts[zoneKey] || 0;
 
         const noteT = (noteTime - this.globalTime);
-        const t = 1 - this.timeFunction(noteT * (this.settings.touchSpeed * 0.8833 + 0.8167) * hispeed);
+        const t = 1 - this.timeFunction(noteT * this._touchSpeedFactor * (hispeed || 1));
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
-        const borderImg = this.images[isMine ? "touch_border_2_mine" : (isDouble ? "touch_border_2_each" : "touch_border_2")];
-        const borderImg3 = this.images[isMine ? "touch_border_3_mine" : (isDouble ? "touch_border_3_each" : "touch_border_3")];
-        const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
+        const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble);
 
         if (holdDuration) {
             const isOn = (noteTime - this.globalTime) <= -0.1;
-            const imgs = [];
-            for (let i = 0; i < 4; i++) {
-                const img = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
-                imgs.push(img);
-            }
             const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
 
             this.ctx.save();
@@ -1264,11 +1303,12 @@ export class SimaiRenderer {
                 this.ctx.clip();
                 this.drawImgAtcenter(touchBorder, size * 2.6);
                 this.ctx.restore();
-                this.ctx.globalAlpha = 1;
-                this.ctx.rotate(Math.PI * -0.75);
+
                 this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
+                this.ctx.rotate(Math.PI * -0.75);
                 for (let i = 0; i < 4; i++) {
-                    this.ctx.drawImage(imgs[i], -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                    const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                    this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                     this.ctx.rotate(Math.PI / 2);
                 }
                 this.ctx.globalAlpha = 1;
@@ -1279,7 +1319,6 @@ export class SimaiRenderer {
             this.ctx.restore();
             return;
         }
-        const img = this.images[isMine ? "touch_mine" : isDouble ? "touch_each" : "touch"];
 
         this.ctx.save();
         if (noteT <= 0) {
@@ -1300,7 +1339,7 @@ export class SimaiRenderer {
             }
             this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
             for (let i = 0; i < 4; i++) {
-                this.ctx.drawImage(img, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI * 0.5);
             }
             this.ctx.globalAlpha = 1;
@@ -1315,7 +1354,8 @@ export class SimaiRenderer {
 
         const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
+        const speedMult = this._speedFactor * (hispeed || 1);
+        const t = 1 - this.timeFunction(noteT * speedMult);
         const p = path || generatePath(pos, slideEnd);
         if (p.totalLength < 1e-4) return;
 
@@ -1337,7 +1377,7 @@ export class SimaiRenderer {
             const { x, y, rot } = p.getPointAt(displaySlideProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
-            const starImg = this.images[s.isMine ? "star_mine" : (s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star"))];
+            const starImg = this.getStarImage(s.isMine, s.isBreak, s.isDouble, false, 0);
             const baseTransform = this.ctx.getTransform();
 
             if (s.slideType === "w") {
@@ -1378,16 +1418,14 @@ export class SimaiRenderer {
             this._dummyCtx = c.getContext('2d');
         }
         this._dummyCtx.setTransform(1, 0, 0, 1, 0, 0);
-        //this._dummyCtx.lineWidth = 3;
 
         let resultId = null;
         for (let j = 0; j < touchPaths.length; j++) {
             const shape = touchPaths[j];
             if (ignoreD && shape.id.startsWith('D')) continue;
 
-            // 給 A 區單獨設定更寬的碰撞外框 (向外吞到 D)
             const isA = shape.id.startsWith('A');
-            this._dummyCtx.lineWidth = isA ? 15 : 3; // A 設粗一點，其他保持 3
+            this._dummyCtx.lineWidth = isA ? 15 : 3;
 
             const isInside = this._dummyCtx.isPointInPath(shape.path, x, y);
             const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
@@ -1435,6 +1473,21 @@ export class SimaiRenderer {
             currentStarSensorId = this.getSensorIdAtPoint(pt.x, pt.y, true);
         }
 
+        const opacity = isIllegal ? 1 : br;
+        const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
+        const isTinted = isIllegal || br > 0;
+
+        let singleImg = null;
+        if (!typew) {
+            if (isTinted) {
+                this._tempColorConfig.colorCode = colorCode;
+                singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
+            } else {
+                singleImg = this.images[prefixOrKey];
+            }
+            if (!singleImg) return;
+        }
+
         this.ctx.save();
         for (let i = arrowCount; i > 0; i--) {
             const imgIndex = Math.min(i - 1, typew ? 10 : 0);
@@ -1442,14 +1495,12 @@ export class SimaiRenderer {
 
             if (starProgress > 0) {
                 if (starProgress >= 1) break;
-
                 if (dist <= starDist) continue;
 
                 if (this.settings.slideArrowHideBySensor !== false) {
                     if (currentStarSensorId && (dist - starDist <= 35)) {
                         const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
                         const arrowSensorId = this.getSensorIdAtPoint(x, y, true);
-
                         if (arrowSensorId && arrowSensorId === currentStarSensorId) {
                             continue;
                         }
@@ -1491,9 +1542,25 @@ export class SimaiRenderer {
     }
 
     drawHanabiEffects() {
+        const decay = this.settings.hanabiEffectDecayTime || 0.8;
+        let maxTime = -Infinity;
+
         for (const key in this.hanabiEffect) {
             const eff = this.hanabiEffect[key];
             if (eff.cleared) continue;
+            const t = eff.noteT / decay;
+            if (t < -1 || t > 0) continue;
+            if (eff.time > maxTime) {
+                maxTime = eff.time;
+            }
+        }
+
+        for (const key in this.hanabiEffect) {
+            const eff = this.hanabiEffect[key];
+            if (eff.cleared || eff.time < maxTime) continue;
+            const t = eff.noteT / decay;
+            if (t < -1 || t > 0) continue;
+
             this.ctx.save();
             this.ctx.translate(eff.x, eff.y);
             this.simpleHanabi(eff.noteT, eff.isCenter);
@@ -2856,6 +2923,7 @@ export class SimaiPreviewRenderer {
 
     drawSlide(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMine, slideDelay, slideDuration } = s;
+        if (slideDuration * this.zoom < 1e-4) return;
         const t = (noteTime + slideDelay - this.globalTime);
         const ctx = this.ctx;
 

@@ -81,6 +81,7 @@ export const zhTW = {
         setPlaybackSpeed: "已設定播放速度：{speed}x",
         resetPlaybackSpeed: "重置播放速度",
         settingsSaved: "設定已儲存",
+        panelRatioReset: "已還原面板比例",
         restoreSaved: "數值已還原（尚未儲存）",
         noAudioFile: "找不到音訊檔案",
         tagReadSuccess: "成功讀取標籤：{title}",
@@ -126,6 +127,7 @@ export const zhTW = {
             slideArrowHideBySensor: "滑星依感應器消失",
             hideOutline: "隱藏判定圈",
             showCoverWhenPaused: "暫停時顯示封面圖",
+            resetPanelRatio: "還原面板比例",
             globalVolume: "全局音量",
             musicVolume: "音樂音量",
             SfxVolume: "音效音量",
@@ -152,6 +154,7 @@ export const zhTW = {
         cancel: "取消",
         close: "關閉",
         reset: "重置數值",
+        resetPanelRatio: "還原面板比例",
         ok: "確定",
         start: "開始",
         init: {

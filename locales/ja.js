@@ -81,6 +81,7 @@ export const ja = {
         setPlaybackSpeed: "再生速度を {speed}x に設定しました",
         resetPlaybackSpeed: "再生速度をリセットしました",
         settingsSaved: "設定を保存しました",
+        panelRatioReset: "パネル割合を復元しました",
         restoreSaved: "値を復元しました（未保存）",
         noAudioFile: "音声ファイルが見つかりません",
         tagReadSuccess: "タグの読み込みに成功: {title}",
@@ -126,6 +127,7 @@ export const ja = {
             slideArrowHideBySensor: "センサーによるスライド矢印消去",
             hideOutline: "判定リングを非表示",
             showCoverWhenPaused: "一時停止時にジャケット画像を表示",
+            resetPanelRatio: "パネル割合を復元",
             globalVolume: "全体の音量",
             musicVolume: "楽曲の音量",
             SfxVolume: "SFX音量",
@@ -152,6 +154,7 @@ export const ja = {
         cancel: "キャンセル",
         close: "閉じる",
         reset: "リセット",
+        resetPanelRatio: "パネル割合を復元",
         ok: "OK",
         start: "スタート",
         init: {

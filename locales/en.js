@@ -81,6 +81,7 @@ export const en = {
         setPlaybackSpeed: "Playback speed set to: {speed}x",
         resetPlaybackSpeed: "Playback speed reset",
         settingsSaved: "Settings saved",
+        panelRatioReset: "Panel ratio restored",
         restoreSaved: "Values restored (not saved yet)",
         noAudioFile: "Audio file not found",
         tagReadSuccess: "Tag read successfully: {title}",
@@ -126,6 +127,7 @@ export const en = {
             slideArrowHideBySensor: "Hide Slide Arrows by Sensor",
             hideOutline: "Hide Judgment Ring",
             showCoverWhenPaused: "Show Cover Image when Paused",
+            resetPanelRatio: "Restore Panel Ratio",
             globalVolume: "Global Volume",
             musicVolume: "Music Volume",
             SfxVolume: "SFX Volume",
@@ -152,6 +154,7 @@ export const en = {
         cancel: "Cancel",
         close: "Close",
         reset: "Reset",
+        resetPanelRatio: "Restore Panel Ratio",
         ok: "OK",
         start: "Start",
         init: {

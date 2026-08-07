@@ -226,11 +226,12 @@ body {
 
 #miniPreviewContainer #mpzoomOut,
 #miniPreviewContainer #mpzoomIn {
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(1px);
     cursor: pointer;
     width: 30px;
     height: 30px;
-    background: transparent;
+    background: color-mix(in srgb, var(--top-utility-bg) 50%, transparent);
+    ;
     border: 1px solid var(--top-utility-btn);
     border-radius: 5px;
     z-index: 5;
@@ -244,6 +245,7 @@ body {
 
 #miniPreviewContainer #mpzoomOut:hover,
 #miniPreviewContainer #mpzoomIn:hover {
+    backdrop-filter: blur(0px);
     background: var(--top-utility-bg);
 }
 

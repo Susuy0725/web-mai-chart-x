@@ -1,7 +1,7 @@
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from './indexDB.js';
 import {
     scaleBase, getButton, debounce, throttle,
-    audioManager, getHighlight, parseMaidata, popupWindow, loadAllImages,
+    getHighlight, parseMaidata, popupWindow, loadAllImages,
     simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText,
     clamp, createLabeledInput1, createCustomSlider, videoRender
 } from './helper.js';
@@ -9,6 +9,7 @@ import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './render
 import { simaiDecode } from './decode.js';
 import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
+import { audioManager } from './audioManager.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -92,7 +93,7 @@ if (typeof document !== 'undefined' && document.fonts) {
 
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
-const slider = document.getElementById('timeControl');
+const timeline = document.getElementById('timeControl');
 const keyboardButton = getButton("keyboard", "control");
 const playButton = getButton("play/pause", "control");
 const hideButton = getButton("hide", "control");
@@ -1217,6 +1218,25 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.showCoverWhenPaused',
                 def: defaultSettings.showCoverWhenPaused || false
+            },
+            {
+                id: 'resetPanelRatio',
+                type: 'button',
+                label: 'settings.items.resetPanelRatio',
+                btnText: 'popup.reset',
+                onClick: () => {
+                    settings.splitRatio = 0.5;
+                    settings.canvasSnapped = false;
+                    applySplitRatio(0.5);
+                    if (canvasSnapped) {
+                        snapRestoreCanvas();
+                    }
+                    setEditorCss();
+                    resize(true);
+                    draw();
+                    saveSettingsDebounce();
+                    simpleToast({ content: t('toast.panelRatioReset'), type: 'info', timeout: 1500 });
+                }
             }
         ]
     },
@@ -1316,18 +1336,18 @@ const saveSettingsDebounce = debounce(() => {
 
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
-    slider.max = endTime + musicDelay;
-    updateSlider(globalTime);
+    timeline.max = endTime + musicDelay;
+    updateSlider(realTime);
 };
 
 const updateSlider = (time) => {
-    const min = parseFloat(slider.min) || 0;
-    const max = parseFloat(slider.max) || 100;
+    const min = parseFloat(timeline.min) || 0;
+    const max = parseFloat(timeline.max) || 100;
     const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
-    slider.value = time;
+    timeline.value = time;
     const thumbWidth = 16;
     const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-    slider.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
+    timeline.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
 };
 
 manageResourcesButton.addEventListener('click', async () => {
@@ -2311,8 +2331,8 @@ function setDataEmpty() {
     musicDelay = 0;
     realTime = 0;
     globalTime = 0;
-    slider.max = 1;
-    slider.value = 0;
+    timeline.max = 1;
+    timeline.value = 0;
     updateSlider(0);
     offsetInput.value = 0;
     editorInput.value = '';
@@ -2912,7 +2932,7 @@ warnEl.addEventListener('click', () => {
 });
 
 const offsetInputDebounce = debounce(() => {
-    slider.max = endTime + musicDelay;
+    timeline.max = endTime + musicDelay;
     updateSlider(realTime);
 
     globalTime = realTime - musicDelay;
@@ -3076,7 +3096,7 @@ const setEditorCss = (visible = null) => {
     // 同步捲動永遠執行（透過 rAF 批次處理，避免頻繁 layout thrash）
     syncHighlightLayerScroll();
 
-    slider.style.display = settings.globalTimeline ? 'block' : 'none';
+    timeline.style.display = settings.globalTimeline ? 'block' : 'none';
     if (visible === null) return;
 
     const visualMode = isVisualMode();
@@ -3220,7 +3240,20 @@ settingsButton.addEventListener('click', () => {
             return row;
         }
 
-        // 4. 一般 Number / Dropdown
+        // 4. Button
+        if (element.tagName === 'BUTTON') {
+            const label = document.createElement('label');
+            label.textContent = labelText;
+            label.style.cssText = 'flex:1; color:#ddd; font-size: 15px;';
+            element.style.cssText = 'padding:6px 14px; background:#333; color:#fff; border:1px solid #555; border-radius:4px; cursor:pointer; font-size:14px; transition:background 0.2s; white-space:nowrap;';
+            element.addEventListener('mouseover', () => { element.style.background = '#444'; });
+            element.addEventListener('mouseout', () => { element.style.background = '#333'; });
+            row.appendChild(label);
+            row.appendChild(element);
+            return row;
+        }
+
+        // 5. 一般 Number / Dropdown
         const label = document.createElement('label');
         label.textContent = labelText;
         label.style.cssText = 'flex:1; color:#ddd; font-size: 15px;';
@@ -3237,7 +3270,9 @@ settingsButton.addEventListener('click', () => {
             const config = inputRefs[id];
             let finalVal;
 
-            if (config.type === 'checkbox') {
+            if (config.type === 'button') {
+                return;
+            } else if (config.type === 'checkbox') {
                 finalVal = config.el.checked;
             } else if (config.type === 'dropdown') {
                 finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
@@ -3398,7 +3433,16 @@ settingsButton.addEventListener('click', () => {
                     });
                 };
             }
-            // --- E. 一般 Number ---
+            // --- E. 處理 Button ---
+            else if (item.type === 'button') {
+                el = document.createElement('button');
+                el.type = 'button';
+                el.textContent = t(item.btnText || 'popup.reset');
+                if (item.onClick) {
+                    el.addEventListener('click', item.onClick);
+                }
+            }
+            // --- F. 一般 Number ---
             else {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
             }
@@ -3450,7 +3494,9 @@ settingsButton.addEventListener('click', () => {
                 text: t('popup.reset'),
                 onClick: (ctx) => {
                     Object.values(inputRefs).forEach(ref => {
-                        if (ref.type === 'checkbox') {
+                        if (ref.type === 'button') {
+                            return;
+                        } else if (ref.type === 'checkbox') {
                             ref.el.checked = ref.def;
                             ref.ref[ref.key] = ref.def; // 🟢 同步寫回記憶體
                         } else if (ref.type === 'object') {
@@ -3477,7 +3523,7 @@ settingsButton.addEventListener('click', () => {
 
                     // 🟢 關鍵修正 4：重置後強制重新重繪畫布，讓畫面上的感應器、速度即時校正
                     draw();
-                    simpleToast({ content: '數值已還原（尚未儲存）', type: 'info', timeout: 1500 });
+                    simpleToast({ content: t('toast.restoreSaved'), type: 'info', timeout: 1500 });
                 }
             },
         ]
@@ -5051,11 +5097,9 @@ const visualScroller = {
     lastX: 0, lastY: 0,
     startTime: 0,
     lastTime: 0,
-    velocity: 0, // 🔴 修正定義：現在定義為「每毫秒移動的像素量 (px/ms)」
+    velocity: 0, // 每毫秒移動的像素量 (px/ms)
     axis: 'vertical',
     momentumFrame: null,
-    // 🔴 修正：改用指數衰減係數 (Exponential Decay Coefficient)
-    // 數值愈大衰減愈快。0.005 相當於在 60Hz 下約 0.92 的摩擦力
     frictionCoeff: 0.01,
 
     pxToSec(px) {
@@ -5067,11 +5111,11 @@ const visualScroller = {
 };
 
 /**
- * 2. 核心更新與慣性邏輯
+ * 2. 核心更新與慣性邏輯 (Unified Time & Scroller Pipeline)
  */
 const updateVisualTime = (newTime) => {
-    const min = parseFloat(slider.min) || 0;
-    const max = parseFloat(slider.max) || 0;
+    const min = parseFloat(timeline.min) || 0;
+    const max = parseFloat(timeline.max) || 0;
     const clampedTime = Math.max(min, Math.min(max, newTime));
 
     timeControlSliding = true;
@@ -5080,9 +5124,14 @@ const updateVisualTime = (newTime) => {
     globalTime = clampedTime - musicDelay;
 
     audioManager.stopAllLongSounds();
+    videoSeekDebounce(realTime);
+
     if (playButton.dataset.playing === 'true') {
-        audioManager.playBGM(realTime);
-        syncPlayTimer();
+        const currentBgmTime = audioManager.getBGMTime();
+        if (currentBgmTime === null || Math.abs(currentBgmTime - realTime) > 0.2) {
+            audioManager.playBGM(realTime);
+            syncPlayTimer();
+        }
     } else {
         audioManager.clearSoundQueue();
         audioManager.stopBGM();
@@ -5107,16 +5156,15 @@ const startMomentum = () => {
         const dt = now - lastFrameTime;
         lastFrameTime = now;
 
-        // 🔴 關鍵修正 1：防止背景分頁或短暫卡頓導致 dt 暴增，限制單幀最大時差為 100ms
         const clampedDt = Math.min(100, dt);
 
-        // 速度過小，或是外部觸發了其他時間滑動則停止
-        if (Math.abs(vel) < 0.04 || !timeControlSliding) {
+        // 速度極微小時停止慣性，並排程清除 sliding 標記與儲存 IDB
+        if (Math.abs(vel) < 0.04) {
             visualScroller.momentumFrame = null;
+            slideInputDebounce();
             return;
         }
 
-        // 🔴 關鍵修正 2：使用微積分位移公式：位移 = 速度 * 時間
         const deltaPx = vel * clampedDt * directionMult;
         const deltaSec = visualScroller.pxToSec(deltaPx);
 
@@ -5171,9 +5219,7 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
         if (axis === 'vertical') {
             const currentY = e.clientY;
             if (dt > 0) {
-                // 🔴 關鍵修正 4：計算物理定義的速度 (px / ms)
                 const instantVel = (currentY - visualScroller.lastY) / dt;
-                // 低通濾波器保持平滑，但兩側皆基於時間，不會受高刷滑鼠干擾
                 visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
             }
             const deltaSec = visualScroller.pxToSec(visualScroller.startY - currentY);
@@ -5198,8 +5244,11 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
         element.releasePointerCapture(e.pointerId);
         element.style.cursor = 'grab';
 
-        // 🔴 修正：由於單位改為 px/ms，閾值調低為 0.05
-        if (Math.abs(visualScroller.velocity) > 0.05) startMomentum();
+        if (Math.abs(visualScroller.velocity) > 0.05) {
+            startMomentum();
+        } else {
+            slideInputDebounce();
+        }
     };
 
     element.addEventListener('pointerup', handlePointerUp);
@@ -5219,7 +5268,6 @@ const bindScrollerEvents = (element, axis = 'vertical') => {
             saveSettingsDebounce();
             draw();
         } else {
-            // 滾輪原本就是單次脈衝，維持原樣，但對齊正確的 renderer 縮放比
             const scrollDelta = visualScroller.pxToSec(e.deltaY * (e.deltaMode === 1 ? 20 : 1));
             updateVisualTime(realTime + scrollDelta);
         }
@@ -5518,35 +5566,8 @@ const videoSeekDebounce = debounce((time) => {
     }
 }, 50);
 
-slider.addEventListener('input', () => {
-    timeControlSliding = true;
-    const value = parseFloat(slider.value);
-    globalTime = value - musicDelay;
-    realTime = value;
-    audioManager.stopAllLongSounds();
-
-    videoSeekDebounce(realTime);
-
-    if (playButton.dataset.playing === 'true') {
-        editorBackgroundVideo.pause();
-        // 2. 播放中拖動：音樂即時同步跳轉 (Seek)
-        // 注意：Web Audio API 重建 Source Node 很快，但極速拖動可能會有噴麥音
-        audioManager.playBGM(realTime);
-        syncPlayTimer();
-    } else {
-        // 3. 暫停中拖動：只需停止 BGM 並更新畫布預覽
-        audioManager.stopBGM();
-        draw();
-    }
-
-    if (settings.cursorFollow) {
-        const point = rawData.slice(0, nowIndex + 1).join(',').length;
-        editorInput.selectionStart = point;
-        editorInput.selectionEnd = point;
-    }
-
-    updateSlider(realTime);
-    slideInputDebounce();
+timeline.addEventListener('input', () => {
+    updateVisualTime(parseFloat(timeline.value));
 });
 
 let bgmUpdateTimer = null;
@@ -5620,6 +5641,7 @@ playButton.addEventListener('click', () => {
 
 resetButton.addEventListener('click', () => {
     updatePauseBackgroundDisplay();
+    editorBackgroundVideo.pause();
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;
@@ -5640,6 +5662,7 @@ resetButton.addEventListener('click', () => {
 
 stopButton.addEventListener('click', () => {
     updatePauseBackgroundDisplay();
+    editorBackgroundVideo.pause();
     editorBackgroundVideo.style.display = 'none';
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
@@ -5671,7 +5694,7 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const maxPlayControlsHeight = c.getPropertyValue('--const-max-playControls-height');
     const collapsedPlayControlsHeight = c.getPropertyValue('--const-collapsed-playControls-height');
     if (!isHidden) {
-        slider.style.display = 'none';
+        timeline.style.display = 'none';
         cC.style.display = 'none';
         hideButton.dataset.hidden = 'true';
         d.setProperty('--playControls-height', '0px');
@@ -5679,7 +5702,7 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
     } else {
         showPlayControlsBtn.style.display = 'none';
         hideButton.dataset.hidden = 'false';
-        slider.style.display = settings.globalTimeline ? 'block' : 'none';
+        timeline.style.display = settings.globalTimeline ? 'block' : 'none';
         cC.style.display = 'flex';
         if (visualVisible) {
             previewContainer.style.display = 'none';
@@ -5883,10 +5906,10 @@ function update(timestamp) {
 
     const isPlaying = playButton.dataset.playing === 'true';
 
-    // 2. 邏輯更新區塊：僅在播放狀態下推進時間
+    // 2. 邏輯更新區塊：僅在播放狀態且非使用者手動滑動/拖曳時推進時間
     if (isPlaying) {
         let timeUpdatedByBgm = false;
-        if (audioManager.haveBGM()) {
+        if (!timeControlSliding && audioManager.haveBGM()) {
             const bgmTime = audioManager.getBGMTime();
             if (bgmTime !== null) {
                 realTime = bgmTime;
@@ -5898,7 +5921,7 @@ function update(timestamp) {
             }
         }
 
-        if (!timeUpdatedByBgm) {
+        if (!timeUpdatedByBgm && !timeControlSliding) {
             if (playStartTimestamp === null) {
                 playStartTimestamp = performance.now();
                 playStartRealTime = realTime;
@@ -6651,7 +6674,8 @@ function draw(dt = 0) {
         notes,
         decodedTags,
         playScoreRes,
-        nowIndex
+        nowIndex,
+        audioManager,
     });
 
     nowIndex = nowIndexRender;

@@ -1,9 +1,9 @@
 :root {
     --split-ratio: 0.5;
     --utility-hidden-height: 16px;
-    --const-max-playControls-height: 130px;
-    --const-collapsed-playControls-height: 70px;
-    --playControls-height: 130px;
+    --const-max-playControls-height: 150px;
+    --const-collapsed-playControls-height: 90px;
+    --playControls-height: 150px;
     --editor-bg: #1F1F1F;
     --top-utility-bg: #0b0b0f;
     --top-utility-btn: #2c2c2c;
@@ -138,7 +138,7 @@ body {
     width: calc(100% - 16px);
     height: 10px;
     background: #222;
-    margin: 4px 8px;
+    margin: 10px 8px;
     border-radius: 7px;
     border: none;
     outline: none;
@@ -252,7 +252,7 @@ body {
 #playControls #playControlContainer {
     position: relative;
     width: 100%;
-    height: 60px;
+    height: 80px;
     bottom: 0;
     display: flex;
     flex-direction: column;
@@ -264,6 +264,7 @@ body {
     gap: 20px;
     align-items: center;
     justify-content: center;
+    margin-bottom: 12px;
 }
 
 .controlsContainer .controlButton {
@@ -909,4 +910,65 @@ body {
 
 .findbar-btn.action-btn:hover {
     background: #4a6080;
+}
+
+/* SwitchBox (輸入區右下角左右長條圓角矩形符號切換盒 - 懸浮感無描邊) */
+.switchBox {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    background: rgba(26, 26, 32, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.switchBox input[type="radio"] {
+    display: none;
+}
+
+.switchBox .switch-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.15s ease;
+}
+
+.switchBox .switch-item:hover {
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+
+.switchBox input[type="radio"]:checked + .switch-item {
+    background: #484852;
+    color: #ffffff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.switchBox .switch-item .material-symbols-outlined {
+    font-size: 18px;
+}
+
+.switchBox .switch-divider {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 1px;
+    flex-shrink: 0;
 }

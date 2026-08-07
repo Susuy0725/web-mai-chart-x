@@ -115,7 +115,12 @@ const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const folderInput = getButton("readFolder", "utility");
 const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
-const changeDisplayMode = getButton("displayMode", "utility").children[0];
+const switchBoxRadios = document.querySelectorAll('input[name="switchBoxMode"]');
+const setSwitchBoxDisplayModeUI = (mode) => {
+    const radioVal = (mode === 'simai') ? 'keyboard' : 'selector';
+    const radio = document.querySelector(`input[name="switchBoxMode"][value="${radioVal}"]`);
+    if (radio) radio.checked = true;
+};
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
 const downloadButton = getButton("download", "utility");
@@ -4920,14 +4925,18 @@ changeDifficulty.addEventListener('change', (e) => {
     difficultyInputDebounce();
 });
 
-changeDisplayMode.addEventListener('change', (e) => {
-    settings.displayMode = e.target.value;
-    updateGridDivisionVisibility();
-    visualEditorRenderer.setZoom(settings.visualZoom);
-    previewRender.setZoom(settings.visualZoom);
-    saveSettingsDebounce();
-    setEditorCss(editorContainer.dataset.hidden !== 'true');
-    draw();
+switchBoxRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            settings.displayMode = (e.target.value === 'keyboard') ? 'simai' : 'visual';
+            updateGridDivisionVisibility();
+            visualEditorRenderer.setZoom(settings.visualZoom);
+            previewRender.setZoom(settings.visualZoom);
+            saveSettingsDebounce();
+            setEditorCss(editorContainer.dataset.hidden !== 'true');
+            draw();
+        }
+    });
 });
 
 function setupZoomButton(button, isZoomIn) {
@@ -7112,7 +7121,7 @@ function _init() {
                 if (settings.canvasSnapped) {
                     snapHideCanvas();
                 }
-                changeDisplayMode.value = settings.displayMode ?? 'simai';
+                setSwitchBoxDisplayModeUI(settings.displayMode ?? 'simai');
                 if (visualToolModeSelect) {
                     visualToolModeSelect.value = settings.visualToolMode ?? 'edit';
                 }

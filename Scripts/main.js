@@ -1077,7 +1077,7 @@ export const defaultSettings = {
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
     effectDecayTime: 0.4,
-    hanabiEffectDecayTime: 0.8,
+    hanabiEffectDecayTime: 1.1,
     noteBaseSize: 11,
     maxSlideCount: 500, // on screen,
     inputDebounceTime: 800, // ms
@@ -1113,12 +1113,15 @@ export const defaultSettings = {
         'slide': 0.4,
         'break_slide_start': 0.4,
         'touch': 0.4,
+        'touchHold_riser': 0.6,
         'hanabi': 0.6,
     },
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     cursorFollow: true, // 游標跟隨
     globalTimeline: true, // 全局時間軸
+    drawHitEffect: true,
+    drawHanabiEffect: true,
     restoreDefaults: function () {
         settings = { ...defaultSettings };
     }
@@ -1223,6 +1226,18 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.showCoverWhenPaused',
                 def: defaultSettings.showCoverWhenPaused || false
+            },
+            {
+                id: 'drawHitEffect',
+                type: 'checkbox',
+                label: 'settings.items.drawHitEffect',
+                def: defaultSettings.drawHitEffect || false
+            },
+            {
+                id: 'drawHanabiEffect',
+                type: 'checkbox',
+                label: 'settings.items.drawHanabiEffect',
+                def: defaultSettings.drawHanabiEffect || false
             },
             {
                 id: 'resetPanelRatio',
@@ -1729,18 +1744,18 @@ editMusicButton.addEventListener('click', () => {
 
     // 建立 UI 容器與元素
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;box-sizing:border-box;color:#e0e0e0;';
+    container.className = 'popup-waveform-container';
 
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 120;
-    canvas.style.cssText = 'width:100%;height:120px;background:#0f0f0f;border:1px solid #444;border-radius:6px;cursor:crosshair;display:block;';
+    canvas.className = 'popup-waveform-canvas';
     container.appendChild(canvas);
 
     const wfCanvas = new BgmEditorWaveformCanvas(canvas, bufferManager);
 
     const controls = document.createElement('div');
-    controls.style.cssText = 'display:flex;flex-direction:column;gap:12px;width:100%;';
+    controls.className = 'popup-waveform-controls';
     controls.innerHTML = `
         <!-- 第一排: BPM 敲擊與第一拍偏移 -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
@@ -1818,14 +1833,14 @@ editMusicButton.addEventListener('click', () => {
 
     // 建立首拍對齊 UI 卡片 (使用者體驗優化)
     const alignCard = document.createElement('div');
-    alignCard.style.cssText = 'background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:12px; display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box;';
+    alignCard.className = 'popup-align-card';
 
     const alignHeader = document.createElement('div');
-    alignHeader.style.cssText = 'font-weight:bold; color:#00a2ff; font-size:12px; display:flex; justify-content:space-between; align-items:center;';
+    alignHeader.className = 'popup-align-header';
     alignHeader.innerHTML = `<span>${t('popup.editMusic.alignmentTitle')}</span><span id="currentBeatsSpan" style="color:#aaa;"></span>`;
 
     const alignBody = document.createElement('div');
-    alignBody.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap; color:#ddd; font-size:12px;';
+    alignBody.className = 'popup-align-body';
     alignBody.innerHTML = `
         <span>${t('popup.editMusic.alignmentPrefix')}</span>
         <input type="number" id="alignBeatsInput" value="4" style="width:55px; background:#111; color:#fff; border:1px solid #444; padding:5px; border-radius:4px; text-align:center; font-weight:bold; font-size:12px;">
@@ -1834,7 +1849,7 @@ editMusicButton.addEventListener('click', () => {
     `;
 
     const alignFooter = document.createElement('div');
-    alignFooter.style.cssText = 'font-size:11px; color:#888; line-height:1.4;';
+    alignFooter.className = 'popup-align-footer';
     alignFooter.textContent = t('popup.editMusic.alignmentDesc');
 
     alignCard.appendChild(alignHeader);
@@ -2080,14 +2095,14 @@ editMusicButton.addEventListener('click', () => {
 
     // --- 功能性按鈕箱配置 ---
     const actionBox = document.createElement('div');
-    actionBox.style.cssText = 'display:flex;gap:10px;margin-top:5px;flex-wrap:wrap;width:100%;';
+    actionBox.className = 'popup-action-box';
 
     // 按鈕 1：裁切
     const cropBtn = document.createElement('button');
     cropBtn.id = 'cropBtn';
     cropBtn.type = 'button';
     cropBtn.innerHTML = `✂️ ${t('popup.editMusic.cropBefore')}`;
-    cropBtn.style.cssText = 'flex:1; min-width:140px; height:38px; background:#8b0000; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;';
+    cropBtn.className = 'popup-crop-btn';
     cropBtn.addEventListener('click', () => {
         if (offsetTime <= 0) return;
         if (!confirm(t('popup.editMusic.confirmCropBefore'))) return;
@@ -2106,7 +2121,7 @@ editMusicButton.addEventListener('click', () => {
     padBtn.id = 'padBtn';
     padBtn.type = 'button';
     padBtn.innerHTML = `➕ ${t('popup.editMusic.padOneBeat')}`;
-    padBtn.style.cssText = 'flex:1; min-width:140px; height:38px; background:#006400; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;';
+    padBtn.className = 'popup-pad-btn';
     padBtn.addEventListener('click', () => {
         stopPreview();
         const bpm = parseFloat(bpmInput.value) || clockBpm;
@@ -2124,7 +2139,7 @@ editMusicButton.addEventListener('click', () => {
     restoreBtn.id = 'restoreBtn';
     restoreBtn.type = 'button';
     restoreBtn.innerHTML = `🔄 ${t('popup.editMusic.restoreOriginal')}`;
-    restoreBtn.style.cssText = 'flex:1; min-width:140px; height:38px; background:#333; color:#aaa; border:1px solid #444; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; justify-content:center; gap:6px;';
+    restoreBtn.className = 'popup-restore-btn';
     restoreBtn.addEventListener('click', () => {
         if (!confirm(t('popup.editMusic.confirmRestore'))) return;
         stopPreview();
@@ -2220,14 +2235,14 @@ tapBpmButton.addEventListener('click', () => {
     let taps = [];
 
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:10px;font-size:13px;';
+    container.className = 'popup-tap-container';
 
     const hint = document.createElement('div');
     hint.innerText = t('popup.tapBpm.hint');
     container.appendChild(hint);
 
     const stats = document.createElement('div');
-    stats.style.cssText = 'display:flex;justify-content:space-between;gap:10px; flex-wrap:wrap;';
+    stats.className = 'popup-tap-stats';
     stats.innerHTML = `
             <div>${t('popup.tapBpm.count')}<strong id="tapBpmCount">0</strong></div>
             <div>${t('popup.tapBpm.bpm')}<strong id="tapBpmValue">--</strong></div>
@@ -2237,17 +2252,17 @@ tapBpmButton.addEventListener('click', () => {
     const tapButton = document.createElement('button');
     tapButton.type = 'button';
     tapButton.innerText = t('popup.tapBpm.btnTap');
-    tapButton.style.cssText = 'width:100%;padding:10px 0;font-size:16px;font-weight:600;background:#333;color:#fff;border:1px solid #555;border-radius:6px;cursor:pointer;';
+    tapButton.className = 'popup-tap-btn';
     container.appendChild(tapButton);
 
     const resetButton = document.createElement('button');
     resetButton.type = 'button';
     resetButton.innerText = t('popup.tapBpm.btnReset');
-    resetButton.style.cssText = 'width:100%;padding:8px 0;font-size:14px;background:#222;color:#fff;border:1px solid #444;border-radius:6px;cursor:pointer;';
+    resetButton.className = 'popup-tap-reset-btn';
     container.appendChild(resetButton);
 
     const message = document.createElement('div');
-    message.style.cssText = 'color:#ccc;font-size:12px;line-height:1.4;';
+    message.className = 'popup-tap-message';
     message.innerText = t('popup.tapBpm.msgNotStarted');
     container.appendChild(message);
 
@@ -2426,17 +2441,17 @@ fetchFromMainoteButton.addEventListener('click', () => {
     }
 
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;width:100%;min-width:250px;';
+    container.className = 'popup-form-container';
 
     // 輔助函式：建立輸入框
     const createInput = (label, placeholder = '') => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+        row.className = 'popup-form-row';
         row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
         const input = document.createElement('input');
         input.type = 'text';
         input.placeholder = placeholder;
-        input.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;';
+        input.className = 'popup-form-input';
         row.appendChild(input);
         return { row, input };
     };
@@ -2444,10 +2459,10 @@ fetchFromMainoteButton.addEventListener('click', () => {
     // 輔助函式：建立下拉選單
     const createSelect = (label, options) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+        row.className = 'popup-form-row';
         row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
         const select = document.createElement('select');
-        select.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;cursor:pointer;';
+        select.className = 'popup-form-select';
 
         options.forEach(opt => {
             const el = document.createElement('option');
@@ -2532,9 +2547,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
     // 搜尋按鈕
     const searchBtn = document.createElement('button');
     searchBtn.textContent = t('popup.fetchMainote.btnSearch');
-    searchBtn.style.cssText = 'padding:10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:8px;transition:background 0.2s;';
-    searchBtn.onmouseover = () => searchBtn.style.background = '#0052a3';
-    searchBtn.onmouseout = () => searchBtn.style.background = '#0066cc';
+    searchBtn.className = 'popup-search-btn';
 
     searchBtn.addEventListener('click', async () => {
         searchBtn.disabled = true;
@@ -2599,7 +2612,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
 
         // 建立結果列表
         const resultContainer = document.createElement('div');
-        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding-right:4px;';
+        resultContainer.className = 'popup-search-results';
 
         let resultPopupCtx = null;
 
@@ -2614,83 +2627,40 @@ fetchFromMainoteButton.addEventListener('click', () => {
                 return false;
             })();
 
-            const loadChart = async (mode) => {
-                if (mode === 'new') {
-                    const newId = await projectCreate(t('popup.projectManager.untitled'));
-                    currentProjectId = newId;
-                    localStorage.setItem('simai_lastProjectId', currentProjectId);
-                    console.log(`[Project] 已建立新專案: ${newId}`);
-                }
-
-                setDataEmpty();
-
-                const diffKey = (targetChart.difficulty || 'MASTER').toUpperCase();
-                const diffMap = { 'EASY': 1, 'BASIC': 2, 'ADVANCED': 3, 'EXPERT': 4, 'MASTER': 5, 'RE:MASTER': 6, 'REMASTER': 6, 'UTAGE': 7 };
-                const targetDiff = diffMap[diffKey] || 5;
-
-                maidata = {};
-                maidata.title = songTitle;
-                maidata[`inote_${targetDiff}`] = targetChart.chart_data || '';
-
-                nowDifficulty = targetDiff;
-                changeDifficulty.value = nowDifficulty;
-                projSet('now_difficulty', nowDifficulty).catch(() => { });
-
-                editorInput.value = maidata[`inote_${targetDiff}`] || '';
-                getres(editorInput.value);
-                applyHighlight(editorInput.value);
-
-                undoStack = [];
-                redoStack = [];
-                historyMap = {};
-                lastEditorValue = editorInput.value || '';
-
-                saveMaidata();
-
-                const displayName = maidata.title || songTitle;
-                if (displayName && currentProjectId) {
-                    projectUpdateName(currentProjectId, displayName).catch(() => { });
-                }
-
-                simpleToast({ content: t('toast.chartLoaded', { title: songTitle }), type: 'success', timeout: 1500 });
+            const doLoad = () => {
                 if (resultPopupCtx) resultPopupCtx.close();
-                if (mainctx) mainctx.close();
+                fetchChartToEditor(targetChart);
             };
 
             if (maidataHaveContext) {
                 popupWindow({
-                    title: t('popup.fetchMainote.loadChartTitle'),
-                    content: t('popup.fetchMainote.loadChartConfirm'),
+                    title: t('popup.fetchMainote.confirmTitle'),
+                    content: t('popup.fetchMainote.confirmContent', { title: songTitle }),
                     buttons: [
                         {
-                            text: t('popup.fetchMainote.overwriteProject'),
-                            onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
+                            text: t('popup.fetchMainote.confirmYes'),
+                            onClick: (ctx) => { ctx.close(); doLoad(); }
                         },
-                        {
-                            text: t('popup.fetchMainote.openNewProject'),
-                            onClick: (ctx) => { ctx.close(); loadChart('new'); }
-                        },
-                        {
-                            text: t('popup.fetchMainote.cancel'),
-                            hideOnClick: true
-                        }
+                        { text: t('popup.fetchMainote.confirmCancel'), hideOnClick: true }
                     ]
                 });
             } else {
-                loadChart('overwrite');
+                doLoad();
             }
         };
 
         // 彈出二級難度選擇子視窗 (點擊整張歌曲卡片時)
         const openDifficultySelectPopup = (group) => {
             const diffListContainer = document.createElement('div');
-            diffListContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px 0;';
+            diffListContainer.className = 'popup-diff-list';
 
             group.charts.forEach((c) => {
                 const diffKey = (c.difficulty || 'MASTER').toUpperCase();
                 const col = diffColors[diffKey] || { bg: '#555', text: '#fff' };
                 const btn = document.createElement('button');
-                btn.style.cssText = `padding:10px 14px;background:${col.bg};color:${col.text};border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;transition:transform 0.1s, filter 0.1s;`;
+                btn.className = 'popup-diff-btn';
+                btn.style.background = col.bg;
+                btn.style.color = col.text;
                 btn.innerHTML = `<span>${diffKey}</span><span>Lv ${c.level || 'N/A'}</span>`;
                 btn.onmouseover = () => { btn.style.filter = 'brightness(1.15)'; btn.style.transform = 'scale(1.02)'; };
                 btn.onmouseout = () => { btn.style.filter = 'none'; btn.style.transform = 'none'; };
@@ -3145,15 +3115,15 @@ const setEditorCss = (visible = null) => {
 
 settingsButton.addEventListener('click', () => {
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex; gap:20px; font-size:14px; height:420px;';
+    container.className = 'popup-setting-container';
 
     // 左側導覽列 (Tabs)
     const sidebar = document.createElement('div');
-    sidebar.style.cssText = 'display:flex; flex-direction:column; width:80px; border-right:1px solid #444; gap:5px; padding-right:10px;';
+    sidebar.className = 'popup-setting-sidebar';
 
     // 右側內容區
     const contentArea = document.createElement('div');
-    contentArea.style.cssText = 'overflow-y:auto; padding-right:10px; display:flex; flex-direction:column; margin-top: 10px; width: stretch;';
+    contentArea.className = 'popup-setting-content';
 
     container.appendChild(sidebar);
     container.appendChild(contentArea);
@@ -3176,13 +3146,13 @@ settingsButton.addEventListener('click', () => {
         const index = tabs.length;
         const tab = document.createElement('div');
         tab.textContent = label;
-        tab.style.cssText = 'padding:10px 8px; cursor:pointer; border-left:4px solid transparent; color:#888; transition:all 0.2s; font-size:15px; border-radius: 2px;';
+        tab.className = 'popup-setting-tab';
         tab.addEventListener('click', () => switchTab(index));
         sidebar.appendChild(tab);
         tabs.push(tab);
 
         const section = document.createElement('div');
-        section.style.cssText = 'display:none; flex-direction:column; gap:16px;';
+        section.className = 'popup-setting-section';
 
         contentArea.appendChild(section);
         sections.push(section);
@@ -3192,15 +3162,15 @@ settingsButton.addEventListener('click', () => {
 
     const createRow = (labelText, element) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom: 4px; min-height: 30px;';
+        row.className = 'popup-setting-row';
 
         // 1. Checkbox
         if (element.type === 'checkbox') {
             const wrapper = document.createElement('label');
-            wrapper.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; cursor:pointer; color:#ddd; font-size:15px;';
+            wrapper.className = 'popup-setting-wrapper';
             const text = document.createElement('span');
             text.textContent = labelText;
-            text.style.cssText = 'flex:1;';
+            text.className = 'popup-setting-text';
             element.style.cssText = 'width:20px; height:20px; flex:0 0 auto; cursor:pointer; margin: 0;';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
@@ -3211,10 +3181,10 @@ settingsButton.addEventListener('click', () => {
         // 2. Range (自訂 div 滑桿主容器)
         if (element.type === 'range') {
             const wrapper = document.createElement('label');
-            wrapper.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; cursor:pointer; color:#ddd; font-size:15px;';
+            wrapper.className = 'popup-setting-wrapper';
             const text = document.createElement('span');
             text.textContent = labelText;
-            text.style.cssText = 'flex:1;';
+            text.className = 'popup-setting-text';
 
             element.style.width = '140px'; // 調寬一點排版更好看
             wrapper.appendChild(text);
@@ -3225,14 +3195,18 @@ settingsButton.addEventListener('click', () => {
 
         // 3. Object (子屬性折疊選單)
         if (element.dataset && element.dataset.type === 'object-container') {
-            row.style.cssText = 'display:flex; flex-direction:column; align-items:stretch; gap:5px; margin-bottom: 8px; width: 100%;';
+            row.className = 'popup-setting-row';
+            row.style.flexDirection = 'column';
+            row.style.alignItems = 'stretch';
 
             const header = document.createElement('div');
-            header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; cursor:pointer; color:#ddd; font-size:15px; padding: 4px 0; user-select:none;';
+            header.className = 'popup-setting-wrapper';
+            header.style.padding = '4px 0';
+            header.style.userSelect = 'none';
             header.innerHTML = `<span>${labelText}</span><span class="arrow-icon" style="transition:transform 0.2s; transform: rotate(0deg); font-size:12px;">▼</span>`;
 
             const subBody = element;
-            subBody.style.cssText = 'display:none; flex-direction:column; gap:6px; padding-left: 12px; border-left: 2px solid #444; margin-top: 4px;';
+            subBody.className = 'popup-setting-subbody';
 
             header.addEventListener('click', () => {
                 const isHidden = subBody.style.display === 'none';
@@ -3249,10 +3223,8 @@ settingsButton.addEventListener('click', () => {
         if (element.tagName === 'BUTTON') {
             const label = document.createElement('label');
             label.textContent = labelText;
-            label.style.cssText = 'flex:1; color:#ddd; font-size: 15px;';
-            element.style.cssText = 'padding:6px 14px; background:#333; color:#fff; border:1px solid #555; border-radius:4px; cursor:pointer; font-size:14px; transition:background 0.2s; white-space:nowrap;';
-            element.addEventListener('mouseover', () => { element.style.background = '#444'; });
-            element.addEventListener('mouseout', () => { element.style.background = '#333'; });
+            label.className = 'popup-setting-label';
+            element.className = 'popup-setting-element';
             row.appendChild(label);
             row.appendChild(element);
             return row;
@@ -3261,8 +3233,8 @@ settingsButton.addEventListener('click', () => {
         // 5. 一般 Number / Dropdown
         const label = document.createElement('label');
         label.textContent = labelText;
-        label.style.cssText = 'flex:1; color:#ddd; font-size: 15px;';
-        element.style.cssText = 'width:100px; flex:0 0 auto; padding:6px 8px; border:1px solid #555; border-radius:4px; background:#222; color:#fff; font-size:14px; text-align: left; transition: border-color 0.2s; box-sizing: border-box;';
+        label.className = 'popup-setting-label';
+        element.className = 'popup-setting-input';
         row.appendChild(label);
         row.appendChild(element);
         return row;

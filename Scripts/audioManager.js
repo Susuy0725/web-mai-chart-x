@@ -15,7 +15,8 @@ class AudioManager {
         this.globalGain = 0.65; // 全域預設音量
         this.bgmVolume = 0.8;    // BGM 預設音量
         this.sfxMasterVolume = 0.5; // 音效主音量
-        this.MAX_VOLUME_LIMIT = 1.0; // 聲音音量閾值
+        this.MAX_VOLUME_LIMIT = 1.0; // 聲音音效閾值
+        this.activeLongSounds = new Map();
 
         // 初始化 Web Audio 上下文與 AudioNode 節點圖
         this.reinitContext();
@@ -62,6 +63,7 @@ class AudioManager {
             'break_slide_start': 0.4,
             'touch': 0.4,
             'hanabi': 0.6,
+            'touchHold_riser': 0.6,
             'track_start': 0.8,
             'all_perfect': 1.0,
         };
@@ -145,10 +147,10 @@ class AudioManager {
 
             // Long Sound Gain 節點
             this.longSoundGainNode = this.ctx.createGain();
-            this.longSoundGainNode.gain.value = clampVolume(0.25, this.MAX_VOLUME_LIMIT);
+            this.longSoundGainNode.gain.value = 1.0;
 
             // Long Sound Compressor
-            this.longSoundCompressor = this.ctx.createDynamicsCompressor();
+            /*this.longSoundCompressor = this.ctx.createDynamicsCompressor();
             this.longSoundCompressor.threshold.setValueAtTime(-16, nowTime);
             this.longSoundCompressor.knee.setValueAtTime(8, nowTime);
             this.longSoundCompressor.ratio.setValueAtTime(4, nowTime);
@@ -156,7 +158,9 @@ class AudioManager {
             this.longSoundCompressor.release.setValueAtTime(0.25, nowTime);
 
             this.longSoundGainNode.connect(this.longSoundCompressor);
-            this.longSoundCompressor.connect(this.sfxGainNode);
+            this.longSoundCompressor.connect(this.sfxGainNode);*/
+            this.longSoundGainNode.connect(this.sfxGainNode);
+            if (this.activeLongSounds) this.activeLongSounds.clear();
 
             this.ctx.addEventListener('statechange', () => {
                 console.log(`[Audio] AudioContext state changed to: ${this.ctx.state}`);
@@ -351,6 +355,7 @@ class AudioManager {
                 this.sfxVolumes[key] = clampVolume(vol, this.MAX_VOLUME_LIMIT);
             }
         }
+        this._updateLongSoundGains();
     }
 
     /**
@@ -576,10 +581,12 @@ class AudioManager {
         }
     }
 
-    startLongSound(id, key, offset = 0) {
+    startLongSound(id, key, offset = 0, volume = null) {
         const buffer = this.bufferMap.get(key);
         const loop = this.loopPoints[key];
         if (!buffer || this.activeLongSounds.has(id)) return;
+
+        this.ensureContextSync();
 
         const source = this.ctx.createBufferSource();
         source.buffer = buffer;
@@ -601,27 +608,65 @@ class AudioManager {
         }
 
         const gainNode = this.ctx.createGain();
-        gainNode.gain.value = clampVolume(0.8, this.MAX_VOLUME_LIMIT);
+        const requestedVol = (volume !== null && volume !== undefined) ? volume : 1.0;
+        this.activeLongSounds.set(id, { source, gainNode, key, volume: requestedVol });
+
+        const keyVol = this.sfxVolumes[key] ?? 1.0;
+        const baseVol = keyVol * requestedVol;
+
+        let count = 0;
+        for (const item of this.activeLongSounds.values()) {
+            if (item.key === key) count++;
+        }
+        if (count === 0) count = 1;
+
+        const initialGain = clampVolume(baseVol / count, this.MAX_VOLUME_LIMIT);
+        gainNode.gain.setValueAtTime(initialGain, this.ctx.currentTime);
+
         source.connect(gainNode);
         gainNode.connect(this.longSoundGainNode);
 
         source.start(0, Math.max(0, startTimeWithinBuffer));
-        this.activeLongSounds.set(id, { source, gainNode });
+        this._updateLongSoundGains();
+    }
+
+    _updateLongSoundGains() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+
+        const keyCounts = new Map();
+        for (const item of this.activeLongSounds.values()) {
+            keyCounts.set(item.key, (keyCounts.get(item.key) || 0) + 1);
+        }
+
+        for (const item of this.activeLongSounds.values()) {
+            const count = keyCounts.get(item.key) || 1;
+            const keyVol = this.sfxVolumes[item.key] ?? 1.0;
+            const requestedVol = (item.volume !== null && item.volume !== undefined) ? item.volume : 1.0;
+            const baseVol = keyVol * requestedVol;
+            const targetGain = clampVolume(baseVol / count, this.MAX_VOLUME_LIMIT);
+
+            item.gainNode.gain.setTargetAtTime(targetGain, now, 0.02);
+        }
     }
 
     stopLongSound(id) {
         if (this.activeLongSounds.has(id)) {
             const { source, gainNode } = this.activeLongSounds.get(id);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
-            source.stop(this.ctx.currentTime + 0.05);
+            gainNode.gain.setTargetAtTime(0.001, this.ctx.currentTime, 0.01);
+            try {
+                source.stop(this.ctx.currentTime + 0.05);
+            } catch (e) { }
             this.activeLongSounds.delete(id);
+            this._updateLongSoundGains();
         }
     }
 
     stopAllLongSounds() {
-        for (const id of this.activeLongSounds.keys()) {
+        for (const id of Array.from(this.activeLongSounds.keys())) {
             this.stopLongSound(id);
         }
+        this.activeLongSounds.clear();
     }
 
     clearSoundQueue() {

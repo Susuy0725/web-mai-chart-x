@@ -1,0 +1,655 @@
+/* ==========================================================================
+   Popup & Toast Style Sheet - Web mai Chart
+   獨立彈窗、通知提示及各類 Popup 模組專用樣式表
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Popup Window 核心組件樣式
+   -------------------------------------------------------------------------- */
+:root {
+    --window-padding: 14px;
+}
+
+.popup-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    perspective: 800px;
+}
+
+.popup-window {
+    background: #202020;
+    color: #ffffff;
+    padding: var(--window-padding);
+    border: 1px solid #404040;
+    border-radius: 8px;
+    max-width: 90%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.popup-title {
+    margin: 0;
+    margin-left: calc(var(--window-padding) / 2);
+    margin-bottom: var(--window-padding);
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    user-select: none;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #f0f0f0;
+}
+
+.popup-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+    font-size: 20px;
+    color: #aaa;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: 50%;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.popup-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.popup-progress-container {
+    width: 100%;
+    height: 6px;
+    background: #333333;
+    border-radius: 3px;
+    overflow: hidden;
+    display: none;
+    margin-bottom: 10px;
+}
+
+.popup-progress-bar {
+    width: 0%;
+    height: 100%;
+    background: #00ffcc;
+    transition: width 0.3s ease;
+}
+
+.popup-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.popup-content {
+    font-family: monospace, inherit;
+    font-size: 12px;
+    background: #151515;
+    padding: 10px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    display: none;
+    color: #dddddd;
+    line-height: 1.5;
+}
+
+.popup-custom-content {
+    padding: 10px;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    display: none;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.popup-buttons {
+    display: flex;
+    gap: var(--window-padding);
+    margin-top: var(--window-padding);
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+.popup-button {
+    background: #202020;
+    color: #ffffff;
+    padding: 7px 12px;
+    cursor: pointer;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    white-space: nowrap;
+    font-size: 13px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.popup-button:hover:not(:disabled) {
+    background: #333333;
+    border-color: #555555;
+}
+
+.popup-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+
+/* --------------------------------------------------------------------------
+   2. SimpleToast 提示通知樣式
+   -------------------------------------------------------------------------- */
+
+#hint-container {
+    position: fixed;
+    top: 40px;
+    left: 0;
+    padding: 10px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    overflow: hidden;
+    max-height: 100vh;
+}
+
+.toast-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    background: #202020;
+    color: #ffffff;
+    padding: 10px 15px;
+    border-left: 4px solid #404040;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    font-size: 13px;
+    pointer-events: auto;
+    width: fit-content;
+    max-width: 300px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    min-height: 20px;
+    max-height: 100px;
+    flex-shrink: 0;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-item.toast-info {
+    border-left-color: #00bbff;
+}
+
+.toast-item.toast-error {
+    border-left-color: #ff4444;
+}
+
+.toast-item.toast-success {
+    border-left-color: #00ffcc;
+}
+
+.toast-item.toast-warning {
+    border-left-color: #ffcc00;
+}
+
+
+/* --------------------------------------------------------------------------
+   3. 彈窗內部 DOM 元素與頁面面板組件 Class
+   -------------------------------------------------------------------------- */
+
+/* 波形與音軌對齊彈窗 */
+.popup-waveform-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 13px;
+    box-sizing: border-box;
+    color: #e0e0e0;
+}
+
+.popup-waveform-canvas {
+    width: 100%;
+    height: 120px;
+    background: #0f0f0f;
+    border: 1px solid #444444;
+    border-radius: 6px;
+    cursor: crosshair;
+    display: block;
+}
+
+.popup-waveform-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.popup-align-card {
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.popup-align-header {
+    font-weight: bold;
+    color: #00a2ff;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.popup-align-body {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: #dddddd;
+    font-size: 12px;
+}
+
+.popup-align-footer {
+    font-size: 11px;
+    color: #888888;
+    line-height: 1.4;
+}
+
+.popup-action-box {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.popup-crop-btn {
+    flex: 1;
+    min-width: 140px;
+    height: 38px;
+    background: #8b0000;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.15s ease;
+}
+
+.popup-crop-btn:hover {
+    background: #a80000;
+}
+
+.popup-pad-btn {
+    flex: 1;
+    min-width: 140px;
+    height: 38px;
+    background: #006400;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.15s ease;
+}
+
+.popup-pad-btn:hover {
+    background: #008000;
+}
+
+.popup-restore-btn {
+    flex: 1;
+    min-width: 140px;
+    height: 38px;
+    background: #333333;
+    color: #aaaaaa;
+    border: 1px solid #444444;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.15s ease;
+}
+
+.popup-restore-btn:hover {
+    background: #444444;
+    color: #ffffff;
+}
+
+/* Tap BPM 彈窗 */
+.popup-tap-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.popup-tap-stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.popup-tap-btn {
+    width: 100%;
+    padding: 10px 0;
+    font-size: var(--window-padding);
+    font-weight: 600;
+    background: #333333;
+    color: #ffffff;
+    border: 1px solid #555555;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.popup-tap-btn:hover {
+    background: #444444;
+}
+
+.popup-tap-reset-btn {
+    width: 100%;
+    padding: 8px 0;
+    font-size: 14px;
+    background: #222222;
+    color: #ffffff;
+    border: 1px solid #444444;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.popup-tap-reset-btn:hover {
+    background: #333333;
+}
+
+.popup-tap-message {
+    color: #cccccc;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* 彈窗內通用表單元素 */
+.popup-form-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 13px;
+    width: 100%;
+    min-width: 250px;
+}
+
+.popup-form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.popup-form-input {
+    background: #222222;
+    color: #ffffff;
+    border: 1px solid #555555;
+    padding: 6px;
+    border-radius: 4px;
+}
+
+.popup-form-select {
+    background: #222222;
+    color: #ffffff;
+    border: 1px solid #555555;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.popup-search-btn {
+    padding: 10px;
+    background: #0066cc;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+
+.popup-search-btn:hover {
+    background: #0052a3;
+}
+
+.popup-search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.popup-diff-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.popup-diff-btn {
+    padding: 10px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: transform 0.1s, filter 0.1s;
+}
+
+.popup-song-card {
+    padding: 10px 12px;
+    background: #26262a;
+    border: 1px solid #3d3d45;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.popup-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.popup-card-title {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 14px;
+    word-break: break-word;
+}
+
+.popup-card-type-badge {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.popup-card-badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.popup-card-badge {
+    padding: 3px 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.15s, filter 0.15s;
+}
+
+/* 全域設定彈窗 (Setting Popup) */
+.popup-setting-container {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+    height: 420px;
+}
+
+.popup-setting-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 80px;
+    border-right: 1px solid #444444;
+    gap: 5px;
+    padding-right: 10px;
+}
+
+.popup-setting-content {
+    overflow-y: auto;
+    padding-right: 10px;
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+    width: stretch;
+}
+
+.popup-setting-tab {
+    padding: 10px 8px;
+    cursor: pointer;
+    border-left: 4px solid transparent;
+    color: #888888;
+    transition: all 0.2s;
+    font-size: 15px;
+    border-radius: 2px;
+}
+
+.popup-setting-section {
+    display: none;
+    flex-direction: column;
+    gap: var(--window-padding);
+}
+
+.popup-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 4px;
+    min-height: 30px;
+}
+
+.popup-setting-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    cursor: pointer;
+    color: #dddddd;
+    font-size: 15px;
+}
+
+.popup-setting-text {
+    flex: 1;
+}
+
+.popup-setting-subbody {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 12px;
+    border-left: 2px solid #444444;
+    margin-top: 4px;
+}
+
+.popup-setting-label {
+    flex: 1;
+    color: #dddddd;
+    font-size: 15px;
+}
+
+.popup-setting-element {
+    padding: 6px 14px;
+    background: #333333;
+    color: #ffffff;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.popup-setting-input {
+    width: 100px;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    background: #222222;
+    color: #ffffff;
+    font-size: 14px;
+    text-align: left;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}

@@ -25,7 +25,7 @@ const baseURL = './Skin/', baseImageKeys = [
     'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
     'slide', 'slide_each', 'slide_break', 'slide_mine',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
-    'touch_just', 'touchhold_off',
+    'touch_just', 'touchhold_off', 'ColorBall',
     'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine',
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
@@ -551,7 +551,6 @@ export function popupWindow({
     closeWhen,
     whenOpen
 } = {}) {
-    const setStyle = (el, styles) => Object.assign(el.style, styles);
     const popupWidth = typeof width === 'number' ? `${width}px` : width;
     const popupHeight = height ? (typeof height === 'number' ? `${height}px` : height) : 'auto';
     const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : '100vh';
@@ -573,17 +572,8 @@ export function popupWindow({
     const createBtn = (btn, ctx) => {
         const normalized = typeof btn === 'string' ? { text: btn } : btn;
         const button = document.createElement('button');
+        button.className = 'popup-button';
         button.innerText = normalized.text ?? '按鈕';
-        setStyle(button, {
-            background: '#202020',
-            color: 'white',
-            padding: '5px 10px',
-            cursor: normalized.disabled ? 'not-allowed' : 'pointer',
-            border: '1px solid #404040',
-            borderRadius: '3px',
-            whiteSpace: 'nowrap',
-            opacity: normalized.disabled ? '0.6' : '1'
-        });
 
         button.disabled = !!normalized.disabled;
         button.onclick = () => {
@@ -608,74 +598,43 @@ export function popupWindow({
 
     // 1. 建立背景 (Backdrop)
     const backdrop = document.createElement('div');
-    setStyle(backdrop, {
-        position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
-        background: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(2px)', zIndex: '50',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        opacity: '0', transition: 'opacity 0.2s ease', perspective: '800px'
-    });
+    backdrop.className = 'popup-backdrop';
 
     // 2. 建立彈窗主體 (Popup)
     const popup = document.createElement('div');
-    setStyle(popup, {
-        background: '#202020', color: 'white', padding: '15px',
-        border: '1px solid #404040', borderRadius: '5px',
-        maxWidth: maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%',
-        width: title ? popupWidth : 'fit-content',
-        height: popupHeight,
-        maxHeight: popupMaxHeight,
-        boxShadow: '0 0 15px rgba(0, 0, 0, 0.7)',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        boxSizing: 'border-box',
-        overflow: 'hidden'
-    });
+    popup.className = 'popup-window';
+    popup.style.maxWidth = maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%';
+    popup.style.width = title ? popupWidth : 'fit-content';
+    popup.style.height = popupHeight;
+    popup.style.maxHeight = popupMaxHeight;
 
     // 3. 內部組件
     const titleElem = document.createElement('h3');
-    setStyle(titleElem, { margin: '5px 0 10px 5px', minHeight: '30px', display: title ? 'flex' : 'none', alignItems: 'center', userSelect: 'none' });
+    titleElem.className = 'popup-title';
+    if (!title) titleElem.style.display = 'none';
     titleElem.innerText = title;
 
     const progressContainer = document.createElement('div');
+    progressContainer.className = 'popup-progress-container';
     const progressBar = document.createElement('div');
-    setStyle(progressContainer, { width: '100%', height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', display: 'none', marginBottom: '10px' });
-    setStyle(progressBar, { width: '0%', height: '100%', background: '#00ffcc', transition: 'width 0.3s ease' });
+    progressBar.className = 'popup-progress-bar';
     progressContainer.appendChild(progressBar);
 
     // Scrollable content wrapper
     const bodyElem = document.createElement('div');
-    setStyle(bodyElem, {
-        flex: '1 1 auto',
-        overflowY: 'auto',
-        minHeight: '0',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px'
-    });
+    bodyElem.className = 'popup-body';
 
     const contentElem = document.createElement('div');
-    setStyle(contentElem, {
-        fontFamily: 'monospace', fontSize: '12px', background: '#151515',
-        padding: '10px', borderRadius: '3px', whiteSpace: 'pre-wrap',
-        display: content ? 'block' : 'none'
-    });
+    contentElem.className = 'popup-content';
     applyContent(contentElem, typeof content === 'string' ? content.trim() : content);
 
     const customContentElem = document.createElement('div');
-    setStyle(customContentElem, {
-        padding: '10px',
-        background: '#1a1a1a',
-        border: '1px solid #333',
-        borderRadius: '3px',
-        display: 'none',
-        height: "100%",
-    });
+    customContentElem.className = 'popup-custom-content';
 
     bodyElem.append(contentElem, customContentElem);
 
     const btnContainer = document.createElement('div');
-    setStyle(btnContainer, { display: 'flex', gap: '10px', marginTop: '10px', overflowX: 'auto', flexWrap: 'nowrap', flexShrink: '0' });
+    btnContainer.className = 'popup-buttons';
 
     // --- 功能函式 ---
 
@@ -749,8 +708,8 @@ export function popupWindow({
     if (!unclosable) {
         backdrop.onclick = (e) => e.target === backdrop && closePopup();
         const closeX = document.createElement('div');
+        closeX.className = 'popup-close-btn';
         closeX.innerText = '×';
-        setStyle(closeX, { position: 'absolute', top: '10px', right: '10px', cursor: 'pointer', fontSize: '20px', color: '#aaa', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '10' });
         closeX.onclick = closePopup;
         popup.appendChild(closeX);
     }
@@ -803,28 +762,8 @@ export function simpleToast({
     let container = document.getElementById('hint-container');
 
     if (!container) {
-
         container = document.createElement('div');
-
         container.id = 'hint-container';
-
-        container.style.cssText = `
-            position: fixed;
-            top: 40px;
-            left: 0;
-            padding: 10px;
-            z-index: 10000;
-
-            display: flex;
-            flex-direction: column;
-
-            pointer-events: none;
-
-            overflow: hidden;
-
-            max-height: 100vh;
-        `;
-
         document.body.appendChild(container);
     }
 
@@ -837,9 +776,7 @@ export function simpleToast({
             .filter(v => !v._isRemoving);
 
     if (activeToasts.length >= MAX_TOASTS) {
-
         const oldest = activeToasts[0];
-
         oldest?._triggerRemove?.();
     }
 
@@ -848,61 +785,7 @@ export function simpleToast({
     // =========================
 
     const popup = document.createElement('div');
-
-    const colorMap = {
-        info: '#00bbff',
-        error: '#ff4444',
-        success: '#00ffcc',
-        warning: '#ffcc00'
-    };
-
-    const color =
-        colorMap[type] || '#404040';
-
-    popup.style.cssText = `
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-
-        background: #202020;
-        color: white;
-
-        padding: 10px 15px;
-
-        border-left: 4px solid ${color};
-
-        border-radius: 4px;
-
-        box-shadow:
-            0 4px 12px rgba(0,0,0,0.5);
-
-        font-size: 13px;
-
-        pointer-events: auto;
-
-        width: fit-content;
-        max-width: 300px;
-
-        margin-bottom: 10px;
-
-        overflow: hidden;
-
-        min-height: 20px;
-        max-height: 100px;
-
-        flex-shrink: 0;
-
-        opacity: 1;
-
-        transform: translateX(0);
-
-        transition:
-            opacity 0.4s cubic-bezier(0.4,0,0.2,1),
-            transform 0.4s cubic-bezier(0.4,0,0.2,1),
-            max-height 0.4s cubic-bezier(0.4,0,0.2,1),
-            margin 0.4s cubic-bezier(0.4,0,0.2,1),
-            padding 0.4s cubic-bezier(0.4,0,0.2,1);
-    `;
+    popup.className = `toast-item toast-${type}`;
 
     // 安全版
     popup.textContent = content;
@@ -2195,7 +2078,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                         const sfxBuf = audioManager.bufferMap.get(key);
                         if (!sfxBuf) return;
                         const loop = audioManager.loopPoints[key];
-                        const finalVol = 0.5 * sfxVolume;
+                        const keyVol = audioManager.sfxVolumes[key] ?? 1.0;
                         const sfxRate = sfxBuf.sampleRate || sr;
 
                         const audibleStartSec = Math.max(s, eventStartSec);
@@ -2211,7 +2094,17 @@ export async function videoRender(audioManager, canvas, renderer, {
 
                             for (let idx = startIdx; idx < endIdx; idx++) {
                                 if (idx < 0 || idx >= outLen) continue;
-                                const timeSinceEventStart = (s + idx / sr) - eventStartSec;
+                                const currentSec = s + idx / sr;
+                                let activeCount = 0;
+                                for (const lev of longEvents) {
+                                    if (lev.key === key && currentSec >= lev.startSec && currentSec < lev.endSec) {
+                                        activeCount++;
+                                    }
+                                }
+                                if (activeCount === 0) activeCount = 1;
+
+                                const finalVol = (keyVol / activeCount) * sfxVolume;
+                                const timeSinceEventStart = currentSec - eventStartSec;
                                 let sampleSec = timeSinceEventStart;
 
                                 if (loop) {

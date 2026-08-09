@@ -4,27 +4,30 @@
     --const-max-playControls-height: 150px;
     --const-collapsed-playControls-height: 90px;
     --playControls-height: 150px;
-    --editor-bg: #1F1F1F;
-    --top-utility-bg: #0b0b0f;
-    --top-utility-btn: #2c2c2c;
+    --editor-background: #1F1F1F;
+    --player-background: #111;
+    --accent-color: #28f;
+    --main-color: #111;
+    --button-ouline: #2c2c2c;
+    --button-background: #1c1c1c;
     --timeline-color: #d44;
 }
 
 @font-face {
     font-family: 'combo';
-    src: url('Fonts/Inter.ttf') format('truetype');
+    src: url('../Fonts/Inter.ttf') format('truetype');
     font-display: swap;
 }
 
 @font-face {
     font-family: 'mono';
-    src: url('Fonts/ShareTechMono-Regular.ttf') format('truetype');
+    src: url('../Fonts/ShareTechMono-Regular.ttf') format('truetype');
     font-display: swap;
 }
 
 @font-face {
     font-family: 'title';
-    src: url('Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
+    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
     font-display: swap;
 }
 
@@ -32,7 +35,7 @@ body {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background: #111;
+    background: var(--player-background);
 
     font-family: "Google Sans", sans-serif;
     font-optical-sizing: auto;
@@ -125,7 +128,7 @@ body {
     bottom: 0;
     left: 0;
     z-index: 10;
-    background: var(--top-utility-bg);
+    background: var(--main-color);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -180,7 +183,7 @@ body {
 }
 
 #playControls #showPlayControlsBtn {
-    background-color: var(--top-utility-bg);
+    background-color: var(--main-color);
     overflow: hidden;
     width: 30%;
     position: absolute;
@@ -201,18 +204,18 @@ body {
 }
 
 #playControls #showPlayControlsBtn:hover {
-    background-color: var(--top-utility-btn);
+    background-color: color-mix(in srgb, var(--main-color) 50%, transparent);
 }
 
 #miniPreviewContainer #miniPreview {
     background: black;
     position: absolute;
-    width: calc(100% - 4px);
+    width: calc(100% - 12px);
     height: 100%;
-    margin: 2px;
-    border: 1px solid var(--top-utility-btn);
+    margin: 0 6px;
+    border: 1px solid var(--button-ouline);
     box-sizing: border-box;
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 #miniPreviewContainer .zoomContainer {
@@ -230,9 +233,9 @@ body {
     cursor: pointer;
     width: 30px;
     height: 30px;
-    background: color-mix(in srgb, var(--top-utility-bg) 50%, transparent);
+    background: color-mix(in srgb, var(--main-color) 50%, transparent);
     ;
-    border: 1px solid var(--top-utility-btn);
+    border: 1px solid var(--button-ouline);
     border-radius: 5px;
     z-index: 5;
     color: white;
@@ -246,7 +249,7 @@ body {
 #miniPreviewContainer #mpzoomOut:hover,
 #miniPreviewContainer #mpzoomIn:hover {
     backdrop-filter: blur(0px);
-    background: var(--top-utility-bg);
+    background: var(--main-color);
 }
 
 #playControls #playControlContainer {
@@ -271,9 +274,8 @@ body {
     display: flex;
     width: 40px;
     height: 40px;
-    border: 1px solid var(--top-utility-btn);
+    /*border: 1px solid var(--top-utility-button-ouline);*/
     padding: 5px;
-    border-radius: 5px;
     color: white;
     font-size: 14px;
     cursor: pointer;
@@ -281,6 +283,48 @@ body {
     justify-content: center;
     overflow: hidden;
     box-sizing: border-box;
+}
+
+.controlsContainer .controlButton::after {
+    content: '';
+    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    position: absolute;
+    background: transparent;
+    z-index: -1;
+    transition: background 50ms ease, border-radius 50ms ease;
+}
+
+.controlsContainer .controlButton:hover::after {
+    background: #ffffff15;
+}
+
+.controlsContainer .controlButton:active::after {
+    background: transparent;
+}
+
+.controlsContainer .controlButton::before {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.4);
+    z-index: -1;
+    /* 預設為擴散與漸隱終點，放開滑鼠時觸發流暢 transition 動畫 */
+    transform: scale(1);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.1, 0.8, 0.3, 1), opacity 0.4s ease-out, border-radius 0.4s ease-out;
+}
+
+.controlsContainer .controlButton:active::before {
+    /* 按下瞬間(0s)重置為起點，不受放開時間限制 */
+    transform: scale(0);
+    opacity: 0.6;
+    transition: 0s;
+    border-radius: 20px;
 }
 
 .a {
@@ -316,7 +360,7 @@ body {
 }
 
 #utilityContainer .closeBtn {
-    background-color: var(--top-utility-bg);
+    background-color: var(--main-color);
     overflow: hidden;
     width: 30%;
     position: absolute;
@@ -330,13 +374,13 @@ body {
     justify-content: center;
     cursor: pointer;
     box-sizing: border-box;
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
     border-radius: 0 0 10px 10px;
     transition: background-color 100ms ease;
 }
 
 #utilityContainer .closeBtn:hover {
-    background-color: var(--top-utility-btn);
+    background-color: var(--button-ouline);
 }
 
 #utilityContainer .warnbtn {
@@ -366,7 +410,7 @@ body {
 }
 
 #topUtilityBtns {
-    background: var(--top-utility-bg);
+    background: var(--main-color);
     width: 100%;
     height: 40px;
     padding: 5px;
@@ -386,7 +430,7 @@ body {
     flex: 0 0 auto;
     padding: 5px;
     background: transparent;
-    border: var(--top-utility-btn) 1px solid;
+    border: var(--button-ouline) 1px solid;
     box-sizing: border-box;
     color: white;
     width: 60px;
@@ -466,7 +510,7 @@ body {
     left: calc(var(--split-ratio) * 100%);
     width: calc((1 - var(--split-ratio)) * 100%);
     height: calc(100% - var(--playControls-height) - 40px);
-    background: var(--editor-bg);
+    background: var(--editor-background);
     /* 背景深色 */
 }
 
@@ -500,7 +544,7 @@ body {
 #panelSplitter.dragging::after {
     left: 1px;
     width: 4px;
-    background: #4a90e2;
+    background: var(--accent-color);
 }
 
 #panelSplitter.expanded {
@@ -533,7 +577,7 @@ body {
 #panelSplitter.snapped.dragging::after {
     left: 2px;
     width: 8px;
-    background: #6ab0ff;
+    background: var(--accent-color);
 }
 
 #visualEditor {
@@ -621,29 +665,31 @@ body {
 
 .utilityDropdown.open .utilityDropdown-content,
 .utilityDropdown:hover .utilityDropdown-content {
-    left: 20px;
-    display: flex;
     opacity: 1;
+    visibility: visible;
+    transform: scaleY(1);
     pointer-events: auto;
 }
 
 .utilityDropdown-content {
-    display: none;
+    display: flex;
     position: absolute;
     top: 40px;
-    left: 0px;
-    background-color: var(--top-utility-bg);
+    background-color: var(--main-color);
     min-width: 120px;
     box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
     z-index: 100;
-    border: 1px solid var(--top-utility-btn);
+    border: 1px solid var(--button-ouline);
     border-radius: 10px;
     padding: 5px;
     flex-direction: column;
     gap: 5px;
     opacity: 0;
+    visibility: hidden;
+    transform: scaleY(0);
+    transform-origin: top center;
     pointer-events: none;
-    transition: opacity 0.2s ease-out;
+    transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s;
 }
 
 .utilityDropdown-content .utilityButton {
@@ -657,7 +703,7 @@ body {
 }
 
 .utilityDropdown-content .utilityButton:hover {
-    background-color: var(--top-utility-btn);
+    background-color: var(--button-ouline);
 }
 
 .utilityDropdown-content .utilityMenuTitle {
@@ -677,23 +723,32 @@ body {
 }
 
 .utilitySubmenu {
-    display: none;
+    display: flex;
     position: absolute;
     top: 0;
     left: 100%;
     min-width: 150px;
-    background-color: var(--top-utility-bg);
-    border: 1px solid var(--top-utility-btn);
+    background-color: var(--main-color);
+    border: 1px solid var(--button-ouline);
     border-radius: 10px;
     padding: 5px;
     flex-direction: column;
     gap: 5px;
     box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.5);
     z-index: 110;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-6px) scale(0.96);
+    transform-origin: top left;
+    pointer-events: none;
+    transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.18s;
 }
 
 .utilityDropdown-content .utilityMenuTitle:hover .utilitySubmenu {
-    display: flex;
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
 }
 
 .utilitySubmenu .utilityButton {
@@ -704,7 +759,7 @@ body {
     width: 90%;
     margin: 0;
     align-self: center;
-    border: 1px solid var(--top-utility-btn);
+    border: 1px solid var(--button-ouline);
 }
 
 .quick-panel {
@@ -737,7 +792,7 @@ body {
     color: #ffffffaa;
     border-radius: 4px;
     transition: all 0.15s ease-out;
-    background-color: var(--top-utility-bg);
+    background-color: var(--main-color);
     isolation: isolate;
 }
 
@@ -814,7 +869,7 @@ body {
     top: 10px;
     right: 25px;
     z-index: 100;
-    background: rgba(22, 22, 28, 0.95);
+    background: var(--main-color);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
@@ -862,7 +917,7 @@ body {
 }
 
 .findbar-input:focus {
-    border-color: #4a90e2;
+    border-color: var(--accent-color);
 }
 
 .findbar-count {
@@ -922,9 +977,7 @@ body {
     align-items: center;
     gap: 3px;
     padding: 4px;
-    background: rgba(26, 26, 32, 0.9);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: var(--main-color);
     border: none;
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
@@ -954,7 +1007,7 @@ body {
     border-radius: 4px;
 }
 
-.switchBox input[type="radio"]:checked + .switch-item {
+.switchBox input[type="radio"]:checked+.switch-item {
     background: #484852;
     color: #ffffff;
     border-radius: 4px;

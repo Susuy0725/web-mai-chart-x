@@ -16,7 +16,8 @@ const CACHE_NAME = (() => {
 const ASSETS = [
     './',
     './index.html',
-    './main.css',
+    './Styles/main.css',
+    './Styles/popup.css',
     './Scripts/main.js',
     './Scripts/renderer.js',
     './Scripts/helper.js',

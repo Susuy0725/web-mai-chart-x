@@ -140,7 +140,9 @@ export const zhTW = {
             autoPauseOnScroll: "滾動時自動暫停",
             globalTimeline: "顯示全域時間軸",
             enableQuickPanel: "啟用快速面板",
-            lang: "語言 / Language"
+            lang: "語言 / Language",
+            drawHitEffect: "渲染擊打特效",
+            drawHanabiEffect: "渲染煙火特效"
         },
         middleDisplayOpts: {
             off: "關閉",

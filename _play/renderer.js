@@ -703,7 +703,47 @@ export class SimaiRenderer {
         const { ctx } = this;
         const { width: w, height: h } = this.getCanvasWH();
 
-        const fpsText = `FPS: ${dt === 0 ? 'PAUSE' : (1 / dt).toFixed(2)}`;
+        if (!this._frameHistory) {
+            this._frameHistory = new Float32Array(300);
+            this._frameIndex = 0;
+            this._frameCount = 0;
+        }
+
+        if (dt > 0) {
+            this._frameHistory[this._frameIndex] = 1 / dt;
+            this._frameIndex = (this._frameIndex + 1) % this._frameHistory.length;
+            if (this._frameCount < this._frameHistory.length) {
+                this._frameCount++;
+            }
+        }
+
+        let avgFps = 0;
+        let low1 = 0;
+        let low01 = 0;
+        if (this._frameCount > 0) {
+            let sum = 0;
+            for (let i = 0; i < this._frameCount; i++) {
+                sum += this._frameHistory[i];
+            }
+            avgFps = sum / this._frameCount;
+
+            const samples = Array.from(this._frameHistory.subarray(0, this._frameCount));
+            samples.sort((a, b) => a - b);
+            const idx1 = Math.floor(samples.length * 0.01);
+            const idx01 = Math.floor(samples.length * 0.001);
+            low1 = samples[idx1];
+            low01 = samples[idx01];
+        }
+
+        const fpsVal = dt === 0 ? 'PAUSE' : (1 / dt).toFixed(2);
+        const avgVal = this._frameCount === 0 ? '---' : avgFps.toFixed(2);
+        const low1Val = this._frameCount === 0 ? '---' : low1.toFixed(2);
+        const low01Val = this._frameCount === 0 ? '---' : low01.toFixed(2);
+
+        const fpsText = `FPS: ${fpsVal}`;
+        const avgFpsText = `Avg FPS: ${avgVal}`;
+        const low1Text = `1% Low: ${low1Val}`;
+        const low01Text = `0.1% Low: ${low01Val}`;
         const absTime = Math.abs(globalTime % 60).toFixed(2).padStart(5, '0');
         const minTime = globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60);
         const timeText = `Time: ${minTime}:${absTime}`;
@@ -713,8 +753,15 @@ export class SimaiRenderer {
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillText(fpsText, -w * 0.5 + 2, -h * 0.5 + 2);
-        ctx.fillText(timeText, -w * 0.5 + 2, -h * 0.5 + 6);
+
+        const startX = -w * 0.5 + 2;
+        let startY = -h * 0.5 + 2;
+        ctx.fillText(fpsText, startX, startY);
+        ctx.fillText(avgFpsText, startX, startY + 4);
+        ctx.fillText(low1Text, startX, startY + 8);
+        ctx.fillText(low01Text, startX, startY + 12);
+        ctx.fillText(timeText, startX, startY + 16);
+
         ctx.restore();
     }
 

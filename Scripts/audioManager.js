@@ -445,10 +445,6 @@ class AudioManager {
                 }
                 break;
             case 'touch':
-                if (note.isMine) {
-                    key = 'answer';
-                    break;
-                }
                 key = 'touch';
                 isMono = false;
                 events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });

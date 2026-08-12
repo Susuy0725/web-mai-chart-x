@@ -727,9 +727,9 @@ export function popupWindow({
     requestAnimationFrame(() => {
         backdrop.style.opacity = '1';
         popup.animate([
-            { transform: 'rotateX(30deg)', opacity: 0 },
-            { transform: 'rotateX(0deg)', opacity: 1 }
-        ], { duration: 200, easing: 'ease-out' });
+            { transform: 'rotateX(30deg) scaleY(0.75) scaleX(0.8)', opacity: 0 },
+            { transform: 'rotateX(0deg) scaleY(1) scaleX(1)', opacity: 1 }
+        ], { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
     });
 
     // 執行回調
@@ -2702,7 +2702,6 @@ export class SimaiLogicControler {
 
         let playCombo = 0;
         let playScore = 0;
-        let slideOnScreenCount = 0;
         let foundIndexForThisFrame = false;
 
         // 核心音符迴圈
@@ -2820,11 +2819,14 @@ export class SimaiLogicControler {
             const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
             const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
 
+            const renderSkipT = noteType === 'slide' ? ((note.slideDelay ?? 0) + (note.slideDuration ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0)) : skipT;
+            const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
+
             const isVisible =
                 (noteType === "slide" ? t >= middleDistance :
                     noteType === "touch" ? touchT >= -1 :
                         t >= -1)
-                && -noteT <= skipT + (note.isHanabi ? hanabiEffectDecayTime : (note.type === 'slide' ? 0 : effectDecayTime));
+                && -noteT <= renderSkipT + decay;
 
             const isVisualVisible = noteT >= 0
                 ? Math.abs(noteT) <= V
@@ -2833,10 +2835,7 @@ export class SimaiLogicControler {
             // 快速分類到桶子
             if (isVisible) {
                 if (noteType === 'slide') {
-                    if (slideOnScreenCount < maxSlideCount) {
-                        buckets.slide.push(note);
-                        slideOnScreenCount++;
-                    }
+                    buckets.slide.push(note);
                 } else if (noteType === 'hold' || noteType === 'tap') {
                     buckets.tapnhold.push(note);
                 } else if (noteType === 'touch') {
@@ -2853,6 +2852,13 @@ export class SimaiLogicControler {
                     visualBuckets.touch.push(note);
                 }
             }
+        }
+
+        if (buckets.slide.length > maxSlideCount) {
+            // 依據 Slide 實際開始滑動時間 (note.time + slideDelay) 由大到小排序 (時間靠後的在前，時間靠前的在後)
+            buckets.slide.sort((a, b) => (b.time + (b.slideDelay ?? 0)) - (a.time + (a.slideDelay ?? 0)));
+            // 優先保留時間最靠前 (陣列末尾) 的 maxSlideCount 個 Slide，裁剪掉開頭多餘的靠後 Slide
+            buckets.slide.splice(0, buckets.slide.length - maxSlideCount);
         }
 
         const tagsLength = decodedTags.length;

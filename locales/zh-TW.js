@@ -142,7 +142,8 @@ export const zhTW = {
             enableQuickPanel: "啟用快速面板",
             lang: "語言 / Language",
             drawHitEffect: "渲染擊打特效",
-            drawHanabiEffect: "渲染煙火特效"
+            drawHanabiEffect: "渲染煙火特效",
+            lowRes: "低解析度模式 (限制 1x DPI 以提升低階裝置效能)"
         },
         middleDisplayOpts: {
             off: "關閉",

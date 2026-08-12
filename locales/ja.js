@@ -140,7 +140,8 @@ export const ja = {
             autoPauseOnScroll: "スクロール時に自動一時停止",
             globalTimeline: "全体のタイムラインを表示",
             enableQuickPanel: "クイックパネルを有効にする",
-            lang: "言語"
+            lang: "言語",
+            lowRes: "低解像度モード (1x 解像度に制限して軽量化)"
         },
         middleDisplayOpts: {
             off: "オフ",

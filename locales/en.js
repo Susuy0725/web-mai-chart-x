@@ -140,7 +140,8 @@ export const en = {
             autoPauseOnScroll: "Auto Pause on Scroll",
             globalTimeline: "Show Global Timeline",
             enableQuickPanel: "Enable Quick Panel",
-            lang: "Language"
+            lang: "Language",
+            lowRes: "Low Resolution Mode (Limit 1x DPI for low-end devices)"
         },
         middleDisplayOpts: {
             off: "Off",

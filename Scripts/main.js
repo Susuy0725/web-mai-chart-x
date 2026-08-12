@@ -1069,7 +1069,7 @@ export const defaultSettings = {
     touchSpeed: 7,
     slideSpeed: 0,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數
-    moviebrightness: -4,
+    moviebrightness: -3,
     showSensor: true,
     rotateStars: true,
     pinkStars: false,
@@ -1094,6 +1094,7 @@ export const defaultSettings = {
     slideArrowHideBySensor: true, // 滑星依感應器消失
     hideOutline: false, // 隱藏判定圈
     showCoverWhenPaused: false, // 暫停時顯示封面圖
+    lowRes: false, // 低解析度模式
     showUI: false,
     enableQuickPanel: false,
     // Sound & Playback
@@ -1238,6 +1239,17 @@ const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.drawHanabiEffect',
                 def: defaultSettings.drawHanabiEffect || false
+            },
+            {
+                id: 'lowRes',
+                type: 'checkbox',
+                label: 'settings.items.lowRes',
+                def: defaultSettings.lowRes || false,
+                apply: () => {
+                    resize(true);
+                    resizeVisualEditor(true);
+                    resizePreviewCanvas();
+                }
             },
             {
                 id: 'resetPanelRatio',
@@ -2441,17 +2453,17 @@ fetchFromMainoteButton.addEventListener('click', () => {
     }
 
     const container = document.createElement('div');
-    container.className = 'popup-form-container';
+    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;width:100%;min-width:250px;';
 
     // 輔助函式：建立輸入框
     const createInput = (label, placeholder = '') => {
         const row = document.createElement('div');
-        row.className = 'popup-form-row';
+        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
         row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
         const input = document.createElement('input');
         input.type = 'text';
         input.placeholder = placeholder;
-        input.className = 'popup-form-input';
+        input.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;';
         row.appendChild(input);
         return { row, input };
     };
@@ -2459,10 +2471,10 @@ fetchFromMainoteButton.addEventListener('click', () => {
     // 輔助函式：建立下拉選單
     const createSelect = (label, options) => {
         const row = document.createElement('div');
-        row.className = 'popup-form-row';
+        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
         row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
         const select = document.createElement('select');
-        select.className = 'popup-form-select';
+        select.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;cursor:pointer;';
 
         options.forEach(opt => {
             const el = document.createElement('option');
@@ -2547,7 +2559,9 @@ fetchFromMainoteButton.addEventListener('click', () => {
     // 搜尋按鈕
     const searchBtn = document.createElement('button');
     searchBtn.textContent = t('popup.fetchMainote.btnSearch');
-    searchBtn.className = 'popup-search-btn';
+    searchBtn.style.cssText = 'padding:10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:8px;transition:background 0.2s;';
+    searchBtn.onmouseover = () => searchBtn.style.background = '#0052a3';
+    searchBtn.onmouseout = () => searchBtn.style.background = '#0066cc';
 
     searchBtn.addEventListener('click', async () => {
         searchBtn.disabled = true;
@@ -2612,7 +2626,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
 
         // 建立結果列表
         const resultContainer = document.createElement('div');
-        resultContainer.className = 'popup-search-results';
+        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding-right:4px;';
 
         let resultPopupCtx = null;
 
@@ -2627,40 +2641,83 @@ fetchFromMainoteButton.addEventListener('click', () => {
                 return false;
             })();
 
-            const doLoad = () => {
+            const loadChart = async (mode) => {
+                if (mode === 'new') {
+                    const newId = await projectCreate(t('popup.projectManager.untitled'));
+                    currentProjectId = newId;
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                    console.log(`[Project] 已建立新專案: ${newId}`);
+                }
+
+                setDataEmpty();
+
+                const diffKey = (targetChart.difficulty || 'MASTER').toUpperCase();
+                const diffMap = { 'EASY': 1, 'BASIC': 2, 'ADVANCED': 3, 'EXPERT': 4, 'MASTER': 5, 'RE:MASTER': 6, 'REMASTER': 6, 'UTAGE': 7 };
+                const targetDiff = diffMap[diffKey] || 5;
+
+                maidata = {};
+                maidata.title = songTitle;
+                maidata[`inote_${targetDiff}`] = targetChart.chart_data || '';
+
+                nowDifficulty = targetDiff;
+                changeDifficulty.value = nowDifficulty;
+                projSet('now_difficulty', nowDifficulty).catch(() => { });
+
+                editorInput.value = maidata[`inote_${targetDiff}`] || '';
+                getres(editorInput.value);
+                applyHighlight(editorInput.value);
+
+                undoStack = [];
+                redoStack = [];
+                historyMap = {};
+                lastEditorValue = editorInput.value || '';
+
+                saveMaidata();
+
+                const displayName = maidata.title || songTitle;
+                if (displayName && currentProjectId) {
+                    projectUpdateName(currentProjectId, displayName).catch(() => { });
+                }
+
+                simpleToast({ content: t('toast.chartLoaded', { title: songTitle }), type: 'success', timeout: 1500 });
                 if (resultPopupCtx) resultPopupCtx.close();
-                fetchChartToEditor(targetChart);
+                if (mainctx) mainctx.close();
             };
 
             if (maidataHaveContext) {
                 popupWindow({
-                    title: t('popup.fetchMainote.confirmTitle'),
-                    content: t('popup.fetchMainote.confirmContent', { title: songTitle }),
+                    title: t('popup.fetchMainote.loadChartTitle'),
+                    content: t('popup.fetchMainote.loadChartConfirm'),
                     buttons: [
                         {
-                            text: t('popup.fetchMainote.confirmYes'),
-                            onClick: (ctx) => { ctx.close(); doLoad(); }
+                            text: t('popup.fetchMainote.overwriteProject'),
+                            onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
                         },
-                        { text: t('popup.fetchMainote.confirmCancel'), hideOnClick: true }
+                        {
+                            text: t('popup.fetchMainote.openNewProject'),
+                            onClick: (ctx) => { ctx.close(); loadChart('new'); }
+                        },
+                        {
+                            text: t('popup.fetchMainote.cancel'),
+                            hideOnClick: true
+                        }
                     ]
                 });
             } else {
-                doLoad();
+                loadChart('overwrite');
             }
         };
 
         // 彈出二級難度選擇子視窗 (點擊整張歌曲卡片時)
         const openDifficultySelectPopup = (group) => {
             const diffListContainer = document.createElement('div');
-            diffListContainer.className = 'popup-diff-list';
+            diffListContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px 0;';
 
             group.charts.forEach((c) => {
                 const diffKey = (c.difficulty || 'MASTER').toUpperCase();
                 const col = diffColors[diffKey] || { bg: '#555', text: '#fff' };
                 const btn = document.createElement('button');
-                btn.className = 'popup-diff-btn';
-                btn.style.background = col.bg;
-                btn.style.color = col.text;
+                btn.style.cssText = `padding:10px 14px;background:${col.bg};color:${col.text};border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;transition:transform 0.1s, filter 0.1s;`;
                 btn.innerHTML = `<span>${diffKey}</span><span>Lv ${c.level || 'N/A'}</span>`;
                 btn.onmouseover = () => { btn.style.filter = 'brightness(1.15)'; btn.style.transform = 'scale(1.02)'; };
                 btn.onmouseout = () => { btn.style.filter = 'none'; btn.style.transform = 'none'; };
@@ -2982,6 +3039,10 @@ function animateCanvasWidth(visible) {
     syncResize();
 }
 
+function getDPR(win = window) {
+    return settings?.lowRes ? 1 : (win.devicePixelRatio || 1);
+}
+
 function ensureVisualEditorContext() {
     if (!visualCtx) {
         visualCtx = visualEditor.getContext('2d');
@@ -2991,7 +3052,7 @@ function ensureVisualEditorContext() {
 
 function resizeVisualEditor(force = false) {
     const ctx2d = ensureVisualEditorContext();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDPR();
     const w = editorContainer.clientWidth * dpr;
     const h = editorContainer.clientHeight * dpr;
 
@@ -3012,7 +3073,7 @@ function resizeVisualEditor(force = false) {
 }
 
 function resizePreviewCanvas() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDPR();
     const w = previewContainer.clientWidth * dpr;
     const h = previewContainer.clientHeight * dpr;
     previewCanvas.width = w;
@@ -5966,7 +6027,7 @@ function update(timestamp) {
 }
 
 function resize(force = false) {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDPR();
     const w = canvasContainer.clientWidth * dpr;
     const h = canvasContainer.clientHeight * dpr;
 
@@ -6157,7 +6218,7 @@ function openSecondWindow() {
     });
 
     const syncResize = () => {
-        const dpr = externalWindow.devicePixelRatio || 1;
+        const dpr = getDPR(externalWindow);
         const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
         extCanvas.width = externalWindow.innerWidth * dpr;
         extCanvas.height = externalWindow.innerHeight * dpr;

@@ -601,6 +601,7 @@ body {
     margin: 0;
     padding: 5px;
     padding-top: calc(var(--utility-hidden-height) + 5px);
+    padding-bottom: calc((100vh - var(--playControls-height) - 40px) * 0.5);
     box-sizing: border-box;
     font-family: 'Consolas', monospace;
     /* 必須設置寬度 */

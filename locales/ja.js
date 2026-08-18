@@ -27,6 +27,7 @@ export const ja = {
         toolsFindReplace: "検索と置換",
         toolsToggleBk: "Break (bk) 切替/追加",
         toolsToggleEx: "EX (ex) 切替/追加",
+        toolsConnectMajdataView: "MajdataView に接続（実験的）",
         manageResources: "リソース管理",
         chartInfo: "譜面情報",
         settings: "設定",
@@ -86,8 +87,13 @@ export const ja = {
         noAudioFile: "音声ファイルが見つかりません",
         tagReadSuccess: "タグの読み込みに成功: {title}",
         fileNameParsed: "ファイル名から情報を解析しました",
-        projectOpenedNew: "新規プロジェクトとして開きました",
+        projectOpenedNew: "新しいプロジェクトとして開きました",
         projectLoadedCurrent: "現在のプロジェクトに読み込みました",
+        majdataConnecting: "MajdataView に接続中 ({url})...",
+        majdataConnected: "MajdataView に接続しました ({url})",
+        majdataAlreadyConnected: "MajdataView に接続済みです ({url})",
+        majdataDisconnected: "MajdataView との接続を切断しました",
+        majdataConnectError: "MajdataView に接続できませんでした ({url})。MajdataView が起動しているか確認してください",
         videoSaved: "背景動画を保存しました",
         videoImportSuccess: "動画から背景動画と音声をインポートしました",
         mediabunnyMissing: "Mediabunnyが読み込まれていないため、録画できません",
@@ -141,7 +147,9 @@ export const ja = {
             globalTimeline: "全体のタイムラインを表示",
             enableQuickPanel: "クイックパネルを有効にする",
             lang: "言語",
-            lowRes: "低解像度モード (1x 解像度に制限して軽量化)"
+            lowRes: "低解像度モード (1x 解像度に制限して軽量化)",
+            majdataWsUrl: "MajdataView WebSocket URL",
+            autoConnectMajdataView: "起動時に MajdataView に自動接続"
         },
         middleDisplayOpts: {
             off: "オフ",

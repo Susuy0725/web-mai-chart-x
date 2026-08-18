@@ -208,8 +208,8 @@ export class SimaiRenderer {
         return this.images["tap"];
     }
 
-    getStarImage(isMine, isBreak, isDouble, isMultiple) {
-        const isPink = this.settings.pinkStars;
+    getStarImage(isMine, isBreak, isDouble, isMultiple, forceblue = false) {
+        const isPink = this.settings.pinkStars && !forceblue;
         const imgKey = isMultiple ?
             (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))) :
             (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))));
@@ -256,14 +256,25 @@ export class SimaiRenderer {
         return this._touchBorderCache[key];
     }
 
-    getEXColor(isBreak, isDouble, noteType) {
+    getEXColor(isBreak, isDouble, noteType, isPink = false) {
         if (isBreak) return this.exColor.break;
         if (isDouble) return this.exColor.double;
-        return this.exColor[noteType] || this.exColor.tap;
+        return isPink ? this.exColor.tap : (this.exColor[noteType] || this.exColor.tap);
     }
 
     getBreakTint(isBreak, isMine) {
         return (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.7 : 0;
+    }
+
+    getNoteSizeScaled(size) {
+        if (typeof size === 'number') {
+            return [size, size];
+        }
+        if (size instanceof Array) {
+            if (size.length < 2) return [size[0], size[0]];
+            return [size[0], size[1]];
+        }
+        return [1, 1];
     }
 
     setContext(ctx) {
@@ -465,7 +476,8 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    getNoteTransform(noteT, speedMult = 1) {
+    getNoteTransform(noteT, speedMult = 1, size) {
+        const sz = this.getNoteSizeScaled(size);
         const calcPiecewiseSpeed = (x) => {
             if (x >= 1) {
                 return x * 0.8833 + 0.8167;
@@ -488,6 +500,8 @@ export class SimaiRenderer {
         this._tempTransform.t = t;
         this._tempTransform.displayT = displayT;
         this._tempTransform.currentScale = currentScale;
+        this._tempTransform.scaleX = Math.abs(sz[0]);
+        this._tempTransform.scaleY = Math.abs(sz[1]);
         return this._tempTransform;
     }
 
@@ -1163,7 +1177,7 @@ export class SimaiRenderer {
             return;
         }
 
-        const { displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
+        const { displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, hispeed, s.size);
         const img = this.getTapImage(isMine, isBreak, isDouble);
         const arcimg = this.getArcImage(isMine, isBreak, isDouble, false);
         const size = this.settings.noteBaseSize * currentScale;
@@ -1178,12 +1192,12 @@ export class SimaiRenderer {
 
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         ctx.rotate(posInfo.rot);
-        this.drawImgAtcenter(img, size);
+        this.drawImgAtcenter(img, size, 0, 0, scaleX, scaleY);
 
         if (s.isEx) {
             this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "tap");
             const exImg = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
-            this.drawImgAtcenter(exImg, size);
+            this.drawImgAtcenter(exImg, size, 0, 0, scaleX, scaleY);
         }
 
         ctx.restore();
@@ -1205,7 +1219,7 @@ export class SimaiRenderer {
             return;
         }
 
-        const { displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
+        const { displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, hispeed, s.size);
         const img = this.getStarImage(isMine, isBreak, isDouble, isMultiple);
         const arcimg = this.getArcImage(isMine, isBreak, isDouble, true);
         const size = this.settings.noteBaseSize * currentScale;
@@ -1228,12 +1242,12 @@ export class SimaiRenderer {
             rot += this.globalTime * 2 * Math.PI * speed;
         }
         ctx.rotate(rot);
-        this.drawImgAtcenter(img, size);
+        this.drawImgAtcenter(img, size, 0, 0, scaleX, scaleY);
 
         if (s.isEx) {
-            this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "star");
+            this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "star", this.settings.pinkStars);
             const exImg = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.6, this._tempColorConfig);
-            this.drawImgAtcenter(exImg, size);
+            this.drawImgAtcenter(exImg, size, 0, 0, scaleX, scaleY);
         }
 
         ctx.restore();
@@ -1265,10 +1279,10 @@ export class SimaiRenderer {
         const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
         const sizeOffset = t < this.settings.middleDistance ? 0 :
-            Math.min((holdDuration + noteT) * 0.9 * speedMult,
+            Math.min((holdDuration + noteT) * speedMult,
                 Math.min((1 - this.settings.middleDistance) * 2.45,
                     Math.min((t - this.settings.middleDistance) * 2.45,
-                        holdDuration * 0.9 * speedMult)));
+                        holdDuration * speedMult)));
 
         this.ctx.save();
         this.ctx.rotate(posInfo.rot);
@@ -1472,7 +1486,7 @@ export class SimaiRenderer {
             const { x, y, rot } = p.getPointAt(displaySlideProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
-            const starImg = this.getStarImage(s.isMine, s.isBreak, s.isDouble, false);
+            const starImg = this.getStarImage(s.isMine, s.isBreak, s.isDouble, false, true);
             const starSize = this.settings.noteBaseSize * sz * 1.45;
 
             if (isWiFi && wPaths) {

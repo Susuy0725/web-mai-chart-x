@@ -461,7 +461,7 @@ export function getHighlight(text, errpos = []) {
 
     const ranges = normalizeRanges(errpos);
 
-    const combinedRegex = /(\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|(?:&amp;)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(m)|(([ABCDE])(\d+)|C|C(d+))/gm;
+    const combinedRegex = /(\|\*[\s\S]*?\*\||\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|(?:&amp;)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(m)|(([ABCDE])(\d+)|C|C(d+))/gm;
 
     const highlightText = (segment) => {
         const escaped = escapeHTML(segment);
@@ -544,7 +544,7 @@ export function popupWindow({
     width = 340,
     maxWidth = 600,
     height = undefined,
-    maxHeight = "100vh",
+    maxHeight = "100dvh",
     unclosable = false,
     onOpen,
     onClose,

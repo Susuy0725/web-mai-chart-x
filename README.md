@@ -27,7 +27,7 @@
 ### 💖 銘謝
 
 本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
-- 音符圖案與音訊素材資源來自 [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
+- 音符圖案與音訊素材資源來自 [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha)、[LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
 
 ### 📖 授權條款
 
@@ -57,7 +57,7 @@ While perfecting the functions that a general editor should have, we also added 
 ### 💖 Acknowledgements
 
 Special thanks to the open-source community for providing the assets:
-- Skin and media resources are derived from [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).
+- Skin and media resources are derived from [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha), [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).
 
 ### 📖 License
 

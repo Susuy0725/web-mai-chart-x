@@ -27,6 +27,7 @@ export const zhTW = {
         toolsFindReplace: "尋找與取代",
         toolsToggleBk: "切換/加入 Break (bk)",
         toolsToggleEx: "切換/加入 EX (ex)",
+        toolsConnectMajdataView: "連接 MajdataView (實驗性)",
         manageResources: "資源管理",
         chartInfo: "譜面資訊",
         settings: "設定",
@@ -88,6 +89,11 @@ export const zhTW = {
         fileNameParsed: "已從檔名解析資訊",
         projectOpenedNew: "已開啟為新專案",
         projectLoadedCurrent: "已載入至目前專案",
+        majdataConnecting: "正在連接至 MajdataView ({url})...",
+        majdataConnected: "已成功連接至 MajdataView ({url})",
+        majdataAlreadyConnected: "已連接至 MajdataView ({url})",
+        majdataDisconnected: "已中斷 MajdataView 連接",
+        majdataConnectError: "無法連接至 MajdataView ({url})，請確認 MajdataView 已啟動",
         videoSaved: "已儲存背景影片",
         videoImportSuccess: "已從影片匯入背景影片與音樂",
         mediabunnyMissing: "Mediabunny 未載入，無法錄製",
@@ -143,7 +149,9 @@ export const zhTW = {
             lang: "語言 / Language",
             drawHitEffect: "渲染擊打特效",
             drawHanabiEffect: "渲染煙火特效",
-            lowRes: "低解析度模式 (限制 1x DPI 以提升低階裝置效能)"
+            lowRes: "低解析度模式 (限制 1x DPI 以提升低階裝置效能)",
+            majdataWsUrl: "MajdataView WebSocket 位址",
+            autoConnectMajdataView: "自動連接 MajdataView"
         },
         middleDisplayOpts: {
             off: "關閉",

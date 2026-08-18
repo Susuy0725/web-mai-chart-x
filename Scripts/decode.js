@@ -25,11 +25,9 @@ const pushWarn = (...args) => {
 };
 
 // Pre-compiled regular expressions for optimal performance
+const REGEX_MULTILINE_COMMENT = /\|\*[\s\S]*?(?:\*\||$)/g;
 const REGEX_COMMENT = /\|\|.*$/gm;
 const REGEX_WHITESPACE = /\s+/g;
-const REGEX_PROP_TAG = /^<([^>]*)>$/;
-const REGEX_START_TAG = /^<([^<>]*)>/;
-const REGEX_END_TAG = /<([^<>]*)>$/;
 const REGEX_POS_MATCH = /^\d+/;
 const REGEX_TOUCH_MATCH = /^([ABCDE])(\d+)|C/;
 const REGEX_SLIDE_SYMBOL = /((?:pp)|(?:qq)|[-<>^vpqszVw])/g;
@@ -38,6 +36,72 @@ const REGEX_BRACKET_CONTENT = /\[[^\]]*\]/g;
 const REGEX_SINGLE_BRACKET = /\[([^\[\]]*)\]/;
 const REGEX_VALID_FLAGS = /[bx\$fh@?!m]/g;
 const REGEX_POS_TOUCH_PREFIX = /^([ABCDE]\d+|C|\d+)/;
+
+/**
+ * Strict property tag parsing function.
+ * Supported property tags:
+ *  - <HS*number> (e.g. <HS*1.25>, <HS*1>, <HS*0.5>)
+ *  - <SIZE*number> or <SIZE*(number,number)> (e.g. <SIZE*2>, <SIZE*(1.5,2)>)
+ *  - <COLOR*RRGGBB> or <COLOR*RRGGBBAA> (e.g. <COLOR*FF0000>, <COLOR*00FF00AA>)
+ *
+ * @param {string} tagContent - The content inside <...> without angle brackets
+ * @returns {{ valid: boolean, type?: 'HS'|'SIZE'|'COLOR', value?: any, raw: string, error?: string }}
+ */
+function parsePropertyTag(tagContent) {
+    const trimmed = tagContent.trim();
+    if (!trimmed) {
+        return { valid: false, raw: trimmed, error: 'Empty property tag' };
+    }
+
+    // 1. HS Property: <HS*<number>>
+    if (/^HS\*/i.test(trimmed)) {
+        const valStr = trimmed.slice(3).trim();
+        if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(valStr)) {
+            return { valid: false, raw: trimmed, error: `Invalid HS value: "${valStr}"` };
+        }
+        const num = parseFloat(valStr);
+        if (isNaN(num) || !isFinite(num)) {
+            return { valid: false, raw: trimmed, error: `Invalid HS value: "${valStr}"` };
+        }
+        return { valid: true, type: 'HS', value: num, raw: trimmed };
+    }
+
+    // 2. SIZE Property: <SIZE*<number>> or <SIZE*(<number>,<number>)>
+    if (/^SIZE\*/i.test(trimmed)) {
+        const valStr = trimmed.slice(5).trim();
+        // Form A: Single scale number, e.g. SIZE*2, SIZE*1.5
+        if (/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(valStr)) {
+            const num = parseFloat(valStr);
+            if (isNaN(num) || !isFinite(num)) {
+                return { valid: false, raw: trimmed, error: `Invalid SIZE value: "${valStr}"` };
+            }
+            return { valid: true, type: 'SIZE', value: num, raw: trimmed };
+        }
+        // Form B: 2D Tuple with explicit parentheses, e.g. SIZE*(1.5,2)
+        const tupleMatch = valStr.match(/^\(\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*,\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*\)$/);
+        if (tupleMatch) {
+            const v1 = parseFloat(tupleMatch[1]);
+            const v2 = parseFloat(tupleMatch[2]);
+            if (isNaN(v1) || !isFinite(v1) || isNaN(v2) || !isFinite(v2)) {
+                return { valid: false, raw: trimmed, error: `Invalid SIZE tuple values: "${valStr}"` };
+            }
+            return { valid: true, type: 'SIZE', value: [v1, v2], raw: trimmed };
+        }
+        // Any other form (e.g. SIZE*NaN, SIZE*6,9 without parens) is invalid!
+        return { valid: false, raw: trimmed, error: `Invalid SIZE format: "${valStr}"` };
+    }
+
+    // 3. COLOR Property: <COLOR*RRGGBB> (6-digit hex) or <COLOR*RRGGBBAA> (8-digit hex)
+    if (/^COLOR\*/i.test(trimmed)) {
+        const valStr = trimmed.slice(6).trim();
+        if (!/^(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(valStr)) {
+            return { valid: false, raw: trimmed, error: `Invalid COLOR format (must be 6 or 8 hex digits): "${valStr}"` };
+        }
+        return { valid: true, type: 'COLOR', value: '#' + valStr, raw: trimmed };
+    }
+
+    return { valid: false, raw: trimmed, error: `Unknown property tag: "${trimmed}"` };
+}
 
 // Pre-computed mathematical constants
 const PI = Math.PI;
@@ -214,6 +278,46 @@ function getSlidePath(start, end, type, mid = null) {
     return { path: r, additional, illegal };
 }
 
+function splitChartByComma(str) {
+    const parts = [];
+    let current = '';
+    let inBracket = 0; // [...]
+    let inParen = 0;   // (...)
+    let inBrace = 0;   // {...}
+
+    for (let i = 0; i < str.length; i++) {
+        // If we encounter a property tag e.g. <SIZE*(1.5,2)> or <HS*1.25>, consume it atomically
+        if (str[i] === '<') {
+            const rest = str.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                current += propMatch[0];
+                i += propMatch[0].length - 1;
+                continue;
+            }
+        }
+
+        const char = str[i];
+        if (char === '[') inBracket++;
+        else if (char === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (char === '(') inParen++;
+        else if (char === ')') inParen = Math.max(0, inParen - 1);
+        else if (char === '{') inBrace++;
+        else if (char === '}') inBrace = Math.max(0, inBrace - 1);
+
+        if (char === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
+            parts.push(current);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    if (current !== '' || str.endsWith(',')) {
+        parts.push(current);
+    }
+    return parts;
+}
+
 /**
  * Decodes Simai chart data into structured note, tag, and timing data.
  * @param {string} data Raw Simai chart string
@@ -223,10 +327,13 @@ export function simaiDecode(data = "", baseOffset = true) {
     warns = [];
     warnpos = [];
 
-    const raw = data.replace(REGEX_COMMENT, "").replace(REGEX_WHITESPACE, '');
+    const raw = data
+        .replace(REGEX_MULTILINE_COMMENT, "")
+        .replace(REGEX_COMMENT, "")
+        .replace(REGEX_WHITESPACE, '');
     if (raw === '') return { notes: [], endTime: 0 };
 
-    const splitParts = raw.split(',');
+    const splitParts = splitChartByComma(raw);
     if (raw.endsWith(',') || raw.endsWith('E')) {
         splitParts.pop();
     }
@@ -250,46 +357,97 @@ export function simaiDecode(data = "", baseOffset = true) {
     let lastBpmTag = -1, lastSplitTag = -1, lastSplitTagCommIndex = -1;
 
     for (let e of splitParts) {
-        if (e.includes('(')) {
-            const result = parseTag(e, '(', ')');
-            if (result.error) { pushWarn(result.error); decodeFailed = true; break; }
-            if (result.value !== null) nowBpm = result.value;
-            if (nowTime === 0 && baseOffset) nowTime = (60 / nowBpm) * 4;
-            if (firstBpm === null && nowBpm !== null) firstBpm = nowBpm;
-            e = result.residue;
-            tags.push({ type: 'bpm', value: nowBpm, time: nowTime });
+        // 1. Extract leading tags (BPM, Split, and Property tags) in sequence
+        const eventProps = [];
+        let eventHispeed = null;
+        let eventSize = null;
+        let eventColor = null;
 
-            let tg;
-            if (lastBpmTag !== -1) {
-                tg = tags[lastBpmTag];
-                tg.nextTime = nowTime;
-            }
-            lastBpmTag = tags.length - 1;
+        while (e.length > 0) {
+            if (e.startsWith('(')) {
+                const closeIdx = e.indexOf(')');
+                if (closeIdx === -1) { pushWarn("Unclosed BPM tag '(', ", { errpos: noteCommaIndex }); break; }
+                const bpmContent = e.slice(1, closeIdx).trim();
+                const bpmVal = parseFloat(bpmContent);
+                if (isNaN(bpmVal) || bpmVal <= 0) {
+                    pushWarn(`Invalid BPM value in (${bpmContent}), `, { errpos: noteCommaIndex });
+                } else {
+                    nowBpm = bpmVal;
+                    if (nowTime === 0 && baseOffset) nowTime = (60 / nowBpm) * 4;
+                    if (firstBpm === null) firstBpm = nowBpm;
+                    tags.push({ type: 'bpm', value: nowBpm, time: nowTime });
 
-            if (lastSplitTag !== -1 && tags[lastSplitTag].time !== nowTime && tg.bpm !== nowBpm) {
-                tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime, nohead: true });
-                tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
-                lastSplitTag = tags.length - 1;
-                lastSplitTagCommIndex = noteCommaIndex;
-            }
-        }
+                    let tg;
+                    if (lastBpmTag !== -1) {
+                        tg = tags[lastBpmTag];
+                        tg.nextTime = nowTime;
+                    }
+                    lastBpmTag = tags.length - 1;
 
-        if (e.includes('{')) {
-            overrideSplitTime = null;
-            const result = parseTag(e, '{', '}', true);
-            if (result.error) { pushWarn(result.error); decodeFailed = true; break; }
-            if (result.value !== null && result.override) {
-                overrideSplitTime = result.value;
-            } else if (result.value !== null) {
-                nowSplit = result.value;
+                    if (lastSplitTag !== -1 && tags[lastSplitTag].time !== nowTime && tg && tg.bpm !== nowBpm) {
+                        tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime, nohead: true });
+                        tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
+                        lastSplitTag = tags.length - 1;
+                        lastSplitTagCommIndex = noteCommaIndex;
+                    }
+                }
+                e = e.slice(closeIdx + 1);
+            } else if (e.startsWith('{')) {
+                const closeIdx = e.indexOf('}');
+                if (closeIdx === -1) { pushWarn("Unclosed split tag '{', ", { errpos: noteCommaIndex }); break; }
+                const splitContent = e.slice(1, closeIdx).trim();
+                if (splitContent.startsWith('#')) {
+                    const dur = parseFloat(splitContent.slice(1));
+                    if (isNaN(dur) || dur < 0) {
+                        pushWarn(`Invalid split duration in {${splitContent}}, `, { errpos: noteCommaIndex });
+                    } else {
+                        overrideSplitTime = dur;
+                        tags.push({
+                            type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime,
+                            nohead: lastBpmTag !== -1 && tags[lastBpmTag].time === nowTime,
+                        });
+                        lastSplitTag = tags.length - 1;
+                        lastSplitTagCommIndex = noteCommaIndex;
+                    }
+                } else {
+                    const splitVal = parseFloat(splitContent);
+                    if (isNaN(splitVal) || splitVal <= 0) {
+                        pushWarn(`Invalid split value in {${splitContent}}, `, { errpos: noteCommaIndex });
+                    } else {
+                        nowSplit = splitVal;
+                        overrideSplitTime = null;
+                        tags.push({
+                            type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime,
+                            nohead: lastBpmTag !== -1 && tags[lastBpmTag].time === nowTime,
+                        });
+                        lastSplitTag = tags.length - 1;
+                        lastSplitTagCommIndex = noteCommaIndex;
+                    }
+                }
+                e = e.slice(closeIdx + 1);
+            } else if (e.startsWith('<')) {
+                // Must match a property tag (e.g. <HS*...>, <SIZE*...>, <COLOR*...>), not slide shape like <5
+                const match = e.match(/^<([A-Za-z]+\*[^>]*)>/);
+                if (!match) break;
+                const tagContent = match[1];
+                const parsed = parsePropertyTag(tagContent);
+                if (!parsed.valid) {
+                    pushWarn(`Invalid property tag <${tagContent}>: ${parsed.error || 'invalid syntax'}, `, { errpos: noteCommaIndex });
+                } else {
+                    eventProps.push(parsed.raw);
+                    if (parsed.type === 'HS') {
+                        hispeed = parsed.value;
+                        eventHispeed = parsed.value;
+                    } else if (parsed.type === 'SIZE') {
+                        eventSize = parsed.value;
+                    } else if (parsed.type === 'COLOR') {
+                        eventColor = parsed.value;
+                    }
+                }
+                e = e.slice(match[0].length);
+            } else {
+                break;
             }
-            e = result.residue;
-            tags.push({
-                type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime,
-                nohead: lastBpmTag !== -1 && tags[lastBpmTag].time === nowTime,
-            });
-            lastSplitTag = tags.length - 1;
-            lastSplitTagCommIndex = noteCommaIndex;
         }
 
         if (lastSplitTag !== -1) {
@@ -298,18 +456,14 @@ export function simaiDecode(data = "", baseOffset = true) {
 
         if (overrideSplitTime) nowBpm = 240 / overrideSplitTime;
 
-        const propMatches = e.match(REGEX_PROP_TAG);
-        if (propMatches) {
-            const prop = propMatches[1].trim();
-            e = e.replace(REGEX_PROP_TAG, '');
-            if (prop.startsWith("HS*")) {
-                const hispeedValue = parseFloat(prop.slice(3));
-                if (!isNaN(hispeedValue)) {
-                    hispeed = hispeedValue;
-                } else {
-                    pushWarn("Invalid hispeed value in property:", { errpos: noteCommaIndex });
-                }
+        // 2. Detect any misplaced property tags inside e (e.g. 1<HS*1>, <HS*1>1/<HS*1>2, <SIZE*1>2`<SIZE*1>3)
+        // Must match property tags <[A-Za-z]+\*[^>]*>, NOT slide shapes like <5>4 or <5
+        const misplacedTags = e.match(/<[A-Za-z]+\*[^>]*>/g);
+        if (misplacedTags) {
+            for (const tag of misplacedTags) {
+                pushWarn(`Misplaced property tag "${tag}": property tags must only appear at the beginning of the note group, `, { errpos: noteCommaIndex });
             }
+            e = e.replace(/<[A-Za-z]+\*[^>]*>/g, '');
         }
 
         indexToTime[noteCommaIndex] = nowTime;
@@ -335,38 +489,6 @@ export function simaiDecode(data = "", baseOffset = true) {
 
         for (const { raw: rawItem, time } of notesToProcess) {
             let raw = rawItem;
-            let props = null;
-
-            // 1. Peel leading property tags
-            while (raw.startsWith('<')) {
-                const match = raw.match(REGEX_START_TAG);
-                if (!match) break;
-                if (match[1].length === 1 && !isNaN(match[1])) break; // Don't strip slide star symbol e.g. <5
-                if (!props) props = [];
-                props.push(match[1].trim());
-                raw = raw.slice(match[0].length);
-            }
-
-            // 2. Peel trailing property tags
-            while (raw.endsWith('>')) {
-                const match = raw.match(REGEX_END_TAG);
-                if (!match) break;
-                if (!props) props = [];
-                props.push(match[1].trim());
-                raw = raw.slice(0, -match[0].length);
-            }
-
-            if (props) {
-                const prop = props[props.length - 1];
-                if (prop.startsWith("HS*")) {
-                    const hispeedValue = parseFloat(prop.slice(3));
-                    if (!isNaN(hispeedValue)) {
-                        hispeed = hispeedValue;
-                    } else {
-                        pushWarn("Invalid hispeed value in property:", { errpos: noteCommaIndex });
-                    }
-                }
-            }
 
             const splitrRaw = raw.includes('/') ? raw.split('/') : [raw];
             let hasEmptySplit = false;
@@ -398,10 +520,20 @@ export function simaiDecode(data = "", baseOffset = true) {
                     continue;
                 }
                 notes.push({
-                    pos: p1, props: props || null, isDouble: true, time, type: 'tap', hispeed, index: noteCommaIndex,
+                    pos: p1,
+                    props: eventProps.length > 0 ? eventProps : null,
+                    hispeed: eventHispeed !== null ? eventHispeed : hispeed,
+                    size: eventSize !== null ? eventSize : null,
+                    color: eventColor !== null ? eventColor : null,
+                    isDouble: true, time, type: 'tap', index: noteCommaIndex,
                     isBreak: false, isHold: false, isMine: false, isEx: false
                 }, {
-                    pos: p2, props: props || null, isDouble: true, time, type: 'tap', hispeed, index: noteCommaIndex,
+                    pos: p2,
+                    props: eventProps.length > 0 ? eventProps : null,
+                    hispeed: eventHispeed !== null ? eventHispeed : hispeed,
+                    size: eventSize !== null ? eventSize : null,
+                    color: eventColor !== null ? eventColor : null,
+                    isDouble: true, time, type: 'tap', index: noteCommaIndex,
                     isBreak: false, isHold: false, isMine: false, isEx: false
                 });
                 tapCounts += 2;
@@ -468,12 +600,14 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                 const noteObj = {
                     pos,
-                    props: props || null,
+                    props: eventProps.length > 0 ? eventProps : null,
+                    hispeed: eventHispeed !== null ? eventHispeed : hispeed,
+                    size: eventSize !== null ? eventSize : null,
+                    color: eventColor !== null ? eventColor : null,
                     touchPos,
                     isDouble: splitr.length > 1,
                     time,
                     type,
-                    hispeed,
                     index: noteCommaIndex,
                     isBreak: false,
                     isHold: false,
@@ -744,7 +878,10 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                             notes.push({
                                 type: 'slide',
-                                props,
+                                props: noteObj.props,
+                                hispeed: noteObj.hispeed,
+                                size: noteObj.size,
+                                color: noteObj.color,
                                 pos: seg.head,
                                 firstSlide: index === 0,
                                 lastSlide: index === segments.length - 1,
@@ -763,7 +900,6 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 slideDelay: currentDelay,
                                 slideDuration: segmentDuration,
                                 isIllegal: seg.illegal,
-                                hispeed,
                                 cullSkipExtend: d - cullSkipSum
                             });
 

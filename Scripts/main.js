@@ -10,9 +10,11 @@ import { simaiDecode } from './decode.js';
 import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
+import { majdataWs } from './majdataWs.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
+majdataWs.setToastHandler(simpleToast);
 
 const isDev =
     self.location.hostname === 'localhost' ||
@@ -145,6 +147,7 @@ const fullscreenButton = getButton("fullscreen", "utility");
 const findReplaceButton = getButton("findReplace", "utility");
 const toggleBkButton = getButton("toggleBk", "utility");
 const toggleExButton = getButton("toggleEx", "utility");
+const connectMajdataViewButton = getButton("connectMajdataView", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
@@ -1095,6 +1098,8 @@ export const defaultSettings = {
     hideOutline: false, // 隱藏判定圈
     showCoverWhenPaused: false, // 暫停時顯示封面圖
     lowRes: false, // 低解析度模式
+    majdataWsUrl: 'ws://127.0.0.1:8083/majdata',
+    autoConnectMajdataView: false,
     showUI: false,
     enableQuickPanel: false,
     // Sound & Playback
@@ -1252,6 +1257,18 @@ const settingsConfig = [
                 }
             },
             {
+                id: 'majdataWsUrl',
+                type: 'text',
+                label: 'settings.items.majdataWsUrl',
+                def: defaultSettings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata'
+            },
+            {
+                id: 'autoConnectMajdataView',
+                type: 'checkbox',
+                label: 'settings.items.autoConnectMajdataView',
+                def: defaultSettings.autoConnectMajdataView || false
+            },
+            {
                 id: 'resetPanelRatio',
                 type: 'button',
                 label: 'settings.items.resetPanelRatio',
@@ -1361,6 +1378,9 @@ const isVisualMode = () => settings.displayMode === 'visual';
 const previewVisible = () => (previewContainer.style.display !== 'none' && document.getElementById('playControls').style.display !== 'none');
 
 const saveSettingsDebounce = debounce(() => {
+    if (majdataWs.isConnected()) {
+        majdataWs.sendSetting(settings);
+    }
     idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
     });
@@ -5640,6 +5660,39 @@ function updatePauseBackgroundDisplay() {
 
 let lastStartTime = 0;
 
+function sendMajdataPlay() {
+    if (!majdataWs.isConnected()) return;
+
+    // 確保 MajdataViewX 的 _state 進入 ViewStatus.Loaded
+    majdataWs.sendLoad({
+        trackPath: '',
+        imagePath: '',
+        videoPath: ''
+    });
+
+    const fumenText = editorInput.value || '';
+    const diffVal = changeDifficulty ? changeDifficulty.value : '3';
+    const diffIdx = isNaN(parseInt(diffVal)) ? 3 : Math.max(0, parseInt(diffVal) - 1);
+    const titleStr = (maidata && maidata.title) ? maidata.title : '';
+    const artistStr = (maidata && maidata.artist) ? maidata.artist : '';
+    const designerStr = (maidata && maidata['des_' + diffVal]) ? maidata['des_' + diffVal] : '';
+    const levelStr = (maidata && maidata['lv_' + diffVal]) ? maidata['lv_' + diffVal] : '';
+    const offsetVal = (typeof musicDelay !== 'undefined') ? musicDelay : 0;
+
+    majdataWs.play({
+        mode: 0,
+        startAt: realTime || 0,
+        speed: settings.playbackSpeed || 1,
+        title: titleStr,
+        artist: artistStr,
+        offset: offsetVal,
+        designer: designerStr,
+        level: levelStr,
+        fumen: fumenText,
+        difficulty: diffIdx
+    });
+}
+
 playButton.addEventListener('click', () => {
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
@@ -5656,6 +5709,10 @@ playButton.addEventListener('click', () => {
         audioManager.stopBGM();
 
         notes.forEach(n => n._riserActive = false); // 強制重置標記
+
+        if (majdataWs.isConnected()) {
+            majdataWs.pause();
+        }
 
         draw(); // 立即更新畫布，反映暫停狀態
     } else {
@@ -5675,6 +5732,10 @@ playButton.addEventListener('click', () => {
 
         // --- 從當前的 realTime 同步啟動 BGM ---
         audioManager.playBGM(realTime);
+
+        if (majdataWs.isConnected()) {
+            sendMajdataPlay();
+        }
 
         update(lastTimestamp);
     }
@@ -5699,6 +5760,10 @@ resetButton.addEventListener('click', () => {
 
     notes.forEach(n => n._riserActive = false); // 強制重置標記
 
+    if (majdataWs.isConnected()) {
+        majdataWs.stop();
+    }
+
     draw(); // 立即更新畫布，反映停止狀態
 });
 
@@ -5721,8 +5786,19 @@ stopButton.addEventListener('click', () => {
 
     notes.forEach(n => n._riserActive = false); // 強制重置標記
 
+    if (majdataWs.isConnected()) {
+        majdataWs.stop();
+    }
+
     draw(); // 立即更新畫布，反映停止狀態
 });
+
+if (connectMajdataViewButton) {
+    connectMajdataViewButton.addEventListener('click', () => {
+        const url = settings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata';
+        majdataWs.toggleConnection(url);
+    });
+}
 
 keyboardButton.addEventListener('click', () => {
     editorInput.focus();
@@ -7150,6 +7226,9 @@ function _init() {
                 await loadProjectData(step);
 
                 window.settings = settings;
+                if (settings.autoConnectMajdataView) {
+                    majdataWs.connect(settings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata');
+                }
                 applySplitRatio(settings.splitRatio ?? 0.5);
                 if (settings.canvasSnapped) {
                     snapHideCanvas();

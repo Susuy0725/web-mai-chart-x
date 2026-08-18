@@ -27,6 +27,7 @@ export const en = {
         toolsFindReplace: "Find & Replace",
         toolsToggleBk: "Toggle Break (bk)",
         toolsToggleEx: "Toggle EX (ex)",
+        toolsConnectMajdataView: "Connect to MajdataView (Experimental)",
         manageResources: "Resource Manager",
         chartInfo: "Chart Info",
         settings: "Settings",
@@ -87,7 +88,12 @@ export const en = {
         tagReadSuccess: "Tag read successfully: {title}",
         fileNameParsed: "Parsed info from filename",
         projectOpenedNew: "Opened as new project",
-        projectLoadedCurrent: "Loaded to current project",
+        projectLoadedCurrent: "Loaded into current project",
+        majdataConnecting: "Connecting to MajdataView ({url})...",
+        majdataConnected: "Connected to MajdataView ({url})",
+        majdataAlreadyConnected: "Already connected to MajdataView ({url})",
+        majdataDisconnected: "Disconnected from MajdataView",
+        majdataConnectError: "Failed to connect to MajdataView ({url}). Please make sure MajdataView is running.",
         videoSaved: "Background video saved",
         videoImportSuccess: "Imported background video and audio from video",
         mediabunnyMissing: "Mediabunny not loaded, cannot record",
@@ -141,7 +147,9 @@ export const en = {
             globalTimeline: "Show Global Timeline",
             enableQuickPanel: "Enable Quick Panel",
             lang: "Language",
-            lowRes: "Low Resolution Mode (Limit 1x DPI for low-end devices)"
+            lowRes: "Low Resolution Mode (Limit 1x DPI for low-end devices)",
+            majdataWsUrl: "MajdataView WebSocket URL",
+            autoConnectMajdataView: "Auto-connect to MajdataView"
         },
         middleDisplayOpts: {
             off: "Off",

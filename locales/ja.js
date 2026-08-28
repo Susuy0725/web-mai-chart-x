@@ -105,7 +105,12 @@ export const ja = {
         durationError: "終了時間は開始時間より後である必要があります",
         renderComplete: "フレームレンダリングが完了しました。ファイルをダウンロードしました。",
         renderFailed: "レンダリング失敗: {error}",
-        moveMouseToOpen: "マウスを動かしてクイックパネルにアクセスします！"
+        moveMouseToOpen: "マウスを動かしてクイックパネルにアクセスします！",
+        swUpdating: "オフライン更新をダウンロード中...",
+        swUpdated: "アップデートの準備が完了しました！",
+        swUpdateDetail: "キャッシュが更新されました。再読み込みして適用してください。",
+        swReloadNow: "今すぐ再読み込み",
+        swDismiss: "後で"
     },
     settings: {
         title: "設定",

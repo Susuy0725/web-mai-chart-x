@@ -105,7 +105,12 @@ export const en = {
         durationError: "End time must be greater than start time",
         renderComplete: "Frame-by-frame rendering complete. File downloaded.",
         renderFailed: "Rendering failed: {error}",
-        moveMouseToOpen: "Move your mouse to access quick panel!"
+        moveMouseToOpen: "Move your mouse to access quick panel!",
+        swUpdating: "Downloading offline update...",
+        swUpdated: "Update ready!",
+        swUpdateDetail: "Cache updated. Please reload to apply latest version.",
+        swReloadNow: "Reload Now",
+        swDismiss: "Dismiss"
     },
     settings: {
         title: "Settings",

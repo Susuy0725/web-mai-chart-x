@@ -1269,20 +1269,19 @@ export class SimaiRenderer {
             }
             return;
         }
+        const md = this.settings.middleDistance;
+
         const isOn = (noteTime - this.globalTime) <= -0.1 && !isMine;
         const img = this.getHoldImage(isMine, isBreak, isDouble, isOn);
         const arcimg = this.getArcImage(isMine, isBreak, isDouble, false);
         const endimg = this.getHoldEndImage(isMine, isBreak, isDouble);
 
-        const t1 = 1 - this.timeFunction((noteTime - this.globalTime + holdDuration) * speedMult);
-        const displayT = Math.min(1, Math.max(this.settings.middleDistance, t));
-        const currentScale = t < this.settings.middleDistance ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance)) : 1;
+        const t1 = 1 - this.timeFunction((noteT + holdDuration) * speedMult);
+        const displayT = Math.min(1, Math.max(md, t));
+        const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
-        const sizeOffset = t < this.settings.middleDistance ? 0 :
-            Math.min((holdDuration + noteT) * speedMult,
-                Math.min((1 - this.settings.middleDistance) * 2.45,
-                    Math.min((t - this.settings.middleDistance) * 2.45,
-                        holdDuration * speedMult)));
+        const sizeOffset = t < md ? 0 :
+            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) - md) * 2.5;
 
         this.ctx.save();
         this.ctx.rotate(posInfo.rot);
@@ -1290,7 +1289,7 @@ export class SimaiRenderer {
         this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
         this.ctx.restore();
 
-        if (t1 > this.settings.middleDistance) {
+        if (t1 > md) {
             this.ctx.save();
             this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
             this.drawImgAtcenter(endimg, size * 0.65);

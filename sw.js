@@ -36,10 +36,62 @@ const ASSETS = [
     './rpc.js',
 ];
 
+async function broadcast(message) {
+    try {
+        const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+        for (const client of clients) {
+            client.postMessage(message);
+        }
+    } catch (err) {
+        console.warn('SW broadcast error:', err);
+    }
+}
+
 self.addEventListener('install', (event) => {
     console.log('Service worker installing', CACHE_NAME);
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+        (async () => {
+            const cache = await caches.open(CACHE_NAME);
+            let loaded = 0;
+            const total = ASSETS.length;
+
+            await broadcast({
+                type: 'SW_UPDATE_START',
+                total,
+                loaded: 0,
+                progress: 0
+            });
+
+            await Promise.all(
+                ASSETS.map(async (url) => {
+                    try {
+                        const response = await fetch(url, { cache: 'no-cache' });
+                        if (response && response.ok && response.status === 200) {
+                            await cache.put(url, response);
+                        }
+                    } catch (err) {
+                        console.warn(`Failed to cache asset ${url}:`, err);
+                    } finally {
+                        loaded++;
+                        const progress = Math.round((loaded / total) * 100);
+                        await broadcast({
+                            type: 'SW_UPDATE_PROGRESS',
+                            total,
+                            loaded,
+                            progress,
+                            file: url
+                        });
+                    }
+                })
+            );
+
+            await broadcast({
+                type: 'SW_UPDATE_COMPLETE',
+                total,
+                loaded: total,
+                progress: 100
+            });
+        })()
     );
     self.skipWaiting();
 });

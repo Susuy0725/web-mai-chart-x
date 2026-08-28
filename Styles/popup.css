@@ -220,6 +220,154 @@
     border-left-color: #ffcc00;
 }
 
+/* Service Worker 更新進度條懸浮面板 */
+.sw-update-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 100000;
+    min-width: 320px;
+    max-width: 400px;
+    background: rgba(26, 26, 26, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 4px solid #00bbff;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 187, 255, 0.15);
+    padding: 14px 16px;
+    color: #ffffff;
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: auto;
+}
+
+.sw-update-toast.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.sw-update-toast.completed {
+    border-left-color: #00ffcc;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 255, 204, 0.2);
+}
+
+.sw-update-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sw-update-title {
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #f0f0f0;
+}
+
+.sw-update-percent {
+    font-size: 12px;
+    font-weight: bold;
+    color: #00bbff;
+    font-family: 'ShareTechMono', monospace;
+}
+
+.sw-update-toast.completed .sw-update-percent {
+    color: #00ffcc;
+}
+
+.sw-update-progress-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.sw-update-progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #0077ff, #00e5ff);
+    border-radius: 3px;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sw-update-toast.completed .sw-update-progress-bar-fill {
+    background: linear-gradient(90deg, #00bbff, #00ffcc);
+}
+
+.sw-update-details {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #a0a0a0;
+}
+
+.sw-update-file {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sw-update-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.sw-update-btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: none;
+    outline: none;
+}
+
+.sw-update-btn-reload {
+    background: #00ffcc;
+    color: #121212;
+    box-shadow: 0 2px 8px rgba(0, 255, 204, 0.3);
+}
+
+.sw-update-btn-reload:hover {
+    background: #33ffd6;
+    box-shadow: 0 4px 12px rgba(0, 255, 204, 0.45);
+}
+
+.sw-update-btn-dismiss {
+    background: transparent;
+    color: #aaaaaa;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.sw-update-btn-dismiss:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+@keyframes sw-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 
 /* --------------------------------------------------------------------------
    3. 彈窗內部 DOM 元素與頁面面板組件 Class

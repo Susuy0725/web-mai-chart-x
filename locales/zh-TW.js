@@ -105,7 +105,12 @@ export const zhTW = {
         durationError: "結束時間需大於開始時間",
         renderComplete: "逐幀渲染完成，檔案已下載",
         renderFailed: "渲染失敗：{error}",
-        moveMouseToOpen: "移動你的滑鼠來存取快捷面板!"
+        moveMouseToOpen: "移動你的滑鼠來存取快捷面板!",
+        swUpdating: "正在下載離線更新...",
+        swUpdated: "版本更新已就緒！",
+        swUpdateDetail: "快取已更新，請重新整理以套用最新版本",
+        swReloadNow: "立即重新整理",
+        swDismiss: "稍後"
     },
     settings: {
         title: "設定",

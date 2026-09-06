@@ -10,7 +10,7 @@
     --main-color: #111;
     --button-ouline: #2c2c2c;
     --button-background: #1c1c1c;
-    --timeline-color: #d44;
+    --timeline-color: rgb(212, 49, 57);
 }
 
 @font-face {
@@ -133,6 +133,7 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    box-shadow: 0px -1px 4px #00000040;
 }
 
 #playControls #timeControl {
@@ -220,10 +221,11 @@ body {
 
 #miniPreviewContainer .zoomContainer {
     position: absolute;
-    top: 15px;
-    left: 10px;
+    left: 18px;
+    height: 100%;
     display: flex;
-    gap: 5px;
+    align-items: center;
+    gap: 10px;
     z-index: 5;
 }
 
@@ -231,8 +233,8 @@ body {
 #miniPreviewContainer #mpzoomIn {
     backdrop-filter: blur(1px);
     cursor: pointer;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     background: color-mix(in srgb, var(--main-color) 50%, transparent);
     ;
     border: 1px solid var(--button-ouline);
@@ -441,6 +443,19 @@ body {
     word-break: keep-all;
     cursor: pointer;
     overflow: hidden;
+}
+
+.utilityButton.disabled,
+.utilityDropdown-content .utilityButton.disabled {
+    color: #666666 !important;
+    opacity: 0.45;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.utilityButton.disabled:hover,
+.utilityDropdown-content .utilityButton.disabled:hover {
+    background-color: transparent !important;
 }
 
 .utilityButton.noFixedsize {

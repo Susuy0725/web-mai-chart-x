@@ -280,6 +280,43 @@ export class SimaiRenderer {
     setContext(ctx) {
         this.canvas = ctx.canvas;
         this.ctx = ctx;
+        this.updateCanvasMetrics();
+        this.invalidateCaches();
+    }
+
+    resize(width, height, dpr = 1, force = false) {
+        if (!this.canvas || !this.ctx) return false;
+        this.dpr = dpr;
+        const w = Math.round(width * dpr);
+        const h = Math.round(height * dpr);
+
+        if (!force && this.canvas.width === w && this.canvas.height === h) {
+            return false;
+        }
+
+        this.canvas.width = w;
+        this.canvas.height = h;
+
+        const p = Math.min(w, h) / scaleBase * this.scale;
+        this.ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
+
+        this.updateCanvasMetrics();
+        this.invalidateCaches();
+        return true;
+    }
+
+    invalidateCaches() {
+        this._staticBackgroundCache = null;
+        this._staticBackgroundCacheParams = null;
+        this._sensorShapeCache = null;
+        this._sensorTextCache = null;
+        this._sensorCacheParams = null;
+        this._canvasWH = null;
+        if (this.offscreen) {
+            const wh = this.getCanvasWH();
+            this.offscreen.width = wh.width;
+            this.offscreen.height = wh.height;
+        }
     }
 
     // --- 核心工具函式 ---
@@ -356,6 +393,8 @@ export class SimaiRenderer {
         if (t < -1) return;
         const invt = clamp(-t, 0, 1);
 
+        this.offscreen = this.offscreen || new OffscreenCanvas(1, 1);
+
         function easeOutExpo(x) {
             return x === 1 ? 1 : 1 - Math.pow(2, -40 * x);
         }
@@ -363,7 +402,7 @@ export class SimaiRenderer {
         function getCustomCurveClamped(x) {
             let val;
             if (x <= 0.3) {
-                val = 1 - Math.pow(2, -40 * x) + Math.pow(2, -12);
+                val = 1 - Math.pow(2, -10 * x) + Math.pow(2, -3);
             } else {
                 const diff = 0.3 - x;
                 val = 1 - (diff * diff) / 0.49;
@@ -374,9 +413,14 @@ export class SimaiRenderer {
 
         const ctx = this.ctx;
         const decayAlpha = getCustomCurveClamped(-t);
-        const radius = 3.5 * this.settings.noteBaseSize * easeOutExpo(invt);
+        const radius = 5 * this.settings.noteBaseSize * easeOutExpo(invt * 0.25);
 
-        const white = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.3);
+        this.offscreen.width = this.getCanvasWH().width;
+        this.offscreen.height = this.getCanvasWH().height;
+
+        const offctx = this.offscreen.getContext('2d');
+
+        /*const white = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
         white.addColorStop(0, "#ffffff00");
         white.addColorStop(0.4, "#ffffff00");
         white.addColorStop(0.8, "#ffffff8b");
@@ -386,9 +430,9 @@ export class SimaiRenderer {
         ctx.fillStyle = white;
         ctx.globalAlpha = decayAlpha;
         ctx.beginPath();
-        ctx.arc(0, 0, radius * 1.3, 0, Math.PI * 2);
+        ctx.arc(0, 0, scaleBase / 2, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
+        ctx.restore();*/
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
@@ -409,14 +453,14 @@ export class SimaiRenderer {
             const cosA1 = Math.cos(angle1);
             const sinA1 = Math.sin(angle1);
 
-            ctx.beginPath();
-            ctx.lineWidth = 1.5;
-            ctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
-            ctx.moveTo(0, 0);
-            ctx.lineTo(cosA * 50, sinA * 50);
-            ctx.lineTo(cosA1 * 50, sinA1 * 50);
-            ctx.closePath();
-            ctx.fill();
+            offctx.beginPath();
+            offctx.lineWidth = 1.5;
+            offctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
+            offctx.moveTo(0, 0);
+            offctx.lineTo(cosA * 50, sinA * 50);
+            offctx.lineTo(cosA1 * 50, sinA1 * 50);
+            offctx.closePath();
+            offctx.fill();
 
             slicePath.moveTo(0, 0);
             slicePath.lineTo(cosA * 50, sinA * 50);
@@ -583,7 +627,8 @@ export class SimaiRenderer {
             for (const n of buckets.touch) this.getTouchHanabi(n);
             this.drawHanabiEffects();
         }
-        for (const n of buckets.slide) this.drawSlide(n);
+        for (const n of buckets.slide) this.drawSlideTrack(n);
+        for (const n of buckets.slide) this.drawSlideStar(n);
 
         for (const n of buckets.tapnhold) {
             if (n.type === "hold") this.drawHold(n);
@@ -1446,8 +1491,8 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawSlide(s) {
-        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed } = s;
+    drawSlideTrack(s) {
+        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, hispeed } = s;
         const noteT = noteTime - this.globalTime;
 
         let displaySlideProgress = 0;
@@ -1479,26 +1524,46 @@ export class SimaiRenderer {
         const isWiFi = s.slideType === "w";
         const prefixOrKey = isWiFi ? prefix : standardKey;
         this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, br, isIllegalRed);
+        this.ctx.restore();
+    }
+
+    drawSlideStar(s) {
+        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths } = s;
+        const noteT = noteTime - this.globalTime;
+
+        let displaySlideProgress = 0;
+        if (-noteT > slideDelay) {
+            displaySlideProgress = (-noteT - slideDelay) / slideDuration;
+        }
+
+        const c = slideDelay + (s.cullSkipExtend ?? 0) + slideDuration;
+        if ((displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c)) {
+            return;
+        }
+
+        const p = path || generatePath(pos, slideEnd);
+        if (p.totalLength < 1e-4) return;
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && (!s.hideHead || sz >= 1) && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish))) {
-            const { x, y, rot } = p.getPointAt(displaySlideProgress);
+            const { x, y, rot } = p.getPointAt(Math.min(1, displaySlideProgress));
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
             const starImg = this.getStarImage(s.isMine, s.isBreak, s.isDouble, false, true);
             const starSize = this.settings.noteBaseSize * sz * 1.45;
+            const isWiFi = s.slideType === "w";
 
             if (isWiFi && wPaths) {
                 const baseTransform = this.ctx.getTransform();
 
-                const w1Point = wPaths.w1.getPointAt(displaySlideProgress);
+                const w1Point = wPaths.w1.getPointAt(Math.min(1, displaySlideProgress));
                 this.ctx.translate(w1Point.x, w1Point.y);
                 this.ctx.rotate(w1Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, starSize);
 
                 this.ctx.setTransform(baseTransform);
 
-                const w2Point = wPaths.w2.getPointAt(displaySlideProgress);
+                const w2Point = wPaths.w2.getPointAt(Math.min(1, displaySlideProgress));
                 this.ctx.translate(w2Point.x, w2Point.y);
                 this.ctx.rotate(w2Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, starSize);
@@ -1511,7 +1576,11 @@ export class SimaiRenderer {
 
             this.ctx.restore();
         }
-        this.ctx.restore();
+    }
+
+    drawSlide(s) {
+        this.drawSlideTrack(s);
+        this.drawSlideStar(s);
     }
 
     getSensorIdAtPoint(x, y, ignoreD = false) {
@@ -1702,8 +1771,11 @@ export class SimaiRenderer {
 
             this.ctx.save();
             this.ctx.translate(eff.x, eff.y);
-            this.simpleHanabi(eff.noteT, eff.isCenter);
-            //this.richHanabi(eff.noteT, eff.isCenter);
+            if (settings.fancyTouchEffect) {
+                this.richHanabi(eff.noteT);
+            } else {
+                this.simpleHanabi(eff.noteT, eff.isCenter);
+            }
             this.ctx.restore();
         }
     }
@@ -1933,6 +2005,26 @@ export class SimaiVisualEditor {
 
     setContext(ctx) {
         this.ctx = ctx;
+        if (ctx?.canvas) this.canvas = ctx.canvas;
+    }
+
+    resize(width, height, dpr = 1, force = false) {
+        if (!this.canvas || !this.ctx) return false;
+        this.dpr = dpr;
+        const w = Math.round(width * dpr);
+        const h = Math.round(height * dpr);
+
+        if (!force && this.canvas.width === w && this.canvas.height === h) {
+            return false;
+        }
+
+        this.canvas.width = w;
+        this.canvas.height = h;
+
+        const p = Math.min(w, h) / scaleBase;
+        this.ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
+        this._canvasWH = null;
+        return true;
     }
 
     drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
@@ -2888,6 +2980,22 @@ export class SimaiPreviewRenderer {
 
     setZoom(zoom) {
         this.zoom = zoom;
+    }
+
+    resize(width, height, dpr = 1, force = false) {
+        if (!this.canvas) return false;
+        this.dpr = dpr;
+        const w = Math.round(width * dpr);
+        const h = Math.round(height * dpr);
+
+        if (!force && this.canvas.width === w && this.canvas.height === h) {
+            return false;
+        }
+
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this._canvasWH = null;
+        return true;
     }
 
     getCanvasWH() {

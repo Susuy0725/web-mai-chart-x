@@ -1192,6 +1192,7 @@ export const defaultSettings = {
     autoConnectMajdataView: false,
     showUI: false,
     enableQuickPanel: false,
+    fancyTouchEffect: false,
     // Sound & Playback
     notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
@@ -1342,8 +1343,6 @@ const settingsConfig = [
                 def: defaultSettings.lowRes || false,
                 apply: () => {
                     resize(true);
-                    resizeVisualEditor(true);
-                    resizePreviewCanvas();
                 }
             },
             {
@@ -2483,6 +2482,7 @@ function setDataEmpty() {
     redoStack = [];
     historyMap = {};
     lastEditorValue = '';
+    updateUndoRedoUI();
     audioManager.removeBackgroundMusic().catch(() => { });
     changeDifficulty.value = nowDifficulty;
     editorBackgroundImage.src = "";
@@ -2781,6 +2781,7 @@ fetchFromMainoteButton.addEventListener('click', () => {
                 redoStack = [];
                 historyMap = {};
                 lastEditorValue = editorInput.value || '';
+                updateUndoRedoUI();
 
                 saveMaidata();
 
@@ -3161,33 +3162,17 @@ function ensureVisualEditorContext() {
 }
 
 function resizeVisualEditor(force = false) {
-    const ctx2d = ensureVisualEditorContext();
+    if (!editorContainer || !visualEditorRenderer) return false;
     const dpr = getDPR();
-    const w = editorContainer.clientWidth * dpr;
-    const h = editorContainer.clientHeight * dpr;
-
-    if (!force && lastVisualEditorSize.w === w && lastVisualEditorSize.h === h) {
-        //resizeVisualEditor();
-        return; // 尺寸不變，避免重設畫布造成多餘重排
-    }
-
-    lastVisualEditorSize.w = w;
-    lastVisualEditorSize.h = h;
-
-    const p = Math.min(w, h) / scaleBase;
-    visualEditor.width = w;
-    visualEditor.height = h;
-    ctx2d.setTransform(p, 0, 0, p, w / 2, h / 2);
-    //resizeVisualEditor();
-    draw();
+    const changed = visualEditorRenderer.resize(editorContainer.clientWidth, editorContainer.clientHeight, dpr, force);
+    if (changed) draw();
+    return changed;
 }
 
-function resizePreviewCanvas() {
+function resizePreviewCanvas(force = false) {
+    if (!previewContainer || !previewRender) return false;
     const dpr = getDPR();
-    const w = previewContainer.clientWidth * dpr;
-    const h = previewContainer.clientHeight * dpr;
-    previewCanvas.width = w;
-    previewCanvas.height = h;
+    return previewRender.resize(previewContainer.clientWidth, previewContainer.clientHeight, dpr, force);
 }
 
 playbackSpeedInput.addEventListener('change', () => {
@@ -3931,24 +3916,40 @@ const invertChange = (change) => {
     return { start: change.start, removed: change.inserted, inserted: change.removed };
 };
 
+function updateUndoRedoUI() {
+    if (undoButton) {
+        const canUndo = Array.isArray(undoStack) && undoStack.length > 0;
+        undoButton.classList.toggle('disabled', !canUndo);
+        undoButton.setAttribute('aria-disabled', String(!canUndo));
+    }
+    if (redoButton) {
+        const canRedo = Array.isArray(redoStack) && redoStack.length > 0;
+        redoButton.classList.toggle('disabled', !canRedo);
+        redoButton.setAttribute('aria-disabled', String(!canRedo));
+    }
+}
+
 const pushUndoChange = (change) => {
     if (!change) return;
     // 新的使用者編輯會清空 redo
     redoStack = [];
     undoStack.push(change);
     if (undoStack.length > maxHistorySize) undoStack.shift();
+    updateUndoRedoUI();
 };
 
 const pushUndo = (change) => {
     if (!change) return;
     undoStack.push(change);
     if (undoStack.length > maxHistorySize) undoStack.shift();
+    updateUndoRedoUI();
 };
 
 const pushRedo = (change) => {
     if (!change) return;
     redoStack.push(change);
     if (redoStack.length > maxHistorySize) redoStack.shift();
+    updateUndoRedoUI();
 };
 
 // 歷史記錄按難度分隔存放
@@ -3975,6 +3976,7 @@ const loadHistoryForDifficulty = (diff) => {
         redoStack = [];
         lastEditorValue = editorInput.value || '';
     }
+    updateUndoRedoUI();
 };
 
 undoButton.addEventListener('click', () => {
@@ -3992,6 +3994,7 @@ undoButton.addEventListener('click', () => {
     if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
         visualEditorRenderer.clearSelection();
     }
+    updateUndoRedoUI();
 });
 
 redoButton.addEventListener('click', () => {
@@ -4007,7 +4010,11 @@ redoButton.addEventListener('click', () => {
     if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
         visualEditorRenderer.clearSelection();
     }
+    updateUndoRedoUI();
 });
+
+// 初始化按鈕禁用狀態
+updateUndoRedoUI();
 
 helpButton.addEventListener('click', () => {
     // 💡 以後想改內容、加新功能，只要改這個設定陣列就好！
@@ -4715,6 +4722,7 @@ function maidataProcess(e) {
     redoStack = [];
     historyMap = {};
     lastEditorValue = editorInput.value || '';
+    updateUndoRedoUI();
 }
 
 // 暫存使用者選擇的檔案，等待使用者選擇「覆蓋」或「新專案」後再處理
@@ -5896,14 +5904,16 @@ keyboardButton.addEventListener('click', () => {
 
 function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const c = window.getComputedStyle(document.documentElement);
-    const cC = document.querySelector('#playControlContainer .controlsContainer');
+    const pc = document.querySelector('#playControlContainer');
+    const mc = document.querySelector('#miniPreviewContainer');
     const d = document.documentElement.style;
 
     const maxPlayControlsHeight = c.getPropertyValue('--const-max-playControls-height');
     const collapsedPlayControlsHeight = c.getPropertyValue('--const-collapsed-playControls-height');
     if (!isHidden) {
         timeline.style.display = 'none';
-        cC.style.display = 'none';
+        mc.style.display = 'none';
+        pc.style.display = 'none';
         hideButton.dataset.hidden = 'true';
         d.setProperty('--playControls-height', '0px');
         showPlayControlsBtn.style.display = 'block';
@@ -5911,7 +5921,8 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
         showPlayControlsBtn.style.display = 'none';
         hideButton.dataset.hidden = 'false';
         timeline.style.display = settings.globalTimeline ? 'block' : 'none';
-        cC.style.display = 'flex';
+        mc.style.display = 'block';
+        pc.style.display = 'flex';
         if (visualVisible) {
             previewContainer.style.display = 'none';
             d.setProperty('--playControls-height', collapsedPlayControlsHeight);
@@ -6194,25 +6205,29 @@ function update(timestamp) {
 
 function resize(force = false) {
     const dpr = getDPR();
-    const w = canvasContainer.clientWidth * dpr;
-    const h = canvasContainer.clientHeight * dpr;
 
-    if (!force && lastCanvasSize.w === w && lastCanvasSize.h === h) {
-        resizeVisualEditor(force);
-        return; // 尺寸不變，避免重設畫布造成多餘重排
+    if (secondCtx) {
+        // 若外部視窗開啟中，主視窗 Canvas 僅繪製提示訊息，僅需更新物理像素尺寸
+        if (canvasContainer) {
+            const w = Math.round(canvasContainer.clientWidth * dpr);
+            const h = Math.round(canvasContainer.clientHeight * dpr);
+            if (canvas.width !== w || canvas.height !== h) {
+                canvas.width = w;
+                canvas.height = h;
+            }
+        }
+    } else if (canvasContainer && renderer) {
+        renderer.resize(canvasContainer.clientWidth, canvasContainer.clientHeight, dpr, force);
     }
 
-    lastCanvasSize.w = w;
-    lastCanvasSize.h = h;
+    if (editorContainer && visualEditorRenderer) {
+        visualEditorRenderer.resize(editorContainer.clientWidth, editorContainer.clientHeight, dpr, force);
+    }
 
-    const scaleValue = renderer?.scale ?? scale;
-    const p = Math.min(w, h) / scaleBase * scaleValue;
+    if (previewContainer && previewRender) {
+        previewRender.resize(previewContainer.clientWidth, previewContainer.clientHeight, dpr, force);
+    }
 
-    canvas.width = w;
-    canvas.height = h;
-    if (!secondCtx) ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
-    resizeVisualEditor(force);
-    resizePreviewCanvas();
     draw();
 }
 
@@ -6380,18 +6395,14 @@ function openSecondWindow() {
         renderer.setContext(ctx); // 告訴 renderer 使用主 Canvas 的上下文
         if (backgroundContainer) backgroundContainer.style.display = '';
         if (canvasOutline) canvasOutline.style.display = settings.hideOutline ? 'none' : '';
-        draw(); // 重新繪製到主 Canvas
+        resize(true); // 重新調整主畫布尺寸與座標系統並重繪
     });
+
+    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
 
     const syncResize = () => {
         const dpr = getDPR(externalWindow);
-        const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
-        extCanvas.width = externalWindow.innerWidth * dpr;
-        extCanvas.height = externalWindow.innerHeight * dpr;
-
-        // 重新套用座標系統
-        const p = size / scaleBase * (renderer?.scale ?? scale) * dpr;
-        secondCtx.setTransform(p, 0, 0, p, extCanvas.width / 2, extCanvas.height / 2);
+        renderer.resize(externalWindow.innerWidth, externalWindow.innerHeight, dpr, true);
         syncSecondWindowBackground();
         draw();
     };
@@ -6404,9 +6415,6 @@ function openSecondWindow() {
             syncResize();
         });
     }
-
-    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
-    draw(); // 重新繪製到第二個 Canvas
 }
 
 recordVideoButton.addEventListener('click', async () => {
@@ -6770,8 +6778,10 @@ window.addEventListener('keydown', (e) => {
             case 'z': {
                 if (document.activeElement === editorInput) {
                     e.preventDefault();
-                    undoButton.click();
-                    simpleToast({ content: '復原譜面變更', type: 'info', timeout: 1200 });
+                    if (undoStack.length > 0) {
+                        undoButton.click();
+                        simpleToast({ content: '復原譜面變更', type: 'info', timeout: 1200 });
+                    }
                 }
                 break;
             }
@@ -6779,8 +6789,10 @@ window.addEventListener('keydown', (e) => {
             case 'y': {
                 if (document.activeElement === editorInput) {
                     e.preventDefault();
-                    redoButton.click();
-                    simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
+                    if (redoStack.length > 0) {
+                        redoButton.click();
+                        simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
+                    }
                 }
                 break;
             }
@@ -7007,6 +7019,7 @@ async function loadProjectData(step) {
         redoStack = [];
         historyMap = {};
         lastEditorValue = editorInput.value || '';
+        updateUndoRedoUI();
 
         musicDelay = parseFloat(maidata.first) || 0;
         offsetInput.value = musicDelay;
@@ -7019,6 +7032,7 @@ async function loadProjectData(step) {
         redoStack = [];
         historyMap = {};
         lastEditorValue = '';
+        updateUndoRedoUI();
         musicDelay = 0;
         offsetInput.value = 0;
     }

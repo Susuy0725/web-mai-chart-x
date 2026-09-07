@@ -1,3 +1,5 @@
+import { generatePath } from '../Scripts/helper.js';
+
 export class SimulatedPlayController {
     constructor() {
         this.activeSensors = new Set();
@@ -22,17 +24,31 @@ export class SimulatedPlayController {
             return empty;
         }
 
-        const numSamples = Math.max(8, Math.min(24, Math.ceil(path.totalLength * 0.4)));
+        const samples = typeof renderer.ensurePathSensorMap === 'function'
+            ? renderer.ensurePathSensorMap(path)
+            : null;
+
         const checkpoints = [];
         let lastSensorId = null;
 
-        for (let i = 0; i <= numSamples; i++) {
-            const ratio = i / numSamples;
-            const pt = path.getPointAt(ratio);
-            const sensorId = renderer.getSensorIdAtPoint(pt.x, pt.y, true);
-            if (sensorId && sensorId !== lastSensorId) {
-                checkpoints.push({ ratio, sensorId });
-                lastSensorId = sensorId;
+        if (samples && samples.length > 0) {
+            for (let i = 0; i < samples.length; i++) {
+                const s = samples[i];
+                if (s && s.sensorId && s.sensorId !== lastSensorId) {
+                    checkpoints.push({ ratio: s.dist / path.totalLength, sensorId: s.sensorId });
+                    lastSensorId = s.sensorId;
+                }
+            }
+        } else {
+            const numSamples = Math.max(8, Math.min(24, Math.ceil(path.totalLength * 0.4)));
+            for (let i = 0; i <= numSamples; i++) {
+                const ratio = i / numSamples;
+                const pt = path.getPointAt(ratio);
+                const sensorId = renderer.getSensorIdAtPoint(pt.x, pt.y, true);
+                if (sensorId && sensorId !== lastSensorId) {
+                    checkpoints.push({ ratio, sensorId });
+                    lastSensorId = sensorId;
+                }
             }
         }
 
@@ -105,6 +121,11 @@ export class SimulatedPlayController {
                 }
 
                 if (!note.isMine && slideDuration > 0) {
+                    if (note.prevSlide && !note.prevSlide.slideFinish) {
+                        note.slideProgress = 0;
+                        note.slideFinish = false;
+                        continue;
+                    }
                     const checkpoints = this.getOrCreateSlideCheckpoints(note, renderer);
                     const totalCp = checkpoints.length;
 

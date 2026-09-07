@@ -62,6 +62,12 @@ const defaultSettings = {
     }
 };
 
+const activeKeyboardSensors = new Set();
+const activePointers = new Map(); // pointerId -> sensorId
+const manualInputSensors = new Set();
+
+const judgeEffects = [];
+
 const _pc = document.getElementById("playControls");
 const _pcc = document.getElementById("playControlContainer");
 const _ccon = _pcc.querySelector(".controlsContainer");
@@ -73,7 +79,39 @@ function getControlButton(action) {
     return btn;
 }
 
+function linkChainSlides(notes) {
+    if (!notes || !Array.isArray(notes)) return;
+    let currentChainLeader = null;
+    let prevSlide = null;
+
+    for (let i = 0; i < notes.length; i++) {
+        const n = notes[i];
+        if (n.type !== 'slide') continue;
+
+        if (n.firstSlide) {
+            currentChainLeader = n;
+            prevSlide = n;
+            n.prevSlide = null;
+            n.chainLeader = n;
+        } else if (currentChainLeader) {
+            n.prevSlide = prevSlide;
+            n.chainLeader = currentChainLeader;
+            if (prevSlide) {
+                prevSlide.nextSlide = n;
+            }
+            prevSlide = n;
+            if (n.lastSlide) {
+                currentChainLeader = null;
+                prevSlide = null;
+            }
+        }
+    }
+}
+
 let datas = simaiDecode();
+if (datas) {
+    linkChainSlides(datas.notes);
+}
 
 const canvas = document.querySelector("#main");
 const ctx = canvas.getContext("2d");
@@ -82,7 +120,26 @@ let settings = {};
 let images;
 let renderer;
 
+function applyAudioSettings(s) {
+    if (!audioManager || !s) return;
+    if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
+    if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
+    if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
+    if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
+}
+
 images = await loadAllImages();
+if (audioManager && audioManager.soundFiles) {
+    for (const key in audioManager.soundFiles) {
+        audioManager.soundFiles[key] = new URL(`../${audioManager.soundFiles[key].replace(/^\.\//, '')}`, import.meta.url).href;
+    }
+    try {
+        await audioManager.init();
+    } catch (err) {
+        console.warn('音效載入失敗:', err);
+    }
+}
+
 const savedSettings = await idbGet('simai_settings');
 if (savedSettings) {
     settings = JSON.parse(savedSettings);
@@ -98,14 +155,16 @@ if (savedSettings) {
         await idbSet('simai_settings', JSON.stringify(settings));
     }
 } else {
-    settings = { ...defaultSettings }
+    settings = { ...defaultSettings };
     await idbSet('simai_settings', JSON.stringify(settings));
 };
+applyAudioSettings(settings);
 renderer = new SimaiRenderer(canvas, settings);
 renderer.setImages(images);
 
 let globalTime = 0;
 let realTime = 0;
+let lastObservedTime = 0;
 let musicDelay = 0;
 let buckets = {
     slide: [],
@@ -142,12 +201,14 @@ const VIDEO_MIN_SEEK_INTERVAL = 0.8;
 
 let timeControlSliding = false;
 
+const canvasContainer = document.getElementById("canvasContainer");
+
 function resize() {
     const dpr = window.devicePixelRatio || 1;
-    const w = canvasContainer.clientWidth * dpr;
-    const h = canvasContainer.clientHeight * dpr;
+    const w = (canvasContainer ? canvasContainer.clientWidth : window.innerWidth) * dpr;
+    const h = (canvasContainer ? canvasContainer.clientHeight : window.innerHeight) * dpr;
 
-    const scaleValue = renderer?.scale ?? scale;
+    const scaleValue = renderer?.scale ?? 0.98;
     const p = Math.min(w, h) / scaleBase * scaleValue;
 
     canvas.width = w;
@@ -192,7 +253,12 @@ function updateAutoPlayUI() {
 if (autoPlayBtn) {
     autoPlayBtn.addEventListener("click", () => {
         settings.autoPlay = !(settings.autoPlay !== false);
+        simulatedPlayController.reset();
+        activeKeyboardSensors.clear();
+        activePointers.clear();
+        manualInputSensors.clear();
         updateAutoPlayUI();
+        idbSet('simai_settings', JSON.stringify(settings));
     });
 }
 updateAutoPlayUI();
@@ -202,78 +268,363 @@ const KEY_TO_SENSOR = {
     '1': 'A1', '2': 'A2', '3': 'A3', '4': 'A4', '5': 'A5', '6': 'A6', '7': 'A7', '8': 'A8',
     'a': 'A1', 's': 'A2', 'd': 'A3', 'f': 'A4', 'j': 'A5', 'k': 'A6', 'l': 'A7', ';': 'A8',
     'A': 'A1', 'S': 'A2', 'D': 'A3', 'F': 'A4', 'J': 'A5', 'K': 'A6', 'L': 'A7',
+    'q': 'A8', 'w': 'A1', 'e': 'A2', 'r': 'A3', 'u': 'A4', 'i': 'A5', 'o': 'A6', 'p': 'A7',
+    ' ': 'C', 'c': 'C', 'C': 'C',
+    'Numpad1': 'A5', 'Numpad2': 'A6', 'Numpad3': 'A7', 'Numpad4': 'A4',
+    'Numpad5': 'C', 'Numpad6': 'A8', 'Numpad7': 'A3', 'Numpad8': 'A2', 'Numpad9': 'A1'
 };
-const manualInputSensors = new Set();
+
+function updateManualSensors() {
+    manualInputSensors.clear();
+    for (const s of activeKeyboardSensors) manualInputSensors.add(s);
+    for (const s of activePointers.values()) if (s) manualInputSensors.add(s);
+}
 
 window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const sensor = KEY_TO_SENSOR[e.key];
+    if (e.repeat) return;
+    const sensor = KEY_TO_SENSOR[e.key] || KEY_TO_SENSOR[e.code];
     if (sensor) {
-        manualInputSensors.add(sensor);
+        activeKeyboardSensors.add(sensor);
+        updateManualSensors();
         triggerManualHit(sensor);
     }
 });
 
 window.addEventListener('keyup', (e) => {
-    const sensor = KEY_TO_SENSOR[e.key];
+    const sensor = KEY_TO_SENSOR[e.key] || KEY_TO_SENSOR[e.code];
     if (sensor) {
-        manualInputSensors.delete(sensor);
+        activeKeyboardSensors.delete(sensor);
+        updateManualSensors();
     }
 });
 
-function triggerManualHit(sensorId) {
-    if (!datas || !datas.notes || !playing || settings.autoPlay !== false) return;
-    const hitWindow = 0.50; // 120ms 手動打擊判定視窗
+// --- MajdataPlay 判定標準系統 (JudgeEngine) ---
+const FRAME_SEC = 1 / 60; // 0.0166667s (16.67ms)
 
+const JUDGE_WINDOWS = {
+    TAP: {
+        CRITICAL_PERFECT: 1 * FRAME_SEC,  // <= 16.67ms (1st Perfect)
+        PERFECT_2ND: 2 * FRAME_SEC,       // <= 33.33ms (2nd Perfect)
+        PERFECT_3RD: 3 * FRAME_SEC,       // <= 50.00ms (3rd Perfect)
+        GREAT_1ST: 4 * FRAME_SEC,         // <= 66.67ms (1st Great)
+        GREAT_2ND: 5 * FRAME_SEC,         // <= 83.33ms (2nd Great)
+        GREAT_3RD: 6 * FRAME_SEC,         // <= 100.00ms (3rd Great)
+        GOOD: 9 * FRAME_SEC               // <= 150.00ms (Good)
+    },
+    TOUCH: {
+        CRITICAL_PERFECT: 9 * FRAME_SEC,  // <= 150.00ms
+        PERFECT_2ND: 10.5 * FRAME_SEC,    // <= 175.00ms
+        PERFECT_3RD: 12 * FRAME_SEC,      // <= 200.00ms
+        GREAT: 15 * FRAME_SEC,            // <= 250.00ms
+        GOOD: 18 * FRAME_SEC              // <= 300.00ms
+    }
+};
+
+function spawnJudgeEffect(note, judgeResult) {
+    if (!renderer) return;
+    let x = 0, y = 0;
+    if (note.type === 'touch') {
+        const ref = touchRefPos[note.touchPos] ? touchRefPos[note.touchPos][note.pos - 1] : { x: 0, y: 0 };
+        x = ref ? ref.x : 0;
+        y = ref ? ref.y : 0;
+    } else if (noteRefPos[note.pos - 1]) {
+        x = noteRefPos[note.pos - 1].x;
+        y = noteRefPos[note.pos - 1].y;
+    }
+
+    judgeEffects.push({
+        text: judgeResult.grade === 'CRITICAL_PERFECT' ? 'PERFECT' : judgeResult.grade,
+        subGrade: judgeResult.subGrade,
+        grade: judgeResult.grade,
+        startTime: performance.now(),
+        duration: 380,
+        x,
+        y
+    });
+
+    if (judgeEffects.length > 25) judgeEffects.shift();
+}
+
+function renderJudgeEffects(ctx) {
+    if (judgeEffects.length === 0) return;
+    const now = performance.now();
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = judgeEffects.length - 1; i >= 0; i--) {
+        const eff = judgeEffects[i];
+        const elapsed = now - eff.startTime;
+        if (elapsed > eff.duration) {
+            judgeEffects.splice(i, 1);
+            continue;
+        }
+        const progress = elapsed / eff.duration;
+        const alpha = Math.max(0, 1 - progress);
+        const distOffset = progress * 1.8;
+        const angle = Math.atan2(eff.y, eff.x);
+        const curX = eff.x + (eff.x === 0 && eff.y === 0 ? 0 : Math.cos(angle) * distOffset);
+        const curY = eff.y + (eff.x === 0 && eff.y === 0 ? -distOffset : Math.sin(angle) * distOffset);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(curX, curY);
+
+        let mainColor = '#ffd700';
+        let mainText = 'PERFECT';
+        if (eff.grade === 'CRITICAL_PERFECT') {
+            mainColor = '#ffe14d';
+            mainText = 'PERFECT';
+        } else if (eff.grade === 'PERFECT') {
+            mainColor = '#ffbb00';
+            mainText = 'PERFECT';
+        } else if (eff.grade === 'GREAT') {
+            mainColor = '#ff5fa2';
+            mainText = 'GREAT';
+        } else if (eff.grade === 'GOOD') {
+            mainColor = '#43c122';
+            mainText = 'GOOD';
+        } else if (eff.grade === 'MISS') {
+            mainColor = '#a0a0a0';
+            mainText = 'MISS';
+        }
+
+        ctx.font = 'bold 3.2px combo';
+        ctx.fillStyle = mainColor;
+        ctx.shadowColor = mainColor;
+        ctx.shadowBlur = 4;
+        ctx.fillText(mainText, 0, 0);
+
+        if (eff.subGrade) {
+            ctx.font = 'bold 1.8px combo';
+            ctx.fillStyle = eff.subGrade === 'FAST' ? '#00e5ff' : '#ff9100';
+            ctx.shadowBlur = 2;
+            ctx.fillText(eff.subGrade, 0, 2.6);
+        }
+
+        ctx.restore();
+    }
+    ctx.restore();
+}
+
+function evaluateHitGrade(diffSec, note) {
+    const isTouch = (note.type === 'touch');
+    const isFast = diffSec < 0;
+    const absDiff = Math.abs(diffSec);
+    const diffMSec = Math.round(diffSec * 1000 * 10) / 10;
+    const win = isTouch ? JUDGE_WINDOWS.TOUCH : JUDGE_WINDOWS.TAP;
+
+    let grade = 'MISS';
+    let subGrade = '';
+    let scoreMultiplier = 0;
+
+    if (isTouch) {
+        if (absDiff <= win.CRITICAL_PERFECT) {
+            grade = 'CRITICAL_PERFECT';
+            scoreMultiplier = 1.0;
+        } else if (absDiff <= win.PERFECT_3RD) {
+            grade = 'PERFECT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 1.0;
+        } else if (absDiff <= win.GREAT) {
+            grade = 'GREAT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 0.8;
+        } else if (absDiff <= win.GOOD) {
+            grade = 'GOOD';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 0.5;
+        }
+    } else {
+        if (absDiff <= win.CRITICAL_PERFECT) {
+            grade = 'CRITICAL_PERFECT';
+            scoreMultiplier = 1.0;
+        } else if (absDiff <= win.PERFECT_3RD) {
+            grade = 'PERFECT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 1.0;
+        } else if (absDiff <= win.GREAT_3RD) {
+            grade = 'GREAT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 0.8;
+        } else if (absDiff <= win.GOOD) {
+            grade = 'GOOD';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 0.5;
+        }
+    }
+
+    // EX 音符特權：只要落在 Good 視窗以內，一律強制升為 CRITICAL_PERFECT
+    if (note.isEx && grade !== 'MISS') {
+        grade = 'CRITICAL_PERFECT';
+        subGrade = '';
+        scoreMultiplier = 1.0;
+    }
+
+    // 地雷音符 Mine：碰觸判定為 MISS
+    if (note.isMine) {
+        grade = 'MISS';
+        subGrade = 'TOO_FAST';
+        scoreMultiplier = 0;
+    }
+
+    return { grade, subGrade, isFast, diffMSec, scoreMultiplier };
+}
+
+function resetNotesForSeek(targetGlobalTime) {
+    if (!datas || !datas.notes) return;
     for (let i = 0; i < datas.notes.length; i++) {
         const note = datas.notes[i];
-        if (note.triggered) continue;
-        const noteT = note.time - globalTime;
+        const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.cullSkipExtend ?? 0);
+        const startTargetT = note.time + (note.slideDelay ?? 0);
+        const endTargetT = note.time + skipT;
 
-        if (Math.abs(noteT) <= hitWindow) {
-            let matches = false;
-            if (note.type === 'touch') {
-                const noteSensor = note.touchPos + note.pos;
-                const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
-                matches = (normSensor === sensorId);
-            } else {
-                matches = ('A' + note.pos) === sensorId;
-            }
+        // 若 Slide/音符尚未完全結束（結束時間大於目標時間），重置結束標記與完成狀態
+        if (endTargetT > targetGlobalTime) {
+            note._endEffectPlayed = false;
+            note.holdFinish = false;
+            note.slideFinish = false;
+        }
 
-            if (matches) {
-                note.triggered = true;
-                note.triggeredTime = globalTime;
-                audioManager.queueSound(note, note.time);
-                break;
+        // 若 Slide 劃軌尚未開始（目標時間尚未到達 slideDelay），進度歸零並清空 checkpoint 判定紀錄
+        if (startTargetT >= targetGlobalTime) {
+            note._startEffectPlayed = false;
+            note.slideProgress = 0;
+            note._checkedCps = null;
+        }
+
+        // 若音符在判定視窗以內或未來的時間，重置判定結果與擊中狀態
+        const isTouch = (note.type === 'touch');
+        const lateWin = isTouch ? JUDGE_WINDOWS.TOUCH.GOOD : JUDGE_WINDOWS.TAP.GOOD;
+        if (note.time + lateWin >= targetGlobalTime) {
+            note.triggered = false;
+            note.judgeResult = null;
+            note._missReported = false;
+            note.isHolding = false;
+            note._holdPressed = false;
+            note._releaseDuration = 0;
+        }
+
+        if (note.time > targetGlobalTime) {
+            if (note._riserActive) {
+                audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
+                note._riserActive = false;
             }
         }
     }
 }
 
+function triggerManualHit(sensorId) {
+    if (!datas || !datas.notes || !playing || settings.autoPlay !== false) return;
+
+    let bestNote = null;
+    let minDiff = Infinity;
+    let bestEval = null;
+
+    for (let i = 0; i < datas.notes.length; i++) {
+        const note = datas.notes[i];
+        if (note.triggered) continue;
+        if (note.type === 'slide') continue; // Slide 由劃軌 Checkpoint 判定，不接受點擊觸發
+        const noteT = note.time - globalTime;
+        const isTouch = (note.type === 'touch');
+        const maxHitWindow = isTouch ? JUDGE_WINDOWS.TOUCH.GOOD : JUDGE_WINDOWS.TAP.GOOD;
+
+        // 音符在未來且超過判定視窗，後續音符更靠後，直接結束搜尋
+        if (noteT > maxHitWindow) break;
+        // 已過判定視窗
+        if (noteT < -maxHitWindow) continue;
+
+        let matches = false;
+        if (isTouch) {
+            const noteSensor = note.touchPos + note.pos;
+            const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
+            matches = (normSensor === sensorId);
+        } else {
+            // 一般音符 (tap, hold, star, slide)
+            // 外鍵與 A 區感應器 (A1~A8) 或內圈 B 感應器 (B1~B8) 均可精確觸發
+            matches = (sensorId === ('A' + note.pos) || sensorId === ('B' + note.pos));
+        }
+
+        if (matches) {
+            const evalRes = evaluateHitGrade(noteT, note);
+            if (evalRes.grade !== 'MISS') {
+                const diff = Math.abs(noteT);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestNote = note;
+                    bestEval = evalRes;
+                }
+            }
+        }
+    }
+
+    if (bestNote && bestEval) {
+        bestNote.triggered = true;
+        bestNote.triggeredTime = globalTime;
+        bestNote.judgeResult = bestEval;
+        spawnJudgeEffect(bestNote, bestEval);
+
+        if (bestNote.holdDuration > 0) {
+            bestNote._holdPressed = true;
+            bestNote.isHolding = true;
+        }
+        audioManager.queueSound(bestNote, globalTime);
+    }
+}
+
+function getSensorFromPointer(e) {
+    if (!renderer) return null;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const dpr = window.devicePixelRatio || 1;
+    const p = Math.min(canvas.width, canvas.height) / scaleBase * renderer.scale;
+    const rx = (x * dpr - canvas.width * 0.5) / p;
+    const ry = (y * dpr - canvas.height * 0.5) / p;
+
+    return renderer.getSensorIdAtPoint(rx, ry);
+}
+
 if (canvas) {
-    const handlePointerHit = (e) => {
+    canvas.addEventListener('pointerdown', (e) => {
         if (!renderer || settings.autoPlay !== false || !playing) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        const dpr = window.devicePixelRatio || 1;
-        const p = Math.min(canvas.width, canvas.height) / scaleBase * renderer.scale;
-        const rx = (x * dpr - canvas.width * 0.5) / p;
-        const ry = (y * dpr - canvas.height * 0.5) / p;
-
-        const sensorId = renderer.getSensorIdAtPoint(rx, ry);
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { }
+        const sensorId = getSensorFromPointer(e);
         if (sensorId) {
-            manualInputSensors.add(sensorId);
+            activePointers.set(e.pointerId, sensorId);
+            updateManualSensors();
             triggerManualHit(sensorId);
-            setTimeout(() => manualInputSensors.delete(sensorId), 100);
+        }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+        if (!renderer || settings.autoPlay !== false || !playing) return;
+        if (!activePointers.has(e.pointerId) && e.buttons === 0) return;
+        const sensorId = getSensorFromPointer(e);
+        const prevSensor = activePointers.get(e.pointerId);
+        if (sensorId !== prevSensor) {
+            if (sensorId) {
+                activePointers.set(e.pointerId, sensorId);
+                updateManualSensors();
+                triggerManualHit(sensorId);
+            } else {
+                activePointers.delete(e.pointerId);
+                updateManualSensors();
+            }
+        }
+    });
+
+    const handlePointerUp = (e) => {
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) { }
+        if (activePointers.has(e.pointerId)) {
+            activePointers.delete(e.pointerId);
+            updateManualSensors();
         }
     };
-
-    canvas.addEventListener('pointerdown', handlePointerHit);
-    canvas.addEventListener('pointermove', (e) => {
-        if (e.buttons > 0) handlePointerHit(e);
-    });
+    canvas.addEventListener('pointerup', handlePointerUp);
+    canvas.addEventListener('pointercancel', handlePointerUp);
 }
 
 if (restartBtn) {
@@ -454,8 +805,11 @@ function calculatePlayScoreRes(datas) {
 }
 
 function getResult() {
-    datas = simaiDecode(rawdata["inote_" + selectedDifficulty], 0);
+    const chartData = (rawdata && rawdata["inote_" + selectedDifficulty]) ||
+        (rawdata && [7, 6, 5, 4, 3, 2, 1].map(d => rawdata["inote_" + d]).find(Boolean)) || "";
+    datas = simaiDecode(chartData, 0);
     if (datas) {
+        linkChainSlides(datas.notes);
         playScoreRes = calculatePlayScoreRes(datas);
     }
 }
@@ -493,32 +847,8 @@ if (timeControl) {
         globalTime = realTime - musicDelay;
         playStartTimestamp = null;
 
-        // 拖拽/跳轉時重置 Note 音效播放與遊玩 Hit 狀態記錄
-        if (datas && datas.notes) {
-            for (let i = 0; i < datas.notes.length; i++) {
-                const note = datas.notes[i];
-                const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
-                const startTargetT = note.time + (note.slideDelay ?? 0);
-                const endTargetT = note.time + skipT;
-
-                if (startTargetT - globalTime > 0.1) {
-                    note._startEffectPlayed = false;
-                    note.triggered = false;
-                }
-                if (endTargetT - globalTime > 0.1) {
-                    note._endEffectPlayed = false;
-                    note.holdFinish = false;
-                    note.slideFinish = false;
-                }
-                if (note.time - globalTime > 0) {
-                    note.isHolding = false;
-                    if (note._riserActive) {
-                        audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
-                        note._riserActive = false;
-                    }
-                }
-            }
-        }
+        // 拖拽/跳轉時完整重置 Note 音效播放、劃軌進度與遊玩 Hit/判定狀態記錄
+        resetNotesForSeek(globalTime);
 
         videoSeekDebounce(realTime);
 
@@ -585,6 +915,11 @@ function play() {
 function restart() {
     pause();
 
+    activePointers.clear();
+    activeKeyboardSensors.clear();
+    manualInputSensors.clear();
+    simulatedPlayController.reset();
+
     playStartTimestamp = null;
     pausedTime = 0;
     realTime = 0;
@@ -602,6 +937,9 @@ function restart() {
             n.slideFinish = false;
             n._checkedCps = null;
             n._holdPressed = false;
+            n._releaseDuration = 0;
+            n.judgeResult = null;
+            n._missReported = false;
         });
     }
 
@@ -747,34 +1085,57 @@ function update() {
         playStartTimestamp = null;
     }
 
+    if (realTime < lastObservedTime - 0.05) {
+        resetNotesForSeek(globalTime);
+    }
+    lastObservedTime = realTime;
+
     updateTimeControlUI();
     draw();
 }
 
-function updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding }) {
+function updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding, dt = 0.016 }) {
     if (!playing || timeControlSliding || settings.autoPlay !== false) return;
 
     for (let i = 0; i < notes.length; i++) {
         const note = notes[i];
         const noteT = note.time - globalTime;
         const noteType = note.type;
+        const isHold = (note.holdDuration > 0);
 
         // 1. Hold & TouchHold 手動按壓與結算判定
-        if (note.holdDuration > 0) {
+        if (isHold) {
             const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
             const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
+            const isSensorPressed = manualInputSensors.has(sensorId) ||
+                (noteType !== 'touch' && (manualInputSensors.has('A' + note.pos) || manualInputSensors.has('B' + note.pos)));
 
-            if (noteT <= 0 && -noteT <= note.holdDuration) {
-                if (manualInputSensors.has(sensorId)) {
+            if (noteT <= 0.05 && -noteT <= note.holdDuration) {
+                if (isSensorPressed) {
                     note.isHolding = true;
                     note._holdPressed = true;
                 } else {
                     note.isHolding = false;
+                    note._releaseDuration = (note._releaseDuration || 0) + dt;
                 }
             } else if (-noteT > note.holdDuration) {
                 note.isHolding = false;
                 if (note._holdPressed || note.triggered) {
-                    note.holdFinish = true;
+                    if (!note.holdFinish) {
+                        note.holdFinish = true;
+                        // MajdataPlay HoldEndJudge 鬆手率結算
+                        const release = note._releaseDuration || 0;
+                        const pressRatio = Math.max(0, (note.holdDuration - release) / note.holdDuration);
+                        if (pressRatio < 0.33 && !note.isEx) {
+                            note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
+                        } else if (pressRatio < 0.67 && !note.isEx) {
+                            note.judgeResult = { grade: 'GOOD', subGrade: '', scoreMultiplier: 0.5 };
+                        } else {
+                            if (!note.judgeResult || note.judgeResult.grade === 'MISS') {
+                                note.judgeResult = { grade: 'PERFECT', subGrade: '', scoreMultiplier: 1.0 };
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -783,6 +1144,22 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
         if (noteType === 'slide') {
             const slideDelay = note.slideDelay ?? 0;
             const slideDuration = note.slideDuration ?? 0;
+
+            // 前一個連鎖 slide 未 finish 前，後面的絕對不能被觸發！
+            if (note.prevSlide && !note.prevSlide.slideFinish) {
+                note.slideProgress = 0;
+                note.slideFinish = false;
+                note._checkedCps = null;
+                continue;
+            }
+
+            // 尚未到達劃軌時間時，進度強制為 0，防止殘留
+            if (-noteT <= slideDelay) {
+                note.slideProgress = 0;
+                note.slideFinish = false;
+                note._checkedCps = null;
+                continue;
+            }
 
             if (-noteT > slideDelay && slideDuration > 0 && !note.isMine) {
                 const checkpoints = simulatedPlayController.getOrCreateSlideCheckpoints(note, renderer);
@@ -841,7 +1218,7 @@ function draw() {
     } else {
         // 手動模式：更新音符手動判定並使用玩家鍵盤/觸控實時按壓 Sensor
         simulatedPlayController.reset();
-        updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding });
+        updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding, dt });
         activeSensors = manualInputSensors;
     }
 
@@ -866,40 +1243,107 @@ function draw() {
     let slideOnScreenCount = 0;
     let foundIndexForThisFrame = false;
 
-    // 正序 (0 ~ notesLength-1) 統計 Combo 與 Score (解決倒序統計導致 Miss Combo 無法清 0 的問題)
+    // 正序 (0 ~ notesLength-1) 統計 Combo 與 Score
     for (let i = 0; i < notesLength; i++) {
         const note = notes[i];
         const noteT = note.time - globalTime;
         const noteType = note.type;
-        const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.cullSkipExtend ?? 0);
+        const isHold = (noteType === 'hold' || (noteType === 'touch' && (note.holdDuration ?? 0) > 0));
+        const holdDuration = note.holdDuration ?? 0;
+        const slideDelay = note.slideDelay ?? 0;
+        const slideDuration = note.slideDuration ?? 0;
+        const skipT = holdDuration + slideDuration + slideDelay + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
 
-        const noteTimePassed = (noteType === "slide" ? (note.lastSlide && skipT + noteT < 0) :
-            noteType === "hold" ? (skipT + noteT < 0) :
-                noteType === "touch" && note.holdDuration !== undefined ? (skipT + noteT < 0) :
-                    noteT < 0);
+        const isTouch = (noteType === 'touch');
+        const lateJudgeWindow = isTouch ? JUDGE_WINDOWS.TOUCH.GOOD : JUDGE_WINDOWS.TAP.GOOD;
 
-        if (!noteTimePassed) break;
+        // 如果 note 還在判定視窗之後的未來，後續 note 都在更遠的未來，結束檢查
+        if (noteT > lateJudgeWindow) break;
 
-        const isHit = (settings.autoPlay !== false)
-            ? true
-            : (note.triggered || note.isHolding || note.holdFinish || note.slideFinish || false);
+        if (settings.autoPlay !== false) {
+            // 自動模式：只要音符到達時間即判定擊中 (Critical Perfect)
+            const notePassed = (noteType === "slide" ? (note.lastSlide && skipT + noteT <= 0) :
+                isHold ? (holdDuration + noteT <= 0) :
+                    noteT <= 0);
 
-        if (isHit) {
-            if (note.isBreak) {
-                noteQuantity.break++;
-            } else if (note.isHold) {
-                noteQuantity.hold++;
-            } else {
-                noteQuantity[noteType]++;
-            }
+            if (!notePassed) continue;
+
+            if (note.isBreak) noteQuantity.break++;
+            else if (note.isHold || isHold) noteQuantity.hold++;
+            else noteQuantity[noteType]++;
+
             playCombo++;
             playScore += ((note.isBreak ? 5 :
                 (noteType === "slide" ? 3 :
-                    note.holdDuration !== undefined ? 2 : 1)
+                    isHold ? 2 : 1)
             ) * (playScoreRes.invScore || 0)) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
         } else {
-            // 未擊中 Miss: Combo 中斷歸零
-            playCombo = 0;
+            // 手動模式：依據 MajdataPlay 判定標準評分與統計 Combo
+            if (noteType === 'slide') {
+                const slideEndT = skipT + noteT;
+                if (slideEndT > 0 && !note.slideFinish) continue;
+
+                // 若為連鎖 slide 且前置 segment 未成功擊中，後段直接算失敗 (連鎖中斷)
+                const prevFailed = (note.prevSlide && !note.prevSlide.slideFinish && (note.prevSlide.slideProgress ?? 0) < 0.5);
+                const isHit = !prevFailed && (note.slideFinish || (note.slideProgress ?? 0) >= 0.5);
+                if (isHit) {
+                    if (note.isBreak) noteQuantity.break++;
+                    else noteQuantity.slide++;
+                    playCombo++;
+                    playScore += (note.isBreak ? 5 : 3) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
+                } else {
+                    playCombo = 0;
+                }
+            } else if (isHold) {
+                const holdEndT = holdDuration + noteT;
+                if (holdEndT > 0) {
+                    if (noteT >= -lateJudgeWindow) continue;
+                    if (!note._holdPressed && !note.triggered && !note.isHolding) {
+                        if (!note._missReported) {
+                            note._missReported = true;
+                            note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
+                            spawnJudgeEffect(note, note.judgeResult);
+                        }
+                        playCombo = 0;
+                    }
+                    continue;
+                }
+
+                // Hold 已結束結算
+                const isHit = (note.judgeResult && note.judgeResult.grade !== 'MISS') || note.holdFinish;
+                if (isHit) {
+                    const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
+                    if (note.isBreak) noteQuantity.break++;
+                    else noteQuantity.hold++;
+                    playCombo++;
+                    playScore += ((note.isBreak ? 5 : 2) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * mult : 0);
+                } else {
+                    playCombo = 0;
+                }
+            } else {
+                // Tap / Star / Touch
+                if (note.triggered) {
+                    const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
+                    if (note.judgeResult && note.judgeResult.grade === 'MISS') {
+                        playCombo = 0;
+                    } else {
+                        if (note.isBreak) noteQuantity.break++;
+                        else noteQuantity[noteType]++;
+                        playCombo++;
+                        playScore += ((note.isBreak ? 5 : 1) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * mult : 0);
+                    }
+                } else {
+                    // 超過晚判定視窗才算 Miss
+                    if (noteT < -lateJudgeWindow) {
+                        if (!note._missReported) {
+                            note._missReported = true;
+                            note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
+                            spawnJudgeEffect(note, note.judgeResult);
+                        }
+                        playCombo = 0;
+                    }
+                }
+            }
         }
     }
 
@@ -934,10 +1378,11 @@ function draw() {
             if (noteType === "touch" && note.holdDuration > 0) {
                 const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
                 const noteId = `riser_${note.pos}_${note.time}`;
-                if (isInsideHold && !note._riserActive) {
+                const isHolding = (settings.autoPlay !== false) ? isInsideHold : (isInsideHold && note.isHolding);
+                if (isHolding && !note._riserActive) {
                     audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
                     note._riserActive = true;
-                } else if (!isInsideHold && note._riserActive) {
+                } else if (!isHolding && note._riserActive) {
                     audioManager.stopLongSound(noteId);
                     note._riserActive = false;
                 }
@@ -949,8 +1394,15 @@ function draw() {
             const startTargetT = note.time + (note.slideDelay ?? 0);
             const startNoteT = startTargetT - globalTime;
             if (startNoteT <= lookAhead && !note._startEffectPlayed) {
-                if (!(noteType === "slide" && !note.firstSlide)) {
-                    audioManager.queueSound(note, startTargetT);
+                // 手動模式下，Tap/Touch/Hold 的起手音效由手動擊中 triggerManualHit 播放
+                // 只有自動模式，或是 Slide 的劃軌開始音效 (slideDelay > 0) 才在此播放
+                const isSlideTrackStart = (noteType === "slide" && (note.slideDelay ?? 0) > 0);
+                const shouldPlayStart = (settings.autoPlay !== false) || isSlideTrackStart;
+
+                if (shouldPlayStart && !(noteType === "slide" && !note.firstSlide)) {
+                    if (startNoteT >= -0.1) {
+                        audioManager.queueSound(note, startTargetT);
+                    }
                 }
                 note._startEffectPlayed = true;
             }
@@ -959,10 +1411,10 @@ function draw() {
             const endNoteT = endTargetT - globalTime;
             if (endNoteT <= lookAhead && !note._endEffectPlayed) {
                 const shouldPlayEndSound =
-                    (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                    (noteType === "slide" && note.lastSlide && note.isBreak && ((settings.autoPlay !== false) || note.slideFinish || (note.slideProgress ?? 0) >= 0.5)) ||
                     note.isHanabi ||
-                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
-                if (shouldPlayEndSound) {
+                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd && ((settings.autoPlay !== false) || note._holdPressed || note.holdFinish));
+                if (shouldPlayEndSound && endNoteT >= -0.1) {
                     audioManager.queueSound(note, endTargetT);
                 }
                 note._endEffectPlayed = true;
@@ -1024,6 +1476,9 @@ function draw() {
         playScoreRes,
         nowIndex,
     });
+
+    // 渲染手動打擊判定即時反饋特效 (PERFECT / GREAT / GOOD / MISS + FAST / LATE)
+    renderJudgeEffects(ctx);
 
     audioManager.update(globalTime);
 }

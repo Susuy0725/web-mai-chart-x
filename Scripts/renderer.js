@@ -1084,8 +1084,12 @@ export class SimaiRenderer {
                     outlineText(ctx, `${this.playCombo}`, 0, 0, 7.4, 0.5, this._middleDisplayConfig2);
                 }
                 break;
-            case 2:
-                const trueScore = Math.max(this.playScore, 0).toFixed(4);
+            case 2: // 分數 (101%+)
+            case 3: // 分數 (101%-)
+                const scoreValue = (this.settings.middleDisplay === 3)
+                    ? (this.playScoreMinus !== undefined ? this.playScoreMinus : 101)
+                    : (this.playScore ?? 0);
+                const trueScore = Math.max(scoreValue, 0).toFixed(4);
                 const dotIdx = trueScore.indexOf(".");
                 const part0 = dotIdx === -1 ? trueScore : trueScore.substring(0, dotIdx);
                 const part1 = dotIdx === -1 ? "" : trueScore.substring(dotIdx + 1);
@@ -1326,7 +1330,7 @@ export class SimaiRenderer {
         const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
         const sizeOffset = t < md ? 0 :
-            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) - md) * 2.5;
+            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) * 0.98 - md) * 2.5;
 
         this.ctx.save();
         this.ctx.rotate(posInfo.rot);
@@ -1598,7 +1602,9 @@ export class SimaiRenderer {
         }
         this._dummyCtx.setTransform(1, 0, 0, 1, 0, 0);
 
-        let resultId = null;
+        let insideId = null;
+        let strokeId = null;
+
         for (let j = 0; j < touchPaths.length; j++) {
             const shape = touchPaths[j];
             if (ignoreD && shape.id.startsWith('D')) continue;
@@ -1607,13 +1613,20 @@ export class SimaiRenderer {
             this._dummyCtx.lineWidth = isA ? 15 : 3;
 
             const isInside = this._dummyCtx.isPointInPath(shape.path, x, y);
-            const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
-
-            if (isInside || isNearEdge) {
-                resultId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
+            if (isInside && !insideId) {
+                insideId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
                 break;
             }
+
+            if (!strokeId) {
+                const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
+                if (isNearEdge) {
+                    strokeId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
+                }
+            }
         }
+
+        let resultId = insideId || strokeId;
 
         if (this._sensorPointCache.size > 1000) {
             this._sensorPointCache.clear();

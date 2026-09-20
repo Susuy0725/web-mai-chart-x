@@ -185,11 +185,18 @@ body {
 
 #playControls .controlsContainer {
     display: flex;
-    gap: 20px;
+    gap: clamp(8px, 1.8vw, 18px);
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
     transition: transform 200ms ease;
+    max-width: 100%;
+    padding: 0 10px;
+    box-sizing: border-box;
+}
+
+.popup-backdrop {
+    z-index: 999;
 }
 
 #playControls.hide #playControlContainer {

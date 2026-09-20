@@ -410,8 +410,10 @@ export class SimaiRenderer {
             dt,
             showSensor,
             showSensorText,
+            activeSensors,
             playCombo,
             playScore,
+            playScoreMinus,
             noteQuantity = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0 },
             playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
         } = state;
@@ -419,6 +421,7 @@ export class SimaiRenderer {
         this.globalTime = globalTime;
         this.playCombo = playCombo;
         this.playScore = playScore;
+        this.playScoreMinus = (playScoreMinus !== undefined) ? playScoreMinus : 101;
 
         if (!this.images) return;
 
@@ -457,7 +460,10 @@ export class SimaiRenderer {
         }
 
         // 3. 按視覺分層繪製
-        if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
+        const shouldDrawHighlight = (this.settings.sensorHighlight !== false) && activeSensors && activeSensors.size > 0;
+        if (showSensor || showSensorText || shouldDrawHighlight) {
+            this.drawSensors(showSensor, showSensorText, shouldDrawHighlight ? activeSensors : null);
+        }
 
         this.drawMiddleDisplay();
 
@@ -486,7 +492,7 @@ export class SimaiRenderer {
         this.drawStaticBackground();
 
         if (this.settings.renderSurroundingAuxiliaryText) {
-            this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
+            this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore, this.playScoreMinus);
         }
         if (this.settings.showUI) {
             this.drawUI(dt, globalTime);
@@ -765,7 +771,7 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
-    drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
+    drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore, playScoreMinus) {
         const { width: w, height: h } = this.getCanvasWH();
         if (h >= w) return;
         const { ctx } = this;
@@ -814,9 +820,11 @@ export class SimaiRenderer {
         ctx.textBaseline = "top";
         ctx.textAlign = "right";
         ctx.font = "bold 5px mono";
-        ctx.fillText('DELUXE Rate:', scaleBase / -2 - 3, 1);
+        const isMinus = (this.settings.middleDisplay === 3);
+        ctx.fillText(isMinus ? 'DELUXE Rate (101%-):' : 'DELUXE Rate:', scaleBase / -2 - 3, 1);
         ctx.font = "7px mono";
-        ctx.fillText(playScore.toFixed(4) + "%", scaleBase / -2 - 3, 8);
+        const displayScore = isMinus ? (playScoreMinus ?? 101) : playScore;
+        ctx.fillText(displayScore.toFixed(4) + "%", scaleBase / -2 - 3, 8);
 
         ctx.restore();
     }
@@ -874,8 +882,12 @@ export class SimaiRenderer {
                     outlineText(ctx, `${this.playCombo}`, 0, 0, 7.4, 0.5, this._middleDisplayConfig2);
                 }
                 break;
-            case 2:
-                const trueScore = Math.max(this.playScore, 0).toFixed(4);
+            case 2: // 分數 (101%+)
+            case 3: // 分數 (101%-)
+                const scoreValue = (this.settings.middleDisplay === 3)
+                    ? (this.playScoreMinus !== undefined ? this.playScoreMinus : 101)
+                    : (this.playScore ?? 0);
+                const trueScore = Math.max(scoreValue, 0).toFixed(4);
                 const dotIdx = trueScore.indexOf(".");
                 const part0 = dotIdx === -1 ? trueScore : trueScore.substring(0, dotIdx);
                 const part1 = dotIdx === -1 ? "" : trueScore.substring(dotIdx + 1);
@@ -943,24 +955,6 @@ export class SimaiRenderer {
 
             sctx.restore();
 
-            // 繪製 A 區外延伸（外鍵 1~8 區域）輔助輪廓
-            sctx.save();
-            const outerR1 = innerCirleBase * 1.05;
-            const outerR2 = innerCirleBase * 1.28;
-            sctx.strokeStyle = '#ff4d4d80';
-            sctx.lineWidth = 0.4;
-            sctx.setLineDash([0.4, 0.8]);
-            for (let i = 1; i <= 8; i++) {
-                const startAng = -Math.PI / 2 + (i - 1) * (Math.PI / 4);
-                const endAng = -Math.PI / 2 + i * (Math.PI / 4);
-                sctx.beginPath();
-                sctx.arc(0, 0, outerR2, startAng, endAng);
-                sctx.arc(0, 0, outerR1, endAng, startAng, true);
-                sctx.closePath();
-                sctx.stroke();
-            }
-            sctx.restore();
-
             const texts = document.createElement('canvas');
             texts.width = wPx;
             texts.height = hPx;
@@ -1019,15 +1013,15 @@ export class SimaiRenderer {
                 const p = Math.min(wPx, hPx) / scaleBase * this.scale;
                 ctx.setTransform(p, 0, 0, p, wPx * 0.5, hPx * 0.5);
 
-                // 1. 內圈感應區高亮
+                // 1. 內圈感應區高亮 (藍色柔光發光)
                 ctx.save();
                 ctx.beginPath();
                 ctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
                 ctx.clip();
 
-                ctx.fillStyle = 'rgba(74, 144, 226, 0.45)';
-                ctx.strokeStyle = '#ffffffa0';
-                ctx.lineWidth = 0.5;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+                ctx.strokeStyle = '#ffffffff';
+                ctx.lineWidth = 0.6;
 
                 for (let j = 0; j < touchPaths.length; j++) {
                     const shape = touchPaths[j];
@@ -1039,7 +1033,7 @@ export class SimaiRenderer {
                 }
                 ctx.restore();
 
-                // 2. 外鍵延伸區域高亮 (對應使用者附圖之紅色外鍵區域)
+                // 2. 外鍵延伸區域高亮 (紅色發光區域 1~8)
                 const outerR1 = innerCirleBase * 1.05;
                 const outerR2 = innerCirleBase * 1.28;
                 for (let i = 1; i <= 8; i++) {
@@ -1051,11 +1045,8 @@ export class SimaiRenderer {
                         ctx.arc(0, 0, outerR2, startAng, endAng);
                         ctx.arc(0, 0, outerR1, endAng, startAng, true);
                         ctx.closePath();
-                        ctx.fillStyle = 'rgba(255, 68, 68, 0.45)';
-                        ctx.strokeStyle = '#ff4d4d';
-                        ctx.lineWidth = 0.6;
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
                         ctx.fill();
-                        ctx.stroke();
                         ctx.restore();
                     }
                 }
@@ -1397,19 +1388,20 @@ export class SimaiRenderer {
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
         let displaySlideProgress = 0;
-        if (-noteT > slideDelay && (!s.prevSlide || s.prevSlide.slideFinish)) {
+        if (-noteT > slideDelay) {
             displaySlideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
 
+        const isParentFinished = !!(s.prevSlide && s.prevSlide.slideFinish);
+        const isHeadTriggered = !!(s.headNote?.triggered || s.headTriggered);
+        const isCanSlide = s.hideHead ? (-noteT >= -0.05) : (isHeadTriggered || -noteT >= -0.05);
+        const isUnlocked = isParentFinished || isCanSlide || !!s.unlocked;
+
         let effectiveProgress = 0;
-        if (-noteT > slideDelay && (!s.prevSlide || s.prevSlide.slideFinish)) {
-            if (this.settings.autoPlay !== false) {
-                effectiveProgress = displaySlideProgress;
-            } else {
-                effectiveProgress = (s.slideProgress !== undefined && s.slideProgress !== null)
-                    ? Math.min(1, Math.max(0, s.slideProgress))
-                    : 0;
-            }
+        if (isUnlocked) {
+            effectiveProgress = (s.slideProgress !== undefined && s.slideProgress !== null)
+                ? Math.min(1, Math.max(0, s.slideProgress))
+                : displaySlideProgress;
         } else {
             effectiveProgress = 0;
         }
@@ -1419,8 +1411,7 @@ export class SimaiRenderer {
         this.drawPathWithArrows(p, effectiveProgress, prefixOrKey, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
-        const canShowStar = (!s.prevSlide || s.prevSlide.slideFinish);
-        if (noteT <= 0 && (!s.hideHead || sz >= 1) && canShowStar && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish))) {
+        if (noteT <= 0 && (!s.hideHead || sz >= 1) && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish))) {
             const { x, y, rot } = p.getPointAt(displaySlideProgress);
             this.ctx.save();
             this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
@@ -1487,7 +1478,9 @@ export class SimaiRenderer {
         }
         this._dummyCtx.setTransform(1, 0, 0, 1, 0, 0);
 
-        let resultId = null;
+        let insideId = null;
+        let strokeId = null;
+
         for (let j = 0; j < touchPaths.length; j++) {
             const shape = touchPaths[j];
             if (ignoreD && shape.id.startsWith('D')) continue;
@@ -1496,13 +1489,20 @@ export class SimaiRenderer {
             this._dummyCtx.lineWidth = isA ? 15 : 3;
 
             const isInside = this._dummyCtx.isPointInPath(shape.path, x, y);
-            const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
-
-            if (isInside || isNearEdge) {
-                resultId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
+            if (isInside && !insideId) {
+                insideId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
                 break;
             }
+
+            if (!strokeId) {
+                const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
+                if (isNearEdge) {
+                    strokeId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
+                }
+            }
         }
+
+        let resultId = insideId || strokeId;
 
         // 2. 若未落在內圈多邊形內，但半徑已靠近外圈（r >= innerCirleBase * 0.95），回退判定為外鍵
         if (!resultId && r >= innerCirleBase * 0.95 && r <= innerCirleBase * 2.8) {
@@ -1519,6 +1519,44 @@ export class SimaiRenderer {
         }
         this._sensorPointCache.set(cacheKey, resultId);
         return resultId;
+    }
+
+    /**
+     * 肥手指 (Fat Finger) 區域擴張採樣：
+     * 以 (x, y) 為中心，在半徑 radius 範圍內進行多點圓形取樣，返回接觸面覆蓋的所有感應器 ID 集合
+     */
+    getSensorsAtPointWithRadius(x, y, radius = 4.2, ignoreD = false) {
+        const sensors = new Set();
+        const centerId = this.getSensorIdAtPoint(x, y, ignoreD);
+        if (centerId) sensors.add(centerId);
+
+        if (radius <= 0) return sensors;
+
+        // 採樣外層 8 個方位角及內層 4 個採樣點，模擬真實手指接觸面的橢圓/圓形覆蓋
+        const outerR = radius;
+        const innerR = radius * 0.55;
+
+        // 8 個外圈採樣點 (每 45 度)
+        const angles8 = [0, 0.785398, 1.570796, 2.356194, 3.141593, 3.926991, 4.712389, 5.497787];
+        for (let i = 0; i < 8; i++) {
+            const a = angles8[i];
+            const px = x + Math.cos(a) * outerR;
+            const py = y + Math.sin(a) * outerR;
+            const sid = this.getSensorIdAtPoint(px, py, ignoreD);
+            if (sid) sensors.add(sid);
+        }
+
+        // 4 個內圈採樣點
+        const angles4 = [0.392699, 1.963495, 3.534292, 5.105088];
+        for (let i = 0; i < 4; i++) {
+            const a = angles4[i];
+            const px = x + Math.cos(a) * innerR;
+            const py = y + Math.sin(a) * innerR;
+            const sid = this.getSensorIdAtPoint(px, py, ignoreD);
+            if (sid) sensors.add(sid);
+        }
+
+        return sensors;
     }
 
     ensurePathSensorMap(recorder) {

@@ -159,7 +159,9 @@ export const en = {
         middleDisplayOpts: {
             off: "Off",
             combo: "COMBO",
-            score: "Score"
+            score: "Score (101%+)",
+            scorePlus: "Score (101%+)",
+            scoreMinus: "Score (101%-)"
         }
     },
     popup: {

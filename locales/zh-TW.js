@@ -161,7 +161,9 @@ export const zhTW = {
         middleDisplayOpts: {
             off: "關閉",
             combo: "COMBO",
-            score: "分數"
+            score: "分數(101%+)",
+            scorePlus: "分數(101%+)",
+            scoreMinus: "分數(101%-)"
         }
     },
     popup: {

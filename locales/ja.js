@@ -159,7 +159,9 @@ export const ja = {
         middleDisplayOpts: {
             off: "オフ",
             combo: "COMBO",
-            score: "スコア"
+            score: "達成率(101%+)",
+            scorePlus: "達成率(101%+)",
+            scoreMinus: "達成率(101%-)"
         }
     },
     popup: {

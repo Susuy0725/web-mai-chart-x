@@ -1,160 +1,111 @@
 import { generatePath } from '../Scripts/helper.js';
+import { getSlideJudgeQueue } from './slidetables.js';
 
 export class SimulatedPlayController {
     constructor() {
         this.activeSensors = new Set();
-        this._slideCheckpointMap = new WeakMap();
+        this._slideAreasMap = new WeakMap();
     }
 
     reset() {
         this.activeSensors.clear();
-        this._slideCheckpointMap = new WeakMap();
+        this._slideAreasMap = new WeakMap();
     }
 
-    getOrCreateSlideCheckpoints(note, renderer) {
-        if (!renderer || typeof renderer.getSensorIdAtPoint !== 'function') return [];
-        if (this._slideCheckpointMap.has(note)) {
-            return this._slideCheckpointMap.get(note);
+    getOrCreateSlideAreas(note, renderer) {
+        if (this._slideAreasMap.has(note)) {
+            return this._slideAreasMap.get(note);
         }
-
-        const path = note.path || generatePath(note.pos, note.slideEnd);
-        if (!path || path.totalLength < 1e-4) {
-            const empty = [];
-            this._slideCheckpointMap.set(note, empty);
-            return empty;
-        }
-
-        const samples = typeof renderer.ensurePathSensorMap === 'function'
-            ? renderer.ensurePathSensorMap(path)
-            : null;
-
-        const checkpoints = [];
-        let lastSensorId = null;
-
-        if (samples && samples.length > 0) {
-            for (let i = 0; i < samples.length; i++) {
-                const s = samples[i];
-                if (s && s.sensorId && s.sensorId !== lastSensorId) {
-                    checkpoints.push({ ratio: s.dist / path.totalLength, sensorId: s.sensorId });
-                    lastSensorId = s.sensorId;
-                }
-            }
-        } else {
-            const numSamples = Math.max(8, Math.min(24, Math.ceil(path.totalLength * 0.4)));
-            for (let i = 0; i <= numSamples; i++) {
-                const ratio = i / numSamples;
-                const pt = path.getPointAt(ratio);
-                const sensorId = renderer.getSensorIdAtPoint(pt.x, pt.y, true);
-                if (sensorId && sensorId !== lastSensorId) {
-                    checkpoints.push({ ratio, sensorId });
-                    lastSensorId = sensorId;
-                }
-            }
-        }
-
-        this._slideCheckpointMap.set(note, checkpoints);
-        return checkpoints;
+        const queue = getSlideJudgeQueue(note, renderer);
+        this._slideAreasMap.set(note, queue);
+        return queue;
     }
 
-    update({ globalTime, notes = [], renderer, playing, timeControlSliding, effectDecayTime = 0.2 }) {
+    update({ globalTime, notes = [], renderer, playing, timeControlSliding, onHit = null }) {
         this.activeSensors.clear();
         if (!playing || timeControlSliding) return;
 
-        const touchDuration = 0.08;
+        const touchDuration = 0.12;
 
         for (let i = 0; i < notes.length; i++) {
             const note = notes[i];
             const noteT = note.time - globalTime;
             const noteType = note.type;
 
-            // 1. Tap / Star / 普通 Touch 觸發擊中
+            // 1. Tap / Star / 普通 Touch：在擊中時刻產生感應器輸入並觸發判定
             if (noteType === 'tap' || (noteType === 'touch' && !note.holdDuration)) {
                 if (noteT <= 0 && -noteT <= touchDuration) {
                     const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
                     const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
                     this.activeSensors.add(sensorId);
-                    if (!note.triggered) {
-                        note.triggered = true;
-                        note.triggeredTime = note.time;
+                    if (!note.triggered && onHit) {
+                        onHit(sensorId, 0);
                     }
-                } else if (-noteT > effectDecayTime) {
-                    note.triggered = false;
                 }
             }
 
-            // 2. Hold & TouchHold 按壓狀態
+            // 2. Hold & TouchHold：在到達時刻觸發判定，並在長按期間持續產生感應器輸入
             if (note.holdDuration > 0) {
                 if (noteT <= 0 && -noteT <= note.holdDuration) {
                     const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
                     const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
                     this.activeSensors.add(sensorId);
-                    note.isHolding = true;
-                    note.holdFinish = false;
-                } else if (-noteT > note.holdDuration) {
-                    note.isHolding = false;
-                    if (!note.holdFinish) {
-                        note.holdFinish = true;
-                        note.holdFinishTime = note.time + note.holdDuration;
-                    } else if (-noteT > note.holdDuration + effectDecayTime) {
-                        note.holdFinish = false;
+                    if (!note.triggered && onHit) {
+                        onHit(sensorId, 0);
                     }
-                } else {
-                    note.isHolding = false;
-                    note.holdFinish = false;
                 }
             }
 
-            // 3. Slide 觸發頭部 Tap 與感應器 Checkpoint 滑動推進
+            // 3. Slide：產生頭部點擊與劃軌 SlideArea 的感應器輸入
             if (noteType === 'slide') {
                 const slideDelay = note.slideDelay ?? 0;
                 const slideDuration = note.slideDuration ?? 0;
 
-                // Slide 頭部點擊感應
-                if (noteT <= 0 && -noteT <= touchDuration) {
+                // 頭部點擊感應：僅在單一 Slide 或連鎖 Slide 的第一段時產生
+                const isHeadPart = note.firstSlide || !note.prevSlide;
+                if (isHeadPart && noteT <= 0 && -noteT <= touchDuration) {
                     this.activeSensors.add('A' + note.pos);
-                    if (!note.triggered) {
-                        note.triggered = true;
-                        note.triggeredTime = note.time;
+                    if (!note.triggered && onHit) {
+                        onHit('A' + note.pos, 0);
                     }
-                } else if (-noteT > effectDecayTime) {
-                    note.triggered = false;
                 }
 
+                // 劃軌感應模擬
                 if (!note.isMine && slideDuration > 0) {
-                    if (note.prevSlide && !note.prevSlide.slideFinish) {
-                        note.slideProgress = 0;
-                        note.slideFinish = false;
-                        continue;
-                    }
-                    const checkpoints = this.getOrCreateSlideCheckpoints(note, renderer);
-                    const totalCp = checkpoints.length;
+                    const slideT = -noteT - slideDelay;
+                    // 連鎖最後一段或獨立 slide 在摸到終點後停留 0.08 秒，非最後一段在交接時只保留 0.02 秒
+                    const touchHoldEnd = (note.lastSlide || !note.nextSlide) ? 0.08 : 0.02;
 
-                    if (-noteT > slideDelay && totalCp > 0) {
-                        const slideT = -noteT - slideDelay;
-                        const progressRatio = Math.min(1, Math.max(0, slideT / slideDuration));
-                        note.slideProgress = progressRatio;
+                    if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
+                        const areas = this.getOrCreateSlideAreas(note, renderer);
+                        const totalAreas = areas.length;
 
-                        // 模擬手劃過當前路徑 Checkpoint 之感應區
-                        const currentCpIdx = Math.min(totalCp - 1, Math.floor(progressRatio * totalCp));
-                        const currentCp = checkpoints[currentCpIdx];
-                        if (currentCp && currentCp.sensorId) {
-                            this.activeSensors.add(currentCp.sensorId);
+                        if (totalAreas > 0) {
+                            const progressRatio = Math.min(1, Math.max(0, slideT / slideDuration));
+                            const curIdx = Math.min(totalAreas - 1, Math.floor(progressRatio * totalAreas));
+
+                            const currentArea = areas[curIdx];
+                            if (currentArea && currentArea.areas) {
+                                for (let s = 0; s < currentArea.areas.length; s++) {
+                                    this.activeSensors.add(currentArea.areas[s]);
+                                }
+                            }
+
+                            // 兩區交接模擬：剛跨入下一區時保留上一區少許時間，保證劃過離開判定觸發
+                            const frac = (progressRatio * totalAreas) - curIdx;
+                            if (frac < 0.25 && curIdx > 0) {
+                                const prevArea = areas[curIdx - 1];
+                                if (prevArea && prevArea.areas) {
+                                    for (let s = 0; s < prevArea.areas.length; s++) {
+                                        this.activeSensors.add(prevArea.areas[s]);
+                                    }
+                                }
+                            }
                         }
-
-                        if (progressRatio >= 1) {
-                            note.slideFinish = true;
-                        } else {
-                            note.slideFinish = false;
-                        }
-                    } else {
-                        note.slideProgress = 0;
-                        note.slideFinish = false;
                     }
-                } else {
-                    note.slideProgress = 0;
-                    note.slideFinish = false;
+                    // 超過 slideDuration + touchHoldEnd 之後，不加入任何感應器，徹底防止結尾殘留
                 }
             }
         }
     }
-}
+}

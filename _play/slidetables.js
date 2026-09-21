@@ -370,6 +370,52 @@ export const PREDEFINED_SLIDE_TABLES = {
     ]
 };
 
+// MajdataPlay SlideTables.cs 官方 Const 停留比例對照表 (Table.Const)
+export const PREDEFINED_SLIDE_CONSTANTS = {
+    circle2: 0.465,
+    circle3: 0.233,
+    circle4: 0.155,
+    circle5: 0.116,
+    circle6: 0.093,
+    circle7: 0.078,
+    circle8: 0.066,
+    circle1: 0.058,
+    line3: 0.182,
+    line4: 0.19,
+    line5: 0.152,
+    line6: 0.19,
+    line7: 0.182,
+    v1: 0.185,
+    v2: 0.15,
+    v3: 0.158,
+    v4: 0.158,
+    v6: 0.158,
+    v7: 0.158,
+    v8: 0.154,
+    ppqq1: 0.065,
+    ppqq2: 0.086,
+    ppqq3: 0.157,
+    ppqq4: 0.065,
+    ppqq5: 0.065,
+    ppqq6: 0.067,
+    ppqq7: 0.079,
+    ppqq8: 0.0626,
+    L2: 0.1,
+    L3: 0.104,
+    L4: 0.098,
+    L5: 0.105,
+    s: 0.13,
+    pq1: 0.095,
+    pq2: 0.112,
+    pq3: 0.125,
+    pq4: 0.139,
+    pq5: 0.16,
+    pq6: 0.08,
+    pq7: 0.084,
+    pq8: 0.0895,
+    wifi: 0.16287
+};
+
 /**
  * 依據 simai slide 參數與幾何路徑，建構對應的 SlideArea 判定隊列
  * @param {Object} note Slide 音符物件 (包含 pos, slideEnd, slideType, slideMid, path)
@@ -444,18 +490,23 @@ export function getSlideJudgeQueue(note, renderer = null) {
             break;
         case 'p':
             baseKey = `pq${relEnd}`;
+            break;
+        case 'q': {
+            const mirrorEnd = ((head - end + 8) % 8) + 1;
+            baseKey = `pq${mirrorEnd}`;
             needMirror = true;
             break;
-        case 'q':
-            baseKey = `pq${relEnd}`;
-            break;
-        case 'pp':
+        }
+        case 'pp': {
             baseKey = `ppqq${relEnd}`;
+            break;
+        }
+        case 'qq': {
+            const mirrorEnd = ((head - end + 8) % 8) + 1;
+            baseKey = `ppqq${mirrorEnd}`;
             needMirror = true;
             break;
-        case 'qq':
-            baseKey = `ppqq${relEnd}`;
-            break;
+        }
         case 'w':
             baseKey = 'wifi';
             break;
@@ -475,11 +526,22 @@ export function getSlideJudgeQueue(note, renderer = null) {
             });
             queue.push(new SlideArea(mappedAreas, item.isLast, item.isSkippable));
         }
+        const tableConst = PREDEFINED_SLIDE_CONSTANTS[baseKey] ?? 0.18;
+        queue.tableConst = tableConst;
+        const meta = { baseKey, relEnd, diff, needMirror, type, head, end, isPredefined: true, tableConst };
+        queue._debugMeta = meta;
+        if (note) note._debugMeta = meta;
         return queue;
     }
 
     // 2. Fallback: 對於自訂形狀或未收錄複合路徑，採用幾何路徑感應器採樣
-    return fallbackGeometricQueue(note, renderer);
+    const fQueue = fallbackGeometricQueue(note, renderer);
+    const tableConst = 0.18;
+    fQueue.tableConst = tableConst;
+    const meta = { baseKey: null, relEnd, diff, needMirror, type, head, end, isPredefined: false, isFallback: true, tableConst };
+    fQueue._debugMeta = meta;
+    if (note) note._debugMeta = meta;
+    return fQueue;
 }
 
 function fallbackGeometricQueue(note, renderer) {

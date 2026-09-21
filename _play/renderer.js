@@ -1392,10 +1392,14 @@ export class SimaiRenderer {
             displaySlideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
 
+        const isConnPart = !!(s.prevSlide || s.nextSlide);
+        const isGroupPartHead = s.firstSlide || !s.prevSlide;
         const isParentFinished = !!(s.prevSlide && s.prevSlide.slideFinish);
         const isHeadTriggered = !!(s.headNote?.triggered || s.headTriggered);
         const isCanSlide = s.hideHead ? (-noteT >= -0.05) : (isHeadTriggered || -noteT >= -0.05);
-        const isUnlocked = isParentFinished || isCanSlide || !!s.unlocked;
+        const isUnlocked = (isConnPart && !isGroupPartHead)
+            ? (isParentFinished || !!s.unlocked)
+            : (isCanSlide || !!s.unlocked);
 
         let effectiveProgress = 0;
         if (isUnlocked) {

@@ -43,6 +43,21 @@
                         smart_toy
                     </span>
                 </div>
+                <div class="controlButton" data-buttonAction="playbackSpeedMinus" title="減慢播放速度 (Ctrl+O / -0.25x)">
+                    <span class="material-symbols-outlined" translate="no">
+                        remove
+                    </span>
+                </div>
+                <div class="controlButton playbackSpeedButton" data-buttonAction="playbackSpeed"
+                    title="播放速度 (點擊重設為 1.00x)">
+                    <input type="number" step="0.05" min="0.25" max="2" value="1.00" id="playbackSpeedInput">
+                    <span class="speedUnit">x</span>
+                </div>
+                <div class="controlButton" data-buttonAction="playbackSpeedAdd" title="加快播放速度 (Ctrl+P / +0.25x)">
+                    <span class="material-symbols-outlined" translate="no">
+                        add
+                    </span>
+                </div>
                 <div class="controlButton" data-buttonAction="hide" data-hidden="false" title="隱藏面板">
                     <span class="material-symbols-outlined" translate="no">
                         keyboard_arrow_down

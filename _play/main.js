@@ -5,6 +5,7 @@ import { parseMaidata, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioM
 import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue } from './slidetables.js';
+import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 
 const simulatedPlayController = new SimulatedPlayController();
 
@@ -23,6 +24,7 @@ const defaultSettings = {
     sensorHighlight: true, // 感應器高亮
     fatFinger: true, // 肥手指擴張判定
     fatFingerRadius: 4.2, // 肥手指判定半徑
+    slideDebug: false, // Slide 判定隊列 Debug 視圖
     // Misc
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
@@ -149,6 +151,7 @@ function applyAudioSettings(s) {
     if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
     if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
     if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
+    if (s.playbackSpeed !== undefined) audioManager.setPlaybackRate(s.playbackSpeed);
 }
 
 images = await loadAllImages();
@@ -182,6 +185,13 @@ if (savedSettings) {
     await idbSet('simai_settings', JSON.stringify(settings));
 };
 applyAudioSettings(settings);
+if (settings.slideDebug) {
+    toggleSlideDebug(true);
+}
+setSlideDebugToggleCallback((state) => {
+    settings.slideDebug = state;
+    idbSet('simai_settings', JSON.stringify(settings)).catch(() => {});
+});
 renderer = new SimaiRenderer(canvas, settings);
 renderer.setImages(images);
 
@@ -253,6 +263,12 @@ const projectBtn = getControlButton("openProject");
 const folderBtn = getControlButton("openFolder");
 const settingsBtn = getControlButton("settings");
 
+const playbackSpeedInput = document.getElementById("playbackSpeedInput");
+const playbackSpeedBtn = getControlButton("playbackSpeed");
+const playbackSpeedMinusBtn = getControlButton("playbackSpeedMinus");
+const playbackSpeedAddBtn = getControlButton("playbackSpeedAdd");
+const slideDebugBtn = getControlButton("slideDebug");
+
 const gameBackgroundImage = document.getElementById("backgroundImage");
 const gameBackgroundVideo = document.getElementById("backgroundVideo");
 const canvasOutline = document.getElementById("canvasOutline");
@@ -314,6 +330,49 @@ function updateManualSensors() {
 window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.repeat) return;
+
+    if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+            case 'o': {
+                e.preventDefault();
+                let sp = (settings.playbackSpeed || 1) - 0.25;
+                if (sp <= 0.25) sp = 0.25;
+                setPlaybackSpeed(sp);
+                simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+                return;
+            }
+            case 'p': {
+                e.preventDefault();
+                let sp = (settings.playbackSpeed || 1) + 0.25;
+                if (sp >= 2.0) sp = 2.0;
+                setPlaybackSpeed(sp);
+                simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+                return;
+            }
+            case 'd': {
+                e.preventDefault();
+                const nextState = toggleSlideDebug();
+                settings.slideDebug = nextState;
+                idbSet('simai_settings', JSON.stringify(settings)).catch(() => {});
+                simpleToast({ content: `Slide Debug 視圖：${nextState ? '開啟' : '關閉'}`, type: 'info', timeout: 1200 });
+                return;
+            }
+        }
+        switch (e.code) {
+            case 'Space': {
+                e.preventDefault();
+                togglePlay();
+                return;
+            }
+            case 'Backspace': {
+                e.preventDefault();
+                restart();
+                return;
+            }
+        }
+        return;
+    }
+
     const sensor = KEY_TO_SENSOR[e.key] || KEY_TO_SENSOR[e.code];
     if (sensor) {
         activeKeyboardSensors.add(sensor);
@@ -344,11 +403,30 @@ const JUDGE_WINDOWS = {
         GOOD: 9 * FRAME_SEC               // <= 150.00ms (Good)
     },
     TOUCH: {
+        // MajdataPlay TouchDrop 規範：
+        // 早按窗口限制在 150ms (TOUCH_JUDGE_SEG_1ST_PERFECT_MSEC = 9 * FRAME_SEC)。
+        // 晚按窗口容錯至 300ms (TOUCH_JUDGE_GOOD_AREA_MSEC = 18 * FRAME_SEC)。
+        FAST_PERFECT: 9 * FRAME_SEC,      // <= 150.00ms (早於此視窗不予判定)
         CRITICAL_PERFECT: 9 * FRAME_SEC,  // <= 150.00ms
-        PERFECT_2ND: 10.5 * FRAME_SEC,    // <= 175.00ms
-        PERFECT_3RD: 12 * FRAME_SEC,      // <= 200.00ms
-        GREAT: 15 * FRAME_SEC,            // <= 250.00ms
-        GOOD: 18 * FRAME_SEC              // <= 300.00ms
+        PERFECT_2ND: 10.5 * FRAME_SEC,    // <= 175.00ms (Late)
+        PERFECT_3RD: 12 * FRAME_SEC,      // <= 200.00ms (Late)
+        GREAT_1ST: 13 * FRAME_SEC,        // <= 216.67ms (Late)
+        GREAT_2ND: 14 * FRAME_SEC,        // <= 233.33ms (Late)
+        GREAT_3RD: 15 * FRAME_SEC,        // <= 250.00ms (Late)
+        GOOD: 18 * FRAME_SEC              // <= 300.00ms (Late)
+    },
+    SLIDE: {
+        MAX_EXT_SEC: 22 * FRAME_SEC,          // 0.3667s (366.67ms)
+        BASE_3RD_PERFECT_SEC: 14 * FRAME_SEC, // 0.2333s (233.33ms)
+        GREAT_1ST_SEC: 21 * FRAME_SEC,        // 0.3500s (350.00ms)
+        GREAT_2ND_SEC: 25 * FRAME_SEC,        // 0.4167s (416.67ms)
+        GREAT_3RD_SEC: 29 * FRAME_SEC,        // 0.4833s (483.33ms)
+        GOOD_AREA_SEC: 36 * FRAME_SEC         // 0.6000s (600.00ms)
+    },
+    HOLD: {
+        RELEASE_IGNORE_SEC: 2 * FRAME_SEC, // 0.0333s (2 幀容錯)
+        HEAD_IGNORE_SEC: 15 * FRAME_SEC,   // 0.2500s
+        TAIL_IGNORE_SEC: 12 * FRAME_SEC    // 0.2000s
     }
 };
 
@@ -445,18 +523,29 @@ function renderJudgeEffects(ctx) {
     ctx.restore();
 }
 
+/**
+ * 評估音符擊中評級
+ * @param {number} diffSec 擊中時間偏差 (秒, globalTime - note.time, 負數代表提早FAST, 正數代表較晚LATE)
+ * @param {Object} note 音符物件
+ * @returns {Object|null} 判定結果物件，若尚未進入早按視窗則回傳 null (不觸發判定)
+ */
 function evaluateHitGrade(diffSec, note) {
     const isTouch = (note.type === 'touch');
     const isFast = diffSec < 0;
     const absDiff = Math.abs(diffSec);
     const diffMSec = Math.round(diffSec * 1000 * 10) / 10;
-    const win = isTouch ? JUDGE_WINDOWS.TOUCH : JUDGE_WINDOWS.TAP;
 
     let grade = 'MISS';
     let subGrade = '';
     let scoreMultiplier = 0;
 
     if (isTouch) {
+        const win = JUDGE_WINDOWS.TOUCH;
+        // MajdataPlay: 早於 150ms 的點擊不予判定 (忽略等待進入窗口)
+        if (isFast && absDiff > win.FAST_PERFECT) {
+            return null;
+        }
+
         if (absDiff <= win.CRITICAL_PERFECT) {
             grade = 'CRITICAL_PERFECT';
             scoreMultiplier = 1.0;
@@ -464,7 +553,7 @@ function evaluateHitGrade(diffSec, note) {
             grade = 'PERFECT';
             subGrade = isFast ? 'FAST' : 'LATE';
             scoreMultiplier = 1.0;
-        } else if (absDiff <= win.GREAT) {
+        } else if (absDiff <= win.GREAT_3RD) {
             grade = 'GREAT';
             subGrade = isFast ? 'FAST' : 'LATE';
             scoreMultiplier = 0.8;
@@ -474,6 +563,7 @@ function evaluateHitGrade(diffSec, note) {
             scoreMultiplier = 0.5;
         }
     } else {
+        const win = JUDGE_WINDOWS.TAP;
         if (absDiff <= win.CRITICAL_PERFECT) {
             grade = 'CRITICAL_PERFECT';
             scoreMultiplier = 1.0;
@@ -509,30 +599,45 @@ function evaluateHitGrade(diffSec, note) {
     return { grade, subGrade, isFast, diffMSec, scoreMultiplier };
 }
 
+/**
+ * 評估 Slide 劃軌完成評級 (對齊 MajdataPlay SlideBase.cs 官方標準)
+ * @param {number} diffSec 完成時間與基準判定時間的偏差 (秒, globalTime - judgeTiming, 負數代表提前FAST, 正數代表延後LATE)
+ * @param {Object} note Slide 音符物件
+ * @returns {Object} 判定結果物件
+ */
 function evaluateSlideGrade(diffSec, note) {
     const isFast = diffSec < 0;
     const absDiff = Math.abs(diffSec);
     const diffMSec = Math.round(diffSec * 1000 * 10) / 10;
 
+    // MajdataPlay 動態 Perfect 視窗擴展公式：
+    // stayTimeMSec = LastWaitTimeSec * 1000
+    // ext = min(stayTimeMSec / 4, 22 * FRAME_LENGTH_MSEC)
+    const stayTimeMSec = (note.lastWaitTimeSec ?? (note.slideDuration * (note.tableConst || 0.18))) * 1000;
+    const extSec = Math.min(stayTimeMSec / 4000, JUDGE_WINDOWS.SLIDE.MAX_EXT_SEC);
+
+    const PERFECT_3RD_SEC = JUDGE_WINDOWS.SLIDE.BASE_3RD_PERFECT_SEC + extSec;
+    const PERFECT_1ST_SEC = PERFECT_3RD_SEC * 0.333333;
+    const PERFECT_2ND_SEC = PERFECT_3RD_SEC * 0.666666;
+
     let grade = 'GOOD';
     let subGrade = isFast ? 'FAST' : 'LATE';
     let scoreMultiplier = 0.5;
 
-    // 參照 MajdataPlay 標準 Slide 判定區間 (秒)
-    // 只要有劃到底，哪怕超出常規窗口（如提早劃完或較慢劃完），最低保底均為 GOOD，絕不判定為 MISS
-    if (absDiff <= 0.20) {
-        grade = 'PERFECT';
+    if (absDiff <= PERFECT_1ST_SEC) {
+        grade = 'CRITICAL_PERFECT';
+        subGrade = '';
         scoreMultiplier = 1.0;
-        if (absDiff > 0.08) {
-            subGrade = isFast ? 'FAST' : 'LATE';
-        } else {
-            subGrade = '';
-        }
-    } else if (absDiff <= 0.40) {
+    } else if (absDiff <= PERFECT_3RD_SEC) {
+        grade = 'PERFECT';
+        subGrade = isFast ? 'FAST' : 'LATE';
+        scoreMultiplier = 1.0;
+    } else if (absDiff <= JUDGE_WINDOWS.SLIDE.GREAT_3RD_SEC) {
         grade = 'GREAT';
         subGrade = isFast ? 'FAST' : 'LATE';
         scoreMultiplier = 0.8;
     } else {
+        // 參照 MajdataPlay: 只要劃完全程，哪怕超出 0.6s，最低保底均為 GOOD，絕不判 MISS
         grade = 'GOOD';
         subGrade = isFast ? 'FAST' : 'LATE';
         scoreMultiplier = 0.5;
@@ -569,6 +674,7 @@ function resetNotesForSeek(targetGlobalTime) {
             note._slideJudged = false;
             note.unlocked = false;
             note.judgeQueue = null;
+            note._fullJudgeQueue = null;
             note._totalAreasCount = 0;
         }
 
@@ -579,6 +685,7 @@ function resetNotesForSeek(targetGlobalTime) {
             note.unlocked = false;
             note.headTriggered = false;
             note.judgeQueue = null;
+            note._fullJudgeQueue = null;
             note._totalAreasCount = 0;
         }
 
@@ -620,14 +727,24 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
         const note = datas.notes[i];
         if (note.triggered) continue;
         if (note.type === 'slide') continue; // Slide 由劃軌 Checkpoint 判定，不接受點擊觸發
-        const noteT = note.time - globalTime;
+        const noteT = note.time - globalTime; // 音符時間相對於當前時間之差 (正數代表在未來)
         const isTouch = (note.type === 'touch');
-        const maxHitWindow = isTouch ? JUDGE_WINDOWS.TOUCH.GOOD : JUDGE_WINDOWS.TAP.GOOD;
 
-        // 音符在未來且超過判定視窗，後續音符更靠後，直接結束搜尋
-        if (noteT > maxHitWindow) break;
-        // 已過判定視窗
-        if (noteT < -maxHitWindow) continue;
+        // 音符在未來且超過最大容許判定視窗，後續音符更靠後，直接結束搜尋
+        if (noteT > 0.35) break;
+
+        // 依據音符類型檢查是否在可擊中時機窗口內
+        if (isTouch) {
+            // Touch 音符：早按限制 150ms 內，晚按至 300ms 內
+            if (noteT > JUDGE_WINDOWS.TOUCH.FAST_PERFECT || noteT < -JUDGE_WINDOWS.TOUCH.GOOD) {
+                continue;
+            }
+        } else {
+            // Tap / Hold / Star 音符：早按與晚按皆為 150ms (9 幀)
+            if (noteT > JUDGE_WINDOWS.TAP.GOOD || noteT < -JUDGE_WINDOWS.TAP.GOOD) {
+                continue;
+            }
+        }
 
         let matches = false;
         if (isTouch) {
@@ -635,16 +752,17 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
             const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
             matches = sensorSet.has(normSensor);
         } else {
-            // 一般音符 (tap, hold, star, slide)
+            // 一般音符 (tap, hold, star)
             // 外鍵與 A 區感應器 (A1~A8) 或內圈 B 感應器 (B1~B8) 均可精確觸發
             matches = sensorSet.has('A' + note.pos) || sensorSet.has('B' + note.pos);
         }
 
         if (matches) {
-            const diffForEval = (forceDiffSec !== null) ? forceDiffSec : noteT;
+            // 統一差值定義：globalTime - note.time (提早擊中為負數 FAST，延後擊中為正數 LATE)
+            const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - note.time);
             const evalRes = evaluateHitGrade(diffForEval, note);
-            if (evalRes.grade !== 'MISS') {
-                const diff = Math.abs(noteT);
+            if (evalRes && evalRes.grade !== 'MISS') {
+                const diff = Math.abs(diffForEval);
                 if (diff < minDiff) {
                     minDiff = diff;
                     bestNote = note;
@@ -672,9 +790,9 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                     matches = sensorSet.has('A' + note.pos) || sensorSet.has('B' + note.pos);
                 }
                 if (matches) {
-                    const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (note.time - globalTime);
+                    const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - note.time);
                     const evalRes = evaluateHitGrade(diffForEval, note);
-                    if (evalRes.grade !== 'MISS') {
+                    if (evalRes && evalRes.grade !== 'MISS') {
                         hitNotes.push(note);
                     }
                 }
@@ -682,8 +800,10 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
         }
 
         for (const hn of hitNotes) {
-            const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (hn.time - globalTime);
+            const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - hn.time);
             const evalRes = evaluateHitGrade(diffForEval, hn);
+            if (!evalRes) continue;
+
             hn.triggered = true;
             hn.triggeredTime = globalTime;
             hn.judgeResult = evalRes;
@@ -793,6 +913,63 @@ if (canvas) {
 
 if (restartBtn) {
     restartBtn.addEventListener("click", restart);
+}
+
+if (playbackSpeedInput) {
+    playbackSpeedInput.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    playbackSpeedInput.addEventListener('change', () => {
+        const speed = parseFloat(playbackSpeedInput.value);
+        if (isNaN(speed) || speed <= 0) {
+            simpleToast({ content: t('toast.invalidPlaybackSpeed'), type: 'warning', timeout: 1800 });
+            playbackSpeedInput.value = (settings.playbackSpeed || 1).toFixed(2);
+            return;
+        }
+        setPlaybackSpeed(speed);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: speed.toFixed(2) }), type: 'success', timeout: 1800 });
+    });
+    playbackSpeedInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            playbackSpeedInput.blur();
+        }
+    });
+}
+
+if (playbackSpeedBtn) {
+    playbackSpeedBtn.addEventListener('click', () => {
+        setPlaybackSpeed(1);
+        simpleToast({ content: t('toast.resetPlaybackSpeed'), type: 'success', timeout: 1800 });
+    });
+}
+
+if (playbackSpeedAddBtn) {
+    playbackSpeedAddBtn.addEventListener('click', () => {
+        let sp = (settings.playbackSpeed || 1) + 0.25;
+        if (sp >= 2.0) sp = 2.0;
+        setPlaybackSpeed(sp);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    });
+}
+
+if (playbackSpeedMinusBtn) {
+    playbackSpeedMinusBtn.addEventListener('click', () => {
+        let sp = (settings.playbackSpeed || 1) - 0.25;
+        if (sp <= 0.25) sp = 0.25;
+        setPlaybackSpeed(sp);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    });
+}
+
+if (slideDebugBtn) {
+    slideDebugBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const nextState = toggleSlideDebug();
+        settings.slideDebug = nextState;
+        idbSet('simai_settings', JSON.stringify(settings)).catch(() => {});
+        simpleToast({ content: `Slide Debug 視圖：${nextState ? '開啟' : '關閉'}`, type: 'info', timeout: 1200 });
+    });
 }
 
 if (hideBtn) {
@@ -1061,8 +1238,8 @@ if (timeControl) {
             const speed = settings.playbackSpeed || 1;
             startTime = performance.now() - (pausedTime * 1000 / speed);
             audioManager.stopAllLongSounds();
-            audioManager.playBGM(realTime);
             audioManager.setPlaybackRate(speed);
+            audioManager.playBGM(realTime);
         } else {
             audioManager.stopAllLongSounds();
             audioManager.clearSoundQueue();
@@ -1108,13 +1285,14 @@ function play() {
     gameBackgroundVideo.style.display = ((gameBackgroundVideo.readyState === 4) ? 'block' : 'none');
     if (gameBackgroundVideo.readyState >= 1) {
         gameBackgroundVideo.currentTime = realTime;
+        gameBackgroundVideo.playbackRate = speed;
     }
     if (gameBackgroundVideo.paused && gameBackgroundVideo.readyState >= 1) {
         gameBackgroundVideo.play();
     }
 
-    audioManager.playBGM(realTime);
     audioManager.setPlaybackRate(speed);
+    audioManager.playBGM(realTime);
 }
 
 function restart() {
@@ -1220,6 +1398,37 @@ function togglePlay() {
     }
     tryUpdateBackgroundBrightness();
 }
+
+const saveSettingsDebounce = debounce(() => {
+    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
+        console.error('儲存設定到 IndexedDB 失敗:', error);
+    });
+}, 300);
+
+function setPlaybackSpeed(speed) {
+    typeof speed === 'string' && (speed = parseFloat(speed));
+    speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
+
+    settings.playbackSpeed = speed;
+    if (playbackSpeedInput) {
+        playbackSpeedInput.value = speed.toFixed(2);
+    }
+
+    audioManager.setPlaybackRate(speed);
+    if (playing) {
+        startTime = performance.now() - (realTime * 1000 / speed);
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
+        audioManager.playBGM(realTime);
+    }
+    if (gameBackgroundVideo && gameBackgroundVideo.src) {
+        gameBackgroundVideo.playbackRate = speed;
+    }
+    saveSettingsDebounce();
+}
+
+// 根據目前 settings 初始化播放速度與 UI
+setPlaybackSpeed(settings.playbackSpeed || 1);
 
 const _cssroot = document.querySelector(':root');
 
@@ -1331,8 +1540,9 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
 
         // 0. Touch 音符支援手預先接觸或劃過感應區判定 (統一觸發 triggerManualHit)
         if (noteType === 'touch' && !note.triggered) {
-            const maxHitWindow = JUDGE_WINDOWS.TOUCH.GOOD;
-            if (noteT <= maxHitWindow && noteT >= -maxHitWindow) {
+            // MajdataPlay 規範：早按視窗為 150ms，晚按視窗為 300ms
+            // noteT = note.time - globalTime (正數代表音符在未來)
+            if (noteT <= JUDGE_WINDOWS.TOUCH.FAST_PERFECT && noteT >= -JUDGE_WINDOWS.TOUCH.GOOD) {
                 const noteSensor = note.touchPos + note.pos;
                 const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
                 if (currentSensors.has(normSensor)) {
@@ -1352,27 +1562,77 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                 if (isSensorPressed) {
                     note.isHolding = true;
                     note._holdPressed = true;
+                    note._waitReleaseSec = 0; // 重置放手計時
                 } else {
                     note.isHolding = false;
-                    note._releaseDuration = (note._releaseDuration || 0) + dt;
+                    // MajdataPlay 鬆手容錯: DELUXE_HOLD_RELEASE_IGNORE_TIME_SEC = 2 * FRAME_SEC (約 33.3ms)
+                    if ((note._waitReleaseSec || 0) <= JUDGE_WINDOWS.HOLD.RELEASE_IGNORE_SEC) {
+                        note._waitReleaseSec = (note._waitReleaseSec || 0) + dt;
+                    } else {
+                        note._releaseDuration = (note._releaseDuration || 0) + dt;
+                    }
                 }
             } else if (-noteT > note.holdDuration) {
                 note.isHolding = false;
                 if (note._holdPressed || note.triggered) {
                     if (!note.holdFinish) {
                         note.holdFinish = true;
-                        // MajdataPlay HoldEndJudge 鬆手率結算
+                        // MajdataPlay HoldEndJudge: 扣除頭尾忽略時間 (合計 0.45s / 0.30s)
+                        const ignoreSec = (noteType === 'touch')
+                            ? (JUDGE_WINDOWS.HOLD.HEAD_IGNORE_SEC + JUDGE_WINDOWS.HOLD.TAIL_IGNORE_SEC) // 0.45s
+                            : (6 * FRAME_SEC + 12 * FRAME_SEC); // 0.30s
+                        const realityHT = Math.max(0, note.holdDuration - ignoreSec);
                         const release = note._releaseDuration || 0;
-                        const pressRatio = Math.max(0, (note.holdDuration - release) / note.holdDuration);
-                        if (pressRatio < 0.33 && !note.isEx) {
-                            note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
-                        } else if (pressRatio < 0.67 && !note.isEx) {
-                            note.judgeResult = { grade: 'GOOD', subGrade: '', scoreMultiplier: 0.5 };
-                        } else {
-                            if (!note.judgeResult || note.judgeResult.grade === 'MISS') {
-                                note.judgeResult = { grade: 'PERFECT', subGrade: '', scoreMultiplier: 1.0 };
+                        const pressRatio = (realityHT <= 0) ? 1.0 : Math.max(0, Math.min(1, (realityHT - release) / realityHT));
+
+                        // 階梯降級邏輯 (參照 MajdataPlay NoteLongDrop.HoldEndJudge)
+                        const headGrade = note.judgeResult ? note.judgeResult.grade : 'PERFECT';
+                        let finalGrade = headGrade;
+                        let finalScoreMult = 1.0;
+
+                        if (pressRatio >= 1.0) {
+                            if (headGrade === 'MISS') {
+                                finalGrade = 'GOOD';
+                                finalScoreMult = 0.5;
+                            } else if (headGrade === 'GOOD') {
+                                finalGrade = 'GREAT';
+                                finalScoreMult = 0.8;
+                            } else {
+                                finalGrade = headGrade;
+                                finalScoreMult = (headGrade === 'CRITICAL_PERFECT' || headGrade === 'PERFECT') ? 1.0 : 0.8;
                             }
+                        } else if (pressRatio >= 0.67) {
+                            if (headGrade === 'CRITICAL_PERFECT') {
+                                finalGrade = 'PERFECT';
+                                finalScoreMult = 1.0;
+                            } else if (headGrade === 'MISS') {
+                                finalGrade = 'GOOD';
+                                finalScoreMult = 0.5;
+                            } else {
+                                finalGrade = headGrade;
+                                finalScoreMult = (headGrade === 'PERFECT') ? 1.0 : (headGrade === 'GREAT' ? 0.8 : 0.5);
+                            }
+                        } else if (pressRatio >= 0.33) {
+                            finalGrade = 'GREAT';
+                            finalScoreMult = 0.8;
+                        } else if (pressRatio >= 0.05) {
+                            finalGrade = 'GOOD';
+                            finalScoreMult = 0.5;
+                        } else {
+                            finalGrade = 'MISS';
+                            finalScoreMult = 0;
                         }
+
+                        if (note.isEx && finalGrade !== 'MISS') {
+                            finalGrade = 'CRITICAL_PERFECT';
+                            finalScoreMult = 1.0;
+                        }
+
+                        note.judgeResult = {
+                            grade: finalGrade,
+                            subGrade: '',
+                            scoreMultiplier: finalScoreMult
+                        };
                     }
                 }
             }
@@ -1385,21 +1645,31 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             const isConnPart = !!(note.prevSlide || note.nextSlide);
             const isGroupPartHead = note.firstSlide || !note.prevSlide;
             const isGroupPartEnd = note.lastSlide || !note.nextSlide;
-            const startTiming = -noteT - slideDelay;
-            const arriveTiming = note.time + slideDelay + slideDuration;
+            const startTiming = note.time + slideDelay;
+            const arriveTiming = startTiming + slideDuration;
 
             // 尚未建立隊列時，從 slidetables 取得標準 SlideArea 隊列
             if (!note.judgeQueue) {
                 const baseQueue = getSlideJudgeQueue(note, renderer);
                 note.judgeQueue = baseQueue.map(a => a.clone());
                 note._totalAreasCount = note.judgeQueue.length;
+                note._fullJudgeQueue = baseQueue.map(a => a.clone());
+                note.tableConst = baseQueue.tableConst ?? (note.tableConst || 0.18);
+                note._debugMeta = baseQueue._debugMeta || note._debugMeta;
             }
 
+            // 計算 MajdataPlay 官方基準判定時機與最後等待時間
+            const tableConst = note.tableConst ?? 0.18;
+            const lastWaitTimeSec = slideDuration * tableConst;
+            const judgeTiming = startTiming + slideDuration * (1 - tableConst);
+            note.lastWaitTimeSec = lastWaitTimeSec;
+            note.judgeTiming = judgeTiming;
+
             // 檢查是否可進入判定 (IsCheckable)
-            // 規則：slide 在頭star被判定時 (或無頭 取note.time) 就可以滑動，slideDelay 僅影響視覺
+            // MajdataPlay 規範：只要到達 note.time - 0.05s (即頭部 star 擊打前 50ms 起) 即可開始劃動判定
             let isCheckable = false;
             const isHeadTriggered = !!(note.headNote?.triggered || note.headTriggered);
-            const isNoteTimeReached = (-noteT >= -0.05); // 到達 note.time
+            const isNoteTimeReached = (globalTime >= note.time - 0.05);
             const canSlideHead = note.hideHead ? isNoteTimeReached : (isHeadTriggered || isNoteTimeReached);
 
             if (isConnPart) {
@@ -1409,10 +1679,11 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         note.unlocked = true;
                     }
                 } else {
-                    // 連鎖 Slide 的後續段：若前段已完成、前段只剩 1 區、或已解鎖、或已到達 note.time
-                    const parentFinished = note.prevSlide ? note.prevSlide.slideFinish : true;
+                    // 連鎖 Slide 的後續段：嚴格對齊 MajdataPlay SingleSlideBase.cs lines 155-158
+                    // 僅當 ParentFinished 或 ParentPendingFinish (前段剩餘未判定區 <= 1) 時才可進入判定
+                    const parentFinished = note.prevSlide ? !!note.prevSlide.slideFinish : true;
                     const parentPending = note.prevSlide && note.prevSlide.judgeQueue ? (note.prevSlide.judgeQueue.length <= 1) : false;
-                    if (parentFinished || parentPending || note.unlocked || isNoteTimeReached) {
+                    if (parentFinished || parentPending) {
                         isCheckable = true;
                         if (parentFinished) {
                             note.unlocked = true;
@@ -1491,18 +1762,18 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         forceFinishParentSlide(note.prevSlide);
                     }
 
-                    // 僅在最後一段結算總評級
+                    // 僅在最後一段結算總評級 (以 MajdataPlay 官方 judgeTiming 基準計算時間差)
                     if (isGroupPartEnd && !note._slideJudged) {
                         note._slideJudged = true;
-                        const diffSec = globalTime - arriveTiming;
+                        const diffSec = globalTime - judgeTiming;
                         note.judgeResult = evaluateSlideGrade(diffSec, note);
                         spawnJudgeEffect(note, note.judgeResult);
                     }
                 }
             }
 
-            // 超時判定 (TooLateJudge - 600ms 寬容窗口)
-            const tooLateTiming = arriveTiming + 0.6;
+            // 超時判定 (TooLateJudge - 600ms 寬容窗口: StartTiming + Length + 0.60s)
+            const tooLateTiming = startTiming + slideDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
             if (globalTime > tooLateTiming && !note.slideFinish) {
                 note.slideFinish = true;
                 if (note.nextSlide) {
@@ -1510,8 +1781,13 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                 }
                 if (isGroupPartEnd && !note._slideJudged) {
                     note._slideJudged = true;
-                    // 超時且隊列尚未清空（沒到底），判定為 MISS
-                    note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
+                    // 參照 MajdataPlay SlideBase.cs lines 639-646:
+                    // 若超時時只剩最後 1 區未完成，給予 LATE GOOD 容錯保底；剩餘 2 區以上才判定為 MISS
+                    if (note.judgeQueue && note.judgeQueue.length === 1) {
+                        note.judgeResult = { grade: 'GOOD', subGrade: 'LATE', isFast: false, diffMSec: 600, scoreMultiplier: 0.5 };
+                    } else {
+                        note.judgeResult = { grade: 'MISS', subGrade: '', isFast: false, diffMSec: 600, scoreMultiplier: 0 };
+                    }
                     spawnJudgeEffect(note, note.judgeResult);
                 }
                 note.judgeQueue = [];
@@ -1822,6 +2098,22 @@ function draw() {
     // 渲染手動打擊判定即時反饋特效 (PERFECT / GREAT / GOOD / MISS + FAST / LATE)
     renderJudgeEffects(ctx);
 
+    if (isSlideDebugEnabled()) {
+        renderSlideDebugOverlay(ctx, {
+            globalTime,
+            notes,
+            renderer,
+            activeSensors
+        });
+        updateSlideDebugPanel({
+            globalTime,
+            notes,
+            renderer,
+            activeSensors,
+            playing
+        });
+    }
+
     audioManager.update(globalTime);
 }
 
@@ -1902,6 +2194,7 @@ async function loadProject(projectId, targetDifficulty = null) {
         if (savedBgm) {
             const url = URL.createObjectURL(savedBgm);
             await audioManager.setBackgroundMusic(url, savedBgm);
+            audioManager.setPlaybackRate(settings.playbackSpeed || 1);
         }
 
         resize();
@@ -2451,6 +2744,10 @@ function openSettings() {
                 {
                     id: 'sensorHighlight', type: 'checkbox', label: '感應器高亮反饋', def: defaultSettings.sensorHighlight ?? true,
                     apply: (val) => { renderer.settings.sensorHighlight = val; draw(); }
+                },
+                {
+                    id: 'slideDebug', type: 'checkbox', label: 'Slide 判定隊列 Debug 視圖 (Ctrl+D)', def: defaultSettings.slideDebug ?? false,
+                    apply: (val) => { toggleSlideDebug(val); }
                 }
             ]
         },
@@ -2472,8 +2769,7 @@ function openSettings() {
                 {
                     id: 'playbackSpeed', type: 'range', label: '播放速度', min: 0.25, max: 2, step: 0.05, def: defaultSettings.playbackSpeed || 1,
                     apply: (val) => {
-                        settings.playbackSpeed = val;
-                        if (playing) audioManager.setPlaybackRate(val);
+                        setPlaybackSpeed(val);
                     }
                 },
                 {
@@ -2606,6 +2902,8 @@ function openSettings() {
                     if (!confirm('確定要將設定還原為預設值嗎？')) return;
                     Object.assign(settings, JSON.parse(JSON.stringify(defaultSettings)));
                     applyAudioSettings(settings);
+                    setPlaybackSpeed(settings.playbackSpeed || 1);
+                    toggleSlideDebug(false);
                     renderer.settings = settings;
                     updateOutlineUI();
                     updateAutoPlayUI();

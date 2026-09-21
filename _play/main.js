@@ -669,6 +669,7 @@ function resetNotesForSeek(targetGlobalTime) {
         // 若 Slide/音符尚未完全結束（結束時間大於目標時間），重置結束標記與完成狀態
         if (endTargetT > targetGlobalTime) {
             note._endEffectPlayed = false;
+            note._hanabiSoundPlayed = false;
             note.holdFinish = false;
             note.slideFinish = false;
             note._slideJudged = false;
@@ -681,12 +682,17 @@ function resetNotesForSeek(targetGlobalTime) {
         // 若 Slide 劃軌尚未開始（目標時間尚未到達 slideDelay），進度歸零並清空隊列判定紀錄
         if (startTargetT >= targetGlobalTime) {
             note._startEffectPlayed = false;
+            note._slideStartPlayed = false;
             note.slideProgress = 0;
             note.unlocked = false;
             note.headTriggered = false;
             note.judgeQueue = null;
             note._fullJudgeQueue = null;
             note._totalAreasCount = 0;
+        }
+
+        if (note.time >= targetGlobalTime) {
+            note._answerSoundPlayed = false;
         }
 
         // 若音符在判定視窗以內或未來的時間，重置判定結果與擊中狀態
@@ -813,7 +819,12 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                 hn._holdPressed = true;
                 hn.isHolding = true;
             }
-            audioManager.queueSound(hn, globalTime);
+            audioManager.queueHitSound(hn, globalTime);
+
+            // Touch Hanabi 判定音效：需要判定命中且非 TouchHold 時在此播放
+            if (hn.type === 'touch' && (!hn.holdDuration || hn.holdDuration <= 0) && hn.isHanabi && evalRes.grade !== 'MISS') {
+                audioManager.queueSoundSingle('hanabi', globalTime);
+            }
 
             // 若擊中的是 slide 頭部 star，立即解鎖對應 slide 允許滑動
             for (let j = 0; j < datas.notes.length; j++) {
@@ -1633,6 +1644,12 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                             subGrade: '',
                             scoreMultiplier: finalScoreMult
                         };
+
+                        // TouchHold Hanabi 結算音效：成功按壓結算且非 MISS 時播放
+                        if (note.isHanabi && finalGrade !== 'MISS' && !note._hanabiSoundPlayed) {
+                            note._hanabiSoundPlayed = true;
+                            audioManager.queueSoundSingle('hanabi', globalTime);
+                        }
                     }
                 }
             }
@@ -1679,15 +1696,11 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         note.unlocked = true;
                     }
                 } else {
-                    // 連鎖 Slide 的後續段：嚴格對齊 MajdataPlay SingleSlideBase.cs lines 155-158
-                    // 僅當 ParentFinished 或 ParentPendingFinish (前段剩餘未判定區 <= 1) 時才可進入判定
+                    // 連鎖 Slide 的後續段：嚴格在前一段判定完成後解鎖進入判定，避免提早偷吃後續軌跡
                     const parentFinished = note.prevSlide ? !!note.prevSlide.slideFinish : true;
-                    const parentPending = note.prevSlide && note.prevSlide.judgeQueue ? (note.prevSlide.judgeQueue.length <= 1) : false;
-                    if (parentFinished || parentPending) {
+                    if (parentFinished || note.unlocked) {
                         isCheckable = true;
-                        if (parentFinished) {
-                            note.unlocked = true;
-                        }
+                        note.unlocked = true;
                     }
                 }
             } else {
@@ -1895,19 +1908,27 @@ function draw() {
             }
         } else if (isHold) {
             const holdEndT = holdDuration + noteT;
-            if (holdEndT > 0) {
-                if (noteT >= -lateJudgeWindow) continue;
-                if (!note._holdPressed && !note.triggered && !note.isHolding) {
-                    if (!note._missReported) {
-                        note._missReported = true;
-                        note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
-                        spawnJudgeEffect(note, note.judgeResult);
-                    }
-                    playCombo = 0;
-                    const baseW = note.isBreak ? 5 : 2;
-                    const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
-                    lostScore += maxNoteScore;
+
+            // 若音符尚未被觸發，且仍在起手有效判定窗口內，繼續等待判定
+            if (!note.triggered && !note._holdPressed && !note.isHolding) {
+                if (noteT >= -lateJudgeWindow) {
+                    continue;
                 }
+                // 超過起手晚判定視窗仍未觸發，判定為 MISS
+                if (!note._missReported) {
+                    note._missReported = true;
+                    note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
+                    spawnJudgeEffect(note, note.judgeResult);
+                }
+                playCombo = 0;
+                const baseW = note.isBreak ? 5 : 2;
+                const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
+                lostScore += maxNoteScore;
+                continue;
+            }
+
+            // 音符已被觸發，若 Hold 尚未結束，繼續等待長按完成
+            if (holdEndT > 0) {
                 continue;
             }
 
@@ -2007,29 +2028,34 @@ function draw() {
 
             const lookAhead = 0.1; // 100ms look-ahead
 
-            // 開始音效 (含前瞻)
+            // 1. Answer 節拍提示音：始終在 note.time 準時播放，不隨玩家輸入改變時間
+            const answerDiffT = note.time - globalTime;
+            if (answerDiffT <= lookAhead && !note._answerSoundPlayed) {
+                if (!note.isMine && !(noteType === 'slide' && !note.firstSlide) && answerDiffT >= -0.1) {
+                    audioManager.queueSoundSingle('answer', note.time);
+                }
+                note._answerSoundPlayed = true;
+            }
+
+            // 2. Slide 開始音效：在 Slide 啟動時刻 (note.time + slideDelay) 準時播放
             const startTargetT = note.time + (note.slideDelay ?? 0);
             const startNoteT = startTargetT - globalTime;
-            if (startNoteT <= lookAhead && !note._startEffectPlayed) {
-                // Tap/Touch/Hold 的起手音效在擊中瞬間由 triggerManualHit 統一播放
-                // 此處只播放 Slide 的劃軌開始音效 (slideDelay > 0)
-                const isSlideTrackStart = (noteType === "slide" && (note.slideDelay ?? 0) > 0);
-                const shouldPlayStart = isSlideTrackStart;
-
-                if (shouldPlayStart && !(noteType === "slide" && !note.firstSlide)) {
+            if (startNoteT <= lookAhead && !note._slideStartPlayed) {
+                if (noteType === "slide" && !note.isMine && (note.firstSlide || !note.prevSlide)) {
                     if (startNoteT >= -0.1) {
                         audioManager.queueSound(note, startTargetT);
                     }
                 }
+                note._slideStartPlayed = true;
                 note._startEffectPlayed = true;
             }
-            // 結束音效 (含前瞻)
+
+            // 3. 結束音效 (含前瞻，Hanabi 音效移至判定命中時播放，不再隨音符結束無腦播放)
             const endTargetT = note.time + skipT;
             const endNoteT = endTargetT - globalTime;
             if (endNoteT <= lookAhead && !note._endEffectPlayed) {
                 const shouldPlayEndSound =
                     (noteType === "slide" && note.lastSlide && note.isBreak && (note.slideFinish || (note.slideProgress ?? 0) >= 0.5)) ||
-                    note.isHanabi ||
                     (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd && (note._holdPressed || note.holdFinish));
                 if (shouldPlayEndSound && endNoteT >= -0.1) {
                     audioManager.queueSound(note, endTargetT);
@@ -2041,7 +2067,11 @@ function draw() {
             const lookAhead = 0.1;
             const startTargetT = note.time + (note.slideDelay ?? 0);
             const endTargetT = note.time + skipT;
+            if (note.time - globalTime > lookAhead) {
+                note._answerSoundPlayed = false;
+            }
             if (startTargetT - globalTime > lookAhead) {
+                note._slideStartPlayed = false;
                 note._startEffectPlayed = false;
             }
             if (endTargetT - globalTime > lookAhead) {

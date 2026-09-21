@@ -16,6 +16,9 @@
 </head>
 
 <body>
+    <div
+        style="user-select:none;z-index: 100;position: fixed; top: 0; right: 0; background-color: #00000080;color: whitesmoke;margin: 10px; padding: 10px; border-radius: 0 0 10px 0;">
+        BETA</div>
     <div id="canvasContainer">
         <img src="../Skin/outline.png" alt="outline" onerror="this.style.display = 'none'" id="canvasOutline">
         <canvas id="main"></canvas>
@@ -76,6 +79,11 @@
                 <div class="controlButton" data-buttonAction="settings" title="設定">
                     <span class="material-symbols-outlined" translate="no">
                         settings
+                    </span>
+                </div>
+                <div class="controlButton" data-buttonAction="slideDebug" title="滑軌除錯">
+                    <span class="material-symbols-outlined" translate="no">
+                        bug_report
                     </span>
                 </div>
             </div>

@@ -452,13 +452,18 @@ export function getSlideJudgeQueue(note, renderer = null) {
             }
             break;
         }
-        case '>': // 順時針弧線
-            baseKey = `circle${relEnd}`;
-            break;
-        case '<': { // 逆時針弧線
-            const mirrorEnd = ((head - end + 8) % 8) + 1;
+        case '>': {  // 順時針弧線
+            const isReversed = head >= 3 && head <= 6;
+            const mirrorEnd = isReversed ? ((head - end + 8) % 8) + 1 : relEnd;
             baseKey = `circle${mirrorEnd}`;
-            needMirror = true;
+            needMirror = isReversed;
+            break;
+        }
+        case '<': { // 逆時針弧線
+            const isReversed = head >= 3 && head <= 6;
+            const mirrorEnd = !isReversed ? ((head - end + 8) % 8) + 1 : relEnd;
+            baseKey = `circle${mirrorEnd}`;
+            needMirror = !isReversed;
             break;
         }
         case 'v': // 經中心 C 的 V 字折線

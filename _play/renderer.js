@@ -1392,27 +1392,17 @@ export class SimaiRenderer {
             displaySlideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
 
-        const isConnPart = !!(s.prevSlide || s.nextSlide);
-        const isGroupPartHead = s.firstSlide || !s.prevSlide;
-        const isParentFinished = !!(s.prevSlide && s.prevSlide.slideFinish);
-        const isHeadTriggered = !!(s.headNote?.triggered || s.headTriggered);
-        const isCanSlide = s.hideHead ? (-noteT >= -0.05) : (isHeadTriggered || -noteT >= -0.05);
-        const isUnlocked = (isConnPart && !isGroupPartHead)
-            ? (isParentFinished || !!s.unlocked)
-            : (isCanSlide || !!s.unlocked);
-
-        let effectiveProgress = 0;
-        if (isUnlocked) {
-            effectiveProgress = (s.slideProgress !== undefined && s.slideProgress !== null)
-                ? Math.min(1, Math.max(0, s.slideProgress))
-                : displaySlideProgress;
-        } else {
-            effectiveProgress = 0;
+        const c = slideDelay + (s.cullSkipExtend ?? 0) + slideDuration;
+        if ((displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c)) {
+            this.ctx.restore();
+            return;
         }
 
         const br = ((s.isBreak && !s.isMine) && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
         const prefixOrKey = s.slideType === "w" ? prefix : standardKey;
-        this.drawPathWithArrows(p, effectiveProgress, prefixOrKey, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
+        // 修正：slide 軌跡不會自己推進 (由玩家滑動判定進度 s.slideProgress 推進)，但 star 會隨時間自己前進 (displaySlideProgress)
+        const trackProgress = s.isMine ? 0 : Math.min(1, Math.max(0, s.slideProgress || 0));
+        this.drawPathWithArrows(p, trackProgress, prefixOrKey, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
 
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && (!s.hideHead || sz >= 1) && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish))) {

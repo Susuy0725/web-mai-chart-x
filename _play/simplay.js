@@ -34,25 +34,28 @@ export class SimulatedPlayController {
 
             // 1. Tap / Star / 普通 Touch：在擊中時刻產生感應器輸入並觸發判定
             if (noteType === 'tap' || (noteType === 'touch' && !note.holdDuration)) {
+                const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
+                const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
                 if (noteT <= 0 && -noteT <= touchDuration) {
-                    const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
-                    const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
                     this.activeSensors.add(sensorId);
-                    if (!note.triggered && onHit) {
-                        onHit(sensorId, 0);
-                    }
+                }
+                if (!note.triggered && noteT <= 0 && -noteT <= 0.15 && onHit) {
+                    onHit(sensorId, 0);
                 }
             }
 
             // 2. Hold & TouchHold：在到達時刻觸發判定，並在長按期間持續產生感應器輸入
+            // （短 Hold 如 1h 的 holdDuration 為 1e-4，需保障至少 touchDuration 觸發與感應窗口）
             if (note.holdDuration > 0) {
-                if (noteT <= 0 && -noteT <= note.holdDuration) {
-                    const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
-                    const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
+                const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
+                const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
+                const holdEnd = Math.max(note.holdDuration, touchDuration);
+
+                if (noteT <= 0 && -noteT <= holdEnd) {
                     this.activeSensors.add(sensorId);
-                    if (!note.triggered && onHit) {
-                        onHit(sensorId, 0);
-                    }
+                }
+                if (!note.triggered && noteT <= 0 && -noteT <= Math.max(note.holdDuration, 0.15) && onHit) {
+                    onHit(sensorId, 0);
                 }
             }
 

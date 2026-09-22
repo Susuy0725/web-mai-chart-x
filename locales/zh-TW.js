@@ -25,8 +25,8 @@ export const zhTW = {
         toolsPopup: "預覽彈出",
         toolsPopupOpened: "已在外部視窗開啟",
         toolsFindReplace: "尋找與取代",
-        toolsToggleBk: "切換/加入 Break (bk)",
-        toolsToggleEx: "切換/加入 EX (ex)",
+        toolsToggleBk: "切換/加入 Break",
+        toolsToggleEx: "切換/加入 EX",
         toolsConnectMajdataView: "連接 MajdataView (實驗性)",
         manageResources: "資源管理",
         chartInfo: "譜面資訊",
@@ -161,7 +161,9 @@ export const zhTW = {
         middleDisplayOpts: {
             off: "關閉",
             combo: "COMBO",
-            score: "分數"
+            score: "分數(101%+)",
+            scorePlus: "分數(101%+)",
+            scoreMinus: "分數(101%-)"
         }
     },
     popup: {

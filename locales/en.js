@@ -25,8 +25,8 @@ export const en = {
         toolsPopup: "Popout Preview",
         toolsPopupOpened: "Opened in external window",
         toolsFindReplace: "Find & Replace",
-        toolsToggleBk: "Toggle Break (bk)",
-        toolsToggleEx: "Toggle EX (ex)",
+        toolsToggleBk: "Toggle Break",
+        toolsToggleEx: "Toggle EX",
         toolsConnectMajdataView: "Connect to MajdataView (Experimental)",
         manageResources: "Resource Manager",
         chartInfo: "Chart Info",
@@ -159,7 +159,9 @@ export const en = {
         middleDisplayOpts: {
             off: "Off",
             combo: "COMBO",
-            score: "Score"
+            score: "Score (101%+)",
+            scorePlus: "Score (101%+)",
+            scoreMinus: "Score (101%-)"
         }
     },
     popup: {

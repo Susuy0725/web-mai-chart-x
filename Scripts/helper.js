@@ -353,7 +353,7 @@ export const touchPaths = [];
 for (let i = 1; i <= 8; i++) {
     // 根據圖片，A/B 的 base 與 D/E 的 base 角度有位移
     // 這裡我們把 A/B 設在中心，D/E 設在間隔處
-    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 2, E: i - 2 };
+    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 2, E: i - 3 };
 
     ['B', 'E', 'A', 'D'].forEach(type => {
         const path = new Path2D();
@@ -1890,13 +1890,9 @@ export async function videoRender(audioManager, canvas, renderer, {
         if (popup.isClosed) return;
 
         const off = document.createElement('canvas');
-        off.width = width;
-        off.height = height;
         const offCtx = off.getContext('2d');
-
-        const scaleValue = renderer?.scale ?? scale;
-        const p = Math.min(width, height) / scaleBase * scaleValue;
-        offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
+        renderer.setContext(offCtx);
+        renderer.resize(width, height, 1, true);
 
         const target = new BufferTarget();
         const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
@@ -2575,6 +2571,9 @@ export async function videoRender(audioManager, canvas, renderer, {
         simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
 
         renderer.setContext(currentContext);
+        if (currentContext.canvas) {
+            renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true);
+        }
         popup.setProgress(100);
         popup.setContent('完成');
 
@@ -2585,7 +2584,12 @@ export async function videoRender(audioManager, canvas, renderer, {
         console.error('逐幀渲染失敗', err);
         simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
         try { popup.setContent('錯誤：' + String(err)); } catch (e) { }
-        try { renderer.setContext(currentContext); } catch (e) { }
+        try {
+            renderer.setContext(currentContext);
+            if (currentContext.canvas) {
+                renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true);
+            }
+        } catch (e) { }
     } finally {
         if (exportVideo && exportVideo.parentNode) {
             exportVideo.parentNode.removeChild(exportVideo);

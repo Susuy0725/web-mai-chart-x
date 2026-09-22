@@ -185,11 +185,18 @@ body {
 
 #playControls .controlsContainer {
     display: flex;
-    gap: 20px;
+    gap: clamp(8px, 1.8vw, 18px);
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
     transition: transform 200ms ease;
+    max-width: 100%;
+    padding: 0 10px;
+    box-sizing: border-box;
+}
+
+.popup-backdrop {
+    z-index: 999;
 }
 
 #playControls.hide #playControlContainer {
@@ -237,4 +244,389 @@ body {
 
 .controlsContainer .controlButton:active::before {
     background-color: #ffffff60;
+}
+
+.controlsContainer .controlButton.playbackSpeedButton {
+    width: auto;
+    min-width: 66px;
+    padding: 2px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    position: relative;
+    user-select: none;
+}
+
+.controlsContainer .controlButton.playbackSpeedButton::before {
+    width: 100%;
+    height: 100%;
+    border-radius: 5px;
+}
+
+.controlsContainer .controlButton.playbackSpeedButton input {
+    width: 38px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    font-family: inherit;
+    text-align: right;
+    outline: none;
+    appearance: textfield;
+    -moz-appearance: textfield;
+    padding: 0;
+    margin: 0;
+    cursor: text;
+}
+
+.controlsContainer .controlButton.playbackSpeedButton input::-webkit-outer-spin-button,
+.controlsContainer .controlButton.playbackSpeedButton input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.controlsContainer .controlButton.playbackSpeedButton .speedUnit {
+    font-size: 12px;
+    color: #bbb;
+    user-select: none;
+    font-weight: bold;
+}
+
+/* ============================================================
+   Slide JudgeQueue Debugger Panel Styles
+   ============================================================ */
+.controlsContainer .controlButton[data-buttonaction="slideDebug"].active {
+    color: #00e5ff;
+    background: rgba(0, 229, 255, 0.18);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+.slide-debug-panel {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 370px;
+    max-width: calc(100vw - 32px);
+    max-height: 82vh;
+    background: rgba(18, 20, 30, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 229, 255, 0.2);
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    font-size: 12px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+}
+
+.slide-debug-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: move;
+}
+
+.slide-debug-header .title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: bold;
+    font-size: 13px;
+    color: #00e5ff;
+}
+
+.slide-debug-header .title .icon {
+    font-size: 18px;
+}
+
+.slide-debug-header .actions {
+    display: flex;
+    gap: 4px;
+}
+
+.slide-debug-header .debug-btn-icon {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.slide-debug-header .debug-btn-icon:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.slide-debug-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    max-height: calc(82vh - 42px);
+}
+
+.slide-debug-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.slide-debug-selector-row .auto-track-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #bbb;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.slide-debug-selector-row .slide-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.slide-debug-selector-row .slide-tab {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 11px;
+    padding: 2px 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.slide-debug-selector-row .slide-tab:hover {
+    background: rgba(0, 229, 255, 0.15);
+    color: #fff;
+}
+
+.slide-debug-selector-row .slide-tab.active {
+    background: rgba(0, 229, 255, 0.25);
+    border-color: #00e5ff;
+    color: #00e5ff;
+    font-weight: bold;
+}
+
+.slide-debug-summary {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.slide-debug-summary .summary-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11.5px;
+}
+
+.slide-debug-summary .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.slide-debug-summary .label {
+    color: #999;
+}
+
+.slide-debug-summary .value {
+    color: #ddd;
+    font-family: monospace;
+}
+
+.slide-debug-summary .value.highlight {
+    color: #ff4081;
+    font-weight: bold;
+}
+
+.meta-badge {
+    background: rgba(64, 196, 255, 0.2);
+    border: 1px solid rgba(64, 196, 255, 0.4);
+    color: #80d8ff;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10.5px;
+}
+
+.meta-badge.mirror {
+    background: rgba(255, 171, 0, 0.2);
+    border-color: rgba(255, 171, 0, 0.4);
+    color: #ffd740;
+}
+
+.meta-badge.fallback {
+    background: rgba(255, 82, 82, 0.2);
+    border-color: rgba(255, 82, 82, 0.4);
+    color: #ff8a80;
+}
+
+.progress-bar-bg {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00e5ff, #00e676);
+    transition: width 0.1s ease;
+}
+
+.slide-debug-table-container {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.slide-debug-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.slide-debug-table th {
+    position: sticky;
+    top: 0;
+    background: rgba(28, 32, 45, 0.95);
+    padding: 5px 6px;
+    text-align: left;
+    color: #aaa;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    font-weight: 600;
+}
+
+.slide-debug-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.slide-debug-table tr.row-done {
+    background: rgba(0, 230, 118, 0.08);
+}
+
+.slide-debug-table tr.row-active {
+    background: rgba(255, 234, 0, 0.14);
+    box-shadow: inset 2px 0 0 #ffea00;
+}
+
+.sensor-chip {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-weight: bold;
+    font-size: 10.5px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.sensor-chip.ring-A { background: rgba(255, 82, 82, 0.25); color: #ff8a80; border: 1px solid rgba(255, 82, 82, 0.4); }
+.sensor-chip.ring-B { background: rgba(255, 215, 64, 0.25); color: #ffe57f; border: 1px solid rgba(255, 215, 64, 0.4); }
+.sensor-chip.ring-C { background: rgba(234, 128, 252, 0.25); color: #ea80fc; border: 1px solid rgba(234, 128, 252, 0.4); }
+.sensor-chip.ring-D { background: rgba(68, 138, 255, 0.25); color: #82b1ff; border: 1px solid rgba(68, 138, 255, 0.4); }
+.sensor-chip.ring-E { background: rgba(0, 230, 118, 0.25); color: #b9f6ca; border: 1px solid rgba(0, 230, 118, 0.4); }
+
+.sensor-chip.active {
+    background: rgba(255, 64, 129, 0.35);
+    color: #ff4081;
+    border: 1px solid #ff4081;
+    box-shadow: 0 0 6px rgba(255, 64, 129, 0.5);
+}
+
+.flag-chip {
+    display: inline-block;
+    font-size: 9px;
+    padding: 0 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #666;
+}
+
+.flag-chip.on {
+    background: rgba(0, 230, 118, 0.25);
+    color: #00e676;
+    font-weight: bold;
+}
+
+.flag-chip.off {
+    background: rgba(64, 196, 255, 0.25);
+    color: #40c4ff;
+    font-weight: bold;
+}
+
+.status-badge {
+    display: inline-block;
+    font-size: 9.5px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.status-badge.done {
+    background: rgba(0, 230, 118, 0.2);
+    color: #00e676;
+}
+
+.status-badge.active {
+    background: rgba(255, 234, 0, 0.25);
+    color: #ffd600;
+    box-shadow: 0 0 6px rgba(255, 214, 0, 0.4);
+}
+
+.status-badge.pending {
+    background: rgba(255, 255, 255, 0.06);
+    color: #777;
+}
+
+.slide-debug-footer {
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.active-sensors-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+}
+
+.active-sensors-row .label {
+    color: #888;
+    white-space: nowrap;
+}
+
+.active-sensors-row .chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
 }

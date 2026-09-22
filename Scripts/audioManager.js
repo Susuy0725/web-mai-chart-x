@@ -391,23 +391,31 @@ class AudioManager {
         await Promise.all(loadTasks);
     }
 
-    queueSoundSingle(sample, targetTime) {
+    queueSoundSingle(sample, targetTime, isMono = false) {
         const vol = clampVolume(this.sfxVolumes[sample] ?? 1.0, this.MAX_VOLUME_LIMIT);
-        this._checkAndPush(sample, targetTime, true, vol);
+        this._checkAndPush(sample, targetTime, isMono, vol);
     }
 
-    queueSound(note, targetTime) {
+    queueSound(note, targetTime, options = {}) {
         const now = performance.now();
         if (note._lastQueued && (now - note._lastQueued < this.MIN_INTERVAL)) return;
         note._lastQueued = now;
 
-        const events = this.getSfxEventsForNote(note, targetTime);
+        const events = this.getSfxEventsForNote(note, targetTime, options);
         for (const ev of events) {
             this._checkAndPush(ev.key, ev.time, ev.isMono, ev.volume);
         }
     }
 
-    getSfxEventsForNote(note, targetTime) {
+    /**
+     * 手動打擊命中專用音效 (僅播放判定反饋音效，排除 answer 提示音與 hanabi，避免打擊時間拉偏 answer 或重複播放 hanabi)
+     */
+    queueHitSound(note, targetTime) {
+        this.queueSound(note, targetTime, { includeAnswer: false, includeHanabi: false });
+    }
+
+    getSfxEventsForNote(note, targetTime, options = {}) {
+        const { includeAnswer = true, includeHanabi = true } = options;
         const events = [];
         let key = 'judge';
         let isMono = true;
@@ -415,7 +423,7 @@ class AudioManager {
         switch (note.type) {
             case 'tap':
                 if (note.isMine) {
-                    key = 'answer';
+                    key = includeAnswer ? 'answer' : '';
                     break;
                 }
                 if (note.isEx) key = 'judge_ex';
@@ -423,14 +431,18 @@ class AudioManager {
                     key = 'judge_break';
                     events.push({ key: 'break', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT) });
                 }
-                events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                if (includeAnswer) {
+                    events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                }
                 break;
             case 'hold':
                 if (note.isMine) {
-                    key = 'answer';
+                    key = includeAnswer ? 'answer' : '';
                     break;
                 }
-                events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                if (includeAnswer) {
+                    events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                }
                 if (!note._startEffectPlayed) {
                     if (note.isBreak) {
                         key = 'judge_break';
@@ -447,8 +459,10 @@ class AudioManager {
             case 'touch':
                 key = 'touch';
                 isMono = false;
-                events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
-                if (note.isHanabi) {
+                if (includeAnswer) {
+                    events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                }
+                if (note.isHanabi && includeHanabi) {
                     if (note.holdDuration >= 0) {
                         if (note._startEffectPlayed) {
                             key = 'hanabi';
@@ -461,7 +475,7 @@ class AudioManager {
                         isMono = true;
                     }
                 }
-                if (note._startEffectPlayed && !note.isHanabi) return events;
+                if (note._startEffectPlayed && !(note.isHanabi && includeHanabi)) return events;
                 break;
             case 'slide':
                 if (note.isMine) {
@@ -486,7 +500,9 @@ class AudioManager {
                 return events;
         }
 
-        events.push({ key, time: targetTime, isMono, volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT) });
+        if (key) {
+            events.push({ key, time: targetTime, isMono, volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT) });
+        }
         return events;
     }
 

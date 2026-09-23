@@ -118,7 +118,8 @@ export const ja = {
             basic: "基本",
             display: "表示",
             sfx: "音声",
-            other: "その他"
+            other: "その他",
+            ai: "AI アシスタント"
         },
         items: {
             speed: "Tap/Hold速度",
@@ -154,7 +155,14 @@ export const ja = {
             lang: "言語",
             lowRes: "低解像度モード (1x 解像度に制限して軽量化)",
             majdataWsUrl: "MajdataView WebSocket URL",
-            autoConnectMajdataView: "起動時に MajdataView に自動接続"
+            autoConnectMajdataView: "起動時に MajdataView に自動接続",
+            aiProvider: "AI プロバイダー",
+            geminiModel: "Gemini モデル",
+            geminiApiKey: "Google AI API キー",
+            geminiApiKeyPlaceholder: "Google AI Studio API キーを入力",
+            geminiApiKeyNotice: "APIキーはブラウザにのみ保存されます。共有PCでは保存しないでください。",
+            enableGhostText: "ゴーストテキストを有効化",
+            ghostTextDebounceTime: "ゴーストテキスト遅延 (ms)"
         },
         middleDisplayOpts: {
             off: "オフ",

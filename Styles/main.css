@@ -663,6 +663,92 @@ body {
     border-radius: 3px;
 }
 
+#highlight-layer .ghost-text-suggestion {
+    color: #9aa0a6 !important;
+    opacity: 0.8;
+    font-style: italic;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+.ghost-action-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 15;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    background: var(--main-color, #18181c);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: auto;
+    transition: opacity 0.15s ease;
+    will-change: transform;
+}
+
+.ghost-action-bar .ghost-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    transition: all 0.12s ease;
+    padding: 0;
+    margin: 0;
+    outline: none;
+    touch-action: manipulation;
+}
+
+.ghost-action-bar .ghost-action-btn:active {
+    transform: scale(0.92);
+}
+
+.ghost-action-bar .ghost-action-accept:hover {
+    background: rgba(74, 222, 128, 0.12);
+    color: #4ade80;
+}
+
+.ghost-action-bar .ghost-action-accept:active {
+    background: rgba(74, 222, 128, 0.22);
+    color: #4ade80;
+}
+
+.ghost-action-bar .ghost-action-dismiss:hover {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+}
+
+.ghost-action-bar .ghost-action-dismiss:active {
+    background: rgba(248, 113, 113, 0.22);
+    color: #f87171;
+}
+
+.ghost-action-bar .ghost-action-btn .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.ghost-action-bar .ghost-action-divider,
+.ghost-action-bar .switch-divider {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 1px;
+    flex-shrink: 0;
+}
+
 .utilityButton.expanded {
     width: 100%;
     height: 30px;

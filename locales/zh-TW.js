@@ -118,7 +118,8 @@ export const zhTW = {
             basic: "基本",
             display: "顯示",
             sfx: "音效",
-            other: "其他"
+            other: "其他",
+            ai: "AI 輔助"
         },
         items: {
             speed: " Tap/Hold 速度",
@@ -156,7 +157,14 @@ export const zhTW = {
             drawHanabiEffect: "渲染煙火特效",
             lowRes: "低解析度模式 (限制 1x DPI 以提升低階裝置效能)",
             majdataWsUrl: "MajdataView WebSocket 位址",
-            autoConnectMajdataView: "自動連接 MajdataView"
+            autoConnectMajdataView: "自動連接 MajdataView",
+            aiProvider: "AI 供應商",
+            geminiModel: "Gemini 模型",
+            geminiApiKey: "Google AI API 金鑰",
+            geminiApiKeyPlaceholder: "請輸入 Google AI Studio API Key",
+            geminiApiKeyNotice: "API 金鑰僅保存在本機瀏覽器，請勿在公用電腦儲存。",
+            enableGhostText: "啟用幽靈文字 (Ghost Text)",
+            ghostTextDebounceTime: "幽靈文字延遲時間 (ms)"
         },
         middleDisplayOpts: {
             off: "關閉",

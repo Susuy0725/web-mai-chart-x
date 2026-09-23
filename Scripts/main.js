@@ -11,6 +11,7 @@ import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
+import { GhostTextController } from './ai/index.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -263,6 +264,30 @@ const quickPanel = document.getElementById('quick-panel');
 const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
 const canvasOutline = document.getElementById('canvasOutline');
 const backgroundContainer = document.querySelector('#canvasContainer .backgroundContainer');
+
+// 幽靈文字 (Ghost Text) 控制器實例
+const ghostController = new GhostTextController({
+    getEnabled: () => Boolean(settings.enableGhostText),
+    getApiKey: () => settings.geminiApiKey || (function () {
+        try { return localStorage.getItem('simai_ai_apikey') || ''; } catch (_) { return ''; }
+    })(),
+    getModel: () => settings.geminiModel || 'gemini-3.5-flash-lite',
+    getDebounceMs: () => settings.ghostTextDebounceTime || 250,
+    getProvider: () => settings.aiProvider || 'google',
+    onStateChange: () => {
+        applyHighlight(editorInput.value);
+    },
+    onAccept: () => {
+        applyHighlight(editorInput.value);
+        if (typeof inputDebounce === 'function') {
+            inputDebounce();
+        }
+    },
+    onError: (msg) => {
+        simpleToast({ content: msg, type: 'error', timeout: 3500 });
+    }
+});
+ghostController.bindEditor(editorInput, editorContainer);
 
 function applySplitRatio(ratio) {
     document.documentElement.style.setProperty('--split-ratio', ratio);
@@ -1219,6 +1244,12 @@ export const defaultSettings = {
     globalTimeline: true, // 全局時間軸
     drawHitEffect: true,
     drawHanabiEffect: true,
+    // AI Assistant
+    aiProvider: 'google',
+    geminiModel: 'gemini-3.5-flash-lite',
+    geminiApiKey: '',
+    enableGhostText: false,
+    ghostTextDebounceTime: 250,
     restoreDefaults: function () {
         settings = { ...defaultSettings };
     }
@@ -1430,6 +1461,56 @@ const settingsConfig = [
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
             }
         ]
+    },
+    {
+        label: 'settings.tabs.ai',
+        items: [
+            {
+                id: 'aiProvider',
+                type: 'dropdown',
+                label: 'settings.items.aiProvider',
+                options: [
+                    { value: 'google', label: 'Google AI (Gemini)' }
+                ],
+                def: defaultSettings.aiProvider
+            },
+            {
+                id: 'geminiModel',
+                type: 'dropdown',
+                label: 'settings.items.geminiModel',
+                options: [
+                    { value: 'gemini-3.5-flash-lite', label: 'gemini-3.5-flash-lite (推薦極速)' },
+                    { value: 'gemini-3.8-flash', label: 'gemini-3.8-flash (最新旗艦)' },
+                    { value: 'gemini-3.5-flash', label: 'gemini-3.5-flash' },
+                    { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash (舊版相容)' }
+                ],
+                def: defaultSettings.geminiModel
+            },
+            {
+                id: 'geminiApiKey',
+                type: 'password',
+                label: 'settings.items.geminiApiKey',
+                placeholder: 'settings.items.geminiApiKeyPlaceholder',
+                notice: 'settings.items.geminiApiKeyNotice',
+                def: defaultSettings.geminiApiKey,
+                showToggle: true
+            },
+            {
+                id: 'enableGhostText',
+                type: 'checkbox',
+                label: 'settings.items.enableGhostText',
+                def: defaultSettings.enableGhostText
+            },
+            {
+                id: 'ghostTextDebounceTime',
+                type: 'number',
+                label: 'settings.items.ghostTextDebounceTime',
+                min: 100,
+                max: 2000,
+                step: 50,
+                def: defaultSettings.ghostTextDebounceTime
+            }
+        ]
     }
 ];
 
@@ -1469,6 +1550,9 @@ const previewVisible = () => (previewContainer.style.display !== 'none' && docum
 const saveSettingsDebounce = debounce(() => {
     if (majdataWs.isConnected()) {
         majdataWs.sendSetting(settings);
+    }
+    if (settings.geminiApiKey !== undefined) {
+        try { localStorage.setItem('simai_ai_apikey', settings.geminiApiKey); } catch (_) { }
     }
     idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
@@ -3386,11 +3470,13 @@ settingsButton.addEventListener('click', () => {
             return row;
         }
 
-        // 5. 一般 Number / Dropdown
+        // 5. 一般 Number / Dropdown / Text / Password
         const label = document.createElement('label');
         label.textContent = labelText;
         label.className = 'popup-setting-label';
-        element.className = 'popup-setting-input';
+        if (!element.classList.contains('popup-setting-password-container') && !element.classList.contains('popup-setting-input')) {
+            element.className = 'popup-setting-input' + (element.classList.contains('popup-setting-input-wide') ? ' popup-setting-input-wide' : '');
+        }
         row.appendChild(label);
         row.appendChild(element);
         return row;
@@ -3410,8 +3496,14 @@ settingsButton.addEventListener('click', () => {
             } else if (config.type === 'dropdown') {
                 finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
             } else if (config.type === 'object') {
-                // 🔥 直接複製子選單同步完的物件結果
+                // 直接複製子選單同步完的物件結果
                 finalVal = { ...config.el.value };
+            } else if (config.type === 'text' || config.type === 'password') {
+                const actualInput = config.el.querySelector ? (config.el.querySelector('input') || config.el) : config.el;
+                finalVal = (actualInput.value || '').trim();
+                if (id === 'geminiApiKey') {
+                    try { localStorage.setItem('simai_ai_apikey', finalVal); } catch (_) { }
+                }
             } else {
                 const rawVal = parseFloat(config.el.value);
                 finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
@@ -3575,7 +3667,51 @@ settingsButton.addEventListener('click', () => {
                     el.addEventListener('click', item.onClick);
                 }
             }
-            // --- F. 一般 Number ---
+            // --- F. 處理 Text / Password ---
+            else if (item.type === 'text' || item.type === 'password') {
+                const placeholder = item.placeholder ? (item.placeholder.startsWith('settings.') ? t(item.placeholder) : item.placeholder) : '';
+                const input = document.createElement('input');
+                input.type = item.type;
+                input.className = 'popup-setting-input popup-setting-input-wide';
+                input.value = currentVal || '';
+                if (placeholder) input.placeholder = placeholder;
+                input.autocomplete = 'off';
+                input.spellcheck = false;
+
+                input.addEventListener('input', (e) => {
+                    try { targetRef[targetKey] = e.target.value; } catch (err) { }
+                });
+
+                if (item.showToggle && item.type === 'password') {
+                    const container = document.createElement('div');
+                    container.className = 'popup-setting-password-container';
+                    container.dataset.type = 'password-container';
+
+                    const toggleBtn = document.createElement('button');
+                    toggleBtn.type = 'button';
+                    toggleBtn.className = 'popup-setting-toggle-btn';
+                    toggleBtn.textContent = '顯示';
+                    toggleBtn.title = '切換顯示密碼';
+                    toggleBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (input.type === 'password') {
+                            input.type = 'text';
+                            toggleBtn.textContent = '隱藏';
+                        } else {
+                            input.type = 'password';
+                            toggleBtn.textContent = '顯示';
+                        }
+                    });
+
+                    container.appendChild(input);
+                    container.appendChild(toggleBtn);
+                    el = container;
+                } else {
+                    el = input;
+                }
+            }
+            // --- G. 一般 Number ---
             else {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
             }
@@ -3589,6 +3725,13 @@ settingsButton.addEventListener('click', () => {
                 key: targetKey
             };
             section.appendChild(createRow(t(item.label), el));
+
+            if (item.notice) {
+                const noticeEl = document.createElement('div');
+                noticeEl.className = 'popup-setting-notice';
+                noticeEl.textContent = item.notice.startsWith('settings.') ? t(item.notice) : item.notice;
+                section.appendChild(noticeEl);
+            }
         });
     });
 
@@ -4666,6 +4809,11 @@ editorInput.addEventListener('input', () => {
 
     // 延遲處理重解析與存檔 (避免打字時解析幾萬行導致卡頓)
     inputDebounce();
+
+    // 觸發幽靈文字補全請求
+    if (ghostController) {
+        ghostController.requestCompletion(value, editorInput.selectionStart);
+    }
 });
 
 offsetInput.addEventListener('input', () => {
@@ -4681,6 +4829,7 @@ offsetInput.addEventListener('input', () => {
 });
 
 function maidataProcess(e) {
+    if (ghostController) ghostController.dismiss();
     maidata = null; // 先清空舊譜面資料，避免讀取失敗時殘留舊資料干擾
     editorInput.value = "";
     offsetInput.value = 0;
@@ -5079,6 +5228,7 @@ changeDifficulty.addEventListener('change', (e) => {
 switchBoxRadios.forEach(radio => {
     radio.addEventListener('change', (e) => {
         if (e.target.checked) {
+            if (ghostController) ghostController.dismiss();
             settings.displayMode = (e.target.value === 'keyboard') ? 'simai' : 'visual';
             updateGridDivisionVisibility();
             visualEditorRenderer.setZoom(settings.visualZoom);
@@ -5674,7 +5824,11 @@ function applyHighlight(text) {
         const end = rawData.slice(0, index + 1).join(',').length;
         return { start, end };
     });
-    highlightLayer.innerHTML = getHighlight(text, warningRanges);
+    if (ghostController && ghostController.visible && ghostController.text) {
+        highlightLayer.innerHTML = ghostController.decorateHighlight(text, (seg) => getHighlight(seg, warningRanges));
+    } else {
+        highlightLayer.innerHTML = getHighlight(text, warningRanges);
+    }
     warningPositions = []; // 重置警告位置，等待下一次解析更新
 }
 
@@ -7313,12 +7467,31 @@ function _init() {
                             isMissingSettings = true;
                         }
                     }
+                    if (!settings.geminiApiKey) {
+                        try {
+                            const localApiKey = localStorage.getItem('simai_ai_apikey');
+                            if (localApiKey) {
+                                settings.geminiApiKey = localApiKey;
+                                isMissingSettings = true;
+                            }
+                        } catch (_) { }
+                    } else {
+                        try {
+                            localStorage.setItem('simai_ai_apikey', settings.geminiApiKey);
+                        } catch (_) { }
+                    }
                     if (isMissingSettings) {
                         await idbSet('simai_settings', JSON.stringify(settings));
                     }
                     playbackSpeedInput.value = settings.playbackSpeed;
                 } else {
-                    settings = { ...defaultSettings }
+                    settings = { ...defaultSettings };
+                    try {
+                        const localApiKey = localStorage.getItem('simai_ai_apikey');
+                        if (localApiKey) {
+                            settings.geminiApiKey = localApiKey;
+                        }
+                    } catch (_) { }
                     await idbSet('simai_settings', JSON.stringify(settings));
                 };
 

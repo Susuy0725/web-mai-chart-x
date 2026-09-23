@@ -118,7 +118,8 @@ export const en = {
             basic: "Basic",
             display: "Display",
             sfx: "Audio",
-            other: "Other"
+            other: "Other",
+            ai: "AI Assistant"
         },
         items: {
             speed: "Tap/Hold Speed",
@@ -154,7 +155,14 @@ export const en = {
             lang: "Language",
             lowRes: "Low Resolution Mode (Limit 1x DPI for low-end devices)",
             majdataWsUrl: "MajdataView WebSocket URL",
-            autoConnectMajdataView: "Auto-connect to MajdataView"
+            autoConnectMajdataView: "Auto-connect to MajdataView",
+            aiProvider: "AI Provider",
+            geminiModel: "Gemini Model",
+            geminiApiKey: "Google AI API Key",
+            geminiApiKeyPlaceholder: "Enter your Google AI Studio API Key",
+            geminiApiKeyNotice: "API key is stored locally in your browser. Do not use on public computers.",
+            enableGhostText: "Enable Ghost Text",
+            ghostTextDebounceTime: "Ghost Text Debounce (ms)"
         },
         middleDisplayOpts: {
             off: "Off",

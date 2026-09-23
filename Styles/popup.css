@@ -706,7 +706,7 @@
 .popup-setting-sidebar {
     display: flex;
     flex-direction: column;
-    width: 80px;
+    width: 92px;
     border-right: 1px solid #444444;
     gap: 5px;
     padding-right: 10px;
@@ -800,4 +800,55 @@
     text-align: left;
     transition: border-color 0.2s;
     box-sizing: border-box;
+}
+
+.popup-setting-input:focus {
+    border-color: #4a90e2;
+    outline: none;
+}
+
+.popup-setting-input-wide {
+    width: 220px;
+    max-width: 65%;
+}
+
+.popup-setting-password-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 65%;
+}
+
+.popup-setting-password-container .popup-setting-input {
+    width: 100%;
+    min-width: 160px;
+}
+
+.popup-setting-toggle-btn {
+    padding: 6px 8px;
+    background: #2d2d2d;
+    color: #cccccc;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.popup-setting-toggle-btn:hover {
+    background: #3d3d3d;
+    color: #ffffff;
+}
+
+.popup-setting-notice {
+    font-size: 12px;
+    color: #9aa0a6;
+    line-height: 1.4;
+    padding: 4px 0 8px 0;
+    margin-top: -6px;
 }

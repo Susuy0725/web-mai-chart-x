@@ -31,8 +31,11 @@ const ASSETS = [
     './Skin/outline.png',
     './Scripts/i18n.js',
     './locales/en.js',
+    './locales/en.json',
     './locales/ja.js',
+    './locales/ja.json',
     './locales/zh-TW.js',
+    './locales/zh-TW.json',
     './rpc.js',
 ];
 

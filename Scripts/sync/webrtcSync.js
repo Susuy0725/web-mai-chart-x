@@ -56,12 +56,26 @@ export class WebRtcSync {
 
         this.pc = null;
         this.dataChannel = null;
-        this.pollTimer = null;
+        this.pairId = null;
+        this.pollInterval = null;
         this._isCleaningUp = false;
+    }
+
+    _log(...args) {
+        console.log(`%c[WebRtcSync:${this.role || 'idle'}]`, "color:#00e5ff; font-weight:bold;", ...args);
+    }
+
+    _warn(...args) {
+        console.warn(`%c[WebRtcSync:${this.role || 'idle'}]`, "color:#ffab00; font-weight:bold;", ...args);
+    }
+
+    _err(...args) {
+        console.error(`%c[WebRtcSync:${this.role || 'idle'}]`, "color:#ff1744; font-weight:bold;", ...args);
     }
 
     _setStatus(status, detail = "") {
         this.status = status;
+        this._log(`狀態變更 -> [${status}]`, detail);
         this.onStatusChange(status, detail);
     }
 
@@ -72,12 +86,13 @@ export class WebRtcSync {
     setWorkerUrl(url) {
         if (url && typeof url === "string") {
             this.workerUrl = url.trim().replace(/\/+$/, "");
+            this._log("更新 Worker 網址:", this.workerUrl);
         }
     }
 
     /**
-     * 發起端（電腦端）：建立房間、產生 4 位數短碼並等候手機加入
-     * @returns {Promise<string>} 回傳 4 位數短碼
+     * 發起端（電腦端）：建立 WebRTC Offer，透過 D1 產生 6 位配對碼並每 2 秒輪詢
+     * @returns {Promise<string>} 回傳 6 位配對碼
      */
     async createRoom() {
         this.disconnect();
@@ -88,33 +103,23 @@ export class WebRtcSync {
         try {
             this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
             this._setupPeerConnection(this.pc);
-            const hostCandidates = [];
 
-            this.pc.onicecandidate = (event) => {
-                if (event.candidate && this.roomCode) {
-                    hostCandidates.push(event.candidate);
-                    this._sendCandidate(this.roomCode, "host", event.candidate).catch(() => { });
-                }
-            };
-
-            // Host 建立 DataChannel
-            this.dataChannel = this.pc.createDataChannel("wmcx-sync", {
-                ordered: true
-            });
+            this.dataChannel = this.pc.createDataChannel("wmcx-sync", { ordered: true });
             this._setupDataChannel(this.dataChannel);
 
-            // 建立 Offer
             const offer = await this.pc.createOffer();
             await this.pc.setLocalDescription(offer);
+            this._log("本地 SDP Offer 建立完成，等待 ICE Gathering 完成 (不使用 Trickle ICE)...");
             await waitForIceGatheringComplete(this.pc);
+            this._log("ICE Gathering 完成");
 
-            // 向 Worker 建立房間並獲取 4 位數短碼
-            const res = await fetch(`${this.workerUrl}/api/room/create`, {
+            // 向 Worker 發送 /api/pair/create
+            this._log("正在向 Worker 發送 /api/pair/create...");
+            const res = await fetch(`${this.workerUrl}/api/pair/create`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    offer: this.pc.localDescription,
-                    candidates: hostCandidates
+                    offer: this.pc.localDescription.sdp
                 })
             });
 
@@ -124,13 +129,16 @@ export class WebRtcSync {
             }
 
             const data = await res.json();
+            this.pairId = data.pairId;
             this.roomCode = data.code;
-            this._setStatus("connecting", `等待接收端輸入配對碼: ${this.roomCode}`);
+            this._log(`房間建立成功，pairId: ${this.pairId}，配對碼: ${this.roomCode} (5 分鐘有效)`);
+            this._setStatus("connecting", `已產生配對碼: ${this.roomCode}，等候加入...`);
 
-            // 開始輪詢對端 Answer
-            this._startPollingAnswer(this.roomCode);
+            // 每 2 秒輪詢狀態
+            this._startPollingStatus(this.pairId);
             return this.roomCode;
         } catch (err) {
+            this._err("建立房間失敗:", err);
             this._setStatus("disconnected", err.message);
             this.onError(err);
             throw err;
@@ -138,12 +146,12 @@ export class WebRtcSync {
     }
 
     /**
-     * 接收端（手機 _play）：輸入 4 位數短碼加入房間並建立連線
-     * @param {string} code - 4 位數短碼
+     * 接收端（手機/iPad 端）：輸入 6 位數配對碼從 D1 取得 Offer 並回傳 Answer
+     * @param {string} code - 6 位數短碼
      */
     async joinRoom(code) {
-        if (!code || typeof code !== "string" || code.trim().length !== 4) {
-            throw new Error("配對碼必須為 4 位數字");
+        if (!code || typeof code !== "string" || code.trim().length !== 6) {
+            throw new Error("配對碼必須為 6 位數字");
         }
 
         const cleanCode = code.trim();
@@ -151,72 +159,63 @@ export class WebRtcSync {
         this._isCleaningUp = false;
         this.role = "client";
         this.roomCode = cleanCode;
-        this._setStatus("connecting", `正在加入房間 ${cleanCode}...`);
+        this._setStatus("connecting", `正在驗證配對碼 ${cleanCode}...`);
 
         try {
-            // 1. 從 Worker 獲取 Host 的 Offer
-            const res = await fetch(`${this.workerUrl}/api/room/offer?code=${cleanCode}`);
+            this._log(`向 Worker 發送 /api/pair/join 驗證配對碼 ${cleanCode}...`);
+            const res = await fetch(`${this.workerUrl}/api/pair/join`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: cleanCode })
+            });
+
             if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || "找不到該配對碼或房間已逾期");
+                throw new Error("配對碼無效或已過期");
             }
 
-            const roomData = await res.json();
-            if (!roomData.offer) {
-                throw new Error("房間尚未就緒或缺少 Offer");
-            }
+            const data = await res.json();
+            this.pairId = data.pairId;
+            this._log(`驗證成功，取得 pairId: ${this.pairId}，開始建立 Answer...`);
+            this._setStatus("connecting", "已取得 Offer，正在建立 Answer...");
 
             this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
             this._setupPeerConnection(this.pc);
-            const clientCandidates = [];
 
-            this.pc.onicecandidate = (event) => {
-                if (event.candidate && this.roomCode) {
-                    clientCandidates.push(event.candidate);
-                    this._sendCandidate(this.roomCode, "client", event.candidate).catch(() => { });
-                }
-            };
-
-            // 接收端監聽 Host 建立的 DataChannel
             this.pc.ondatachannel = (event) => {
+                this._log("收到 Host 建立的 DataChannel:", event.channel.label);
                 this.dataChannel = event.channel;
                 this._setupDataChannel(this.dataChannel);
             };
 
-            // 2. 設置 Remote Description (Host Offer)
-            await this.pc.setRemoteDescription(new RTCSessionDescription(roomData.offer));
+            await this.pc.setRemoteDescription(new RTCSessionDescription({
+                type: 'offer',
+                sdp: data.offer
+            }));
 
-            // 添加 Host 已蒐集到的 ICE Candidates
-            if (Array.isArray(roomData.hostCandidates)) {
-                for (const cand of roomData.hostCandidates) {
-                    try {
-                        await this.pc.addIceCandidate(new RTCIceCandidate(cand));
-                    } catch (_) { }
-                }
-            }
-
-            // 3. 建立 Answer
             const answer = await this.pc.createAnswer();
             await this.pc.setLocalDescription(answer);
+            this._log("本地 Answer 建立完成，等待 ICE Gathering 完成 (不使用 Trickle ICE)...");
             await waitForIceGatheringComplete(this.pc);
+            this._log("ICE Gathering 完成");
 
-            // 4. 將 Answer 上傳至 Worker
-            const ansRes = await fetch(`${this.workerUrl}/api/room/answer`, {
+            this._log("正在將 Answer 上傳至 /api/pair/answer...");
+            const ansRes = await fetch(`${this.workerUrl}/api/pair/answer`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    code: cleanCode,
-                    answer: this.pc.localDescription,
-                    candidates: clientCandidates
+                    pairId: this.pairId,
+                    answer: this.pc.localDescription.sdp
                 })
             });
 
             if (!ansRes.ok) {
-                throw new Error("上傳 Answer 失敗");
+                throw new Error("上傳 Answer 失敗或配對已過期");
             }
 
+            this._log("Answer 上傳成功，正在等待 WebRTC P2P 直連握手...");
             this._setStatus("connecting", "已送出 Answer，正在建立 P2P 直連...");
         } catch (err) {
+            this._err("加入配對失敗:", err);
             this._setStatus("disconnected", err.message);
             this.onError(err);
             throw err;
@@ -225,22 +224,21 @@ export class WebRtcSync {
 
     _setupDataChannel(channel) {
         if (!channel) return;
+        this._log(`綁定 DataChannel: [${channel.label}], 目前狀態: ${channel.readyState}`);
 
         channel.onopen = () => {
             if (this.dataChannel !== channel) return; // 舊通道事件，忽略
-            if (this.pollTimer) {
-                clearInterval(this.pollTimer);
-                this.pollTimer = null;
+            this._log("DataChannel.onopen -> P2P WebRTC 直連握手成功！");
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
             }
             this._setStatus("connected", "已成功建立 WebRTC P2P 直連！");
-            // 握手完成，通知 Worker 釋放該房間
-            if (this.roomCode && this.role === "host") {
-                fetch(`${this.workerUrl}/api/room?code=${this.roomCode}`, { method: "DELETE" }).catch(() => { });
-            }
         };
 
         channel.onclose = () => {
             if (this.dataChannel !== channel) return; // 舊通道事件，忽略
+            this._warn("DataChannel.onclose -> P2P 連線已中斷");
             if (this.status === "connected" || this.status === "connecting") {
                 this._setStatus("disconnected", "P2P 連線已中斷");
                 this.disconnect();
@@ -249,7 +247,7 @@ export class WebRtcSync {
 
         channel.onerror = (err) => {
             if (this.dataChannel !== channel) return;
-            console.warn("[WebRTC DataChannel Error]", err);
+            this._err("DataChannel.onerror:", err);
             this.onError(new Error("DataChannel error: " + (err.message || "連線錯誤")));
         };
 
@@ -257,6 +255,7 @@ export class WebRtcSync {
             if (this.dataChannel !== channel) return;
             try {
                 const data = JSON.parse(event.data);
+                this._log("收到 P2P 訊息:", data.action, data);
                 this.onMessage(data);
             } catch (e) {
                 console.warn("[WebRTC message parse error]", e, event.data);
@@ -269,6 +268,7 @@ export class WebRtcSync {
         pc.onconnectionstatechange = () => {
             if (this.pc !== pc) return; // 舊 PC 事件，忽略
             const state = pc.connectionState;
+            this._log("PeerConnection 狀態改變 ->", state);
             if (state === "disconnected" || state === "failed" || state === "closed") {
                 if (this.status === "connected" || this.status === "connecting") {
                     this._setStatus("disconnected", `PeerConnection ${state}`);
@@ -279,6 +279,7 @@ export class WebRtcSync {
         pc.oniceconnectionstatechange = () => {
             if (this.pc !== pc) return; // 舊 PC 事件，忽略
             const state = pc.iceConnectionState;
+            this._log("ICE Connection 狀態改變 ->", state);
             if (state === "disconnected" || state === "failed" || state === "closed") {
                 if (this.status === "connected" || this.status === "connecting") {
                     this._setStatus("disconnected", `ICE Connection ${state}`);
@@ -288,60 +289,61 @@ export class WebRtcSync {
         };
     }
 
-    _startPollingAnswer(code) {
-        if (this.pollTimer) clearInterval(this.pollTimer);
+    /**
+     * 每 2 秒輪詢配對狀態，收到 Answer 或過期時立即終止
+     */
+    _startPollingStatus(pairId) {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
 
         let attempts = 0;
-        const maxAttempts = 600; // 最多等候 10 分鐘 (每 1000ms 輪詢一次)
+        const maxAttempts = 150; // 每 2 秒一次，最多 5 分鐘 (300 秒)
 
-        this.pollTimer = setInterval(async () => {
+        this.pollInterval = setInterval(async () => {
             if (this._isCleaningUp || this.status === "connected" || !this.pc) {
-                clearInterval(this.pollTimer);
-                this.pollTimer = null;
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
                 return;
             }
 
             attempts++;
             if (attempts > maxAttempts) {
-                clearInterval(this.pollTimer);
-                this.pollTimer = null;
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+                this._warn("配對碼已達 5 分鐘有效時間，自動逾時");
                 this.disconnect();
-                this._setStatus("disconnected", "等待配對逾時，請重新產生配對碼");
+                this._setStatus("disconnected", "配對碼已過期，請重新產生");
                 return;
             }
 
             try {
-                const res = await fetch(`${this.workerUrl}/api/room/answer?code=${code}`);
+                const res = await fetch(`${this.workerUrl}/api/pair/status/${pairId}`);
                 if (!res.ok) return;
 
                 const data = await res.json();
-                if (data.ready && data.answer) {
-                    clearInterval(this.pollTimer);
-                    this.pollTimer = null;
+                if (data.status === "ready" && data.answer) {
+                    clearInterval(this.pollInterval);
+                    this.pollInterval = null;
 
-                    this._setStatus("connecting", "接收端已加入，正在握手直連...");
-                    await this.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-
-                    if (Array.isArray(data.clientCandidates)) {
-                        for (const cand of data.clientCandidates) {
-                            try {
-                                await this.pc.addIceCandidate(new RTCIceCandidate(cand));
-                            } catch (_) { }
-                        }
-                    }
+                    this._log("收到 Answer，正在套用並建立 P2P 直連...");
+                    this._setStatus("connecting", "接收端已加入，正在建立 P2P 直連...");
+                    await this.pc.setRemoteDescription(new RTCSessionDescription({
+                        type: 'answer',
+                        sdp: data.answer
+                    }));
+                } else if (data.status === "expired") {
+                    clearInterval(this.pollInterval);
+                    this.pollInterval = null;
+                    this._warn("配對已過期");
+                    this.disconnect();
+                    this._setStatus("disconnected", "配對碼無效或已過期");
                 }
-            } catch (_) { }
-        }, 1000);
-    }
-
-    async _sendCandidate(code, role, candidate) {
-        try {
-            await fetch(`${this.workerUrl}/api/room/candidate`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code, role, candidate })
-            });
-        } catch (_) { }
+            } catch (err) {
+                this._warn("輪詢狀態異常:", err.message);
+            }
+        }, 2000);
     }
 
     /**
@@ -350,12 +352,16 @@ export class WebRtcSync {
      * @returns {boolean} 是否成功發送
      */
     send(messageObj) {
-        if (!this.isConnected()) return false;
+        if (!this.isConnected()) {
+            this._warn("未連線，無法傳送訊息:", messageObj);
+            return false;
+        }
         try {
+            this._log("發送 P2P 訊息 ->", messageObj.action, messageObj);
             this.dataChannel.send(JSON.stringify(messageObj));
             return true;
         } catch (err) {
-            console.warn("[WebRTC send error]", err);
+            this._err("DataChannel 發送失敗:", err);
             return false;
         }
     }
@@ -403,6 +409,17 @@ export class WebRtcSync {
     }
 
     /**
+     * 廣播播放速度變更
+     * @param {number} speed - 播放速度
+     */
+    sendSpeed(speed = 1.0) {
+        return this.send({
+            action: "speed",
+            speed
+        });
+    }
+
+    /**
      * 傳送譜面字串與曲目資訊
      */
     sendChart(chartPayload) {
@@ -417,9 +434,9 @@ export class WebRtcSync {
      */
     disconnect() {
         this._isCleaningUp = true;
-        if (this.pollTimer) {
-            clearInterval(this.pollTimer);
-            this.pollTimer = null;
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
         }
 
         // 先清除引用再關閉，確保舊事件觸發時身份檢查 (this.dataChannel !== channel) 必定成立
@@ -436,12 +453,9 @@ export class WebRtcSync {
             try { oldPc.close(); } catch (_) { }
         }
 
-        if (this.roomCode && this.role === "host") {
-            fetch(`${this.workerUrl}/api/room?code=${this.roomCode}`, { method: "DELETE" }).catch(() => { });
-        }
-
         this.role = null;
         this.roomCode = null;
+        this.pairId = null;
         this._setStatus("disconnected", "已中斷連線");
     }
 }

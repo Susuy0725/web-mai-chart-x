@@ -184,6 +184,8 @@ class EditorSyncManager {
         const bgm = this.editorContext?.getAudioFile ? this.editorContext.getAudioFile() : null;
         if (bgm) {
             await this.sendAudioFile(bgm);
+        } else {
+            this.sync.send({ action: 'audio_clear' });
         }
     }
 
@@ -229,7 +231,7 @@ class EditorSyncManager {
 
     _handleStatusChange(status, detail) {
         if (status === 'connected') {
-            simpleToast({ content: t('settings.connection.statusConnected') || '已成功建立 P2P 直連！', type: 'success', timeout: 3000 });
+            simpleToast({ content: t('settings.connection.toastConnected') || '已成功建立 P2P 直連！', type: 'success', timeout: 3000 });
             // 連線建立時自動將目前編輯器的譜面與音源推給手機 (稍作延遲確保通道就緒)
             setTimeout(() => {
                 this.pushCurrentProject();
@@ -307,65 +309,55 @@ class EditorSyncManager {
 
         const codeTitle = document.createElement('span');
         codeTitle.style.cssText = 'font-size:12px; color:#888; letter-spacing:1px;';
-        codeTitle.textContent = t('settings.connection.pairCodeTitle') || '手機配對碼 (4 位數字)';
+        codeTitle.textContent = t('settings.connection.pairCodeTitle') || '手機/iPad 配對碼 (6 位數字)';
 
         const codeText = document.createElement('div');
-        codeText.style.cssText = 'font-size:36px; font-weight:bold; letter-spacing:8px; color:#00e5ff; font-family:monospace; user-select:all;';
-        codeText.textContent = this.sync.roomCode || '----';
+        codeText.style.cssText = 'font-size:36px; font-weight:bold; letter-spacing:6px; color:#00e5ff; font-family:monospace; user-select:all;';
+        codeText.textContent = this.sync.roomCode || '------';
+
+        const countdownLabel = document.createElement('div');
+        countdownLabel.style.cssText = 'font-size:11px; color:#aaa; font-family:monospace; margin-top:2px; display:none;';
+        countdownLabel.textContent = '';
+
+        let countdownTimer = null;
+        const startCountdown = (durationSec = 300) => {
+            if (countdownTimer) clearInterval(countdownTimer);
+            let remaining = durationSec;
+            countdownLabel.style.display = 'block';
+            const updateLabel = () => {
+                const m = Math.floor(remaining / 60);
+                const s = remaining % 60;
+                countdownLabel.textContent = `${m}:${s.toString().padStart(2, '0')} remaining`;
+                if (remaining <= 0) {
+                    clearInterval(countdownTimer);
+                    countdownLabel.textContent = '配對碼已逾期';
+                    countdownLabel.style.color = '#ff5252';
+                }
+            };
+            updateLabel();
+            countdownTimer = setInterval(() => {
+                remaining--;
+                updateLabel();
+            }, 1000);
+        };
+
+        const stopCountdown = () => {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+            countdownLabel.style.display = 'none';
+        };
 
         const statusLabel = document.createElement('div');
         statusLabel.style.cssText = 'font-size:12px; color:#ffab00; margin-top:4px;';
-        statusLabel.textContent = this.sync.isConnected() ? (t('settings.connection.statusConnected') || '已成功連線至手機') : (this.sync.roomCode ? (t('settings.connection.waitingClient') || '請在手機 _play 設定中輸入此配對碼') : (t('settings.connection.promptGenCode') || '點擊下方按鈕產生配對碼'));
+        statusLabel.textContent = this.sync.isConnected() ? (t('settings.connection.statusConnected', { target: 'P2P 直連' }) || '狀態：已連線 (P2P 直連)') : (this.sync.roomCode ? (t('settings.connection.waitingClient') || '請在手機 _play 設定中輸入此配對碼') : (t('settings.connection.promptGenCode') || '點擊下方按鈕產生配對碼'));
 
         codeBox.appendChild(codeTitle);
         codeBox.appendChild(codeText);
+        codeBox.appendChild(countdownLabel);
         codeBox.appendChild(statusLabel);
         container.appendChild(codeBox);
-
-        // 手機直連連結區塊
-        const linkBox = document.createElement('div');
-        linkBox.style.cssText = 'display:flex; flex-direction:column; gap:6px; background:#222; padding:10px; border-radius:6px; border:1px solid #3a3a3a;';
-        
-        const linkLabel = document.createElement('span');
-        linkLabel.style.cssText = 'font-size:11px; color:#aaa;';
-        linkLabel.textContent = t('settings.connection.mobileDirectLink') || '手機直連網址（同區網開啟即可自動連線）：';
-
-        const linkRow = document.createElement('div');
-        linkRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
-
-        const linkInput = document.createElement('input');
-        linkInput.type = 'text';
-        linkInput.readOnly = true;
-        linkInput.style.cssText = 'flex:1; background:#111; color:#76ff03; border:1px solid #444; border-radius:4px; padding:6px 8px; font-size:11px; font-family:monospace;';
-        
-        const getMobileUrl = () => {
-            const host = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? location.hostname : location.hostname;
-            const port = location.port ? `:${location.port}` : '';
-            const roomParam = this.sync.roomCode ? `?room=${this.sync.roomCode}` : '';
-            return `${location.protocol}//${host}${port}/_play/index.html${roomParam}`;
-        };
-        linkInput.value = getMobileUrl();
-
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'popup-button';
-        copyBtn.style.cssText = 'padding:6px 12px; font-size:12px; cursor:pointer; background:#333; color:#fff; border:1px solid #555; border-radius:4px; white-space:nowrap;';
-        copyBtn.textContent = t('settings.connection.copyLink') || '複製連結';
-        copyBtn.addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(linkInput.value);
-                simpleToast({ content: t('settings.connection.copied') || '已複製手機直連網址', type: 'success', timeout: 1500 });
-            } catch (_) {
-                linkInput.select();
-                document.execCommand('copy');
-                simpleToast({ content: t('settings.connection.copied') || '已複製手機直連網址', type: 'success', timeout: 1500 });
-            }
-        });
-
-        linkRow.appendChild(linkInput);
-        linkRow.appendChild(copyBtn);
-        linkBox.appendChild(linkLabel);
-        linkBox.appendChild(linkRow);
-        container.appendChild(linkBox);
 
         // 操作按鈕行
         const btnRow = document.createElement('div');
@@ -389,11 +381,11 @@ class EditorSyncManager {
             const connected = this.sync.isConnected();
             const hasCode = !!this.sync.roomCode;
 
-            codeText.textContent = this.sync.roomCode || '----';
-            linkInput.value = getMobileUrl();
+            codeText.textContent = this.sync.roomCode || '------';
 
             if (connected) {
-                statusLabel.textContent = t('settings.connection.statusConnected') || '已成功連線至手機 (P2P 直連)';
+                stopCountdown();
+                statusLabel.textContent = t('settings.connection.statusConnected', { target: 'P2P 直連' }) || '狀態：已連線 (P2P 直連)';
                 statusLabel.style.color = '#00e676';
                 actionBtn.textContent = t('settings.connection.btnDisconnect') || '中斷連線';
                 actionBtn.style.background = '#d32f2f';
@@ -405,6 +397,7 @@ class EditorSyncManager {
                 actionBtn.style.background = '#4a90e2';
                 pushProjectBtn.style.display = 'none';
             } else {
+                stopCountdown();
                 statusLabel.textContent = t('settings.connection.promptGenCode') || '點擊「產生配對碼」以開始連線';
                 statusLabel.style.color = '#888';
                 actionBtn.textContent = t('settings.connection.btnGen') || '產生配對碼';
@@ -415,6 +408,7 @@ class EditorSyncManager {
 
         actionBtn.addEventListener('click', async () => {
             if (this.sync.isConnected()) {
+                stopCountdown();
                 this.sync.disconnect();
                 this._updateModalUI();
                 simpleToast({ content: t('settings.connection.disconnectedToast') || '已中斷連線', type: 'info', timeout: 1500 });
@@ -426,9 +420,11 @@ class EditorSyncManager {
             try {
                 const code = await this.sync.createRoom();
                 codeText.textContent = code;
+                startCountdown(300); // 啟動 5 分鐘倒數
                 this._updateModalUI();
                 simpleToast({ content: `${t('settings.connection.pairCodeReady') || '配對碼已就緒'}: ${code}`, type: 'success', timeout: 3000 });
             } catch (err) {
+                stopCountdown();
                 simpleToast({ content: `產生配對碼失敗: ${err.message}`, type: 'error', timeout: 3500 });
                 this._updateModalUI();
             } finally {
@@ -453,9 +449,21 @@ class EditorSyncManager {
             buttons: [
                 {
                     text: t('popup.close') || '關閉',
-                    hideOnClick: true
+                    hideOnClick: true,
+                    onClick: () => {
+                        // 若尚未完成連線，關閉時主動中斷等候，停止輪詢避免浪費 Worker 額度
+                        if (!this.sync.isConnected()) {
+                            this.sync.disconnect();
+                        }
+                    }
                 }
-            ]
+            ],
+            onClose: () => {
+                // 點擊遮罩或右上角叉叉關閉時同步處理
+                if (!this.sync.isConnected()) {
+                    this.sync.disconnect();
+                }
+            }
         });
     }
 }

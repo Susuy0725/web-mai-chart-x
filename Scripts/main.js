@@ -7165,6 +7165,12 @@ async function loadProject(projectId) {
         audioManager.stopBGM();
     }
 
+    // 若連線同步中，通知對端停止播放並重置進度
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.sendPause();
+        editorSync.sendSeek(0);
+    }
+
     currentProjectId = projectId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
 
@@ -7175,6 +7181,7 @@ async function loadProject(projectId) {
 
     if (editorSync && editorSync.isConnected()) {
         editorSync.pushCurrentProject();
+        await editorSync.pushCurrentProject();
     }
 
     const list = await projectList();

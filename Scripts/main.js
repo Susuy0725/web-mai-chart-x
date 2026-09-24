@@ -11,6 +11,7 @@ import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
+import { editorSync } from './sync/editorSync.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -238,6 +239,7 @@ const findReplaceButton = getButton("findReplace", "utility");
 const toggleBkButton = getButton("toggleBk", "utility");
 const toggleExButton = getButton("toggleEx", "utility");
 const connectMajdataViewButton = getButton("connectMajdataView", "utility");
+const syncPlayButton = getButton("syncPlay", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const previewContainer = document.getElementById('miniPreviewContainer');
@@ -3207,6 +3209,9 @@ function setPlaybackSpeed(speed) {
     if (editorBackgroundVideo.src) {
         editorBackgroundVideo.playbackRate = speed;
     }
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.sendSpeed(speed);
+    }
     saveSettingsDebounce();
 }
 
@@ -5074,6 +5079,9 @@ changeDifficulty.addEventListener('change', (e) => {
 
     inputDebounce();
     difficultyInputDebounce();
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.pushCurrentChart();
+    }
 });
 
 switchBoxRadios.forEach(radio => {
@@ -5713,6 +5721,9 @@ const slideInputDebounce = debounce(() => {
             }
         }
     }
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.sendSeek(realTime);
+    }
     projSet('timeControl', realTime).catch((error) => {
         console.error("儲存時間控制值到 IndexedDB 失敗:", error);
     });
@@ -5811,6 +5822,9 @@ playButton.addEventListener('click', () => {
         if (majdataWs.isConnected()) {
             majdataWs.pause();
         }
+        if (editorSync && editorSync.isConnected()) {
+            editorSync.sendPause();
+        }
 
         draw(); // 立即更新畫布，反映暫停狀態
     } else {
@@ -5833,6 +5847,9 @@ playButton.addEventListener('click', () => {
 
         if (majdataWs.isConnected()) {
             sendMajdataPlay();
+        }
+        if (editorSync && editorSync.isConnected()) {
+            editorSync.sendPlay(realTime, settings.playbackSpeed || 1);
         }
 
         update(lastTimestamp);
@@ -5861,6 +5878,9 @@ resetButton.addEventListener('click', () => {
     if (majdataWs.isConnected()) {
         majdataWs.stop();
     }
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.sendRestart();
+    }
 
     draw(); // 立即更新畫布，反映停止狀態
 });
@@ -5887,6 +5907,9 @@ stopButton.addEventListener('click', () => {
     if (majdataWs.isConnected()) {
         majdataWs.stop();
     }
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.sendRestart();
+    }
 
     draw(); // 立即更新畫布，反映停止狀態
 });
@@ -5897,6 +5920,56 @@ if (connectMajdataViewButton) {
         majdataWs.toggleConnection(url);
     });
 }
+
+// 初始化編輯器端 WebRTC 同步管理器 (與 _play 雙向連動)
+editorSync.init({
+    editorInput,
+    playButton,
+    syncButton: syncPlayButton,
+    getRealTime: () => realTime,
+    getPlaybackSpeed: () => settings.playbackSpeed || 1,
+    getChartMeta: () => ({
+        title: (maidata && maidata.title) || '',
+        artist: (maidata && maidata.artist) || '',
+        offset: (typeof musicDelay !== 'undefined') ? musicDelay : 0
+    }),
+    getFullMaidata: () => getSimaiDataString(),
+    getAudioFile: () => audioManager.bgmFile || audioManager.bgmBlob || null,
+    getDifficulty: () => (changeDifficulty ? changeDifficulty.value : '3'),
+    onRemotePlay: (targetTime, speed) => {
+        // 套用速度（若有差異）
+        if (typeof speed === 'number' && speed !== settings.playbackSpeed) {
+            setPlaybackSpeed(speed);
+        }
+        if (playButton.dataset.playing !== 'true') {
+            realTime = targetTime;
+            updateSlider(realTime);
+            playButton.click();
+        } else {
+            // 已在播放中：重新對齊時間
+            realTime = targetTime;
+            updateSlider(realTime);
+        }
+    },
+    onRemotePause: () => {
+        if (playButton.dataset.playing === 'true') {
+            playButton.click();
+        }
+    },
+    onRemoteSeek: (targetTime) => {
+        realTime = targetTime;
+        updateSlider(realTime);
+        updateVisualTime(realTime);
+    },
+    onRemoteRestart: () => {
+        resetButton.click();
+    },
+    onRemoteSpeed: (speed) => {
+        if (typeof speed === 'number') {
+            setPlaybackSpeed(speed);
+        }
+    }
+});
 
 keyboardButton.addEventListener('click', () => {
     editorInput.focus();
@@ -7099,6 +7172,10 @@ async function loadProject(projectId) {
 
     // 載入專案資料
     await loadProjectData();
+
+    if (editorSync && editorSync.isConnected()) {
+        editorSync.pushCurrentProject();
+    }
 
     const list = await projectList();
     const proj = list.find(p => p.id === projectId);

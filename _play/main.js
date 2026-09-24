@@ -6,8 +6,39 @@ import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
+import { majdataWs } from '../Scripts/majdataWs.js';
+import { WebRtcSync, DEFAULT_WORKER_URL } from '../Scripts/sync/webrtcSync.js';
 
 const simulatedPlayController = new SimulatedPlayController();
+
+// -------------------------------------------------------------
+// WebRTC P2P 與 MajdataView 同步管理器
+// -------------------------------------------------------------
+const webrtcSync = new WebRtcSync({
+    workerUrl: localStorage.getItem('wmcx_worker_url') || DEFAULT_WORKER_URL,
+    onStatusChange: (status, detail) => {
+        if (status === 'disconnected') {
+            incomingAudioChunks = null;
+            incomingAudioMeta = null;
+            incomingAudioReceivedCount = 0;
+        }
+        updateSyncStatusUI();
+        if (status === 'connected' && webrtcSync.role === 'client') {
+            webrtcSync.send({ action: 'requestChart' });
+        }
+    },
+    onMessage: (msg) => {
+        handleIncomingSyncMessage(msg);
+    },
+    onError: (err) => {
+        simpleToast({ content: `WebRTC 錯誤: ${err.message}`, type: 'error', timeout: 3500 });
+    }
+});
+
+majdataWs.setToastHandler(simpleToast);
+majdataWs.onStatusChange(() => {
+    updateSyncStatusUI();
+});
 
 const defaultSettings = {
     // Game
@@ -262,6 +293,197 @@ const hideShowBtn = document.getElementById("showPlayControlsBtn");
 const projectBtn = getControlButton("openProject");
 const folderBtn = getControlButton("openFolder");
 const settingsBtn = getControlButton("settings");
+const connectionBtn = getControlButton("connection");
+
+function updateSyncStatusUI() {
+    const isWrtc = webrtcSync.isConnected();
+    const isMaj = majdataWs.isConnected();
+    const isConnecting = webrtcSync.status === 'connecting' || majdataWs.status === 'connecting';
+
+    if (connectionBtn) {
+        connectionBtn.classList.remove('connected', 'connecting');
+        if (isWrtc || isMaj) {
+            connectionBtn.classList.add('connected');
+            connectionBtn.title = isWrtc ? (t('settings.connection.clientP2P') || 'WebRTC P2P 已連線') : (t('settings.connection.clientMajdata') || 'MajdataView 已連線');
+        } else if (isConnecting) {
+            connectionBtn.classList.add('connecting');
+            connectionBtn.title = t('settings.connection.statusConnecting') || '正在連線...';
+        } else {
+            connectionBtn.title = t('settings.connection.syncRole') || '連線同步設定';
+        }
+    }
+}
+
+if (connectionBtn) {
+    connectionBtn.addEventListener("click", () => {
+        openSettings(3); // 開啟設定並切換至「連線同步」標籤頁
+    });
+}
+
+function base64ToUint8Array(base64) {
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+let incomingAudioChunks = null;
+let incomingAudioMeta = null;
+let incomingAudioReceivedCount = 0;
+
+async function handleIncomingSyncMessage(msg) {
+    if (!msg || !msg.action) return;
+
+    if (msg.action === 'play') {
+        const speed = msg.speed || 1;
+        const targetTime = (typeof msg.startAt === 'number') ? msg.startAt : realTime;
+        realTime = targetTime;
+        pausedTime = targetTime;
+        globalTime = realTime - musicDelay;
+        resetNotesForSeek(globalTime);
+        updateTimeControlUI();
+        if (settings.playbackSpeed !== speed) {
+            settings.playbackSpeed = speed;
+            if (playbackSpeedInput) playbackSpeedInput.value = speed.toFixed(2);
+            audioManager.setPlaybackRate(speed);
+        }
+        if (!playing) {
+            play(true);
+        } else {
+            playStartRealTime = realTime;
+            playStartTimestamp = performance.now();
+            audioManager.playBGM(realTime);
+        }
+    } else if (msg.action === 'pause') {
+        if (playing) {
+            pause(true);
+        }
+    } else if (msg.action === 'seek') {
+        const newTime = msg.time || 0;
+        realTime = newTime;
+        pausedTime = newTime;
+        globalTime = realTime - musicDelay;
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
+        resetNotesForSeek(globalTime);
+        if (playing) {
+            audioManager.playBGM(realTime);
+        }
+        updateTimeControlUI();
+        draw();
+    } else if (msg.action === 'restart') {
+        restart(true);
+    } else if (msg.action === 'speed') {
+        const newSpeed = msg.speed || 1;
+        setPlaybackSpeed(newSpeed, true);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: newSpeed.toFixed(2) }), type: 'info', timeout: 1500 });
+    } else if (msg.action === 'chart') {
+        if (msg.data) {
+            setDataEmpty();
+            if (msg.data.selectedDifficulty) {
+                selectedDifficulty = String(msg.data.selectedDifficulty);
+            }
+            if (msg.data.fullMaidata) {
+                maidataProcess(msg.data.fullMaidata);
+            } else if (msg.data.fumen) {
+                if (msg.data.fumen.includes('&inote_') || msg.data.fumen.includes('&title=')) {
+                    maidataProcess(msg.data.fumen);
+                } else {
+                    const diffKey = "inote_" + (msg.data.selectedDifficulty || selectedDifficulty || '3');
+                    rawdata = {
+                        title: msg.data.title || '',
+                        artist: msg.data.artist || '',
+                        first: msg.data.musicDelay !== undefined ? String(msg.data.musicDelay) : '0',
+                        [diffKey]: msg.data.fumen
+                    };
+                    musicDelay = parseFloat(rawdata.first) || 0;
+                    getResult();
+                }
+            }
+            updateTimeControlUI();
+            resetNotesForSeek(0);
+            draw();
+            simpleToast({ content: t('settings.connection.chartSynced') || '已同步譜面資料', type: 'success', timeout: 2000 });
+        }
+    } else if (msg.action === 'audio_start') {
+        incomingAudioMeta = msg;
+        incomingAudioChunks = new Array(msg.totalChunks || 0);
+        incomingAudioReceivedCount = 0;
+        simpleToast({ content: `${t('settings.connection.audioSyncing') || '正在同步音源'} (${msg.fileName || 'track'})...`, type: 'info', timeout: 2000 });
+    } else if (msg.action === 'audio_chunk') {
+        if (incomingAudioChunks && msg.chunkIndex !== undefined && msg.data) {
+            incomingAudioChunks[msg.chunkIndex] = base64ToUint8Array(msg.data);
+            incomingAudioReceivedCount++;
+            if (msg.totalChunks && (incomingAudioReceivedCount % Math.max(1, Math.floor(msg.totalChunks / 5)) === 0 || incomingAudioReceivedCount === msg.totalChunks)) {
+                const percent = Math.round((incomingAudioReceivedCount / msg.totalChunks) * 100);
+                simpleToast({ content: `${t('settings.connection.audioReceiving') || '接收音源中...'} (${percent}%)`, type: 'info', timeout: 800 });
+            }
+        }
+    } else if (msg.action === 'audio_end') {
+        if (incomingAudioChunks && incomingAudioChunks.length > 0) {
+            try {
+                const mimeType = incomingAudioMeta?.mimeType || 'audio/mp3';
+                const audioBlob = new Blob(incomingAudioChunks, { type: mimeType });
+                await audioManager.setBackgroundMusic(audioBlob);
+                incomingAudioChunks = null;
+                incomingAudioMeta = null;
+                incomingAudioReceivedCount = 0;
+
+                // 傳輸完成讓用戶點一下解鎖行動裝置 AudioContext
+                popupWindow({
+                    title: t('settings.connection.syncCompleted') || '同步完成',
+                    content: t('settings.connection.audioUnlockPrompt') || '譜面與音源已同步至手機！\n行動裝置需點擊下方按鈕以啟用音效與音樂播放。',
+                    width: 320,
+                    buttons: [
+                        {
+                            text: t('settings.connection.btnEnableAudio') || '確認啟用音訊',
+                            onClick: () => {
+                                if (audioManager.ctx && audioManager.ctx.state === 'suspended') {
+                                    audioManager.ctx.resume();
+                                }
+                                simpleToast({ content: t('settings.connection.audioReady') || '音訊已就緒！', type: 'success', timeout: 2000 });
+                            },
+                            hideOnClick: true
+                        }
+                    ]
+                });
+            } catch (err) {
+                console.error('[WebRTC Sync] Error assembling audio:', err);
+                simpleToast({ content: `音源載入失敗: ${err.message}`, type: 'error', timeout: 3000 });
+            }
+        }
+    }
+}
+
+function sendMajdataPlay() {
+    if (!majdataWs.isConnected()) return;
+
+    majdataWs.sendLoad({
+        trackPath: '',
+        imagePath: '',
+        videoPath: ''
+    });
+
+    const chartData = (rawdata && rawdata["inote_" + selectedDifficulty]) ||
+        (rawdata && [7, 6, 5, 4, 3, 2, 1].map(d => rawdata["inote_" + d]).find(Boolean)) || "";
+    const diffIdx = Math.max(0, parseInt(selectedDifficulty || 3) - 1);
+
+    majdataWs.play({
+        mode: 0,
+        startAt: realTime || 0,
+        speed: settings.playbackSpeed || 1,
+        title: (rawdata && rawdata.title) || '',
+        artist: (rawdata && rawdata.artist) || '',
+        offset: (typeof musicDelay !== 'undefined') ? musicDelay : 0,
+        designer: (rawdata && rawdata['des_' + selectedDifficulty]) || '',
+        level: (rawdata && rawdata['lv_' + selectedDifficulty]) || '',
+        fumen: chartData,
+        difficulty: diffIdx
+    });
+}
 
 const playbackSpeedInput = document.getElementById("playbackSpeedInput");
 const playbackSpeedBtn = getControlButton("playbackSpeed");
@@ -1215,10 +1437,11 @@ function updateTimeControlUI() {
     if (!timeControl) return;
     const totalTime = getTotalTime();
     timeControl.max = totalTime;
+    const displayTime = timeControlSliding ? parseFloat(timeControl.value) : realTime;
     if (!timeControlSliding) {
         timeControl.value = realTime;
     }
-    const ratio = Math.max(0, Math.min(1, totalTime > 0 ? (realTime / totalTime) : 0));
+    const ratio = Math.max(0, Math.min(1, totalTime > 0 ? (displayTime / totalTime) : 0));
     const thumbWidth = 16;
     const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
     timeControl.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
@@ -1232,42 +1455,74 @@ const videoSeekDebounce = debounce((time) => {
     }
 }, 50);
 
+const slideInputDebounce = debounce(() => {
+    timeControlSliding = false;
+    if (playing) {
+        const speed = settings.playbackSpeed || 1;
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
+        audioManager.setPlaybackRate(speed);
+        audioManager.playBGM(realTime);
+    }
+    if (webrtcSync && webrtcSync.isConnected()) {
+        webrtcSync.sendSeek(realTime);
+    }
+    if (majdataWs && majdataWs.isConnected()) {
+        majdataWs.stop();
+        if (playing) sendMajdataPlay();
+    }
+}, 150);
+
 if (timeControl) {
-    const handleSeek = () => {
+    const handleSeek = (isContinuous = false) => {
+        timeControlSliding = true;
         const newTime = parseFloat(timeControl.value);
         pausedTime = newTime;
         realTime = newTime;
         globalTime = realTime - musicDelay;
-        playStartTimestamp = null;
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
 
         // 拖拽/跳轉時完整重置 Note 音效播放、劃軌進度與遊玩 Hit/判定狀態記錄
         resetNotesForSeek(globalTime);
-
         videoSeekDebounce(realTime);
 
-        if (playing) {
-            const speed = settings.playbackSpeed || 1;
-            startTime = performance.now() - (pausedTime * 1000 / speed);
+        if (isContinuous) {
             audioManager.stopAllLongSounds();
-            audioManager.setPlaybackRate(speed);
-            audioManager.playBGM(realTime);
+            updateTimeControlUI();
+            draw();
+            slideInputDebounce();
         } else {
+            timeControlSliding = false;
             audioManager.stopAllLongSounds();
-            audioManager.clearSoundQueue();
-            audioManager.stopBGM();
+            if (playing) {
+                const speed = settings.playbackSpeed || 1;
+                startTime = performance.now() - (pausedTime * 1000 / speed);
+                audioManager.setPlaybackRate(speed);
+                audioManager.playBGM(realTime);
+            } else {
+                audioManager.clearSoundQueue();
+                audioManager.stopBGM();
+            }
+            updateTimeControlUI();
+            draw();
+
+            if (webrtcSync && webrtcSync.isConnected()) {
+                webrtcSync.sendSeek(realTime);
+            }
+            if (majdataWs && majdataWs.isConnected()) {
+                majdataWs.stop();
+                if (playing) sendMajdataPlay();
+            }
         }
-        updateTimeControlUI();
-        draw();
     };
 
     timeControl.addEventListener("input", () => {
-        timeControlSliding = true;
-        handleSeek();
+        handleSeek(true);
     });
 
     timeControl.addEventListener("change", () => {
-        timeControlSliding = false;
-        handleSeek();
+        handleSeek(false);
     });
 
     timeControl.addEventListener("pointerdown", () => {
@@ -1275,17 +1530,34 @@ if (timeControl) {
     });
 
     timeControl.addEventListener("pointerup", () => {
-        timeControlSliding = false;
+        slideInputDebounce();
     });
 }
 
-function play() {
+function play(isRemote = false) {
     if (playing) return;
     playing = true;
-    playStartTimestamp = null;
+
+    // 手勢觸發時若音訊處於 suspended 狀態，立即嘗試喚醒以避免時脈回溯跳動
+    if (audioManager && audioManager.ctx && audioManager.ctx.state === 'suspended') {
+        audioManager.ctx.resume().catch(() => {});
+    }
+
+    const now = performance.now();
+    playStartRealTime = realTime;
+    playStartTimestamp = now;
+
+    if (!isRemote) {
+        if (webrtcSync && webrtcSync.isConnected()) {
+            webrtcSync.sendPlay(realTime, settings.playbackSpeed || 1);
+        }
+        if (majdataWs && majdataWs.isConnected()) {
+            sendMajdataPlay();
+        }
+    }
 
     const speed = settings.playbackSpeed || 1;
-    startTime = performance.now() - (pausedTime * 1000 / speed);
+    startTime = now - (pausedTime * 1000 / speed);
 
     if (playPauseBtn) {
         playPauseBtn.classList.add("playing");
@@ -1306,8 +1578,17 @@ function play() {
     audioManager.playBGM(realTime);
 }
 
-function restart() {
-    pause();
+function restart(isRemote = false) {
+    pause(isRemote);
+
+    if (!isRemote) {
+        if (webrtcSync && webrtcSync.isConnected()) {
+            webrtcSync.sendRestart();
+        }
+        if (majdataWs && majdataWs.isConnected()) {
+            majdataWs.stop();
+        }
+    }
 
     activePointers.clear();
     activeKeyboardSensors.clear();
@@ -1372,12 +1653,21 @@ function updatePauseBackgroundDisplay() {
     }
 }
 
-function pause() {
+function pause(isRemote = false) {
     if (!playing) return;
     playing = false;
     playStartTimestamp = null;
 
     pausedTime = realTime;
+
+    if (!isRemote) {
+        if (webrtcSync && webrtcSync.isConnected()) {
+            webrtcSync.sendPause();
+        }
+        if (majdataWs && majdataWs.isConnected()) {
+            majdataWs.pause();
+        }
+    }
 
     if (playPauseBtn) {
         playPauseBtn.classList.remove("playing");
@@ -1416,7 +1706,7 @@ const saveSettingsDebounce = debounce(() => {
     });
 }, 300);
 
-function setPlaybackSpeed(speed) {
+function setPlaybackSpeed(speed, isRemote = false) {
     typeof speed === 'string' && (speed = parseFloat(speed));
     speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
 
@@ -1431,6 +1721,10 @@ function setPlaybackSpeed(speed) {
         playStartTimestamp = performance.now();
         playStartRealTime = realTime;
         audioManager.playBGM(realTime);
+        // 本地調速時同步至 editor，遠端觸發時不回送（防回聲）
+        if (!isRemote && webrtcSync && webrtcSync.isConnected()) {
+            webrtcSync.sendPlay(realTime, speed);
+        }
     }
     if (gameBackgroundVideo && gameBackgroundVideo.src) {
         gameBackgroundVideo.playbackRate = speed;
@@ -1474,7 +1768,7 @@ function update() {
         let timeUpdatedByBgm = false;
 
         // 1. 優先使用音訊 AudioContext 硬體時脈同步，避免主線程計時器產生時間對不上
-        if (audioManager && typeof audioManager.getBGMTime === 'function') {
+        if (!timeControlSliding && audioManager && typeof audioManager.getBGMTime === 'function') {
             const bgmTime = audioManager.getBGMTime();
             if (bgmTime !== null && bgmTime !== undefined) {
                 realTime = bgmTime;
@@ -1485,8 +1779,8 @@ function update() {
             }
         }
 
-        // 2. 音訊無時脈輸出時使用 Timer Fallback
-        if (!timeUpdatedByBgm) {
+        // 2. 音訊無時脈輸出時使用 Timer Fallback（僅在非使用者手動滑動中推進）
+        if (!timeUpdatedByBgm && !timeControlSliding) {
             if (playStartTimestamp === null) {
                 playStartTimestamp = now;
                 playStartRealTime = realTime;
@@ -2481,7 +2775,7 @@ async function openProjectManager() {
 // 設定面板 (Settings Popup)
 // ============================================================
 
-function openSettings() {
+function openSettings(initialTabIndex = 0) {
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
 
@@ -2886,7 +3180,288 @@ function openSettings() {
         });
     });
 
-    switchTab(0);
+    // =========================================================
+    // 連線同步 (Connection) 標籤頁
+    // =========================================================
+    const connSection = addTab(t('settings.tabs.connection') || '連線同步');
+
+    // 1. 目標客戶端選擇器
+    let clientMode = localStorage.getItem('wmcx_client_mode') || 'webrtc';
+    const clientModeSelect = createDropdown(clientMode, [
+        { value: 'webrtc', label: 'wmcx ↔ wmcxp (WebRTC P2P 直連)' },
+        { value: 'majdata', label: 'MajdataView (Unity 模擬器)' }
+    ]);
+    connSection.appendChild(createRow('連線目標客戶端', clientModeSelect));
+
+    // 容器 A: MajdataView 面板
+    const majdataPanel = document.createElement('div');
+    majdataPanel.style.display = clientMode === 'majdata' ? 'flex' : 'none';
+    majdataPanel.style.flexDirection = 'column';
+    majdataPanel.style.width = '100%';
+    majdataPanel.style.gap = '8px';
+
+    const majIpInput = document.createElement('input');
+    majIpInput.type = 'text';
+    majIpInput.className = 'popup-setting-input';
+    majIpInput.value = localStorage.getItem('wmcx_majdata_ip') || '127.0.0.1';
+    majIpInput.placeholder = '127.0.0.1 或 192.168.x.x';
+    majdataPanel.appendChild(createRow('主機 IP', majIpInput));
+
+    const majPortInput = document.createElement('input');
+    majPortInput.type = 'number';
+    majPortInput.className = 'popup-setting-input';
+    majPortInput.value = localStorage.getItem('wmcx_majdata_port') || '8083';
+    majdataPanel.appendChild(createRow('端口 (Port)', majPortInput));
+
+    const majStatusRow = document.createElement('div');
+    majStatusRow.className = 'popup-setting-row';
+    majStatusRow.style.justifyContent = 'space-between';
+    majStatusRow.style.alignItems = 'center';
+
+    const majStatusLabel = document.createElement('span');
+    majStatusLabel.style.fontSize = '12px';
+    majStatusLabel.style.color = '#aaa';
+
+    const majConnectBtn = document.createElement('button');
+    majConnectBtn.className = 'popup-button';
+    majConnectBtn.style.padding = '6px 14px';
+
+    const updateMajdataUI = () => {
+        const connected = majdataWs.isConnected();
+        const connecting = majdataWs.status === 'connecting';
+        if (connected) {
+            majStatusLabel.textContent = `狀態：已連線 (${majdataWs.url})`;
+            majStatusLabel.style.color = '#00e676';
+            majConnectBtn.textContent = '中斷連線';
+            majConnectBtn.style.backgroundColor = '#d32f2f';
+        } else if (connecting) {
+            majStatusLabel.textContent = '狀態：正在連線...';
+            majStatusLabel.style.color = '#ffab00';
+            majConnectBtn.textContent = '取消連線';
+            majConnectBtn.style.backgroundColor = '#666';
+        } else {
+            majStatusLabel.textContent = '狀態：未連線';
+            majStatusLabel.style.color = '#888';
+            majConnectBtn.textContent = '手動連線';
+            majConnectBtn.style.backgroundColor = '#4a90e2';
+        }
+    };
+    updateMajdataUI();
+
+    majConnectBtn.addEventListener('click', () => {
+        if (majdataWs.isConnected() || majdataWs.status === 'connecting') {
+            majdataWs.disconnect();
+        } else {
+            const ip = majIpInput.value.trim() || '127.0.0.1';
+            const port = majPortInput.value.trim() || '8083';
+            localStorage.setItem('wmcx_majdata_ip', ip);
+            localStorage.setItem('wmcx_majdata_port', port);
+            const targetUrl = `ws://${ip}:${port}/majdata`;
+            majdataWs.connect(targetUrl);
+        }
+        updateMajdataUI();
+        updateSyncStatusUI();
+    });
+
+    majStatusRow.appendChild(majStatusLabel);
+    majStatusRow.appendChild(majConnectBtn);
+    majdataPanel.appendChild(majStatusRow);
+    connSection.appendChild(majdataPanel);
+
+    // 容器 B: WebRTC P2P 面板
+    const webrtcPanel = document.createElement('div');
+    webrtcPanel.style.display = clientMode === 'webrtc' ? 'flex' : 'none';
+    webrtcPanel.style.flexDirection = 'column';
+    webrtcPanel.style.width = '100%';
+    webrtcPanel.style.gap = '8px';
+
+    // 角色切換 (接收端 / 發起端)
+    let webrtcRole = localStorage.getItem('wmcx_webrtc_role') || 'client';
+    const roleSelect = createDropdown(webrtcRole, [
+        { value: 'client', label: '接收端 (手機 / 播放器)' },
+        { value: 'host', label: '發起端 (電腦 / 主控)' }
+    ]);
+    webrtcPanel.appendChild(createRow('同步角色', roleSelect));
+
+    // Client 區塊
+    const clientBox = document.createElement('div');
+    clientBox.style.display = webrtcRole === 'client' ? 'flex' : 'none';
+    clientBox.style.flexDirection = 'column';
+    clientBox.style.gap = '8px';
+
+    const roomCodeInput = document.createElement('input');
+    roomCodeInput.type = 'text';
+    roomCodeInput.maxLength = 4;
+    roomCodeInput.placeholder = '請輸入 4 位數配對碼';
+    roomCodeInput.style.letterSpacing = '4px';
+    roomCodeInput.style.fontWeight = 'bold';
+    roomCodeInput.style.textAlign = 'center';
+    roomCodeInput.style.fontSize = '16px';
+    roomCodeInput.style.width = '160px';
+
+    const joinBtn = document.createElement('button');
+    joinBtn.className = 'popup-button';
+    joinBtn.textContent = '手動加入連線';
+    joinBtn.style.padding = '6px 14px';
+    joinBtn.style.backgroundColor = '#4a90e2';
+
+    const clientJoinRow = document.createElement('div');
+    clientJoinRow.className = 'popup-setting-row';
+    clientJoinRow.style.justifyContent = 'space-between';
+    clientJoinRow.style.alignItems = 'center';
+    clientJoinRow.appendChild(roomCodeInput);
+    clientJoinRow.appendChild(joinBtn);
+    clientBox.appendChild(createRow('配對碼', clientJoinRow));
+
+    webrtcPanel.appendChild(clientBox);
+
+    // Host 區塊
+    const hostBox = document.createElement('div');
+    hostBox.style.display = webrtcRole === 'host' ? 'flex' : 'none';
+    hostBox.style.flexDirection = 'column';
+    hostBox.style.gap = '8px';
+
+    const createCodeBtn = document.createElement('button');
+    createCodeBtn.className = 'popup-button';
+    createCodeBtn.textContent = '產生配對碼';
+    createCodeBtn.style.padding = '6px 14px';
+    createCodeBtn.style.backgroundColor = '#4a90e2';
+
+    const hostCodeDisplay = document.createElement('span');
+    hostCodeDisplay.style.fontSize = '22px';
+    hostCodeDisplay.style.fontWeight = 'bold';
+    hostCodeDisplay.style.letterSpacing = '6px';
+    hostCodeDisplay.style.color = '#00e5ff';
+    hostCodeDisplay.textContent = webrtcSync.roomCode || '----';
+
+    const hostRow = document.createElement('div');
+    hostRow.className = 'popup-setting-row';
+    hostRow.style.justifyContent = 'space-between';
+    hostRow.style.alignItems = 'center';
+    hostRow.appendChild(hostCodeDisplay);
+    hostRow.appendChild(createCodeBtn);
+    hostBox.appendChild(createRow('發起連線', hostRow));
+
+    webrtcPanel.appendChild(hostBox);
+
+    // Worker URL 自訂
+    const workerUrlInput = document.createElement('input');
+    workerUrlInput.type = 'text';
+    workerUrlInput.className = 'popup-setting-input';
+    workerUrlInput.value = localStorage.getItem('wmcx_worker_url') || DEFAULT_WORKER_URL;
+    workerUrlInput.placeholder = DEFAULT_WORKER_URL;
+    workerUrlInput.addEventListener('change', () => {
+        const val = workerUrlInput.value.trim() || DEFAULT_WORKER_URL;
+        localStorage.setItem('wmcx_worker_url', val);
+        webrtcSync.setWorkerUrl(val);
+    });
+    webrtcPanel.appendChild(createRow('信號站網址', workerUrlInput));
+
+    // WebRTC 狀態與中斷按鈕
+    const webrtcStatusRow = document.createElement('div');
+    webrtcStatusRow.className = 'popup-setting-row';
+    webrtcStatusRow.style.justifyContent = 'space-between';
+    webrtcStatusRow.style.alignItems = 'center';
+
+    const webrtcStatusLabel = document.createElement('span');
+    webrtcStatusLabel.style.fontSize = '12px';
+    webrtcStatusLabel.style.color = '#aaa';
+
+    const webrtcDisconnectBtn = document.createElement('button');
+    webrtcDisconnectBtn.className = 'popup-button';
+    webrtcDisconnectBtn.textContent = t('settings.connection.webrtcDisconnect') || '中斷連線';
+    webrtcDisconnectBtn.style.padding = '6px 14px';
+    webrtcDisconnectBtn.style.backgroundColor = '#d32f2f';
+
+    const updateWebRtcUI = () => {
+        const connected = webrtcSync.isConnected();
+        const connecting = webrtcSync.status === 'connecting';
+        if (connected) {
+            const codeStr = webrtcSync.roomCode ? ' #' + webrtcSync.roomCode : '';
+            webrtcStatusLabel.textContent = t('settings.connection.webrtcConnected', { code: codeStr }) || `狀態：已連線 (P2P 房間 ${codeStr})`;
+            webrtcStatusLabel.style.color = '#00e676';
+            webrtcDisconnectBtn.style.display = 'block';
+        } else if (connecting) {
+            webrtcStatusLabel.textContent = t('settings.connection.webrtcConnecting') || '狀態：正在連線...';
+            webrtcStatusLabel.style.color = '#ffab00';
+            webrtcDisconnectBtn.style.display = 'block';
+        } else {
+            webrtcStatusLabel.textContent = t('settings.connection.webrtcDisconnected') || '狀態：未連線';
+            webrtcStatusLabel.style.color = '#888';
+            webrtcDisconnectBtn.style.display = 'none';
+        }
+        if (webrtcSync.roomCode) {
+            hostCodeDisplay.textContent = webrtcSync.roomCode;
+        }
+    };
+    updateWebRtcUI();
+
+    joinBtn.addEventListener('click', async () => {
+        const code = roomCodeInput.value.trim();
+        if (code.length !== 4) {
+            simpleToast({ content: t('settings.connection.pairCodePlaceholder') || '請輸入完整的 4 位數配對碼', type: 'warning', timeout: 2000 });
+            return;
+        }
+        joinBtn.disabled = true;
+        joinBtn.textContent = t('settings.connection.joining') || '加入中...';
+        try {
+            await webrtcSync.joinRoom(code);
+            simpleToast({ content: `${t('settings.connection.statusConnecting') || '正在連線...'} (${code})`, type: 'info', timeout: 2000 });
+        } catch (e) {
+            simpleToast({ content: `連線失敗: ${e.message}`, type: 'error', timeout: 3000 });
+        } finally {
+            joinBtn.disabled = false;
+            joinBtn.textContent = t('settings.connection.webrtcJoin') || '手動加入連線';
+            updateWebRtcUI();
+            updateSyncStatusUI();
+        }
+    });
+
+    createCodeBtn.addEventListener('click', async () => {
+        createCodeBtn.disabled = true;
+        createCodeBtn.textContent = t('settings.connection.creating') || '產生中...';
+        try {
+            const code = await webrtcSync.createRoom();
+            hostCodeDisplay.textContent = code;
+            simpleToast({ content: t('settings.connection.toastPairCodeReady', { code }) || `配對碼 ${code} 已就緒，請在另一端輸入`, type: 'success', timeout: 3000 });
+        } catch (e) {
+            simpleToast({ content: `建立失敗: ${e.message}`, type: 'error', timeout: 3000 });
+        } finally {
+            createCodeBtn.disabled = false;
+            createCodeBtn.textContent = t('settings.connection.regenerateBtn') || '重新產生';
+            updateWebRtcUI();
+            updateSyncStatusUI();
+        }
+    });
+
+    webrtcDisconnectBtn.addEventListener('click', () => {
+        webrtcSync.disconnect();
+        updateWebRtcUI();
+        updateSyncStatusUI();
+        simpleToast({ content: t('settings.connection.webrtcDisconnectedToast') || '已中斷 WebRTC 連線', type: 'info', timeout: 1500 });
+    });
+
+    webrtcStatusRow.appendChild(webrtcStatusLabel);
+    webrtcStatusRow.appendChild(webrtcDisconnectBtn);
+    webrtcPanel.appendChild(webrtcStatusRow);
+
+    connSection.appendChild(webrtcPanel);
+
+    clientModeSelect.addEventListener('change', (e) => {
+        clientMode = e.target.value;
+        localStorage.setItem('wmcx_client_mode', clientMode);
+        majdataPanel.style.display = clientMode === 'majdata' ? 'flex' : 'none';
+        webrtcPanel.style.display = clientMode === 'webrtc' ? 'flex' : 'none';
+    });
+
+    roleSelect.addEventListener('change', (e) => {
+        webrtcRole = e.target.value;
+        localStorage.setItem('wmcx_webrtc_role', webrtcRole);
+        clientBox.style.display = webrtcRole === 'client' ? 'flex' : 'none';
+        hostBox.style.display = webrtcRole === 'host' ? 'flex' : 'none';
+    });
+
+    switchTab(initialTabIndex);
 
     const applyAndSave = () => {
         Object.keys(inputRefs).forEach(id => {
@@ -2983,4 +3558,3 @@ function openSettings() {
         console.warn('初始化載入專案失敗:', e);
     }
 })();
-

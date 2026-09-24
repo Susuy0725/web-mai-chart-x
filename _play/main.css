@@ -23,7 +23,13 @@
     font-display: swap;
 }
 
-body {
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    touch-action: none;
     background-color: #222;
 }
 
@@ -301,6 +307,23 @@ body {
     color: #00e5ff;
     background: rgba(0, 229, 255, 0.18);
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+.controlsContainer .controlButton[data-buttonaction="connection"].connected {
+    color: #00e676;
+    background: rgba(0, 230, 118, 0.18);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
+}
+
+.controlsContainer .controlButton[data-buttonaction="connection"].connecting {
+    color: #ffab00;
+    background: rgba(255, 171, 0, 0.18);
+    animation: syncPulse 1.2s infinite ease-in-out;
+}
+
+@keyframes syncPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.96); }
 }
 
 .slide-debug-panel {

@@ -2,7 +2,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <link rel="stylesheet" href="main.css">
     <link rel="stylesheet" href="../Styles/popup.css">
     <title>Web mai Chart X - Play</title>
@@ -81,6 +81,11 @@
                         settings
                     </span>
                 </div>
+                <div class="controlButton" data-buttonAction="connection" title="連線同步設定">
+                    <span class="material-symbols-outlined" translate="no">
+                        sync
+                    </span>
+                </div>
                 <div class="controlButton" data-buttonAction="slideDebug" title="滑軌除錯">
                     <span class="material-symbols-outlined" translate="no">
                         bug_report
@@ -94,7 +99,6 @@
             </span>
         </div>
     </div>
-    <script type="module" src="../Scripts/indexDB.js"></script>
     <script type="module" src="main.js"></script>
 </body>
 

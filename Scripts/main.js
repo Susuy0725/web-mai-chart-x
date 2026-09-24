@@ -12,6 +12,9 @@ import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
 import { editorSync } from './sync/editorSync.js';
+import * as googleDriveService from './drive/googleDriveService.js';
+import * as cloudProjectManager from './drive/cloudProjectManager.js';
+import { openProjectManagerModal } from './projectManagerModal.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -20,7 +23,9 @@ majdataWs.setToastHandler(simpleToast);
 const isDev =
     self.location.hostname === 'localhost' ||
     self.location.hostname === '127.0.0.1' ||
-    self.location.hostname.endsWith('.ngrok-free.app');
+    self.location.hostname.endsWith('.ngrok-free.app') ||
+    self.location.hostname.endsWith('.ngrok-free.dev') ||
+    self.location.hostname.endsWith('.ngrok.io');
 
 let swProgressToast = null;
 
@@ -105,41 +110,59 @@ function showSwUpdateComplete() {
     }
 }
 
-if ('serviceWorker' in navigator && !isDev) {
-    navigator.serviceWorker.addEventListener('message', (event) => {
-        const data = event.data;
-        if (!data) return;
-
-        if (data.type === 'SW_UPDATE_START' || data.type === 'SW_UPDATE_PROGRESS') {
-            showSwUpdateProgress(data);
-        } else if (data.type === 'SW_UPDATE_COMPLETE') {
-            showSwUpdateComplete();
-        }
-    });
-
-    navigator.serviceWorker.register('./sw.js')
-        .then((reg) => {
-            console.log('Service worker registered:', reg);
-
-            // 監聽是否有新的 Service Worker 正在等待接管
-            reg.addEventListener('updatefound', () => {
-                const newWorker = reg.installing;
-                newWorker.addEventListener('statechange', () => {
-                    // 當新版下載完成並進入 waiting 狀態時
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        showSwUpdateComplete();
-                    }
+if ('serviceWorker' in navigator) {
+    if (isDev) {
+        // 測試與開發環境 (localhost / 127.0.0.1 / ngrok)：自動註銷 Service Worker 並清空開發快取，防止干擾除錯
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+                registration.unregister().then(() => {
+                    console.log('[SW] 測試環境：已自動註銷 Service Worker');
                 });
-            });
-
-            // 強制立刻檢查更新，並捕獲可能發生的錯誤
-            reg.update().catch((err) => {
-                console.warn('Service worker update failed:', err);
-            });
-        })
-        .catch((err) => {
-            console.warn('Service worker registration failed:', err);
+            }
         });
+        if (window.caches) {
+            caches.keys().then((keys) => {
+                for (const key of keys) {
+                    caches.delete(key).then(() => {
+                        console.log('[SW] 測試環境：已清除舊快取:', key);
+                    });
+                }
+            });
+        }
+    } else {
+        // 正式發布環境：正常註冊並啟用離線快取功能
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            const data = event.data;
+            if (!data) return;
+
+            if (data.type === 'SW_UPDATE_START' || data.type === 'SW_UPDATE_PROGRESS') {
+                showSwUpdateProgress(data);
+            } else if (data.type === 'SW_UPDATE_COMPLETE') {
+                showSwUpdateComplete();
+            }
+        });
+
+        navigator.serviceWorker.register('./sw.js')
+            .then((reg) => {
+                console.log('Service worker registered:', reg);
+
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showSwUpdateComplete();
+                        }
+                    });
+                });
+
+                reg.update().catch((err) => {
+                    console.warn('Service worker update failed:', err);
+                });
+            })
+            .catch((err) => {
+                console.warn('Service worker registration failed:', err);
+            });
+    }
 }
 
 let
@@ -160,8 +183,8 @@ let
     lastEditorValue = '';
 
 // 專案命名空間化的讀寫包裝
-const projSet = (key, value) => idbSetProject(currentProjectId, key, value);
-const projGet = (key) => idbGetProject(currentProjectId, key);
+const projSet = (key, value) => currentProjectId ? idbSetProject(currentProjectId, key, value) : Promise.resolve();
+const projGet = (key) => currentProjectId ? idbGetProject(currentProjectId, key) : Promise.resolve(null);
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
@@ -186,6 +209,15 @@ if (typeof document !== 'undefined' && document.fonts) {
 
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
+
+if (canvasContainer) {
+    canvasContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvasContainer.addEventListener('selectstart', (e) => e.preventDefault());
+}
+if (canvas) {
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('selectstart', (e) => e.preventDefault());
+}
 const timeline = document.getElementById('timeControl');
 const keyboardButton = getButton("keyboard", "control");
 const playButton = getButton("play/pause", "control");
@@ -202,11 +234,9 @@ const addMusicButton = getButton("addMusic", "utility");
 const addVideoButton = getButton("addVideo", "utility");
 const importFromVideoButton = getButton("importFromVideo", "utility");
 const readMaidataButton = getButton("readMaidata", "utility");
-const readZipButton = getButton("readZip", "utility");
 const chartInfoButton = getButton("chartInfo", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
-const folderInput = getButton("readFolder", "utility");
 const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
 const switchBoxRadios = document.querySelectorAll('input[name="switchBoxMode"]');
 const setSwitchBoxDisplayModeUI = (mode) => {
@@ -217,7 +247,6 @@ const setSwitchBoxDisplayModeUI = (mode) => {
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
 const downloadButton = getButton("download", "utility");
-const createNewButton = getButton("createNew", "utility");
 const warnEl = document.querySelector("#utilityContainer .warnbtn");
 const editMusicButton = getButton("editMusic", "utility");
 const rCwiseButton = getButton("rotateClockwise", "utility");
@@ -1236,7 +1265,7 @@ function applyAudioSettings(s) {
 
 const settingsConfig = [
     {
-        label: 'settings.tabs.basic',
+        label: 'settings.tabs.general',
         items: [
             { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
@@ -2950,13 +2979,6 @@ fetchFromMainoteButton.addEventListener('click', () => {
     });
 });
 
-createNewButton.addEventListener('click', async () => {
-    if (!confirm(t('popup.createNewProject.confirm'))) return;
-    const newId = await projectCreate(t('popup.projectManager.untitled'));
-    loadProject(newId);
-    simpleToast({ content: t('toast.projectCreated'), type: 'success', timeout: 1200 });
-});
-
 const getres = ((simaiDataValue) => {
     const result = (() => {
         try {
@@ -3101,9 +3123,57 @@ const saveMaidata = debounce(() => {
         if (name) projectUpdateName(currentProjectId, name).catch(() => { });
     }
 
+    // 雲端專案自動存檔 (Google Drive)
+    if (cloudProjectManager.isCurrentCloudProject() && googleDriveService.isLoggedIn()) {
+        const cloudFolderId = cloudProjectManager.getCloudFolderId();
+        const cloudName = cloudProjectManager.getCloudProjectName();
+        const simaiText = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : '';
+        googleDriveService.autoSaveProject(cloudFolderId, {
+            maidataText: simaiText,
+            metadata: {
+                id: cloudFolderId,
+                name: cloudName || maidata?.title || '未命名專案',
+                nowDifficulty,
+                timeControl: realTime
+            }
+        }).catch((err) => {
+            console.error('[GoogleDrive] 雲端自動存檔失敗:', err);
+        });
+    }
+
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
 }, 2000);
+
+/**
+ * 載入或匯入專案檔案時，全量同步推送至 Google Drive (含即時進度條與清空舊檔支援)
+ */
+async function syncFullProjectToCloud({ clearExisting = false } = {}) {
+    if (!cloudProjectManager.isCurrentCloudProject() || !googleDriveService.isLoggedIn()) return;
+    const simaiText = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : '';
+    const audioFile = typeof audioManager?.getBGMFile === 'function' ? audioManager.getBGMFile() : null;
+    const bgImg = backgroundImage || null;
+    const bgVid = backgroundVideo || null;
+
+    try {
+        await cloudProjectManager.syncProjectToCloud({
+            folderId: cloudProjectManager.getCloudFolderId(),
+            projectName: cloudProjectManager.getCloudProjectName(),
+            maidataText: simaiText,
+            audioFile,
+            bgImageFile: bgImg,
+            bgVideoFile: bgVid,
+            metadata: {
+                nowDifficulty,
+                timeControl: realTime
+            },
+            clearExisting,
+            onToast: simpleToast
+        });
+    } catch (err) {
+        console.error('[GoogleDrive] 全量專案推送失敗:', err);
+    }
+}
 
 const inputDebounce = debounce(() => {
     // 記錄歷史 (diff)
@@ -3274,7 +3344,7 @@ const setEditorCss = (visible = null) => {
     animateCanvasWidth(visible);
 };
 
-settingsButton.addEventListener('click', () => {
+function openSettings(initialTabIndex = 0) {
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
 
@@ -3597,7 +3667,99 @@ settingsButton.addEventListener('click', () => {
         });
     });
 
-    switchTab(0);
+    // =========================================================
+    // 同步 (Sync) 標籤頁
+    // =========================================================
+    const syncSection = addTab(t('settings.tabs.sync') || '同步');
+
+    // 1. Google Drive 雲端同步區塊
+    const gdriveBox = document.createElement('div');
+    gdriveBox.style.cssText = 'display:flex; flex-direction:column; gap:10px; padding:12px; background:#181818; border:1px solid #333; border-radius:6px; margin-bottom:8px;';
+
+    const gdriveTitle = document.createElement('div');
+    gdriveTitle.style.cssText = 'font-weight:600; font-size:13px; color:#fff; display:flex; align-items:center; gap:6px;';
+    gdriveTitle.innerHTML = `<span class="material-symbols-outlined" style="color:#4a90e2; font-size:20px;">cloud</span>${t('settings.gdrive.title') || 'Google Drive 雲端同步'}`;
+    gdriveBox.appendChild(gdriveTitle);
+
+    const gdriveStatusRow = document.createElement('div');
+    gdriveStatusRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px;';
+
+    const statusText = document.createElement('span');
+    const gdriveActionBtn = document.createElement('button');
+    gdriveActionBtn.className = 'popup-button';
+    gdriveActionBtn.style.cssText = 'padding:5px 12px; font-size:12px; cursor:pointer; flex-shrink:0;';
+
+    const updateGdriveUI = () => {
+        const loggedIn = googleDriveService.isLoggedIn();
+        const user = googleDriveService.getCurrentUser();
+        if (loggedIn) {
+            statusText.textContent = t('settings.gdrive.loggedInAs', { account: user?.email || user?.name || 'Google 使用者' });
+            statusText.style.color = '#4caf50';
+            gdriveActionBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
+            gdriveActionBtn.style.background = '#3a2020';
+            gdriveActionBtn.style.borderColor = '#662222';
+        } else {
+            statusText.textContent = t('settings.gdrive.notLoggedIn') || '尚未登入';
+            statusText.style.color = '#888';
+            gdriveActionBtn.textContent = t('settings.gdrive.loginBtn') || '登入 Google 帳號';
+            gdriveActionBtn.style.background = '#203040';
+            gdriveActionBtn.style.borderColor = '#305070';
+        }
+    };
+
+    gdriveActionBtn.onclick = async () => {
+        if (googleDriveService.isLoggedIn()) {
+            googleDriveService.logout();
+            simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
+            updateGdriveUI();
+        } else {
+            try {
+                gdriveActionBtn.disabled = true;
+                gdriveActionBtn.textContent = t('settings.gdrive.loggingIn') || '正在登入...';
+                await googleDriveService.login();
+                simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
+                updateGdriveUI();
+            } catch (err) {
+                console.error('[GoogleDrive] 登入錯誤:', err);
+                simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
+                updateGdriveUI();
+            } finally {
+                gdriveActionBtn.disabled = false;
+            }
+        }
+    };
+
+    updateGdriveUI();
+    gdriveStatusRow.appendChild(statusText);
+    gdriveStatusRow.appendChild(gdriveActionBtn);
+    gdriveBox.appendChild(gdriveStatusRow);
+
+    const gdriveHint = document.createElement('div');
+    gdriveHint.style.cssText = 'font-size:11px; color:#777; line-height:1.4;';
+    gdriveHint.textContent = t('settings.gdrive.autoSaveDesc') || '編輯雲端專案時，譜面變更將自動同步回 Google Drive。';
+    gdriveBox.appendChild(gdriveHint);
+
+    syncSection.appendChild(gdriveBox);
+
+    // 2. 手機 P2P WebRTC 同步區塊
+    const p2pBox = document.createElement('div');
+    p2pBox.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#181818; border:1px solid #333; border-radius:6px;';
+    const p2pLabel = document.createElement('span');
+    p2pLabel.textContent = t('menu.toolsSyncPlay') || '同步至 _play (手機)';
+    p2pLabel.style.cssText = 'font-size:13px; color:#ddd;';
+    const openP2pBtn = document.createElement('button');
+    openP2pBtn.className = 'popup-button';
+    openP2pBtn.textContent = t('settings.connection.btnOpen') || '開啟';
+    openP2pBtn.style.cssText = 'padding:5px 14px; font-size:12px; cursor:pointer;';
+    openP2pBtn.onclick = () => {
+        const syncPlayBtn = document.getElementById('syncPlayButton');
+        if (syncPlayBtn) syncPlayBtn.click();
+    };
+    p2pBox.appendChild(p2pLabel);
+    p2pBox.appendChild(openP2pBtn);
+    syncSection.appendChild(p2pBox);
+
+    switchTab(initialTabIndex);
 
     const oldAudioSettings = {
         globalVolume: settings.globalVolume,
@@ -3666,6 +3828,10 @@ settingsButton.addEventListener('click', () => {
             },
         ]
     });
+}
+
+settingsButton.addEventListener('click', () => {
+    openSettings(0);
 });
 
 chartInfoButton.addEventListener('click', () => {
@@ -4730,98 +4896,6 @@ function maidataProcess(e) {
     updateUndoRedoUI();
 }
 
-// 暫存使用者選擇的檔案，等待使用者選擇「覆蓋」或「新專案」後再處理
-let _pendingFolderFiles = null;
-
-folderInput.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const input = folderInput.children[0];
-    const maidataHaveContext = (() => {
-        if (audioManager.haveBGM()) {
-            return true;
-        }
-        for (let i = 1; i <= 7; i++) {
-            if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
-                return true;
-            }
-        }
-        return false;
-    })();
-    if (maidataHaveContext) {
-        // 有現有內容，先讓使用者選擇怎麼處理
-        _pendingFolderFiles = null; // 先清空
-        popupWindow({
-            title: t('popup.loadConfirm.titleFolder'),
-            content: t('popup.loadConfirm.content'),
-            buttons: [
-                {
-                    text: t('popup.loadConfirm.overwrite'),
-                    onClick: (ctx) => {
-                        ctx.close();
-                        // 標記模式後開啟檔案選擇器
-                        _pendingFolderFiles = 'overwrite';
-                        input.value = '';
-                        input.click();
-                    }
-                },
-                {
-                    text: t('popup.loadConfirm.newProject'),
-                    onClick: (ctx) => {
-                        ctx.close();
-                        _pendingFolderFiles = 'new';
-                        input.value = '';
-                        input.click();
-                    }
-                },
-                {
-                    text: t('popup.cancel'),
-                    hideOnClick: true
-                }
-            ]
-        });
-    } else {
-        // 沒有現有內容，直接開啟檔案選擇器（視為覆蓋）
-        _pendingFolderFiles = 'overwrite';
-        input.value = '';
-        input.click();
-    }
-});
-
-folderInput.children[0].addEventListener('click', (e) => {
-    e.stopPropagation();
-});
-
-// 只在初始化時設置一次，避免重複綁定
-folderInput.children[0].onchange = async (event) => {
-    const files = event.target.files;
-    if (files.length === 0) {
-        console.warn("未選擇任何檔案");
-        return;
-    }
-
-    const mode = _pendingFolderFiles || 'overwrite';
-    _pendingFolderFiles = null;
-
-    if (mode === 'new') {
-        // 建立新專案
-        const newId = await projectCreate(t('popup.projectManager.untitled'));
-        currentProjectId = newId;
-        localStorage.setItem('simai_lastProjectId', currentProjectId);
-        console.log(`[Project] 已建立新專案: ${newId}`);
-    }
-
-    setDataEmpty(); // 先清空現有資料，避免讀取失敗時殘留舊資料干擾
-    await handleFolderInput(files);
-    setEndtime(endTime);
-    draw();
-
-    // 嘗試用 maidata.title 更新專案名稱
-    if (maidata?.title && currentProjectId) {
-        projectUpdateName(currentProjectId, maidata.title).catch(() => { });
-    }
-    simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-};
-
 async function handleFolderInput(files) {
     // Normalize input into an array of File-like objects (supports FileList, Array, or JSZip.files mapping)
     const entries = [];
@@ -4876,12 +4950,19 @@ async function handleFolderInput(files) {
         }
         if (lowerName.startsWith('maidata.')) {
             // 譜面檔
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                maidataProcess(e.target.result);
-                resize();
-            };
-            reader.readAsText(file);
+            await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    maidataProcess(e.target.result);
+                    resize();
+                    resolve();
+                };
+                reader.onerror = (err) => {
+                    console.error('讀取 maidata 失敗:', err);
+                    resolve();
+                };
+                reader.readAsText(file);
+            });
         }
         if (lowerName.startsWith('bg.')) {
             if (isVideo) {
@@ -4943,83 +5024,6 @@ readMaidataButton.addEventListener('click', () => {
     input.click();
 });
 
-readZipButton.addEventListener('click', () => {
-    const maidataHaveContext = (() => {
-        if (audioManager.haveBGM()) {
-            return true;
-        }
-        for (let i = 1; i <= 7; i++) {
-            if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
-                return true;
-            }
-        }
-        return false;
-    })();
-
-    const triggerZipInput = (mode) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.zip';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    if (mode === 'new') {
-                        // 建立新專案
-                        const newId = await projectCreate(t('popup.projectManager.untitled'));
-                        currentProjectId = newId;
-                        localStorage.setItem('simai_lastProjectId', currentProjectId);
-                        console.log(`[Project] 已建立新專案: ${newId}`);
-                    }
-                    setDataEmpty();
-                    JSZip.loadAsync(file).then(async (zip) => {
-                        await handleFolderInput(zip.files);
-                        setEndtime(endTime);
-                        draw();
-                        // 嘗試用 maidata.title 更新專案名稱
-                        if (maidata?.title && currentProjectId) {
-                            projectUpdateName(currentProjectId, maidata.title).catch(() => { });
-                        }
-                        simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-                    });
-                    resize();
-                };
-                reader.readAsArrayBuffer(file);
-            }
-        };
-        input.click();
-    };
-
-    if (maidataHaveContext) {
-        popupWindow({
-            title: t('popup.loadConfirm.titleZip'),
-            content: t('popup.loadConfirm.content'),
-            buttons: [
-                {
-                    text: t('popup.loadConfirm.overwrite'),
-                    onClick: (ctx) => {
-                        ctx.close();
-                        triggerZipInput('overwrite');
-                    }
-                },
-                {
-                    text: t('popup.loadConfirm.newProject'),
-                    onClick: (ctx) => {
-                        ctx.close();
-                        triggerZipInput('new');
-                    }
-                },
-                {
-                    text: t('popup.cancel'),
-                    hideOnClick: true
-                }
-            ]
-        });
-    } else {
-        triggerZipInput('overwrite');
-    }
-});
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
@@ -5170,30 +5174,64 @@ setupZoomButton(previewZoomInButton, true);
 setupZoomButton(previewZoomOutButton, false);
 
 
+let utilityBtnsAnim = null;
+
 hideUtilityButton.addEventListener('click', () => {
     const utilityBtns = document.getElementById('topUtilityBtns');
     const utilityContainer = document.getElementById('utilityContainer');
     const isHidden = hideUtilityButton.dataset.hidden === 'true';
+
+    // 收起所有已開啟的下拉選單與子選單
+    document.querySelectorAll('.utilityDropdown').forEach(d => {
+        d.classList.remove('open');
+        d.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
+    });
+
+    if (utilityBtnsAnim) {
+        utilityBtnsAnim.cancel();
+        utilityBtnsAnim = null;
+    }
+
     if (isHidden) {
         utilityBtns.style.display = 'flex';
-        utilityBtns.animate([
+        utilityBtns.style.height = '';
+        utilityBtns.style.opacity = '';
+        utilityBtns.style.padding = '';
+
+        utilityBtnsAnim = utilityBtns.animate([
             { opacity: 0, height: '0px', padding: '0 5px' },
             { opacity: 1, height: '40px', padding: '5px' }
-        ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
+        ], { duration: 200, easing: 'ease' });
 
-        }
+        utilityBtnsAnim.onfinish = () => {
+            if (utilityBtnsAnim) {
+                utilityBtnsAnim.cancel();
+                utilityBtnsAnim = null;
+            }
+            utilityBtns.style.display = 'flex';
+            utilityBtns.style.height = '40px';
+            utilityBtns.style.opacity = '1';
+            utilityBtns.style.padding = '5px';
+        };
+
         canvasContainer.classList.remove('expanded');
         editorContainer.classList.remove('expanded');
         if (panelSplitter) panelSplitter.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
     } else {
-        //utilityBtns.style.display = 'none';
-        utilityBtns.animate([
+        utilityBtnsAnim = utilityBtns.animate([
             { opacity: 1, height: '40px', padding: '5px' },
             { opacity: 0, height: '0px', padding: '0 5px' }
-        ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
+        ], { duration: 200, easing: 'ease' });
+
+        utilityBtnsAnim.onfinish = () => {
+            if (utilityBtnsAnim) {
+                utilityBtnsAnim.cancel();
+                utilityBtnsAnim = null;
+            }
             utilityBtns.style.display = 'none';
-        }
+        };
+
         canvasContainer.classList.add('expanded');
         editorContainer.classList.add('expanded');
         if (panelSplitter) panelSplitter.classList.add('expanded');
@@ -5204,20 +5242,53 @@ hideUtilityButton.addEventListener('click', () => {
     resize();
 });
 
-const utilityDropdown = document.querySelector('.utilityDropdown');
-const utilityDropdownBtn = document.querySelector('.utilityDropdown-btn');
-if (utilityDropdown && utilityDropdownBtn) {
-    utilityDropdownBtn.addEventListener('click', (event) => {
-        event.stopPropagation();
-        utilityDropdown.classList.toggle('open');
+// 支援所有下拉選單（漢堡選單、編輯選單等），並支援觸控設備切換子選單
+const allUtilityDropdowns = document.querySelectorAll('.utilityDropdown');
+allUtilityDropdowns.forEach(dropdown => {
+    const btn = dropdown.querySelector('.utilityDropdown-btn');
+    if (btn) {
+        btn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const isOpen = dropdown.classList.contains('open');
+            allUtilityDropdowns.forEach(d => {
+                if (d !== dropdown) {
+                    d.classList.remove('open');
+                    d.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
+                }
+            });
+            dropdown.classList.toggle('open', !isOpen);
+        });
+    }
+
+    // 子選單項目（如檔案、功能/工具）在觸控螢幕上點擊切換展開
+    const menuTitles = dropdown.querySelectorAll('.utilityMenuTitle');
+    menuTitles.forEach(title => {
+        title.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = title.classList.contains('open');
+            menuTitles.forEach(t => { if (t !== title) t.classList.remove('open'); });
+            title.classList.toggle('open', !isOpen);
+        });
     });
 
-    document.addEventListener('click', (event) => {
-        if (!utilityDropdown.contains(event.target)) {
-            utilityDropdown.classList.remove('open');
+    // 點擊選單內部動作按鈕時自動關閉選單（避免觸控螢幕選單殘留）
+    const actionButtons = dropdown.querySelectorAll('.utilityButton:not(.utilityMenuTitle)');
+    actionButtons.forEach(actionBtn => {
+        actionBtn.addEventListener('click', () => {
+            dropdown.classList.remove('open');
+            dropdown.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
+        });
+    });
+});
+
+document.addEventListener('click', (event) => {
+    allUtilityDropdowns.forEach(dropdown => {
+        if (!dropdown.contains(event.target)) {
+            dropdown.classList.remove('open');
+            dropdown.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
         }
     });
-}
+});
 
 quickGenerateButton.addEventListener('click', () => {
     popupWindow({
@@ -7193,149 +7264,78 @@ async function loadProject(projectId) {
  * 開啟專案總管 UI
  */
 function openProjectManager() {
-    const setStyle = (el, styles) => Object.assign(el.style, styles);
-
-    const buildList = async (container) => {
-        container.innerHTML = '';
-        const list = await projectList();
-
-        if (list.length === 0) {
-            container.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">尚無任何專案</div>';
-            return;
-        }
-
-        // 按更新時間排序（最近的在上）
-        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-        for (const proj of list) {
-            const isCurrent = proj.id === currentProjectId;
-            const row = document.createElement('div');
-            setStyle(row, {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 10px',
-                background: isCurrent ? '#333' : '#1a1a1a',
-                border: isCurrent ? '1px solid #ccc' : '1px solid #333',
-                borderRadius: '6px',
-                marginBottom: '6px',
-                gap: '8px',
-                transition: 'background 0.15s',
-            });
-
-            // 左側：名稱 + 時間
-            const infoDiv = document.createElement('div');
-            setStyle(infoDiv, { flex: '1', minWidth: '0', overflow: 'hidden' });
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = proj.name || '未命名專案';
-            setStyle(nameSpan, {
-                fontWeight: '600',
-                fontSize: '13px',
-                color: isCurrent ? '#fff' : '#ccc',
-                display: 'block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-            });
-            if (isCurrent) nameSpan.textContent += ' （目前）';
-
-            const timeSpan = document.createElement('span');
-            const d = new Date(proj.updatedAt || proj.createdAt);
-            timeSpan.textContent = `上次編輯：${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
-            setStyle(timeSpan, { fontSize: '10px', color: '#888', display: 'block', marginTop: '2px' });
-
-            infoDiv.appendChild(nameSpan);
-            infoDiv.appendChild(timeSpan);
-
-            // 右側：按鈕
-            const btnGroup = document.createElement('div');
-            setStyle(btnGroup, { display: 'flex', gap: '4px', flexShrink: '0' });
-
-            const makeBtn = (text, onClick, color = '#404040') => {
-                const btn = document.createElement('button');
-                btn.textContent = text;
-                setStyle(btn, {
-                    background: color,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '4px 8px',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                });
-                btn.addEventListener('mouseenter', () => btn.style.opacity = '0.8');
-                btn.addEventListener('mouseleave', () => btn.style.opacity = '1');
-                btn.onclick = onClick;
-                return btn;
+    openProjectManagerModal({
+        currentProjectId,
+        onLoadProject: async (projectId) => {
+            await loadProject(projectId);
+        },
+        onDeleteCurrentProject: async () => {
+            currentProjectId = null;
+            localStorage.removeItem('simai_lastProjectId');
+            cloudProjectManager.clearCloudProject();
+            setDataEmpty();
+            draw();
+            resize();
+            simpleToast({ content: '已清空編輯器狀態，未指定專案', type: 'info', timeout: 1500 });
+        },
+        onImportFolder: (onSuccess) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.onchange = async (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    const newId = await projectCreate('匯入專案');
+                    currentProjectId = newId;
+                    cloudProjectManager.clearCloudProject();
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                    setDataEmpty();
+                    await handleFolderInput(files);
+                    if (maidata?.title) {
+                        await projectUpdateName(newId, maidata.title);
+                    }
+                    draw();
+                    resize();
+                    simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
+                    if (typeof onSuccess === 'function') onSuccess();
+                }
             };
-
-            if (!isCurrent) {
-                btnGroup.appendChild(makeBtn('開啟', async () => {
-                    await loadProject(proj.id);
-                    simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
-                    buildList(container);
-                }, '#2d6e2d'));
-            }
-
-            btnGroup.appendChild(makeBtn('重新命名', async () => {
-                const newName = prompt('請輸入新的專案名稱：', proj.name || '');
-                if (newName !== null && newName.trim() !== '') {
-                    await projectRename(proj.id, newName.trim());
-                    buildList(container);
+            input.click();
+        },
+        onImportZip: (onSuccess) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
+                        currentProjectId = newId;
+                        cloudProjectManager.clearCloudProject();
+                        localStorage.setItem('simai_lastProjectId', currentProjectId);
+                        setDataEmpty();
+                        const zip = await JSZip.loadAsync(file);
+                        await handleFolderInput(zip.files);
+                        if (maidata?.title) {
+                            await projectUpdateName(newId, maidata.title);
+                        }
+                        draw();
+                        resize();
+                        simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
+                        if (typeof onSuccess === 'function') onSuccess();
+                    } catch (err) {
+                        console.error('ZIP 匯入失敗:', err);
+                        simpleToast({ content: `匯入失敗：${err.message || err}`, type: 'error', timeout: 3000 });
+                    }
                 }
-            }));
-
-            btnGroup.appendChild(makeBtn('刪除', async () => {
-                if (isCurrent) {
-                    alert('無法刪除目前正在使用的專案。\n請先切換到其他專案後再刪除。');
-                    return;
-                }
-                if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
-                await projectDelete(proj.id);
-                buildList(container);
-                simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
-            }, '#6e2d2d'));
-
-            row.appendChild(infoDiv);
-            row.appendChild(btnGroup);
-            container.appendChild(row);
-        }
-    };
-
-    const container = document.createElement('div');
-    setStyle(container, {
-        maxHeight: '350px',
-        overflowY: 'auto',
-        scrollbarWidth: 'thin',
-        scrollbarColor: '#555 transparent',
-    });
-
-    buildList(container);
-
-    popupWindow({
-        title: "專案總管",
-        customContent: container,
-        width: 480,
-        maxWidth: 560,
-        buttons: [
-            {
-                text: "新建空白專案",
-                onClick: async () => {
-                    const name = prompt('請輸入專案名稱：', '未命名專案');
-                    if (name === null) return;
-                    const newId = await projectCreate(t('popup.projectManager.untitled'));
-                    const proj = await loadProject(newId);
-                    simpleToast({ content: `已切換至專案：${proj.name || '未命名'}`, type: 'success', timeout: 1500 });
-                    buildList(container);
-                }
-            },
-            {
-                text: t('popup.close'),
-                hideOnClick: true,
-            }
-        ]
+            };
+            input.click();
+        },
+        openSettings,
+        simpleToast,
+        popupWindow,
+        assetPrefix: ''
     });
 }
 

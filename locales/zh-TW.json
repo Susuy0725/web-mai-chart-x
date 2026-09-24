@@ -8,11 +8,11 @@
     "fileProjectManager": "專案總管",
     "fileReadFolder": "讀取資料夾",
     "fileReadZip": "讀取壓縮檔",
-    "fileDownload": "下載",
+    "fileDownload": "匯出",
     "fileAddMusic": "加入音樂",
     "fileAddVideo": "加入影片",
     "fileImportFromVideo": "從影片匯入",
-    "fileReadMaidata": "讀取maidata",
+    "fileReadMaidata": "加入maidata",
     "tools": "功能/工具",
     "toolsGetNowNoteIndex": "游標移至播放頭",
     "toolsGetCursorNoteIndex": "播放頭移至游標",
@@ -52,7 +52,8 @@
     "gridDivisionCustom": "自訂...",
     "visualToolMode": "模式",
     "visualToolModeEdit": "編輯 ✏️",
-    "visualToolModeSelect": "選擇 ↖️"
+    "visualToolModeSelect": "選擇 ↖️",
+    "gotoPlay": "開啟Play"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."
@@ -248,6 +249,19 @@
       "transferComplete": "同步完成",
       "btnOpen": "開啟",
       "toastConnected": "已成功建立 P2P 直連！"
+    },
+    "gdrive": {
+      "title": "Google Drive 雲端同步",
+      "accountLabel": "帳號狀態",
+      "notLoggedIn": "尚未登入",
+      "loggedInAs": "已登入：{account}",
+      "loginBtn": "登入 Google 帳號",
+      "logoutBtn": "登出帳號",
+      "loggingIn": "正在登入...",
+      "loginSuccess": "Google Drive 登入成功！",
+      "loginError": "登入失敗：{error}",
+      "logoutSuccess": "已登出 Google 帳號",
+      "autoSaveDesc": "編輯雲端專案時，譜面變更將自動同步回 Google Drive。"
     }
   },
   "popup": {
@@ -365,6 +379,21 @@
     },
     "projectManager": {
       "title": "專案總管",
+      "tabLocal": "本地",
+      "tabCloud": "雲端",
+      "cloudTitle": "雲端專案",
+      "cloudPlaceholder": "雲端同步與雲端專案管理功能開發中，敬請期待。",
+      "cloudNotLoggedIn": "尚未登入 Google Drive",
+      "cloudNotLoggedInDesc": "請前往「設定 > 同步」登入 Google 帳號以檢視與編輯雲端專案。",
+      "cloudGoToSettings": "前往設定登入",
+      "cloudLoginNow": "立即登入",
+      "cloudLoading": "正在讀取雲端專案...",
+      "cloudEmpty": "Google Drive 尚無專案資料夾",
+      "cloudLoadBtn": "載入編輯",
+      "cloudCurrentBadge": "雲端專案",
+      "cloudLoadedToast": "已載入雲端專案：{name}",
+      "cloudAutoSavedToast": "雲端專案已自動儲存",
+      "newBlankProject": "新建空白專案",
       "untitled": "未命名專案",
       "searchPlaceholder": "搜尋專案名稱...",
       "sortByTime": "按時間排序",

@@ -242,8 +242,11 @@ export class SyncManager {
             this._incomingAudioCount = 0;
             this._isSendingAudio = false;
             this._isRemoteTriggered = false;
-            if (this._transferPopupCtx && !this._transferPopupCtx.isClosed) {
-                this._transferPopupCtx.close();
+            if (this._transferCardEl) {
+                this._transferCardEl.style.opacity = '0';
+                setTimeout(() => {
+                    if (this._transferCardEl) this._transferCardEl.style.display = 'none';
+                }, 300);
             }
         } else if (status === 'connected') {
             if (this.role === 'client') {
@@ -297,17 +300,8 @@ export class SyncManager {
                 }
             } else if (msg.action === 'chart') {
                 if (msg.data && typeof this.callbacks.onChart === 'function') {
-                    this.showTransferProgress({
-                        text: t('settings.connection.transferChart') || '正在同步譜面資料...',
-                        percent: 30,
-                        completed: false
-                    });
+                    // 譜面即時同步：靜默套用，不彈出任何視窗
                     await this.callbacks.onChart(msg.data);
-                    this.showTransferProgress({
-                        text: t('settings.connection.chartSynced') || '已同步譜面資料',
-                        percent: 45,
-                        completed: false
-                    });
                 }
             } else if (msg.action === 'audio_clear') {
                 if (typeof this.callbacks.onAudioClear === 'function') {
@@ -381,42 +375,72 @@ export class SyncManager {
     }
 
     // =========================================================
-    // UI 視窗與彈窗
+    // UI 視窗與彈窗 (右下角非侵入式懸浮傳輸進度卡片)
     // =========================================================
 
-    showTransferProgress({ text, percent = 0, completed = false, onDone = null }) {
-        if (!this._transferPopupCtx || this._transferPopupCtx.isClosed) {
-            this._transferPopupCtx = popupWindow({
-                title: t('settings.connection.transferModalTitle') || '同步進度',
-                content: text,
-                width: 320,
-                maxWidth: 380,
-                unclosable: !completed,
-                buttons: completed ? [
-                    {
-                        text: t('popup.done') || '完成',
-                        onClick: () => {
-                            if (typeof onDone === 'function') onDone();
-                        },
-                        hideOnClick: true
-                    }
-                ] : []
-            });
-            this._transferPopupCtx.setProgress(percent);
-        } else {
-            this._transferPopupCtx.setContent(text);
-            this._transferPopupCtx.setProgress(percent);
-            if (completed) {
-                this._transferPopupCtx.setButtons([
-                    {
-                        text: t('popup.done') || '完成',
-                        onClick: () => {
-                            if (typeof onDone === 'function') onDone();
-                        },
-                        hideOnClick: true
-                    }
-                ]);
-            }
+    showTransferProgress({ title = '同步媒體資源...', text = '', percent = 0, completed = false, onDone = null }) {
+        if (!this._transferCardEl) {
+            this._transferCardEl = document.createElement('div');
+            this._transferCardEl.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                z-index: 10000;
+                background: #1e1e1e;
+                color: #fff;
+                padding: 14px 18px;
+                border-radius: 8px;
+                box-shadow: 0 4px 24px rgba(0, 0, 0, 0.65);
+                border: 1px solid #383838;
+                min-width: 280px;
+                max-width: 380px;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                font-family: inherit;
+                pointer-events: auto;
+                transition: opacity 0.3s ease, transform 0.3s ease;
+            `;
+            document.body.appendChild(this._transferCardEl);
+        }
+
+        const pct = Math.max(0, Math.min(100, Math.round(percent)));
+        const iconName = completed ? 'check_circle' : 'audiotrack';
+        const iconColor = completed ? '#4caf50' : '#4a90e2';
+
+        this._transferCardEl.style.display = 'flex';
+        this._transferCardEl.style.opacity = '1';
+        this._transferCardEl.style.transform = 'translateY(0)';
+
+        this._transferCardEl.innerHTML = `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; color:#fff;">
+                    <span class="material-symbols-outlined" style="font-size:20px; color:${iconColor};" translate="no">${iconName}</span>
+                    <span>${title}</span>
+                </div>
+                <span style="font-size:11px; color:#888;">${pct}%</span>
+            </div>
+            <div style="font-size:12px; color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                ${text || '傳輸中...'}
+            </div>
+            <div style="width:100%; height:6px; background:#2a2a2a; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${pct}%; background:${iconColor}; transition:width 0.25s ease;"></div>
+            </div>
+        `;
+
+        if (completed) {
+            if (this._transferHideTimer) clearTimeout(this._transferHideTimer);
+            this._transferHideTimer = setTimeout(() => {
+                if (this._transferCardEl) {
+                    this._transferCardEl.style.opacity = '0';
+                    this._transferCardEl.style.transform = 'translateY(10px)';
+                    setTimeout(() => {
+                        if (this._transferCardEl) this._transferCardEl.style.display = 'none';
+                        if (typeof onDone === 'function') onDone();
+                    }, 350);
+                }
+            }, 1200);
         }
     }
 

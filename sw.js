@@ -4,7 +4,9 @@ const CACHE_NAME = (() => {
     const isDev =
         self.location.hostname === 'localhost' ||
         self.location.hostname === '127.0.0.1' ||
-        self.location.hostname.endsWith('.ngrok-free.app');
+        self.location.hostname.endsWith('.ngrok-free.app') ||
+        self.location.hostname.endsWith('.ngrok-free.dev') ||
+        self.location.hostname.endsWith('.ngrok.io');
 
     if (isDev) {
         return 'web-mai-chart-cache-' + Date.now();
@@ -23,8 +25,16 @@ const ASSETS = [
     './Scripts/helper.js',
     './Scripts/decode.js',
     './Scripts/indexDB.js',
+    './Scripts/audioManager.js',
+    './Scripts/majdataWs.js',
+    './Scripts/banana.js',
     './Scripts/jszip.min.js',
     './Scripts/mediabunny.cjs',
+    './Scripts/drive/googleDriveService.js',
+    './Scripts/drive/cloudProjectManager.js',
+    './Scripts/sync/editorSync.js',
+    './Scripts/sync/syncManager.js',
+    './Scripts/sync/webrtcSync.js',
     './favicon.ico',
     './Fonts/ShareTechMono-Regular.ttf',
     './Fonts/Inter.ttf',
@@ -37,6 +47,13 @@ const ASSETS = [
     './locales/zh-TW.js',
     './locales/zh-TW.json',
     './rpc.js',
+    './_play/index.html',
+    './_play/main.css',
+    './_play/main.js',
+    './_play/renderer.js',
+    './_play/simplay.js',
+    './_play/slideDebug.js',
+    './_play/slidetables.js'
 ];
 
 async function broadcast(message) {

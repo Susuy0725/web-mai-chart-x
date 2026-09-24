@@ -7,6 +7,9 @@ import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 import { SyncManager } from '../Scripts/sync/syncManager.js';
+import * as googleDriveService from '../Scripts/drive/googleDriveService.js';
+import * as cloudProjectManager from '../Scripts/drive/cloudProjectManager.js';
+import { openProjectManagerModal } from '../Scripts/projectManagerModal.js';
 
 const simulatedPlayController = new SimulatedPlayController();
 
@@ -362,6 +365,15 @@ const VIDEO_MIN_SEEK_INTERVAL = 0.8;
 let timeControlSliding = false;
 
 const canvasContainer = document.getElementById("canvasContainer");
+
+if (canvasContainer) {
+    canvasContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvasContainer.addEventListener('selectstart', (e) => e.preventDefault());
+}
+if (canvas) {
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('selectstart', (e) => e.preventDefault());
+}
 
 function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -2474,238 +2486,65 @@ async function loadProject(projectId, targetDifficulty = null) {
 }
 
 async function openProjectManager() {
-    const setStyle = (el, styles) => Object.assign(el.style, styles);
-
-    const buildList = async (container) => {
-        container.innerHTML = '';
-        let list = await projectList();
-
-        if (list.length === 0) {
-            const migratedId = await migrateFromLegacy();
-            if (migratedId) {
-                list = await projectList();
-            }
-        }
-
-        if (list.length === 0) {
-            container.innerHTML = '<div style="color: #888; text-align: center; padding: 24px;">尚無任何專案</div>';
-            return;
-        }
-
-        // 按更新時間排序（最近的在上）
-        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-        for (const proj of list) {
-            const isCurrent = proj.id === currentProjectId;
-            const row = document.createElement('div');
-            setStyle(row, {
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px 12px',
-                background: isCurrent ? 'rgba(74, 144, 226, 0.15)' : '#262626',
-                border: isCurrent ? '1px solid #4a90e2' : '1px solid #383838',
-                borderRadius: '8px',
-                marginBottom: '8px',
-                gap: '8px',
-                transition: 'all 0.15s ease',
-            });
-
-            // 上半部：名稱 + 狀態 + 操作按鈕
-            const topRow = document.createElement('div');
-            setStyle(topRow, {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '8px'
-            });
-
-            // 左側：名稱與標籤
-            const infoDiv = document.createElement('div');
-            setStyle(infoDiv, { flex: '1', minWidth: '0', overflow: 'hidden' });
-
-            const titleContainer = document.createElement('div');
-            setStyle(titleContainer, { display: 'flex', alignItems: 'center', gap: '6px' });
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = proj.name || '未命名專案';
-            setStyle(nameSpan, {
-                fontWeight: '600',
-                fontSize: '14px',
-                color: isCurrent ? '#6ba4f8' : '#eee',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-            });
-            titleContainer.appendChild(nameSpan);
-
-            if (isCurrent) {
-                const currentBadge = document.createElement('span');
-                currentBadge.textContent = '使用中';
-                setStyle(currentBadge, {
-                    fontSize: '10px',
-                    color: '#fff',
-                    background: '#2b6cb0',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    fontWeight: 'bold',
-                    flexShrink: '0'
-                });
-                titleContainer.appendChild(currentBadge);
-            }
-
-            const timeSpan = document.createElement('span');
-            const d = new Date(proj.updatedAt || proj.createdAt);
-            timeSpan.textContent = `最後更新：${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-            setStyle(timeSpan, { fontSize: '11px', color: '#888', display: 'block', marginTop: '2px' });
-
-            infoDiv.appendChild(titleContainer);
-            infoDiv.appendChild(timeSpan);
-
-            // 右側按鈕組
-            const btnGroup = document.createElement('div');
-            setStyle(btnGroup, { display: 'flex', gap: '6px', flexShrink: '0' });
-
-            const makeBtn = (text, onClick, bgColor = '#3a3a3a') => {
-                const btn = document.createElement('button');
-                btn.textContent = text;
-                setStyle(btn, {
-                    background: bgColor,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '5px 10px',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'opacity 0.15s ease'
-                });
-                btn.addEventListener('mouseenter', () => btn.style.opacity = '0.8');
-                btn.addEventListener('mouseleave', () => btn.style.opacity = '1');
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    onClick();
-                };
-                return btn;
-            };
-
-            const openBtn = makeBtn(isCurrent ? '重新載入' : '開啟', async () => {
-                await loadProject(proj.id);
-                simpleToast({ content: `已載入專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
-                buildList(container);
-            }, isCurrent ? '#2d5a88' : '#2e7d32');
-            btnGroup.appendChild(openBtn);
-
-            btnGroup.appendChild(makeBtn('重新命名', async () => {
-                const newName = prompt('請輸入新的專案名稱：', proj.name || '');
-                if (newName !== null && newName.trim() !== '') {
-                    await projectRename(proj.id, newName.trim());
-                    buildList(container);
-                    simpleToast({ content: '專案名稱已更新', type: 'info', timeout: 1200 });
-                }
-            }));
-
-            btnGroup.appendChild(makeBtn('刪除', async () => {
-                if (isCurrent) {
-                    alert('無法刪除目前正在播放的專案。\n請先切換到其他專案後再刪除。');
-                    return;
-                }
-                if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
-                await projectDelete(proj.id);
-                buildList(container);
-                simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
-            }, '#c62828'));
-
-            topRow.appendChild(infoDiv);
-            topRow.appendChild(btnGroup);
-            row.appendChild(topRow);
-
-            // 下半部：難度選擇標籤 (若有 maidata)
-            const diffRow = document.createElement('div');
-            setStyle(diffRow, {
-                display: 'flex',
-                gap: '6px',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                marginTop: '2px'
-            });
-
-            idbGetProject(proj.id, 'maidata').then(projMaiData => {
-                if (!projMaiData) return;
-                const mData = typeof projMaiData === 'string' ? parseMaidata(projMaiData) : projMaiData;
-                const availableDiffs = [1, 2, 3, 4, 5, 6, 7].filter(d => !!mData[`inote_${d}`]);
-                if (availableDiffs.length === 0) return;
-
-                const diffTitle = document.createElement('span');
-                diffTitle.textContent = '難度：';
-                setStyle(diffTitle, { fontSize: '11px', color: '#999' });
-                diffRow.appendChild(diffTitle);
-
-                availableDiffs.forEach(diffNum => {
-                    const diffBtn = document.createElement('button');
-                    const isSelectedDiff = isCurrent && selectedDifficulty === diffNum;
-                    diffBtn.textContent = `${DIFFICULTY_NAMES[diffNum] || diffNum}`;
-                    setStyle(diffBtn, {
-                        fontSize: '10px',
-                        padding: '2px 8px',
-                        borderRadius: '3px',
-                        border: isSelectedDiff ? '1px solid #fff' : '1px solid transparent',
-                        background: DIFFICULTY_COLORS[diffNum] || '#555',
-                        color: diffNum === 6 ? '#000' : '#fff',
-                        cursor: 'pointer',
-                        fontWeight: isSelectedDiff ? 'bold' : 'normal',
-                        opacity: isSelectedDiff ? '1' : '0.85'
-                    });
-                    diffBtn.title = `點擊切換為此難度播放`;
-                    diffBtn.onclick = async (e) => {
-                        e.stopPropagation();
-                        await loadProject(proj.id, diffNum);
-                        simpleToast({ content: `已切換難度至：${DIFFICULTY_NAMES[diffNum]}`, type: 'success', timeout: 1200 });
-                        buildList(container);
-                    };
-                    diffRow.appendChild(diffBtn);
-                });
-            });
-
-            row.appendChild(diffRow);
-            container.appendChild(row);
-        }
-    };
-
-    const container = document.createElement('div');
-    setStyle(container, {
-        maxHeight: '400px',
-        overflowY: 'auto',
-        scrollbarWidth: 'thin',
-        scrollbarColor: '#555 transparent',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px'
-    });
-
-    buildList(container);
-
-    popupWindow({
-        title: "專案總管",
-        customContent: container,
-        width: 520,
-        maxWidth: 620,
-        buttons: [
-            {
-                text: "新建空白專案",
-                onClick: async () => {
-                    const name = prompt('請輸入專案名稱：', '未命名專案');
-                    if (name === null) return;
-                    const newId = await projectCreate(name.trim() || '未命名專案');
+    openProjectManagerModal({
+        currentProjectId,
+        onLoadProject: async (projectId) => {
+            await loadProject(projectId);
+        },
+        onDeleteCurrentProject: async () => {
+            currentProjectId = null;
+            localStorage.removeItem('simai_lastProjectId');
+            setDataEmpty();
+            simpleToast({ content: '已清空播放狀態，未指定專案', type: 'info', timeout: 1500 });
+        },
+        onImportFolder: (onSuccess) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.onchange = async (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    const newId = await projectCreate('匯入專案');
+                    currentProjectId = newId;
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                    setDataEmpty();
+                    await handleFolderInput(files);
                     await loadProject(newId);
-                    simpleToast({ content: `已建立並切換至專案：${name.trim() || '未命名專案'}`, type: 'success', timeout: 1500 });
-                    buildList(container);
+                    simpleToast({ content: '已匯入並播放專案', type: 'success', timeout: 1500 });
+                    if (typeof onSuccess === 'function') onSuccess();
                 }
-            },
-            {
-                text: "關閉",
-                hideOnClick: true,
-            }
-        ]
+            };
+            input.click();
+        },
+        onImportZip: (onSuccess) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
+                        currentProjectId = newId;
+                        localStorage.setItem('simai_lastProjectId', currentProjectId);
+                        setDataEmpty();
+                        const zip = await JSZip.loadAsync(file);
+                        await handleFolderInput(zip.files);
+                        await loadProject(newId);
+                        simpleToast({ content: '已匯入並播放專案', type: 'success', timeout: 1500 });
+                        if (typeof onSuccess === 'function') onSuccess();
+                    } catch (err) {
+                        console.error('ZIP 匯入失敗:', err);
+                        simpleToast({ content: `匯入失敗：${err.message || err}`, type: 'error', timeout: 3000 });
+                    }
+                }
+            };
+            input.click();
+        },
+        openSettings,
+        simpleToast,
+        popupWindow,
+        assetPrefix: '../'
     });
 }
 
@@ -3140,6 +2979,69 @@ function openSettings(initialTabIndex = 0) {
             }
         });
     });
+
+    // 1. Google Drive 雲端同步區塊
+    const gdriveBox = document.createElement('div');
+    gdriveBox.style.cssText = 'display:flex; flex-direction:column; gap:10px; padding:12px; background:#181818; border:1px solid #333; border-radius:6px; margin-bottom:12px; width:100%; box-sizing:border-box;';
+
+    const gdriveTitle = document.createElement('div');
+    gdriveTitle.style.cssText = 'font-weight:600; font-size:13px; color:#fff; display:flex; align-items:center; gap:6px;';
+    gdriveTitle.innerHTML = `<span class="material-symbols-outlined" style="color:#4a90e2; font-size:20px;">cloud</span>${t('settings.gdrive.title') || 'Google Drive 雲端同步'}`;
+    gdriveBox.appendChild(gdriveTitle);
+
+    const gdriveStatusRow = document.createElement('div');
+    gdriveStatusRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px;';
+
+    const statusText = document.createElement('span');
+    const gdriveActionBtn = document.createElement('button');
+    gdriveActionBtn.className = 'popup-button';
+    gdriveActionBtn.style.cssText = 'padding:5px 12px; font-size:12px; cursor:pointer; flex-shrink:0;';
+
+    const updateGdriveUI = () => {
+        const loggedIn = googleDriveService.isLoggedIn();
+        const user = googleDriveService.getCurrentUser();
+        if (loggedIn) {
+            statusText.textContent = t('settings.gdrive.loggedInAs', { account: user?.email || user?.name || 'Google 使用者' });
+            statusText.style.color = '#4caf50';
+            gdriveActionBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
+            gdriveActionBtn.style.background = '#3a2020';
+            gdriveActionBtn.style.borderColor = '#662222';
+        } else {
+            statusText.textContent = t('settings.gdrive.notLoggedIn') || '尚未登入';
+            statusText.style.color = '#888';
+            gdriveActionBtn.textContent = t('settings.gdrive.loginBtn') || '登入 Google 帳號';
+            gdriveActionBtn.style.background = '#203040';
+            gdriveActionBtn.style.borderColor = '#305070';
+        }
+    };
+
+    gdriveActionBtn.onclick = async () => {
+        if (googleDriveService.isLoggedIn()) {
+            googleDriveService.logout();
+            simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
+            updateGdriveUI();
+        } else {
+            try {
+                gdriveActionBtn.disabled = true;
+                gdriveActionBtn.textContent = t('settings.gdrive.loggingIn') || '正在登入...';
+                await googleDriveService.login();
+                simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
+                updateGdriveUI();
+            } catch (err) {
+                console.error('[GoogleDrive] 登入錯誤:', err);
+                simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
+                updateGdriveUI();
+            } finally {
+                gdriveActionBtn.disabled = false;
+            }
+        }
+    };
+
+    updateGdriveUI();
+    gdriveStatusRow.appendChild(statusText);
+    gdriveStatusRow.appendChild(gdriveActionBtn);
+    gdriveBox.appendChild(gdriveStatusRow);
+    connSection.appendChild(gdriveBox);
 
     connSection.appendChild(createRow(t('settings.connection.syncView') || '設定同步檢視', openSyncBtn));
 

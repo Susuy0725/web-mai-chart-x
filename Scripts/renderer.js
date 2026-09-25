@@ -18,6 +18,45 @@ import {
 const charWidthCache = {};
 const RICH_HANABI_COLOR_MAP = ['#ff009dff', '#ff4800', '#ffe100', '#ddff00', '#00bbff'];
 
+const JUDGE_COLORS = {
+    PERFECT: "#FFFE02",
+    GREAT: "#FE5454",
+    GOOD: "#45FD43",
+};
+
+function hexToRgb(hex) {
+    if (!hex) return { r: 255, g: 254, b: 2 };
+    let c = hex.replace('#', '');
+    if (c.length === 3) {
+        c = c.split('').map(x => x + x).join('');
+    }
+    const num = parseInt(c, 16);
+    return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+    };
+}
+
+function getJudgeRgba(judge, alpha = 1) {
+    let colorHex = JUDGE_COLORS.PERFECT;
+    if (judge) {
+        if (typeof judge === 'object' && judge.grade) {
+            judge = judge.grade;
+        }
+        if (typeof judge === 'string') {
+            const upper = judge.toUpperCase();
+            if (upper.includes('PERFECT')) colorHex = JUDGE_COLORS.PERFECT;
+            else if (upper.includes('GREAT')) colorHex = JUDGE_COLORS.GREAT;
+            else if (upper.includes('GOOD')) colorHex = JUDGE_COLORS.GOOD;
+            else if (JUDGE_COLORS[upper]) colorHex = JUDGE_COLORS[upper];
+            else if (judge.startsWith('#')) colorHex = judge;
+        }
+    }
+    const rgb = hexToRgb(colorHex);
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
 function textMonospace(ctx, text, x, y, cellWidth, mode = 'stroke') {
     ctx.textAlign = 'left';
     const fontKey = ctx.font;
@@ -182,8 +221,14 @@ export class SimaiRenderer {
         }
 
         const tinted = getTintedImage(this.images[imgKey], opacity, config);
-        // 限制快取大小，防止記憶體溢出
-        if (this._tintCache.size > 200) this._tintCache.clear();
+        if (this._tintCache.size >= 250) {
+            const iter = this._tintCache.keys();
+            for (let i = 0; i < 50; i++) {
+                const next = iter.next();
+                if (next.done) break;
+                this._tintCache.delete(next.value);
+            }
+        }
         this._tintCache.set(cacheKey, tinted);
         return tinted;
     }
@@ -336,14 +381,14 @@ export class SimaiRenderer {
 
     // --- 視覺效果 ---
 
-    simpleHitEffect(noteT) {
+    simpleHitEffect(noteT, judge = null) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
         this.ctx.save();
         const decayAlpha = 1 - Math.max(0, -t);
         const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
 
-        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+        this.ctx.strokeStyle = getJudgeRgba(judge, 0.8 * decayAlpha);
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
         this.ctx.globalCompositeOperation = 'lighter';
         this.ctx.beginPath();
@@ -498,7 +543,7 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
-    simpleHoldEffect(noteT) {
+    simpleHoldEffect(noteT, judge = null) {
         this.ctx.save();
         const t = noteT * -2;
         const decayAlpha = 1 - Math.max(0, t % 1);
@@ -506,13 +551,13 @@ export class SimaiRenderer {
         const radius = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha);
         const radius1 = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha1);
 
-        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha})`;
+        this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha);
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
         this.ctx.globalCompositeOperation = 'lighter';
         this.ctx.beginPath();
         this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
         this.ctx.stroke();
-        this.ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha1})`;
+        this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha1);
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha1;
         this.ctx.beginPath();
         this.ctx.arc(0, 0, radius1, 0, Math.PI * 2);
@@ -1345,19 +1390,21 @@ export class SimaiRenderer {
             this.ctx.restore();
         }
 
+        function drawHoldImage(ctx, img, size, sizeOffset) {
+            ctx.drawImage(img, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+            ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+            ctx.drawImage(img, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+
         this.ctx.save();
         this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         this.ctx.rotate(posInfo.rot);
-        this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-        this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-        this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        drawHoldImage(this.ctx, img, size, sizeOffset);
 
         if (s.isEx) {
             this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "tap");
             const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
-            this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-            this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-            this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+            drawHoldImage(this.ctx, ex, size, sizeOffset);
         }
         this.ctx.restore();
 
@@ -1596,10 +1643,27 @@ export class SimaiRenderer {
             return this._sensorPointCache.get(cacheKey);
         }
 
-        if (!this._dummyCtx) {
-            const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
-            this._dummyCtx = c.getContext('2d');
+        const r = Math.hypot(x, y);
+
+        // 1. A 區外延伸（外鍵 1~8 區域）：
+        // 當半徑超出主圓盤外邊界時，依據極座標角度判定為 1~8 號外鍵
+        if (r >= innerCirleBase * 1.05 && r <= innerCirleBase * 2.8) {
+            let normAngle = Math.atan2(y, x) + Math.PI / 2;
+            if (normAngle < 0) normAngle += Math.PI * 2;
+            const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
+            if (keyNum >= 1 && keyNum <= 8) {
+                const outerKeyId = 'A' + keyNum;
+                if (this._sensorPointCache.size > 1000) this._sensorPointCache.clear();
+                this._sensorPointCache.set(cacheKey, outerKeyId);
+                return outerKeyId;
+            }
         }
+
+        if (!this._dummyCtx) {
+            const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+            this._dummyCtx = c ? c.getContext('2d') : null;
+        }
+        if (!this._dummyCtx) return null;
         this._dummyCtx.setTransform(1, 0, 0, 1, 0, 0);
 
         let insideId = null;
@@ -1991,7 +2055,14 @@ export class SimaiVisualEditor {
         }
 
         const tinted = getTintedImage(this.images[imgKey], opacity, config);
-        if (this._tintCache.size > 200) this._tintCache.clear();
+        if (this._tintCache.size >= 250) {
+            const iter = this._tintCache.keys();
+            for (let i = 0; i < 50; i++) {
+                const next = iter.next();
+                if (next.done) break;
+                this._tintCache.delete(next.value);
+            }
+        }
         this._tintCache.set(cacheKey, tinted);
         return tinted;
     }
@@ -2179,6 +2250,12 @@ export class SimaiVisualEditor {
         const img = this.images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
         if (imgNotExists(img)) return;
 
+        function drawHoldImage(ctx, img, size, sizeOffset) {
+            ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+            ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+            ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+
         const size = this.settings.noteBaseSize;
         const sizeOffset = holdDuration * 0.0555 * this.zoom;
 
@@ -2189,16 +2266,12 @@ export class SimaiVisualEditor {
             this.ctx.globalAlpha = this.passOpacity;
         }
 
-        this.ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-        this.ctx.drawImage(img, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-        this.ctx.drawImage(img, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        drawHoldImage(this.ctx, img, size, sizeOffset);
 
         if (s.isEx) {
             this._tempColorConfig.colorCode = isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap);
             const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
-            this.ctx.drawImage(ex, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-            this.ctx.drawImage(ex, 0, 55, 122, 90, -size / 2, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-            this.ctx.drawImage(ex, 0, 145, 122, 55, -size / 2, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+            drawHoldImage(this.ctx, ex, size, sizeOffset);
         }
         this.ctx.restore();
     }

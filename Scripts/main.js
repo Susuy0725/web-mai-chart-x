@@ -5869,6 +5869,8 @@ resetButton.addEventListener('click', () => {
     audioManager.stopAllLongSounds();
     audioManager.stopBGM();
 
+    videoSeekDebounce(0);
+
     notes.forEach(n => n._riserActive = false); // 強制重置標記
 
     if (majdataWs.isConnected()) {
@@ -5881,7 +5883,6 @@ resetButton.addEventListener('click', () => {
 stopButton.addEventListener('click', () => {
     updatePauseBackgroundDisplay();
     editorBackgroundVideo.pause();
-    editorBackgroundVideo.style.display = 'none';
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;

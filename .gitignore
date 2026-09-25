@@ -4,3 +4,4 @@
 .vite/deps/package.json
 dist/*
 dist/
+scratch/

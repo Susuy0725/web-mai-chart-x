@@ -44,9 +44,11 @@
         style="user-select:none;z-index: 100;position: fixed; top: 0; right: 0; background-color: #00000080;color: whitesmoke;margin: 10px; padding: 10px; border-radius: 0 0 10px 0;">
         BETA</div>
 
-    <main id="app" role="main" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: hidden;">
+    <main id="app" role="main"
+        style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: hidden;">
         <div id="canvasContainer">
-            <img src="../Skin/outline.png" alt="外框輪廓" onerror="this.style.display = 'none'" id="canvasOutline" width="1000" height="1000" fetchpriority="high">
+            <img src="../Skin/outline.png" alt="外框輪廓" onerror="this.style.display = 'none'" id="canvasOutline"
+                width="1000" height="1000" fetchpriority="high">
             <canvas id="main" aria-label="譜面播放畫布"></canvas>
             <div class="backgroundContainer">
                 <img src="" alt="背景圖片" onerror="this.style.display='none'" id="backgroundImage">
@@ -57,61 +59,71 @@
             <div id="playControlContainer">
                 <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01" aria-label="播放進度">
                 <div class="controlsContainer">
-                    <div class="controlButton" data-buttonAction="reset" title="重新開始" role="button" tabindex="0" aria-label="重新開始">
+                    <div class="controlButton" data-buttonAction="reset" title="重新開始" role="button" tabindex="0"
+                        aria-label="重新開始">
                         <span class="material-symbols-outlined" translate="no">
                             skip_previous
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="play/pause" data-playing="false" title="播放 / 暫停" role="button" tabindex="0" aria-label="播放或暫停">
+                    <div class="controlButton" data-buttonAction="play/pause" data-playing="false" title="播放 / 暫停"
+                        role="button" tabindex="0" aria-label="播放或暫停">
                         <span class="material-symbols-outlined" translate="no">
                             play_arrow
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="autoPlay" data-autoplay="true" title="Auto / Manual Play" role="button" tabindex="0" aria-label="自動模擬或手動遊玩">
+                    <div class="controlButton" data-buttonAction="autoPlay" data-autoplay="true"
+                        title="Auto / Manual Play" role="button" tabindex="0" aria-label="自動模擬或手動遊玩">
                         <span class="material-symbols-outlined" translate="no">
                             smart_toy
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="playbackSpeedMinus" title="減慢播放速度 (Ctrl+O / -0.25x)" role="button" tabindex="0" aria-label="減慢播放速度">
+                    <div class="controlButton" data-buttonAction="playbackSpeedMinus" title="減慢播放速度 (Ctrl+O / -0.25x)"
+                        role="button" tabindex="0" aria-label="減慢播放速度">
                         <span class="material-symbols-outlined" translate="no">
                             remove
                         </span>
                     </div>
                     <div class="controlButton playbackSpeedButton" data-buttonAction="playbackSpeed"
                         title="播放速度 (點擊重設為 1.00x)" role="button" tabindex="0" aria-label="重設播放速度為1倍">
-                        <input type="number" step="0.05" min="0.25" max="2" value="1.00" id="playbackSpeedInput" aria-label="播放速度倍率">
+                        <input type="number" step="0.05" min="0.25" max="2" value="1.00" id="playbackSpeedInput"
+                            aria-label="播放速度倍率">
                         <span class="speedUnit">x</span>
                     </div>
-                    <div class="controlButton" data-buttonAction="playbackSpeedAdd" title="加快播放速度 (Ctrl+P / +0.25x)" role="button" tabindex="0" aria-label="加快播放速度">
+                    <div class="controlButton" data-buttonAction="playbackSpeedAdd" title="加快播放速度 (Ctrl+P / +0.25x)"
+                        role="button" tabindex="0" aria-label="加快播放速度">
                         <span class="material-symbols-outlined" translate="no">
                             add
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="hide" data-hidden="false" title="隱藏面板" role="button" tabindex="0" aria-label="收合控制面板">
+                    <div class="controlButton" data-buttonAction="hide" data-hidden="false" title="隱藏面板" role="button"
+                        tabindex="0" aria-label="收合控制面板">
                         <span class="material-symbols-outlined" translate="no">
                             keyboard_arrow_down
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="openProject" title="專案總管" role="button" tabindex="0" aria-label="專案總管">
+                    <div class="controlButton" data-buttonAction="openProject" title="專案總管" role="button" tabindex="0"
+                        aria-label="專案總管">
                         <span class="material-symbols-outlined" translate="no">
                             topic
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="openFolder" title="開啟本機資料夾" role="button" tabindex="0" aria-label="開啟本機資料夾">
+                    <div class="controlButton" data-buttonAction="openFolder" title="開啟本機資料夾" role="button" tabindex="0"
+                        aria-label="開啟本機資料夾">
                         <span class="material-symbols-outlined" translate="no">
                             folder
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="settings" title="設定" role="button" tabindex="0" aria-label="遊戲設定">
+                    <div class="controlButton" data-buttonAction="settings" title="設定" role="button" tabindex="0"
+                        aria-label="遊戲設定">
                         <span class="material-symbols-outlined" translate="no">
                             settings
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="slideDebug" title="滑軌除錯" role="button" tabindex="0" aria-label="滑軌除錯">
+                    <!--<div class="controlButton" data-buttonAction="slideDebug" title="滑軌除錯" role="button" tabindex="0" aria-label="滑軌除錯">
                         <span class="material-symbols-outlined" translate="no">
                             bug_report
                         </span>
-                    </div>
+                    </div>-->
                 </div>
             </div>
             <div id="showPlayControlsBtn" title="顯示控制列" role="button" tabindex="0" aria-label="顯示控制列">

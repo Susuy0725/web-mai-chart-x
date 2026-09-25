@@ -200,7 +200,7 @@ const stepsSeg2 = [
     new Set(['B5']), new Set(),
     new Set(['C']), new Set(),
     new Set(['B8']), new Set(),
-    new Set(['A8'])
+    new Set(['A8']), new Set()
 ];
 for (const s of stepsSeg2) {
     stepSlideFixed(seg1, s, globalTime);

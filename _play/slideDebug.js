@@ -93,15 +93,20 @@ export function getSlideQueueInfo(note, renderer) {
     // 若尚未在 play 迴圈中初始化，即時透過 getSlideJudgeQueue 生成預覽隊列
     if (!fullQueue) {
         const baseQueue = getSlideJudgeQueue(note, renderer);
-        fullQueue = baseQueue.map(a => a.clone());
+        if (baseQueue.isWifi && baseQueue.branches) {
+            fullQueue = baseQueue.branches.center.map(a => a.clone());
+        } else {
+            fullQueue = baseQueue.map(a => a.clone());
+        }
         meta = baseQueue._debugMeta || note._debugMeta;
         if (!remainingQueue) {
             remainingQueue = fullQueue;
         }
     }
 
-    const totalCount = fullQueue ? fullQueue.length : 0;
-    const remainingCount = remainingQueue ? remainingQueue.length : (note.slideFinish ? 0 : totalCount);
+    const totalCount = note._totalAreasCount || (fullQueue ? fullQueue.length : 0);
+    const queues = note.judgeQueues || (remainingQueue ? [remainingQueue] : []);
+    const remainingCount = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : (note.slideFinish ? 0 : totalCount);
     const finishedCount = note.slideFinish ? totalCount : Math.max(0, totalCount - remainingCount);
     const currentActiveIndex = note.slideFinish ? -1 : finishedCount;
 
@@ -192,6 +197,27 @@ function ensurePanelDOM() {
         autoTrack = e.target.checked;
         if (autoTrack) {
             selectedNote = null;
+        }
+        if (lastPanelUpdateParams) {
+            updateSlideDebugPanel({ ...lastPanelUpdateParams, force: true });
+        }
+    });
+
+    // 標籤切換事件委託 (使用 pointerdown 瞬間切換，不依賴每幀重構的 click 事件)
+    const tabsContainer = panelEl.querySelector('#slideDebugTabs');
+    tabsContainer.addEventListener('pointerdown', (e) => {
+        const tabBtn = e.target.closest('.slide-tab');
+        if (!tabBtn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = parseInt(tabBtn.dataset.index, 10);
+        if (!isNaN(idx) && lastActiveSlides[idx]) {
+            selectedNote = lastActiveSlides[idx];
+            autoTrack = false;
+            if (autoTrackCheck) autoTrackCheck.checked = false;
+            if (lastPanelUpdateParams) {
+                updateSlideDebugPanel({ ...lastPanelUpdateParams, force: true });
+            }
         }
     });
 
@@ -454,41 +480,73 @@ export function renderSlideDebugOverlay(ctx, { globalTime, notes, renderer, acti
 /**
  * 更新除錯面板內容 (DOM)
  */
-export function updateSlideDebugPanel({ globalTime, notes, renderer, activeSensors, playing }) {
+let lastPanelUpdateTime = 0;
+const PANEL_UPDATE_INTERVAL_MS = 60; // 60ms 刷新一次 DOM (約 16fps)，既即時又省效能
+let lastPanelUpdateParams = null;
+let lastActiveSlides = [];
+let cachedActiveSlides = [];
+
+export function updateSlideDebugPanel({ globalTime, notes, renderer, activeSensors, playing, force = false }) {
     if (!isEnabled) return;
     ensurePanelDOM();
     if (!panelEl || panelEl.style.display === 'none') return;
     if (isMinimized) return;
 
-    const activeSlides = findActiveSlides(notes, globalTime);
+    lastPanelUpdateParams = { globalTime, notes, renderer, activeSensors, playing };
 
-    // 自動選擇或維持當前選取的 Slide
-    if (autoTrack || !selectedNote || !activeSlides.includes(selectedNote)) {
+    const now = performance.now();
+    if (!force && (now - lastPanelUpdateTime < PANEL_UPDATE_INTERVAL_MS)) {
+        return;
+    }
+    lastPanelUpdateTime = now;
+
+    const activeSlides = findActiveSlides(notes, globalTime);
+    lastActiveSlides = activeSlides;
+
+    // 自動跟隨或維持當前手動選取的 Slide
+    if (autoTrack) {
         selectedNote = activeSlides[0] || null;
+    } else {
+        // 手動模式：若目前選取的 note 仍在活躍列表中則繼續維持，若已完全過期才切回第 1 個
+        if (!selectedNote || !activeSlides.includes(selectedNote)) {
+            selectedNote = activeSlides[0] || null;
+        }
     }
 
     // A. 更新 Slide 標籤列 (若同時有多條 Slide，如雙劃軌)
     const tabsContainer = panelEl.querySelector('#slideDebugTabs');
-    tabsContainer.innerHTML = '';
 
     if (activeSlides.length > 0) {
-        activeSlides.forEach((note, idx) => {
-            const tab = document.createElement('button');
-            const isSelected = (note === selectedNote);
-            tab.className = `slide-tab ${isSelected ? 'active' : ''}`;
-            const typeStr = note.slideType || '-';
-            const midStr = note.slideMid ? `:${note.slideMid}` : '';
-            tab.textContent = `#${idx + 1} ${note.pos}${typeStr}${midStr}${note.slideEnd} (${note.time.toFixed(2)}s)`;
-            tab.addEventListener('click', () => {
-                selectedNote = note;
-                autoTrack = false;
-                const check = panelEl.querySelector('#slideDebugAutoTrack');
-                if (check) check.checked = false;
+        // 智慧比對：若活躍列表無變化，不銷毀重建 DOM 按鈕，僅更新 active 樣式，防止滑鼠點擊遺失
+        const isSameList = cachedActiveSlides.length === activeSlides.length &&
+            cachedActiveSlides.every((note, idx) => note === activeSlides[idx]);
+
+        if (!isSameList) {
+            cachedActiveSlides = [...activeSlides];
+            tabsContainer.innerHTML = '';
+            activeSlides.forEach((note, idx) => {
+                const tab = document.createElement('button');
+                const isSelected = (note === selectedNote);
+                tab.className = `slide-tab ${isSelected ? 'active' : ''}`;
+                tab.dataset.index = `${idx}`;
+                const typeStr = note.slideType || '-';
+                const midStr = note.slideMid ? `:${note.slideMid}` : '';
+                tab.textContent = `#${idx + 1} ${note.pos}${typeStr}${midStr}${note.slideEnd} (${note.time.toFixed(2)}s)`;
+                tabsContainer.appendChild(tab);
             });
-            tabsContainer.appendChild(tab);
-        });
+        } else {
+            // 列表未改變，僅更新 active 樣式
+            const tabButtons = tabsContainer.querySelectorAll('.slide-tab');
+            tabButtons.forEach((tab, idx) => {
+                const note = activeSlides[idx];
+                tab.classList.toggle('active', note === selectedNote);
+            });
+        }
     } else {
-        tabsContainer.innerHTML = '<span style="color:#777; font-size:11px;">(目前時間無活躍 Slide)</span>';
+        if (cachedActiveSlides.length !== 0) {
+            cachedActiveSlides = [];
+            tabsContainer.innerHTML = '<span style="color:#777; font-size:11px;">(目前時間無活躍 Slide)</span>';
+        }
     }
 
     if (!selectedNote) {

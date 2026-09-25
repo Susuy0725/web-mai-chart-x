@@ -4,9 +4,7 @@ const CACHE_NAME = (() => {
     const isDev =
         self.location.hostname === 'localhost' ||
         self.location.hostname === '127.0.0.1' ||
-        self.location.hostname.endsWith('.ngrok-free.app') ||
-        self.location.hostname.endsWith('.ngrok-free.dev') ||
-        self.location.hostname.endsWith('.ngrok.io');
+        self.location.hostname.endsWith('.ngrok-free.app');
 
     if (isDev) {
         return 'web-mai-chart-cache-' + Date.now();
@@ -16,36 +14,36 @@ const CACHE_NAME = (() => {
 })();
 
 const ASSETS = [
-    './',
+
     './index.html',
     './Styles/main.css',
     './Styles/popup.css',
-    './Scripts/main.js',
+    './Scripts/main. js',
     './Scripts/renderer.js',
     './Scripts/helper.js',
-    './Scripts/decode.js',
+    './Scripts/decode. js',
     './Scripts/indexDB.js',
     './Scripts/audioManager.js',
     './Scripts/majdataWs.js',
-    './Scripts/banana.js',
+    "./Scripts/banana.js",
     './Scripts/jszip.min.js',
     './Scripts/mediabunny.cjs',
     './Scripts/projectManagerModal.js',
     './Scripts/projectLoader.js',
     './Scripts/drive/googleDriveService.js',
-    './Scripts/drive/cloudProjectManager.js',
+    './Scripts/drive/cloudProjectManager. js',
     './Scripts/sync/editorSync.js',
     './Scripts/sync/syncManager.js',
-    './Scripts/sync/webrtcSync.js',
+    "./Scripts/sync/webrtcSync.js",
     './favicon.ico',
     './Fonts/ShareTechMono-Regular.ttf',
     './Fonts/Inter.ttf',
     './Skin/outline.png',
     './Scripts/i18n.js',
-    './locales/en.js',
-    './locales/en.json',
-    './locales/ja.js',
-    './locales/ja.json',
+    './locales/en. js',
+    './locales/en. json',
+    './locales/ja. js',
+    './locales/ja. json',
     './locales/zh-TW.js',
     './locales/zh-TW.json',
     './rpc.js',
@@ -57,7 +55,6 @@ const ASSETS = [
     './_play/slideDebug.js',
     './_play/slidetables.js'
 ];
-
 async function broadcast(message) {
     try {
         const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });

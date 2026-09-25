@@ -12,7 +12,7 @@ export function imgNotExists(image) {
     return false;
 }
 
-const baseURL = new URL('../Skin/', import.meta.url).href, baseImageKeys = [
+const baseURL = new URL('../Skin/', import.meta.url).href.replace(/\/?$/, '/'), baseImageKeys = [
     'no_image',
     'tap', 'tap_break', 'tap_each', 'tap_ex', 'tap_mine',
     'NormalArc', 'BreakArc', 'EachArc', 'SlideArc', 'MineArc',
@@ -900,7 +900,7 @@ export async function loadAllImages(onProgress) {
 
     // 3. 使用 map 建立任務隊列，確保每一個 key 都會回報進度
     const loadQueue = allKeys.map(async key => {
-        const url = `${baseURL}${key}.png`;
+        const url = `${baseURL.replace(/\/?$/, '/')}${key}.png`;
         try {
             try {
                 const img = await getImgWithCache(url, key);
@@ -918,36 +918,43 @@ export async function loadAllImages(onProgress) {
     return images;
 }
 async function getImgWithCache(url, key) {
+    const decodeBlobToImage = (blobData) => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = (err) => reject(new Error(`Failed to decode image blob for key: ${key}`));
+            img.src = URL.createObjectURL(blobData);
+        });
+    };
+
     // 1. 嘗試從 IndexedDB 取得 Blob
     let blob = await idbGet(`img_cache_${key}`);
 
-    if (!blob) {
-        // 2. 沒快取則抓取網路資料
+    if (blob) {
         try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP status ${response.status}`);
-            }
-            blob = await response.blob();
-            // 3. 存入 IndexedDB
-            await idbSet(`img_cache_${key}`, blob);
-        } catch (e) {
-            console.error(`圖片載入失敗: ${url}`, e);
-            throw e; // 拋出錯誤以利呼叫端捕獲
+            return await decodeBlobToImage(blob);
+        } catch (decodeErr) {
+            console.warn(`[快取損壞] key: ${key} 解碼失敗，自動清除並重新由網路拉取資源`);
+            await idbSet(`img_cache_${key}`, null).catch(() => {});
+            blob = null;
         }
     }
 
-    if (!blob) {
-        throw new Error(`Blob is null for key: ${key}`);
+    // 2. 沒快取或快取損壞時，重新從網路抓取資料
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP status ${response.status}`);
+        }
+        blob = await response.blob();
+        const img = await decodeBlobToImage(blob);
+        // 確認可正常解碼為有效圖片後才寫入 IndexedDB
+        await idbSet(`img_cache_${key}`, blob).catch(() => {});
+        return img;
+    } catch (e) {
+        console.error(`圖片載入失敗: ${url}`, e);
+        throw e;
     }
-
-    // 4. 將 Blob 轉為 Image 物件
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(new Error(`Failed to decode image blob for key: ${key}`));
-        img.src = URL.createObjectURL(blob);
-    });
 }
 export function generatePath(startPos, endPos) {
     console.warn("path missing, using straight line as fallback");

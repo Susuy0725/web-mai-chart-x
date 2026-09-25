@@ -13,6 +13,7 @@ import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
 import { editorSync } from './sync/editorSync.js';
 import * as googleDriveService from './drive/googleDriveService.js';
+import * as cloudProjectManager from './drive/cloudProjectManager.js';
 import { openProjectManagerModal } from './projectManagerModal.js';
 import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from './projectLoader.js';
 
@@ -21,6 +22,9 @@ applyI18nToDOM();
 majdataWs.setToastHandler(simpleToast);
 
 const isDev =
+    import.meta.env?.VITE_MODE === 'debug' ||
+    Boolean(import.meta.env?.DEV) ||
+    self.location.port === '5173' ||
     self.location.hostname === 'localhost' ||
     self.location.hostname === '127.0.0.1' ||
     self.location.hostname.endsWith('.ngrok-free.app') ||
@@ -7078,7 +7082,7 @@ async function loadProjectData(step) {
 
     if (savedMaiData) {
         s(88, "還原編輯內容...");
-        maidata = savedMaiData;
+        maidata = typeof savedMaiData === 'string' ? parseMaidata(savedMaiData) : (savedMaiData || {});
         editorInput.value = maidata["inote_" + nowDifficulty] || '';
         getres(editorInput.value);
         applyHighlight(editorInput.value);
@@ -7197,7 +7201,7 @@ function openProjectManager() {
         onDeleteCurrentProject: async () => {
             currentProjectId = null;
             localStorage.removeItem('simai_lastProjectId');
-            cloudProjectManager.clearCloudProject();
+            cloudProjectManager?.clearCloudProject?.();
             setDataEmpty();
             draw();
             resize();
@@ -7212,7 +7216,7 @@ function openProjectManager() {
                 if (files && files.length > 0) {
                     const newId = await projectCreate('匯入專案');
                     currentProjectId = newId;
-                    cloudProjectManager.clearCloudProject();
+                    cloudProjectManager?.clearCloudProject?.();
                     localStorage.setItem('simai_lastProjectId', currentProjectId);
                     setDataEmpty();
                     await handleFolderInput(files);
@@ -7237,7 +7241,7 @@ function openProjectManager() {
                     try {
                         const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
                         currentProjectId = newId;
-                        cloudProjectManager.clearCloudProject();
+                        cloudProjectManager?.clearCloudProject?.();
                         localStorage.setItem('simai_lastProjectId', currentProjectId);
                         setDataEmpty();
                         const zip = await JSZip.loadAsync(file);

@@ -2,7 +2,7 @@ name: Auto Update SW Cache and Push
 
 on:
   push:
-    branches: ["dev"]
+    branches: ["main"]
 
 permissions:
   contents: read

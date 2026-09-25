@@ -14,6 +14,7 @@ import { majdataWs } from './majdataWs.js';
 import { editorSync } from './sync/editorSync.js';
 import * as googleDriveService from './drive/googleDriveService.js';
 import * as cloudProjectManager from './drive/cloudProjectManager.js';
+import { createGoogleSignInButton } from './drive/googleButton.js';
 import { openProjectManagerModal } from './projectManagerModal.js';
 import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from './projectLoader.js';
 
@@ -112,6 +113,20 @@ function showSwUpdateComplete() {
             }, 300);
         });
     }
+}
+
+function showCleanCompleteAndReload() {
+    popupWindow({
+        title: t('popup.resource.clearCache') || "清除緩存",
+        content: t('popup.resource.clearCompleteReload') || "清理完成，將重新整理以完成清除",
+        unclosable: true,
+        buttons: [{
+            text: t('popup.resource.confirm') || t('popup.ok') || "確定",
+            onClick: () => {
+                window.location.reload();
+            }
+        }]
+    });
 }
 
 if ('serviceWorker' in navigator) {
@@ -1463,6 +1478,15 @@ const settingsConfig = [
             },
             {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
+            },
+            {
+                id: 'openResourceManager',
+                type: 'button',
+                label: 'settings.items.manageResources',
+                btnText: 'settings.connection.btnOpen',
+                onClick: () => {
+                    openResourceManager();
+                }
             }
         ]
     }
@@ -1526,14 +1550,14 @@ const updateSlider = (time) => {
     timeline.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
 };
 
-manageResourcesButton.addEventListener('click', async () => {
+async function openResourceManager() {
     async function getSize() {
         // open a fresh readonly transaction each time so it won't be closed already
         const db = await openDB();
         const transaction = db.transaction("editorState", "readonly");
         const store = transaction.objectStore("editorState");
 
-        let details = "IndexedDB 儲存狀態：\n\n";
+        let details = t('popup.resource.dbStatus') || "IndexedDB 儲存狀態：\n\n";
         let totalSize = 0;
 
         // 取得所有 Key 並統計大小
@@ -1552,31 +1576,31 @@ manageResourcesButton.addEventListener('click', async () => {
             totalSize += size;
             details += `• ${key}: ${formatSize(size)}\n`;
         }
-        details += `\n總計使用量: ${formatSize(totalSize)}`;
+        details += t('popup.resource.totalUsage', { size: formatSize(totalSize) }) || `\n總計使用量: ${formatSize(totalSize)}`;
 
         return details;
     }
 
     // 呼叫你的 simplePopupWindow
     popupWindow({
-        title: t('popup.resource.title'),
+        title: t('popup.resource.title') || "資源管理",
         content: await getSize(),
         buttons: [
             {
-                text: "清除緩存",
+                text: t('popup.resource.clearCache') || "清除緩存",
                 onClick: (manageCtx) => {
                     const refreshManage = async () => {
                         manageCtx.setContent(await getSize());
                     };
 
                     popupWindow({
-                        title: "清除緩存",
+                        title: t('popup.resource.clearCache') || "清除緩存",
                         width: "max-content",
                         buttons: [
                             {
-                                text: "清除所有資料",
+                                text: t('popup.resource.clearAll') || "清除所有資料",
                                 onClick: async () => {
-                                    const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                                    const confirmed = confirm(t('popup.resource.confirmClearAll') || "確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
                                     if (!confirmed) return;
                                     const db = await openDB();
                                     const transaction = db.transaction("editorState", "readwrite");
@@ -1586,15 +1610,16 @@ manageResourcesButton.addEventListener('click', async () => {
                                     try {
                                         await transaction.complete;
                                         console.log("已清除 IndexedDB 中的所有資料");
+                                        showCleanCompleteAndReload();
                                     } catch (e) {
                                         console.error("清除 IndexedDB 資料失敗:", e);
                                     }
                                 }
                             },
                             {
-                                text: "清除譜面暫存",
+                                text: t('popup.resource.clearChartCache') || "清除譜面暫存",
                                 onClick: async () => {
-                                    const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                                    const confirmed = confirm(t('popup.resource.confirmClearChart') || "確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
                                     if (!confirmed) return;
 
                                     const db = await openDB();
@@ -1619,8 +1644,7 @@ manageResourcesButton.addEventListener('click', async () => {
 
                                         transaction.oncomplete = () => {
                                             console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                                            // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                                            // location.reload(); 
+                                            showCleanCompleteAndReload();
                                         };
                                     };
 
@@ -1631,9 +1655,9 @@ manageResourcesButton.addEventListener('click', async () => {
                                 }
                             },
                             {
-                                text: "清除素材暫存",
+                                text: t('popup.resource.clearAssetCache') || "清除素材暫存",
                                 onClick: async () => {
-                                    const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                                    const confirmed = confirm(t('popup.resource.confirmClearAsset') || "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
                                     if (!confirmed) return;
 
                                     const db = await openDB();
@@ -1663,8 +1687,7 @@ manageResourcesButton.addEventListener('click', async () => {
 
                                         transaction.oncomplete = () => {
                                             console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                                            // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                                            // location.reload(); 
+                                            showCleanCompleteAndReload();
                                         };
                                     };
 
@@ -1675,7 +1698,7 @@ manageResourcesButton.addEventListener('click', async () => {
                                 }
                             },
                             {
-                                text: t('popup.close'),
+                                text: t('popup.resource.close') || t('popup.close') || "關閉",
                                 hideOnClick: true
                             }
                         ]
@@ -1688,7 +1711,11 @@ manageResourcesButton.addEventListener('click', async () => {
             }
         ]
     });
-});
+}
+
+if (manageResourcesButton) {
+    manageResourcesButton.addEventListener('click', openResourceManager);
+}
 /**
  * 將 AudioBuffer 轉換為 16-bit PCM WAV Blob
  */
@@ -3561,8 +3588,8 @@ function openSettings(initialTabIndex = 0) {
     const inputRefs = {};
     let popupCtx = null;
 
-    // 重構原本的生成迴圈段落
-    settingsConfig.forEach((category) => {
+    // 定義渲染設定分頁函式
+    const renderCategory = (category) => {
         const section = addTab(t(category.label));
 
         if (category.html) {
@@ -3669,7 +3696,13 @@ function openSettings(initialTabIndex = 0) {
             };
             section.appendChild(createRow(t(item.label), el));
         });
-    });
+    };
+
+    // 先渲染前置一般分頁（通用、顯示、音效，排除「其他」）
+    const otherCategory = settingsConfig.find(category => category.label === 'settings.tabs.other');
+    const normalCategories = settingsConfig.filter(category => category.label !== 'settings.tabs.other');
+
+    normalCategories.forEach(renderCategory);
 
     // =========================================================
     // 同步 (Sync) 標籤頁
@@ -3686,56 +3719,64 @@ function openSettings(initialTabIndex = 0) {
     gdriveBox.appendChild(gdriveTitle);
 
     const gdriveStatusRow = document.createElement('div');
-    gdriveStatusRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px;';
+    gdriveStatusRow.style.cssText = 'display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px 12px;';
 
     const statusText = document.createElement('span');
-    const gdriveActionBtn = document.createElement('button');
-    gdriveActionBtn.className = 'popup-button';
-    gdriveActionBtn.style.cssText = 'padding:5px 12px; font-size:12px; cursor:pointer; flex-shrink:0;';
+    statusText.style.lineHeight = '1.4';
+    const gdriveBtnContainer = document.createElement('div');
+    gdriveBtnContainer.style.flexShrink = '0';
 
     const updateGdriveUI = () => {
         const loggedIn = googleDriveService.isLoggedIn();
         const user = googleDriveService.getCurrentUser();
+        gdriveBtnContainer.innerHTML = '';
+
         if (loggedIn) {
             statusText.textContent = t('settings.gdrive.loggedInAs', { account: user?.email || user?.name || 'Google 使用者' });
             statusText.style.color = '#4caf50';
-            gdriveActionBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
-            gdriveActionBtn.style.background = '#3a2020';
-            gdriveActionBtn.style.borderColor = '#662222';
+            statusText.style.whiteSpace = 'normal';
+            statusText.style.wordBreak = 'break-all';
+
+            const logoutBtn = document.createElement('button');
+            logoutBtn.type = 'button';
+            logoutBtn.className = 'popup-button';
+            logoutBtn.style.cssText = 'padding:6px 14px; font-size:12px; cursor:pointer; flex-shrink:0; background:#3a2020; border-color:#662222; color:#fff; border-radius:6px;';
+            logoutBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
+            logoutBtn.onclick = () => {
+                googleDriveService.logout();
+                simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
+                updateGdriveUI();
+            };
+            gdriveBtnContainer.appendChild(logoutBtn);
         } else {
             statusText.textContent = t('settings.gdrive.notLoggedIn') || '尚未登入';
             statusText.style.color = '#888';
-            gdriveActionBtn.textContent = t('settings.gdrive.loginBtn') || '登入 Google 帳號';
-            gdriveActionBtn.style.background = '#203040';
-            gdriveActionBtn.style.borderColor = '#305070';
-        }
-    };
+            statusText.style.whiteSpace = 'nowrap';
 
-    gdriveActionBtn.onclick = async () => {
-        if (googleDriveService.isLoggedIn()) {
-            googleDriveService.logout();
-            simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
-            updateGdriveUI();
-        } else {
-            try {
-                gdriveActionBtn.disabled = true;
-                gdriveActionBtn.textContent = t('settings.gdrive.loggingIn') || '正在登入...';
-                await googleDriveService.login();
-                simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
-                updateGdriveUI();
-            } catch (err) {
-                console.error('[GoogleDrive] 登入錯誤:', err);
-                simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
-                updateGdriveUI();
-            } finally {
-                gdriveActionBtn.disabled = false;
-            }
+            const googleBtn = createGoogleSignInButton({
+                theme: 'dark',
+                size: 'small',
+                text: t('settings.gdrive.loginBtn') || '登入 Google 帳號',
+                onClick: async () => {
+                    try {
+                        googleBtn.setLoading(true, t('settings.gdrive.loggingIn') || '正在登入...');
+                        await googleDriveService.login();
+                        simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
+                        updateGdriveUI();
+                    } catch (err) {
+                        console.error('[GoogleDrive] 登入錯誤:', err);
+                        simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
+                        updateGdriveUI();
+                    }
+                }
+            });
+            gdriveBtnContainer.appendChild(googleBtn);
         }
     };
 
     updateGdriveUI();
     gdriveStatusRow.appendChild(statusText);
-    gdriveStatusRow.appendChild(gdriveActionBtn);
+    gdriveStatusRow.appendChild(gdriveBtnContainer);
     gdriveBox.appendChild(gdriveStatusRow);
 
     const gdriveHint = document.createElement('div');
@@ -3762,6 +3803,13 @@ function openSettings(initialTabIndex = 0) {
     p2pBox.appendChild(p2pLabel);
     p2pBox.appendChild(openP2pBtn);
     syncSection.appendChild(p2pBox);
+
+    // =========================================================
+    // 其他 (Other) 標籤頁（放置在最下方）
+    // =========================================================
+    if (otherCategory) {
+        renderCategory(otherCategory);
+    }
 
     switchTab(initialTabIndex);
 
@@ -4191,6 +4239,106 @@ redoButton.addEventListener('click', () => {
 // 初始化按鈕禁用狀態
 updateUndoRedoUI();
 
+// 支援幫助說明的 Markdown 渲染與更新日誌快取
+let changelogCache = null;
+async function getChangelogContent() {
+    if (changelogCache) return changelogCache;
+    try {
+        const res = await fetch('./CHANGELOG.md');
+        if (res.ok) {
+            changelogCache = await res.text();
+            return changelogCache;
+        }
+    } catch (e) {
+        console.warn('載入 CHANGELOG.md 失敗:', e);
+    }
+    return null;
+}
+
+function renderMarkdown(md) {
+    if (!md) return '';
+
+    const lines = md.split(/\r?\n/);
+    const htmlLines = [];
+    let inList = false;
+
+    const escapeHtml = (str) => {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    };
+
+    const formatInline = (text) => {
+        return text
+            .replace(/`([^`]+)`/g, '<span class="code-highlight">$1</span>')
+            .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#3b82f6; text-decoration:none;">$1</a>');
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+        const rawLine = lines[i];
+        const trimmed = rawLine.trim();
+
+        if (!trimmed) {
+            if (inList) {
+                htmlLines.push('</ul>');
+                inList = false;
+            }
+            continue;
+        }
+
+        if (trimmed.startsWith('# ')) {
+            if (inList) { htmlLines.push('</ul>'); inList = false; }
+            htmlLines.push(`<h3 style="color:#fff; font-size:16px; margin:6px 0 14px 0; border-bottom:1px solid #333; padding-bottom:6px;">${formatInline(escapeHtml(trimmed.slice(2).trim()))}</h3>`);
+            continue;
+        }
+        if (trimmed.startsWith('## ')) {
+            if (inList) { htmlLines.push('</ul>'); inList = false; }
+            htmlLines.push(`<h4>${formatInline(escapeHtml(trimmed.slice(3).trim()))}</h4>`);
+            continue;
+        }
+        if (trimmed.startsWith('### ')) {
+            if (inList) { htmlLines.push('</ul>'); inList = false; }
+            htmlLines.push(`<h5 style="color:#ddd; font-size:14px; margin:12px 0 6px 0;">${formatInline(escapeHtml(trimmed.slice(4).trim()))}</h5>`);
+            continue;
+        }
+
+        if (trimmed.startsWith('> ') || trimmed.startsWith('&gt; ')) {
+            if (inList) { htmlLines.push('</ul>'); inList = false; }
+            const quoteContent = trimmed.replace(/^(&gt;|>)\s*/, '');
+            htmlLines.push(`<blockquote>${formatInline(escapeHtml(quoteContent))}</blockquote>`);
+            continue;
+        }
+
+        const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
+        if (listMatch) {
+            if (!inList) {
+                htmlLines.push('<ul>');
+                inList = true;
+            }
+            let itemContent = listMatch[1];
+            if (itemContent.startsWith('> ') || itemContent.startsWith('&gt; ')) {
+                const subQuote = itemContent.replace(/^(&gt;|>)\s*/, '');
+                htmlLines.push(`<li><blockquote style="margin:2px 0;">${formatInline(escapeHtml(subQuote))}</blockquote></li>`);
+            } else {
+                htmlLines.push(`<li>${formatInline(escapeHtml(itemContent))}</li>`);
+            }
+            continue;
+        }
+
+        if (inList) { htmlLines.push('</ul>'); inList = false; }
+        htmlLines.push(`<p>${formatInline(escapeHtml(trimmed))}</p>`);
+    }
+
+    if (inList) {
+        htmlLines.push('</ul>');
+    }
+
+    return htmlLines.join('\n');
+}
+
 helpButton.addEventListener('click', () => {
     // 💡 以後想改內容、加新功能，只要改這個設定陣列就好！
     const helpData = [
@@ -4205,6 +4353,11 @@ helpButton.addEventListener('click', () => {
             title: t('popup.help.shortcutTitle'),
             items: t('popup.help.shortcutItems'),
             isList: true
+        },
+        {
+            tabTitle: t('popup.help.changelogTab') || '更新日誌',
+            title: t('popup.help.changelogTitle') || '更新日誌 (Changelog)',
+            isCustom: true
         }
     ];
 
@@ -4263,6 +4416,30 @@ helpButton.addEventListener('click', () => {
         position: absolute; left: 4px; top: 0;
       }
       .tab-pane b { color: #ffffff; }
+      .tab-pane blockquote {
+        margin: 6px 0 10px 0;
+        padding: 4px 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border-left: 3px solid #666;
+        color: #888;
+        font-size: 12.5px;
+        border-radius: 0 4px 4px 0;
+      }
+      .changelog-scroll {
+        max-height: 52vh;
+        overflow-y: auto;
+        padding-right: 6px;
+      }
+      .changelog-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .changelog-scroll::-webkit-scrollbar-thumb {
+        background: #333;
+        border-radius: 3px;
+      }
+      .changelog-scroll::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
       .code-highlight {
         background: #242424; color: #ffffff; padding: 3px 8px; border-radius: 4px;
         font-family: Consolas, Monaco, monospace; font-size: 12px; border: 1px solid #3a3a3a;
@@ -4282,6 +4459,16 @@ helpButton.addEventListener('click', () => {
     `).join('');
 
     const panesHTML = helpData.map((data, i) => {
+        if (data.isCustom) {
+            return `
+                <div class="tab-pane" style="display: ${i === 0 ? 'block' : 'none'};">
+                    <div class="changelog-scroll" id="help-changelog-container">
+                        <p style="color:#777;">${t('popup.help.changelogLoading') || '正在載入更新日誌...'}</p>
+                    </div>
+                </div>
+            `;
+        }
+
         // 依據 isList 決定渲染成 <ul><li> 還是複數個 <p>
         const contentBody = data.isList
             ? `<ul>${data.items.map(item => `<li>${item}</li>`).join('')}</ul>`
@@ -4304,7 +4491,7 @@ helpButton.addEventListener('click', () => {
         </div>
     `;
 
-    // --- 3. 開啟彈窗與事件綁定（邏輯完全不需要動）---
+    // --- 3. 開啟彈窗與事件綁定 ---
     popupWindow({
         title: t('popup.help.title'),
         customContent: content,
@@ -4325,6 +4512,20 @@ helpButton.addEventListener('click', () => {
                     panes[index].style.display = 'block';
                 };
             });
+
+            // 異步載入並渲染 CHANGELOG.md
+            const changelogContainer = container.querySelector('#help-changelog-container');
+            if (changelogContainer) {
+                getChangelogContent().then(md => {
+                    if (md) {
+                        changelogContainer.innerHTML = renderMarkdown(md);
+                    } else {
+                        changelogContainer.innerHTML = `<p style="color:#e57373;">${t('popup.help.changelogError') || '無法載入更新日誌'}</p>`;
+                    }
+                }).catch(() => {
+                    changelogContainer.innerHTML = `<p style="color:#e57373;">${t('popup.help.changelogError') || '無法載入更新日誌'}</p>`;
+                });
+            }
         }
     });
 });
@@ -7383,12 +7584,12 @@ function _init() {
                 updateDiscordRPC(maidata, nowDifficulty);
             } catch (e) {
                 console.error("初始化失敗:", e);
-                ctx.setContent(`初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
+                ctx.setContent(t('popup.init.errorRefresh', { error: e.message }) || `初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
                 // 報錯時可以考慮顯示一個「強制關閉」按鈕，或者讓視窗可以被手動關閉
                 ctx.setButtons([{
-                    text: "清除所有資料",
+                    text: t('popup.resource.clearAll') || "清除所有資料",
                     onClick: async () => {
-                        const confirmed = confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
+                        const confirmed = confirm(t('popup.resource.confirmClearAll') || "確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
                         if (!confirmed) return;
                         const db = await openDB();
                         const transaction = db.transaction("editorState", "readwrite");
@@ -7397,14 +7598,15 @@ function _init() {
                         try {
                             await transaction.complete;
                             console.log("已清除 IndexedDB 中的所有資料");
+                            showCleanCompleteAndReload();
                         } catch (e) {
                             console.error("清除 IndexedDB 資料失敗:", e);
                         }
                     }
                 }, {
-                    text: "清除譜面暫存",
+                    text: t('popup.resource.clearChartCache') || "清除譜面暫存",
                     onClick: async () => {
-                        const confirmed = confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
+                        const confirmed = confirm(t('popup.resource.confirmClearChart') || "確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
                         if (!confirmed) return;
 
                         const db = await openDB();
@@ -7428,8 +7630,7 @@ function _init() {
 
                             transaction.oncomplete = () => {
                                 console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                                // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                                // location.reload(); 
+                                showCleanCompleteAndReload();
                             };
                         };
 
@@ -7439,9 +7640,9 @@ function _init() {
                     }
                 },
                 {
-                    text: "清除素材暫存",
+                    text: t('popup.resource.clearAssetCache') || "清除素材暫存",
                     onClick: async () => {
-                        const confirmed = confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
+                        const confirmed = confirm(t('popup.resource.confirmClearAsset') || "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
                         if (!confirmed) return;
 
                         const db = await openDB();
@@ -7469,8 +7670,7 @@ function _init() {
 
                             transaction.oncomplete = () => {
                                 console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                                // 這裡可以選擇是否要 reload 頁面或是更新 UI
-                                // location.reload(); 
+                                showCleanCompleteAndReload();
                             };
                         };
 
@@ -7483,9 +7683,9 @@ function _init() {
                     text: t('popup.close'),
                     onClick: () => {
                         popupWindow({
-                            title: "警告",
-                            content: "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
-                            buttons: [{ text: "繼續", onClick: () => { ctx.close(); }, hideOnClick: true }, { text: "取消", hideOnClick: true }]
+                            title: t('popup.warning.title') || "警告",
+                            content: t('popup.warning.continueRisk') || "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
+                            buttons: [{ text: t('popup.warning.continue') || "繼續", onClick: () => { ctx.close(); }, hideOnClick: true }, { text: t('popup.cancel') || "取消", hideOnClick: true }]
                         });
                     }
                 }]);

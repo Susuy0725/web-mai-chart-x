@@ -289,6 +289,16 @@
       "restoringState": "正在恢復上次的編輯狀態...",
       "errorRefresh": "初始化發生錯誤：\n{error}\n請嘗試重新整理。"
     },
+    "import": {
+      "title": "正在匯入專案...",
+      "readingZip": "正在解壓縮檔案 ({percent}%)...",
+      "readingFolder": "正在讀取資料夾檔案 ({percent}%)...",
+      "parsingFiles": "正在解析專案內容...",
+      "savingDatabase": "正在儲存至資料庫 ({percent}%)...",
+      "rendering": "正在套用並渲染畫面...",
+      "complete": "完成！正在套用專案...",
+      "failed": "匯入失敗："
+    },
     "resource": {
       "title": "資源管理",
       "dbStatus": "IndexedDB 儲存狀態：\n\n",

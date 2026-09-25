@@ -159,7 +159,9 @@
       "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "Auto-connect to MajdataView",
-      "manageResources": "Resource Manager"
+      "manageResources": "Resource Manager",
+      "drawHanabiEffect": "Rendering fireworks effects",
+      "drawHitEffect": "Render hit effects"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -324,7 +326,8 @@
       "alignmentCurrent": "Current: ~{beats} beats",
       "alignmentPrefix": "Align first beat to beat",
       "alignmentBtn": "Add Silence",
-      "alignmentDesc": "Inserts silence at the beginning of the audio so that the duration from start to the first beat is exactly the specified number of beats."
+      "alignmentDesc": "Inserts silence at the beginning of the audio so that the duration from start to the first beat is exactly the specified number of beats.",
+      "alignmentSuffix": "shoot"
     },
     "tapBpm": {
       "title": "Tap BPM",
@@ -485,7 +488,18 @@
       "changelogTab": "Changelog",
       "changelogTitle": "Changelog",
       "changelogLoading": "Loading changelog...",
-      "changelogError": "Failed to load changelog"
+      "changelogError": "Failed to load changelog",
+      "shortcutItems[7]": "<b>Quick Panel</b>: After setting is opened, press <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> and move the mouse to the function you want to perform, then release <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>."
+    },
+    "import": {
+      "complete": "Finish! Applying project...",
+      "failed": "Import failed:",
+      "parsingFiles": "Parsing project content...",
+      "readingFolder": "Reading folder files ({percent}%)...",
+      "readingZip": "Unzipping file ({percent}%)...",
+      "rendering": "Applying and rendering screen...",
+      "savingDatabase": "Saving to database ({percent}%)...",
+      "title": "Importing projects..."
     }
   },
   "rpc": {

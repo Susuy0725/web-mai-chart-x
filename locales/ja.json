@@ -159,7 +159,9 @@
       "lowRes": "低解像度モード (1x 解像度に制限して軽量化)",
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "起動時に MajdataView に自動接続",
-      "manageResources": "リソース管理"
+      "manageResources": "リソース管理",
+      "drawHanabiEffect": "花火のエフェクトのレンダリング",
+      "drawHitEffect": "ヒットエフェクトをレンダリングする"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -486,7 +488,18 @@
       "changelogTab": "更新履歴",
       "changelogTitle": "更新履歴 (Changelog)",
       "changelogLoading": "更新履歴を読み込み中...",
-      "changelogError": "更新履歴の読み込みに失敗しました"
+      "changelogError": "更新履歴の読み込みに失敗しました",
+      "shortcutItems[7]": "<b>クイック パネル</b>: 設定を開いた後、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を押して、実行したい機能にマウスを移動し、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を放します。"
+    },
+    "import": {
+      "complete": "仕上げる！プロジェクトを適用中...",
+      "failed": "インポートに失敗しました:",
+      "parsingFiles": "プロジェクトのコンテンツを解析しています...",
+      "readingFolder": "フォルダー ファイルを読み取り中 ({percent}%)...",
+      "readingZip": "ファイルを解凍しています ({percent}%)...",
+      "rendering": "画面を適用してレンダリングしています...",
+      "savingDatabase": "データベースに保存しています ({percent}%)...",
+      "title": "プロジェクトをインポートしています..."
     }
   },
   "rpc": {

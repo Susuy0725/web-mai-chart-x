@@ -17,7 +17,7 @@ import * as googleDriveService from './drive/googleDriveService.js';
 import * as cloudProjectManager from './drive/cloudProjectManager.js';
 import { createGoogleSignInButton } from './drive/googleButton.js';
 import { openProjectManagerModal } from './projectManagerModal.js';
-import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from './projectLoader.js';
+import { normalizeFiles, parseProjectBundle, saveProjectToIdb, runImportModal } from './projectLoader.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -5129,12 +5129,34 @@ function maidataProcess(e) {
     updateUndoRedoUI();
 }
 
-async function handleFolderInput(files) {
-    const entries = await normalizeFiles(files);
-    const bundle = await parseProjectBundle(entries);
+async function handleFolderInput(files, onProgress) {
+    const entries = await normalizeFiles(files, (pct, name) => {
+        if (typeof onProgress === 'function') {
+            onProgress(Math.round(pct * 0.4), t('popup.import.readingFolder', { percent: pct }) || `正在讀取檔案 (${pct}%)...`);
+        }
+    });
+    if (typeof onProgress === 'function') {
+        onProgress(45, t('popup.import.parsingFiles') || '正在解析專案內容...');
+    }
+    const bundle = await parseProjectBundle(entries, (pct, name) => {
+        if (typeof onProgress === 'function') {
+            onProgress(45 + Math.round(pct * 0.25), t('popup.import.parsingFiles') || '正在解析專案內容...');
+        }
+    });
 
     if (currentProjectId) {
-        await saveProjectToIdb(currentProjectId, bundle);
+        if (typeof onProgress === 'function') {
+            onProgress(70, t('popup.import.savingDatabase', { percent: 0 }) || '正在儲存至資料庫...');
+        }
+        await saveProjectToIdb(currentProjectId, bundle, (pct) => {
+            if (typeof onProgress === 'function') {
+                onProgress(70 + Math.round(pct * 0.2), t('popup.import.savingDatabase', { percent: pct }) || `正在儲存至資料庫 (${pct}%)...`);
+            }
+        });
+    }
+
+    if (typeof onProgress === 'function') {
+        onProgress(92, t('popup.import.rendering') || '正在套用並渲染畫面...');
     }
 
     if (bundle.bgm) {
@@ -5162,6 +5184,9 @@ async function handleFolderInput(files) {
     }
 
     applyMovieBrightness(settings.moviebrightness);
+    if (typeof onProgress === 'function') {
+        onProgress(100, t('popup.import.complete') || '完成！正在套用專案...');
+    }
 }
 
 readMaidataButton.addEventListener('click', () => {
@@ -5205,27 +5230,37 @@ if (readZipButton) {
                 const file = e.target.files[0];
                 if (file) {
                     await ensureJSZip();
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        if (mode === 'new') {
-                            const newId = await projectCreate(t('popup.projectManager.untitled'));
-                            currentProjectId = newId;
-                            localStorage.setItem('simai_lastProjectId', currentProjectId);
-                            console.log(`[Project] 已建立新專案: ${newId}`);
-                        }
-                        setDataEmpty();
-                        JSZip.loadAsync(file).then(async (zip) => {
-                            await handleFolderInput(zip.files);
-                            setEndtime(endTime);
-                            draw();
-                            if (maidata?.title && currentProjectId) {
-                                projectUpdateName(currentProjectId, maidata.title).catch(() => { });
+                    try {
+                        await runImportModal({
+                            title: t('popup.import.title') || '正在匯入專案...',
+                            task: async (step) => {
+                                step(5, t('popup.import.readingZip', { percent: 0 }) || '正在讀取壓縮檔...');
+                                if (mode === 'new') {
+                                    const newId = await projectCreate(file.name.replace(/\.zip$/i, '') || t('popup.projectManager.untitled'));
+                                    currentProjectId = newId;
+                                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                                    console.log(`[Project] 已建立新專案: ${newId}`);
+                                }
+                                setDataEmpty();
+                                const zip = await JSZip.loadAsync(file, (meta) => {
+                                    const pct = Math.round(meta.percent);
+                                    step(Math.round(pct * 0.35), t('popup.import.readingZip', { percent: pct }) || `正在解壓縮檔案 (${pct}%)...`);
+                                });
+                                await handleFolderInput(zip.files, (p, msg) => {
+                                    step(35 + Math.round(p * 0.6), msg);
+                                });
+                                setEndtime(endTime);
+                                draw();
+                                if (maidata?.title && currentProjectId) {
+                                    projectUpdateName(currentProjectId, maidata.title).catch(() => { });
+                                }
+                                resize();
                             }
-                            simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
                         });
-                        resize();
-                    };
-                    reader.readAsArrayBuffer(file);
+                        simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
+                    } catch (err) {
+                        console.error('ZIP 匯入失敗:', err);
+                    }
                 }
             };
             input.click();
@@ -7511,19 +7546,31 @@ function openProjectManager() {
             input.onchange = async (e) => {
                 const files = e.target.files;
                 if (files && files.length > 0) {
-                    const newId = await projectCreate('匯入專案');
-                    currentProjectId = newId;
-                    cloudProjectManager?.clearCloudProject?.();
-                    localStorage.setItem('simai_lastProjectId', currentProjectId);
-                    setDataEmpty();
-                    await handleFolderInput(files);
-                    if (maidata?.title) {
-                        await projectUpdateName(newId, maidata.title);
+                    try {
+                        await runImportModal({
+                            title: t('popup.import.title') || '正在匯入專案...',
+                            task: async (step) => {
+                                step(5, t('popup.import.readingFolder', { percent: 0 }) || '正在讀取資料夾檔案...');
+                                const newId = await projectCreate('匯入專案');
+                                currentProjectId = newId;
+                                cloudProjectManager?.clearCloudProject?.();
+                                localStorage.setItem('simai_lastProjectId', currentProjectId);
+                                setDataEmpty();
+                                await handleFolderInput(files, (p, msg) => {
+                                    step(5 + Math.round(p * 0.9), msg);
+                                });
+                                if (maidata?.title) {
+                                    await projectUpdateName(newId, maidata.title);
+                                }
+                                draw();
+                                resize();
+                            }
+                        });
+                        simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
+                        if (typeof onSuccess === 'function') onSuccess();
+                    } catch (err) {
+                        console.error('資料夾匯入失敗:', err);
                     }
-                    draw();
-                    resize();
-                    simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
-                    if (typeof onSuccess === 'function') onSuccess();
                 }
             };
             input.click();
@@ -7536,23 +7583,34 @@ function openProjectManager() {
                 const file = e.target.files[0];
                 if (file) {
                     try {
-                        const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
-                        currentProjectId = newId;
-                        cloudProjectManager?.clearCloudProject?.();
-                        localStorage.setItem('simai_lastProjectId', currentProjectId);
-                        setDataEmpty();
-                        const zip = await JSZip.loadAsync(file);
-                        await handleFolderInput(zip.files);
-                        if (maidata?.title) {
-                            await projectUpdateName(newId, maidata.title);
-                        }
-                        draw();
-                        resize();
+                        await ensureJSZip();
+                        await runImportModal({
+                            title: t('popup.import.title') || '正在匯入專案...',
+                            task: async (step) => {
+                                step(5, t('popup.import.readingZip', { percent: 0 }) || '正在讀取壓縮檔...');
+                                const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
+                                currentProjectId = newId;
+                                cloudProjectManager?.clearCloudProject?.();
+                                localStorage.setItem('simai_lastProjectId', currentProjectId);
+                                setDataEmpty();
+                                const zip = await JSZip.loadAsync(file, (meta) => {
+                                    const pct = Math.round(meta.percent);
+                                    step(Math.round(pct * 0.35), t('popup.import.readingZip', { percent: pct }) || `正在解壓縮檔案 (${pct}%)...`);
+                                });
+                                await handleFolderInput(zip.files, (p, msg) => {
+                                    step(35 + Math.round(p * 0.6), msg);
+                                });
+                                if (maidata?.title) {
+                                    await projectUpdateName(newId, maidata.title);
+                                }
+                                draw();
+                                resize();
+                            }
+                        });
                         simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
                         if (typeof onSuccess === 'function') onSuccess();
                     } catch (err) {
                         console.error('ZIP 匯入失敗:', err);
-                        simpleToast({ content: `匯入失敗：${err.message || err}`, type: 'error', timeout: 3000 });
                     }
                 }
             };

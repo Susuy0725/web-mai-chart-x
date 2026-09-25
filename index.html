@@ -69,8 +69,6 @@
     <link rel="stylesheet" href="Styles/main.css">
     <link rel="preload" as="style" href="Styles/popup.css">
     <link rel="stylesheet" href="Styles/popup.css" media="print" onload="this.media='all'">
-    <link rel="preload" as="style" href="Styles/swUpdate.css">
-    <link rel="stylesheet" href="Styles/swUpdate.css" media="print" onload="this.media='all'">
     <noscript>
         <link rel="stylesheet" href="Styles/popup.css">
     </noscript>
@@ -140,7 +138,8 @@
                 ▲
             </div>
         </div>
-        <div id="panelSplitter" title="拖曳調整面板比例" role="separator" aria-label="調整面板比例" tabindex="0"></div>
+        <div id="panelSplitter" title="拖曳調整面板比例" role="separator" aria-label="調整面板比例" tabindex="0" aria-valuenow="50"
+            aria-valuemin="0" aria-valuemax="100"></div>
         <div id="editorContainer">
             <div id="findReplaceBar" class="find-replace-bar" style="display: none;">
                 <div class="findbar-row">

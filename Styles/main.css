@@ -27,7 +27,7 @@
 
 @font-face {
     font-family: 'title';
-    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
+    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('opentype');
     font-display: swap;
 }
 

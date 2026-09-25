@@ -295,10 +295,13 @@
 
 .sw-update-progress-bar-fill {
     height: 100%;
-    width: 0%;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(0);
     background: linear-gradient(90deg, #0077ff, #00e5ff);
     border-radius: 3px;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
 }
 
 .sw-update-toast.completed .sw-update-progress-bar-fill {

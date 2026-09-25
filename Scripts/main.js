@@ -37,7 +37,7 @@ function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' }
                 <span class="sw-update-percent">${progress}%</span>
             </div>
             <div class="sw-update-progress-bar-bg">
-                <div class="sw-update-progress-bar-fill" style="width: ${progress}%"></div>
+                <div class="sw-update-progress-bar-fill" style="transform: scaleX(${progress / 100})"></div>
             </div>
             <div class="sw-update-details">
                 <span class="sw-update-file">${file ? file.replace('./', '') : ''}</span>
@@ -51,7 +51,7 @@ function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' }
         const fileEl = swProgressToast.querySelector('.sw-update-file');
         const countEl = swProgressToast.querySelector('.sw-update-count');
 
-        if (fill) fill.style.width = `${progress}%`;
+        if (fill) fill.style.transform = `scaleX(${progress / 100})`;
         if (percent) percent.textContent = `${progress}%`;
         if (fileEl && file) fileEl.textContent = file.replace('./', '');
         if (countEl) countEl.textContent = `${loaded} / ${total}`;
@@ -76,7 +76,7 @@ function showSwUpdateComplete() {
             <span class="sw-update-percent">100%</span>
         </div>
         <div class="sw-update-progress-bar-bg">
-            <div class="sw-update-progress-bar-fill" style="width: 100%"></div>
+            <div class="sw-update-progress-bar-fill" style="transform: scaleX(1)"></div>
         </div>
         <div class="sw-update-details">
             <span>${t('toast.swUpdateDetail') || '快取已更新，請重新整理以套用最新版本'}</span>
@@ -6854,7 +6854,6 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 window.addEventListener("pagehide", closeExternalWindow);
-window.addEventListener("unload", closeExternalWindow);
 
 let playedClock = [false, false, false, false];
 
@@ -7295,9 +7294,24 @@ function _init() {
         onOpen: async (ctx) => {
             try {
                 const step = (p, msg) => (ctx.setProgress(p), ctx.setContent(msg));
-                await audioManager.init((pct, key) => step(pct * 0.4, t('popup.init.loadingSfx', { key, percent: Math.round(pct) })));
+                let sfxPct = 0;
+                let imgPct = 0;
+                const updateCombinedStep = (msg) => {
+                    const combinedPct = Math.min(78, Math.round((sfxPct * 0.38) + (imgPct * 0.40)));
+                    step(combinedPct, msg);
+                };
 
-                images = await loadAllImages((pct, key) => step(40 + pct * 0.4, t('popup.init.loadingAssets', { key, percent: Math.round(pct) })));
+                const [_, loadedImages] = await Promise.all([
+                    audioManager.init((pct, key) => {
+                        sfxPct = pct;
+                        updateCombinedStep(t('popup.init.loadingSfx', { key, percent: Math.round(pct) }));
+                    }),
+                    loadAllImages((pct, key) => {
+                        imgPct = pct;
+                        updateCombinedStep(t('popup.init.loadingAssets', { key, percent: Math.round(pct) }));
+                    })
+                ]);
+                images = loadedImages;
 
                 // === 專案系統初始化 ===
                 step(78, t('popup.init.initProjects'));

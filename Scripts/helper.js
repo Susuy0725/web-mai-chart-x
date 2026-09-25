@@ -12,21 +12,33 @@ export function imgNotExists(image) {
     return false;
 }
 
-const baseURL = './Skin/', baseImageKeys = [
+const baseURL = './Skin/';
+
+// 核心渲染素材（首屏 Canvas 必備打擊元件，優先載入以大幅加速 LCP）
+const coreImageKeys = [
     'no_image',
-    'tap', 'tap_break', 'tap_each', 'tap_ex', 'tap_mine',
-    'NormalArc', 'BreakArc', 'EachArc', 'SlideArc', 'MineArc',
-    'hold', 'hold_break', 'hold_each', 'hold_ex', 'hold_mine',
+    'tap', 'tap_break', 'tap_each', 'tap_ex',
+    'NormalArc', 'BreakArc', 'EachArc', 'SlideArc',
+    'hold', 'hold_break', 'hold_each', 'hold_ex',
     'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
-    'Hold_End', 'Hold_Break_End', 'Hold_Each_End', 'Hold_Mine_End',
-    'touch', 'touch_each', 'touch_mine', 'touch_point', 'touch_point_each', 'touch_point_mine',
-    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each', 'touch_border_2_mine', 'touch_border_3_mine',
-    'star', 'star_pink', 'star_break', 'star_each', 'star_ex', 'star_mine',
-    'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
-    'slide', 'slide_each', 'slide_break', 'slide_mine',
+    'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
+    'touch', 'touch_each', 'touch_point', 'touch_point_each',
+    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each',
+    'star', 'star_pink', 'star_break', 'star_each', 'star_ex',
+    'slide', 'slide_each', 'slide_break',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
-    'touch_just', 'touchhold_off', 'ColorBall',
-    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine',
+    'touch_just', 'touchhold_off'
+];
+
+// 次要/特殊素材（WiFi 連續動畫幀、地雷、雙押星等，由背景非同步載入不阻塞首屏）
+const secondaryImageKeys = [
+    'tap_mine', 'MineArc',
+    'hold_mine', 'Hold_Mine_End',
+    'touch_mine', 'touch_point_mine', 'touch_border_2_mine', 'touch_border_3_mine',
+    'star_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
+    'slide_mine',
+    'ColorBall',
+    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine'
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
 
@@ -609,7 +621,7 @@ export function popupWindow({
     popup.style.maxHeight = popupMaxHeight;
 
     // 3. 內部組件
-    const titleElem = document.createElement('h3');
+    const titleElem = document.createElement('h2');
     titleElem.className = 'popup-title';
     if (!title) titleElem.style.display = 'none';
     titleElem.innerText = title;
@@ -881,40 +893,53 @@ export function simpleToast({
 export async function loadAllImages(onProgress) {
     const images = {};
 
-    // 1. 先把所有要載入的 Key 整理成一個陣列
-    const allKeys = [...baseImageKeys];
-    wifiPrefixes.forEach(prefix => {
-        for (let i = 0; i < 11; i++) {
-            allKeys.push(prefix + i);
-        }
-    });
-
-    // 2. 直接用陣列長度當總數，絕對不會算錯
-    const total = allKeys.length;
-    let loaded = 0;
+    const totalCore = coreImageKeys.length;
+    let loadedCore = 0;
 
     const report = (key) => {
-        loaded++;
-        if (onProgress) onProgress((loaded / total) * 100, key);
+        loadedCore++;
+        if (onProgress) onProgress((loadedCore / totalCore) * 100, key);
     };
 
-    // 3. 使用 map 建立任務隊列，確保每一個 key 都會回報進度
-    const loadQueue = allKeys.map(async key => {
+    // 1. 優先載入首屏必需的核心元件（大幅縮減 LCP 阻塞時間）
+    const coreQueue = coreImageKeys.map(async key => {
         const url = `${baseURL}${key}.png`;
         try {
             try {
                 const img = await getImgWithCache(url, key);
                 if (img) images[key] = img;
             } catch (err) {
-                // 如果是那個忘記刪的舊 Key，這裡會抓到錯誤但不會卡住
                 console.warn(`[資源缺失] 無法載入 ${key}:`, err);
             }
         } finally {
-            return report(key);
-        } // 無論成功失敗都必須 report
+            report(key);
+        }
     });
 
-    await Promise.all(loadQueue);
+    await Promise.all(coreQueue);
+
+    // 2. 次要素材（44 張 WiFi 動畫幀、地雷變形等）改於背景以小批次非同步載入，不阻塞首屏渲染與彈窗關閉
+    const secondaryKeys = [
+        ...secondaryImageKeys,
+        ...wifiPrefixes.flatMap(prefix => Array.from({ length: 11 }, (_, i) => `${prefix}${i}`))
+    ];
+
+    (async () => {
+        const batchSize = 6;
+        for (let i = 0; i < secondaryKeys.length; i += batchSize) {
+            const batch = secondaryKeys.slice(i, i + batchSize);
+            await Promise.all(batch.map(async key => {
+                const url = `${baseURL}${key}.png`;
+                try {
+                    const img = await getImgWithCache(url, key);
+                    if (img) images[key] = img;
+                } catch (err) {
+                    console.warn(`[背景資源缺失] 無法載入 ${key}:`, err);
+                }
+            }));
+        }
+    })();
+
     return images;
 }
 async function getImgWithCache(url, key) {

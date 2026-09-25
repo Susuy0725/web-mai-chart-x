@@ -32,6 +32,7 @@
     "manageResources": "Resource Manager",
     "chartInfo": "Chart Info",
     "settings": "Settings",
+    "help": "Help",
     "edit": "Edit",
     "editUndo": "Undo",
     "editRedo": "Redo",
@@ -157,7 +158,8 @@
       "lang": "Language",
       "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",
       "majdataWsUrl": "MajdataView WebSocket URL",
-      "autoConnectMajdataView": "Auto-connect to MajdataView"
+      "autoConnectMajdataView": "Auto-connect to MajdataView",
+      "manageResources": "Resource Manager"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -197,7 +199,11 @@
       "waitingPhoneHint": "Waiting for mobile to join... Enter pairing code on phone",
       "waitingClient": "Waiting for mobile to join... Enter pairing code on phone",
       "promptGenCode": "Click button below to generate pairing code",
-      "modalDesc": "Syncs charts, audio, and playback state in real-time from the PC editor to the mobile _play player via WebRTC P2P.",
+      "modalDesc": "Please ensure the devices to connect are on the same Wi-Fi network and enter the pairing code below.",
+      "countdownRemaining": "{time} remaining",
+      "countdownExpired": "Pairing code expired",
+      "p2pDirect": "P2P Direct",
+      "genCodeFailed": "Failed to generate pairing code: {error}",
       "pairCodeTitle": "Mobile Pairing Code (6 digits)",
       "mobileDirectLink": "Mobile Direct Link (open on the same local network to connect automatically):",
       "copyLink": "Copy Link",
@@ -247,6 +253,19 @@
       "transferComplete": "Sync Completed",
       "btnOpen": "Open",
       "toastConnected": "P2P direct connection established!"
+    },
+    "gdrive": {
+      "title": "Google Drive Cloud Sync",
+      "accountLabel": "Account Status",
+      "notLoggedIn": "Not logged in",
+      "loggedInAs": "Logged in as: {account}",
+      "loginBtn": "Sign in with Google",
+      "logoutBtn": "Sign out",
+      "loggingIn": "Signing in...",
+      "loginSuccess": "Google Drive signed in successfully!",
+      "loginError": "Sign-in failed: {error}",
+      "logoutSuccess": "Signed out of Google account",
+      "autoSaveDesc": "When editing a cloud project, chart changes are automatically synced to Google Drive."
     }
   },
   "popup": {
@@ -265,7 +284,8 @@
       "loadingAssets": "Loading assets: {key} ({percent}%)",
       "initProjects": "Initializing project system...",
       "restoringSettings": "Restoring settings...",
-      "restoringState": "Restoring last edit session state..."
+      "restoringState": "Restoring last edit session state...",
+      "errorRefresh": "Initialization error:\n{error}\nPlease try reloading the page."
     },
     "resource": {
       "title": "Resource Manager",
@@ -278,6 +298,8 @@
       "confirmClearChart": "Are you sure you want to clear all chart data? Sound effects and image caches will be kept.",
       "clearAssetCache": "Clear Asset Cache",
       "confirmClearAsset": "Are you sure you want to clear all sound effects and image cache files? Chart data will be kept.",
+      "clearCompleteReload": "Cleanup completed. The page will reload to complete the process.",
+      "confirm": "OK",
       "close": "Close"
     },
     "editMusic": {
@@ -344,7 +366,9 @@
       "confirm": "Do you want to create a new chart? This will create a new project."
     },
     "warning": {
-      "title": "Warnings"
+      "title": "Warnings",
+      "continueRisk": "Continuing may cause unexpected errors. We recommend clearing cache data or refreshing the page first.\n<br>You can try clearing cached data and reloading to see if corrupted data caused the issue.",
+      "continue": "Continue"
     },
     "chartInfo": {
       "title": "Chart Info",
@@ -367,6 +391,15 @@
       "tabCloud": "Cloud",
       "cloudTitle": "Cloud Projects",
       "cloudPlaceholder": "Cloud sync and project management are under development.",
+      "cloudNotLoggedIn": "Not logged in to Google Drive",
+      "cloudNotLoggedInDesc": "Please sign in to your Google account to view and edit cloud projects.",
+      "cloudLoginNow": "Sign in now",
+      "cloudLoading": "Loading cloud projects...",
+      "cloudEmpty": "No project folder found on Google Drive",
+      "cloudLoadBtn": "Load to Edit",
+      "cloudCurrentBadge": "Cloud",
+      "cloudLoadedToast": "Loaded cloud project: {name}",
+      "cloudAutoSavedToast": "Cloud project auto-saved",
       "newBlankProject": "New Blank Project",
       "untitled": "Untitled Project",
       "searchPlaceholder": "Search project name...",
@@ -448,7 +481,11 @@
         "<b>Speed Up Playback</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">P</span>.",
         "<b>Slow Down Playback</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>.",
         "<b>Scale Rate</b>: <span class=\"code-highlight\">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity."
-      ]
+      ],
+      "changelogTab": "Changelog",
+      "changelogTitle": "Changelog",
+      "changelogLoading": "Loading changelog...",
+      "changelogError": "Failed to load changelog"
     }
   },
   "rpc": {

@@ -32,6 +32,7 @@
     "manageResources": "資源管理",
     "chartInfo": "譜面資訊",
     "settings": "設定",
+    "help": "幫助說明",
     "edit": "編輯",
     "editUndo": "復原",
     "editRedo": "重作",
@@ -159,7 +160,8 @@
       "drawHanabiEffect": "渲染煙火特效",
       "lowRes": "低解析度模式 (限制 1x DPI 以提升低階裝置效能)",
       "majdataWsUrl": "MajdataView WebSocket 位址",
-      "autoConnectMajdataView": "自動連接 MajdataView"
+      "autoConnectMajdataView": "自動連接 MajdataView",
+      "manageResources": "資源管理"
     },
     "middleDisplayOpts": {
       "off": "關閉",
@@ -199,7 +201,11 @@
       "waitingPhoneHint": "等待手機加入... 請在手機端輸入配對碼",
       "waitingClient": "等待手機加入... 請在手機端輸入配對碼",
       "promptGenCode": "點擊下方按鈕產生配對碼",
-      "modalDesc": "此功能將電腦編輯器的譜面、音源與播放狀態，透過 WebRTC 區域網路 P2P 即時同步至手機端 _play 播放器。",
+      "modalDesc": "請確保欲連線的裝置在同個Wi-Fi連線下並輸入以下配對碼",
+      "countdownRemaining": "{time} 剩餘",
+      "countdownExpired": "配對碼已逾期",
+      "p2pDirect": "P2P 直連",
+      "genCodeFailed": "產生配對碼失敗: {error}",
       "pairCodeTitle": "手機配對碼 (6 位數字)",
       "mobileDirectLink": "手機快速連線網址（同一區網開啟即可自動連線）：",
       "copyLink": "複製連結",
@@ -280,7 +286,8 @@
       "loadingAssets": "正在載入素材: {key} ({percent}%)",
       "initProjects": "正在初始化專案系統...",
       "restoringSettings": "正在恢復設定...",
-      "restoringState": "正在恢復上次的編輯狀態..."
+      "restoringState": "正在恢復上次的編輯狀態...",
+      "errorRefresh": "初始化發生錯誤：\n{error}\n請嘗試重新整理。"
     },
     "resource": {
       "title": "資源管理",
@@ -293,6 +300,8 @@
       "confirmClearChart": "確定要清除所有譜面資料嗎？音效與圖片快取將會保留。",
       "clearAssetCache": "清除素材暫存",
       "confirmClearAsset": "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。",
+      "clearCompleteReload": "清理完成，將重新整理以完成清除",
+      "confirm": "確定",
       "close": "關閉"
     },
     "editMusic": {
@@ -360,7 +369,9 @@
       "confirm": "是否要建立新的譜面？這將建立一個新專案。"
     },
     "warning": {
-      "title": "警告"
+      "title": "警告",
+      "continueRisk": "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
+      "continue": "繼續"
     },
     "chartInfo": {
       "title": "譜面資訊",
@@ -384,8 +395,7 @@
       "cloudTitle": "雲端專案",
       "cloudPlaceholder": "雲端同步與雲端專案管理功能開發中，敬請期待。",
       "cloudNotLoggedIn": "尚未登入 Google Drive",
-      "cloudNotLoggedInDesc": "請前往「設定 > 同步」登入 Google 帳號以檢視與編輯雲端專案。",
-      "cloudGoToSettings": "前往設定登入",
+      "cloudNotLoggedInDesc": "請登入 Google 帳號以檢視與編輯雲端專案。",
       "cloudLoginNow": "立即登入",
       "cloudLoading": "正在讀取雲端專案...",
       "cloudEmpty": "Google Drive 尚無專案資料夾",
@@ -475,7 +485,11 @@
         "<b>減速播放</b>：<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>。",
         "<b>縮放倍率</b>：<span class=\"code-highlight\">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。",
         "<b>快速面板</b>：在設定開啟後按<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> 並將滑鼠移向欲執行的功能，再放開<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>。"
-      ]
+      ],
+      "changelogTab": "更新日誌",
+      "changelogTitle": "更新日誌 (Changelog)",
+      "changelogLoading": "正在載入更新日誌...",
+      "changelogError": "無法載入更新日誌"
     }
   },
   "rpc": {

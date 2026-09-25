@@ -300,7 +300,7 @@ class EditorSyncManager {
         // 提示說明
         const desc = document.createElement('div');
         desc.style.cssText = 'color:#bbb; line-height:1.6;';
-        desc.textContent = t('settings.connection.modalDesc') || '此功能將電腦編輯器的譜面、音源與播放狀態，透過 WebRTC 區域網路 P2P 即時同步至手機端 _play 播放器。';
+        desc.textContent = t('settings.connection.modalDesc') || '請確保欲連線的裝置在同個Wi-Fi連線下並輸入以下配對碼';
         container.appendChild(desc);
 
         // 配對碼大字體顯示區
@@ -327,10 +327,11 @@ class EditorSyncManager {
             const updateLabel = () => {
                 const m = Math.floor(remaining / 60);
                 const s = remaining % 60;
-                countdownLabel.textContent = `${m}:${s.toString().padStart(2, '0')} remaining`;
+                const timeStr = `${m}:${s.toString().padStart(2, '0')}`;
+                countdownLabel.textContent = t('settings.connection.countdownRemaining', { time: timeStr }) || `${timeStr} remaining`;
                 if (remaining <= 0) {
                     clearInterval(countdownTimer);
-                    countdownLabel.textContent = '配對碼已逾期';
+                    countdownLabel.textContent = t('settings.connection.countdownExpired') || '配對碼已逾期';
                     countdownLabel.style.color = '#ff5252';
                 }
             };
@@ -351,7 +352,7 @@ class EditorSyncManager {
 
         const statusLabel = document.createElement('div');
         statusLabel.style.cssText = 'font-size:12px; color:#ffab00; margin-top:4px;';
-        statusLabel.textContent = this.sync.isConnected() ? (t('settings.connection.statusConnected', { target: 'P2P 直連' }) || '狀態：已連線 (P2P 直連)') : (this.sync.roomCode ? (t('settings.connection.waitingClient') || '請在手機 _play 設定中輸入此配對碼') : (t('settings.connection.promptGenCode') || '點擊下方按鈕產生配對碼'));
+        statusLabel.textContent = this.sync.isConnected() ? (t('settings.connection.statusConnected', { target: t('settings.connection.p2pDirect') || 'P2P 直連' }) || '狀態：已連線 (P2P 直連)') : (this.sync.roomCode ? (t('settings.connection.waitingClient') || '請在手機 _play 設定中輸入此配對碼') : (t('settings.connection.promptGenCode') || '點擊下方按鈕產生配對碼'));
 
         codeBox.appendChild(codeTitle);
         codeBox.appendChild(codeText);
@@ -385,7 +386,7 @@ class EditorSyncManager {
 
             if (connected) {
                 stopCountdown();
-                statusLabel.textContent = t('settings.connection.statusConnected', { target: 'P2P 直連' }) || '狀態：已連線 (P2P 直連)';
+                statusLabel.textContent = t('settings.connection.statusConnected', { target: t('settings.connection.p2pDirect') || 'P2P 直連' }) || '狀態：已連線 (P2P 直連)';
                 statusLabel.style.color = '#00e676';
                 actionBtn.textContent = t('settings.connection.btnDisconnect') || '中斷連線';
                 actionBtn.style.background = '#d32f2f';
@@ -425,7 +426,7 @@ class EditorSyncManager {
                 simpleToast({ content: `${t('settings.connection.pairCodeReady') || '配對碼已就緒'}: ${code}`, type: 'success', timeout: 3000 });
             } catch (err) {
                 stopCountdown();
-                simpleToast({ content: `產生配對碼失敗: ${err.message}`, type: 'error', timeout: 3500 });
+                simpleToast({ content: t('settings.connection.genCodeFailed', { error: err.message }) || `產生配對碼失敗: ${err.message}`, type: 'error', timeout: 3500 });
                 this._updateModalUI();
             } finally {
                 actionBtn.disabled = false;

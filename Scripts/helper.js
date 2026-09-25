@@ -1828,6 +1828,9 @@ export async function videoRender(audioManager, canvas, renderer, {
     playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
     chartInfo = {},
 } = {}) {
+    if (!window.Mediabunny) {
+        await ensureMediabunny();
+    }
     const settings = renderer.settings || window.settings || {};
     const {
         Output,
@@ -1836,7 +1839,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         CanvasSource,
         AudioBufferSource,
         QUALITY_HIGH
-    } = window.Mediabunny;
+    } = window.Mediabunny || {};
 
     const introDuration = includeIntro ? 6 : 0;
 
@@ -2889,4 +2892,50 @@ export function easeInBack(x) {
     const c3 = c1 + 1;
 
     return c3 * x * x * x - c1 * x * x;
+}
+
+export function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+            if (existing.dataset.loaded === 'true') {
+                return resolve();
+            }
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', (e) => reject(e), { once: true });
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = (err) => reject(err);
+        document.head.appendChild(script);
+    });
+}
+
+export async function ensureMediabunny() {
+    if (window.Mediabunny) return window.Mediabunny;
+    await loadScript('Scripts/mediabunny.cjs');
+    return window.Mediabunny;
+}
+
+export async function ensureJSZip() {
+    if (window.JSZip) return window.JSZip;
+    await loadScript('Scripts/jszip.min.js');
+    return window.JSZip;
+}
+
+export async function ensureSupabase() {
+    if (globalThis.supabase?.createClient) return globalThis.supabase;
+    await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+    return globalThis.supabase;
+}
+
+export async function ensureJsMediaTags() {
+    if (window.jsmediatags) return window.jsmediatags;
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js');
+    return window.jsmediatags;
 }

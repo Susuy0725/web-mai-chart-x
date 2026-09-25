@@ -3,7 +3,8 @@ import {
     scaleBase, getButton, debounce, throttle,
     getHighlight, parseMaidata, popupWindow, loadAllImages,
     simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText,
-    clamp, createLabeledInput1, createCustomSlider, videoRender
+    clamp, createLabeledInput1, createCustomSlider, videoRender,
+    ensureMediabunny, ensureJSZip, ensureSupabase, ensureJsMediaTags
 } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
@@ -2500,8 +2501,9 @@ function setDataEmpty() {
     //projSet('timeControl', 0).catch(() => { });
 }
 
-fetchFromMainoteButton.addEventListener('click', () => {
+fetchFromMainoteButton.addEventListener('click', async () => {
     let mainctx = null;
+    await ensureSupabase();
 
     // 以 globalThis 取得 Supabase，避免在 module/非 module 環境中直接存取未宣告的全域變數導致錯誤
     const createClient = globalThis.supabase?.createClient;
@@ -3671,7 +3673,7 @@ chartInfoButton.addEventListener('click', () => {
      * 核心邏輯：處理音訊 Metadata 並更新 tempData 與 UI
      * @param {File} file 音訊檔案
      */
-    const processAudioMetadata = (file) => {
+    const processAudioMetadata = async (file) => {
         if (!file) {
             simpleToast({ content: t('toast.noAudioFile'), type: "error" });
             return;
@@ -3689,19 +3691,27 @@ chartInfoButton.addEventListener('click', () => {
         };
 
         // 1. 優先嘗試使用 jsmediatags 讀取 ID3 標籤
-        if (window.jsmediatags) {
-            window.jsmediatags.read(file, {
-                onSuccess: (tag) => {
-                    const { title, artist } = tag.tags;
-                    applyData(title, artist);
-                    simpleToast({ content: t('toast.tagReadSuccess', { title: title || t('popup.chartInfo.noTitle') }), type: "success" });
-                },
-                onError: (error) => {
-                    console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
-                    fallbackToFileName(file);
-                }
-            });
-        } else {
+        let parsed = false;
+        try {
+            await ensureJsMediaTags();
+            if (window.jsmediatags) {
+                parsed = true;
+                window.jsmediatags.read(file, {
+                    onSuccess: (tag) => {
+                        const { title, artist } = tag.tags;
+                        applyData(title, artist);
+                        simpleToast({ content: t('toast.tagReadSuccess', { title: title || t('popup.chartInfo.noTitle') }), type: "success" });
+                    },
+                    onError: (error) => {
+                        console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
+                        fallbackToFileName(file);
+                    }
+                });
+            }
+        } catch (err) {
+            console.warn("載入 jsmediatags 失敗，改用檔名解析:", err);
+        }
+        if (!parsed) {
             fallbackToFileName(file);
         }
 
@@ -4955,9 +4965,10 @@ readZipButton.addEventListener('click', () => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.zip';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
             if (file) {
+                await ensureJSZip();
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     if (mode === 'new') {
@@ -5243,10 +5254,10 @@ editorInput.addEventListener('scroll', () => {
 });
 editorInput.addEventListener('touchmove', () => {
     syncHighlightLayerScroll();
-});
+}, { passive: true });
 editorInput.addEventListener('touchstart', () => {
     syncHighlightLayerScroll();
-});
+}, { passive: true });
 
 /**
  * 1. 狀態管理
@@ -5623,6 +5634,8 @@ downloadButton.addEventListener('click', () => {
             {
                 text: t('popup.download.packZip'),
                 onClick: async (ctx) => {
+                    ctx.setProgress(5);
+                    await ensureJSZip();
                     ctx.setProgress(10);
                     const zip = new JSZip();
                     const fileName = sanitize(getFinalName());
@@ -6418,6 +6431,13 @@ function openSecondWindow() {
 }
 
 recordVideoButton.addEventListener('click', async () => {
+    if (!window.Mediabunny) {
+        try {
+            await ensureMediabunny();
+        } catch (e) {
+            console.warn('載入 Mediabunny 失敗:', e);
+        }
+    }
     if (!window.Mediabunny) {
         simpleToast({ content: t('toast.mediabunnyMissing'), type: 'error' });
         return;
@@ -7489,4 +7509,4 @@ const unlockAudio = () => {
 };
 window.addEventListener('click', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
-window.addEventListener('touchstart', unlockAudio, { once: true });
+window.addEventListener('touchstart', unlockAudio, { once: true, passive: true });

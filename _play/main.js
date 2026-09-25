@@ -8,6 +8,7 @@ import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 import { SyncManager } from '../Scripts/sync/syncManager.js';
 import * as googleDriveService from '../Scripts/drive/googleDriveService.js';
+import { createGoogleSignInButton } from '../Scripts/drive/googleButton.js';
 import { openProjectManagerModal } from '../Scripts/projectManagerModal.js';
 import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from '../Scripts/projectLoader.js';
 
@@ -2952,56 +2953,64 @@ function openSettings(initialTabIndex = 0) {
     gdriveBox.appendChild(gdriveTitle);
 
     const gdriveStatusRow = document.createElement('div');
-    gdriveStatusRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px;';
+    gdriveStatusRow.style.cssText = 'display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px 12px;';
 
     const statusText = document.createElement('span');
-    const gdriveActionBtn = document.createElement('button');
-    gdriveActionBtn.className = 'popup-button';
-    gdriveActionBtn.style.cssText = 'padding:5px 12px; font-size:12px; cursor:pointer; flex-shrink:0;';
+    statusText.style.lineHeight = '1.4';
+    const gdriveBtnContainer = document.createElement('div');
+    gdriveBtnContainer.style.flexShrink = '0';
 
     const updateGdriveUI = () => {
         const loggedIn = googleDriveService.isLoggedIn();
         const user = googleDriveService.getCurrentUser();
+        gdriveBtnContainer.innerHTML = '';
+
         if (loggedIn) {
             statusText.textContent = t('settings.gdrive.loggedInAs', { account: user?.email || user?.name || 'Google 使用者' });
             statusText.style.color = '#4caf50';
-            gdriveActionBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
-            gdriveActionBtn.style.background = '#3a2020';
-            gdriveActionBtn.style.borderColor = '#662222';
+            statusText.style.whiteSpace = 'normal';
+            statusText.style.wordBreak = 'break-all';
+
+            const logoutBtn = document.createElement('button');
+            logoutBtn.type = 'button';
+            logoutBtn.className = 'popup-button';
+            logoutBtn.style.cssText = 'padding:6px 14px; font-size:12px; cursor:pointer; flex-shrink:0; background:#3a2020; border-color:#662222; color:#fff; border-radius:6px;';
+            logoutBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
+            logoutBtn.onclick = () => {
+                googleDriveService.logout();
+                simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
+                updateGdriveUI();
+            };
+            gdriveBtnContainer.appendChild(logoutBtn);
         } else {
             statusText.textContent = t('settings.gdrive.notLoggedIn') || '尚未登入';
             statusText.style.color = '#888';
-            gdriveActionBtn.textContent = t('settings.gdrive.loginBtn') || '登入 Google 帳號';
-            gdriveActionBtn.style.background = '#203040';
-            gdriveActionBtn.style.borderColor = '#305070';
-        }
-    };
+            statusText.style.whiteSpace = 'nowrap';
 
-    gdriveActionBtn.onclick = async () => {
-        if (googleDriveService.isLoggedIn()) {
-            googleDriveService.logout();
-            simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
-            updateGdriveUI();
-        } else {
-            try {
-                gdriveActionBtn.disabled = true;
-                gdriveActionBtn.textContent = t('settings.gdrive.loggingIn') || '正在登入...';
-                await googleDriveService.login();
-                simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
-                updateGdriveUI();
-            } catch (err) {
-                console.error('[GoogleDrive] 登入錯誤:', err);
-                simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
-                updateGdriveUI();
-            } finally {
-                gdriveActionBtn.disabled = false;
-            }
+            const googleBtn = createGoogleSignInButton({
+                theme: 'dark',
+                size: 'small',
+                text: t('settings.gdrive.loginBtn') || '登入 Google 帳號',
+                onClick: async () => {
+                    try {
+                        googleBtn.setLoading(true, t('settings.gdrive.loggingIn') || '正在登入...');
+                        await googleDriveService.login();
+                        simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
+                        updateGdriveUI();
+                    } catch (err) {
+                        console.error('[GoogleDrive] 登入錯誤:', err);
+                        simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
+                        updateGdriveUI();
+                    }
+                }
+            });
+            gdriveBtnContainer.appendChild(googleBtn);
         }
     };
 
     updateGdriveUI();
     gdriveStatusRow.appendChild(statusText);
-    gdriveStatusRow.appendChild(gdriveActionBtn);
+    gdriveStatusRow.appendChild(gdriveBtnContainer);
     gdriveBox.appendChild(gdriveStatusRow);
     connSection.appendChild(gdriveBox);
 

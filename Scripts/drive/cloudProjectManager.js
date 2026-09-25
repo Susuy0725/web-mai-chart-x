@@ -3,6 +3,7 @@
  * 負責 Google Drive 雲端專案的狀態管理、全量同步、傳輸進度條與專案面板介面
  */
 import * as googleDriveService from './googleDriveService.js';
+import { createGoogleSignInButton } from './googleButton.js';
 import { t } from '../i18n.js';
 
 let currentCloudFolderId = null;
@@ -233,41 +234,29 @@ export async function renderCloudProjectPane(container, {
         setStyle(title, { fontSize: '15px', fontWeight: '600', color: '#ffffff' });
 
         const desc = document.createElement('div');
-        desc.textContent = t('popup.projectManager.cloudNotLoggedInDesc') || '請前往「設定 > 同步」登入 Google 帳號以檢視與編輯雲端專案。';
+        desc.textContent = t('popup.projectManager.cloudNotLoggedInDesc') || '請登入 Google 帳號以檢視與編輯雲端專案。';
         setStyle(desc, { fontSize: '12px', color: '#888888', maxWidth: '340px', lineHeight: '1.5' });
 
         const btnRow = document.createElement('div');
         setStyle(btnRow, { display: 'flex', gap: '8px', marginTop: '6px' });
 
-        if (typeof openSettings === 'function') {
-            const settingsBtn = document.createElement('button');
-            settingsBtn.className = 'popup-button';
-            settingsBtn.textContent = t('popup.projectManager.cloudGoToSettings') || '前往設定登入';
-            settingsBtn.style.padding = '6px 14px';
-            settingsBtn.onclick = () => {
-                if (onClosePopup) onClosePopup();
-                openSettings(4);
-            };
-            btnRow.appendChild(settingsBtn);
-        }
-
-        const directLoginBtn = document.createElement('button');
-        directLoginBtn.className = 'popup-button';
-        directLoginBtn.textContent = t('popup.projectManager.cloudLoginNow') || '立即登入';
-        directLoginBtn.style.cssText = 'padding:6px 14px; background:#1f3a58; border-color:#2a5078; color:#fff;';
-        directLoginBtn.onclick = async () => {
-            try {
-                directLoginBtn.disabled = true;
-                directLoginBtn.textContent = t('settings.gdrive.loggingIn') || '正在登入...';
-                await googleDriveService.login();
-                onToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
-                renderCloudProjectPane(container, { createProjectRow, onOpenProject, openSettings, onToast, onClosePopup });
-            } catch (err) {
-                console.error('[GoogleDrive] 登入失敗:', err);
-                onToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
-                renderCloudProjectPane(container, { createProjectRow, onOpenProject, openSettings, onToast, onClosePopup });
+        const directLoginBtn = createGoogleSignInButton({
+            theme: 'dark',
+            size: 'medium',
+            text: t('settings.gdrive.loginBtn') || '使用 Google 帳戶登入',
+            onClick: async () => {
+                try {
+                    directLoginBtn.setLoading(true, t('settings.gdrive.loggingIn') || '正在登入...');
+                    await googleDriveService.login();
+                    onToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
+                    renderCloudProjectPane(container, { createProjectRow, onOpenProject, openSettings, onToast, onClosePopup });
+                } catch (err) {
+                    console.error('[GoogleDrive] 登入失敗:', err);
+                    onToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
+                    renderCloudProjectPane(container, { createProjectRow, onOpenProject, openSettings, onToast, onClosePopup });
+                }
             }
-        };
+        });
 
         btnRow.appendChild(directLoginBtn);
         container.appendChild(icon);

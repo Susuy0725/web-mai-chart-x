@@ -16,6 +16,7 @@ import {
     migrateFromLegacy
 } from './indexDB.js';
 import * as googleDriveService from './drive/googleDriveService.js';
+import { createGoogleSignInButton } from './drive/googleButton.js';
 import { showTransferProgressModal } from './drive/cloudProjectManager.js';
 import { t } from './i18n.js';
 import { getSimaiDataString } from './helper.js';
@@ -774,37 +775,32 @@ export async function openProjectManagerModal({
             cloudPane.innerHTML = `
                 <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 24px; background:#1a1a1a; border:1px dashed #383838; border-radius:8px; text-align:center; gap:12px;">
                     <span class="material-symbols-outlined" style="font-size:48px; color:#4a90e2; opacity:0.85;" translate="no">cloud_queue</span>
-                    <div style="font-size:15px; font-weight:600; color:#ffffff;">尚未登入 Google Drive</div>
-                    <div style="font-size:12px; color:#888888; max-width:320px; line-height:1.5;">登入 Google 帳號後，即可在各裝置間下載與同步專案壓縮包。</div>
-                    <div style="display:flex; gap:10px; margin-top:8px;">
-                        <button type="button" id="cloudGoSettingsBtn" class="popup-button" style="padding:6px 16px;">前往設定</button>
-                        <button type="button" id="cloudLoginNowBtn" class="popup-button" style="padding:6px 16px; background:#1f3a58; border-color:#2a5078; color:#fff;">立即登入</button>
-                    </div>
+                    <div style="font-size:15px; font-weight:600; color:#ffffff;">${t('popup.projectManager.cloudNotLoggedIn') || '尚未登入 Google Drive'}</div>
+                    <div style="font-size:12px; color:#888888; max-width:320px; line-height:1.5;">${t('popup.projectManager.cloudNotLoggedInDesc') || '請登入 Google 帳號以檢視與編輯雲端專案。'}</div>
+                    <div id="cloudBtnRow" style="display:flex; align-items:center; gap:12px; margin-top:8px;"></div>
                 </div>
             `;
 
-            const goSettingsBtn = cloudPane.querySelector('#cloudGoSettingsBtn');
-            const loginNowBtn = cloudPane.querySelector('#cloudLoginNowBtn');
+            const btnRow = cloudPane.querySelector('#cloudBtnRow');
 
-            if (goSettingsBtn) {
-                goSettingsBtn.onclick = () => {
-                    if (popupCtx) popupCtx.close();
-                    if (typeof openSettings === 'function') openSettings(3);
-                };
-            }
-            if (loginNowBtn) {
-                loginNowBtn.onclick = async () => {
+            const googleBtn = createGoogleSignInButton({
+                theme: 'dark',
+                size: 'medium',
+                text: t('settings.gdrive.loginBtn') || '使用 Google 帳戶登入',
+                onClick: async () => {
                     try {
-                        loginNowBtn.disabled = true;
-                        loginNowBtn.textContent = '登入中...';
+                        googleBtn.setLoading(true, t('settings.gdrive.loggingIn') || '正在登入...');
                         await googleDriveService.login();
-                        toast('Google Drive 登入成功', 'success', 1500);
+                        toast(t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功', 'success', 1500);
                         renderCloudList();
                     } catch (err) {
-                        toast(`登入失敗：${err.message || err}`, 'error', 3000);
+                        toast(t('settings.gdrive.loginError', { error: err.message || err }), 'error', 3000);
                         renderCloudList();
                     }
-                };
+                }
+            });
+            if (btnRow) {
+                btnRow.appendChild(googleBtn);
             }
             return;
         }

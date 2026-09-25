@@ -4,3 +4,7 @@
 .vite/deps/package.json
 dist/*
 dist/
+node_modules/
+.env
+vite.config.js
+scratch/

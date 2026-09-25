@@ -30,6 +30,8 @@ const ASSETS = [
     './Scripts/banana.js',
     './Scripts/jszip.min.js',
     './Scripts/mediabunny.cjs',
+    './Scripts/projectManagerModal.js',
+    './Scripts/projectLoader.js',
     './Scripts/drive/googleDriveService.js',
     './Scripts/drive/cloudProjectManager.js',
     './Scripts/sync/editorSync.js',

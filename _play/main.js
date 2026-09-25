@@ -8,8 +8,8 @@ import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 import { SyncManager } from '../Scripts/sync/syncManager.js';
 import * as googleDriveService from '../Scripts/drive/googleDriveService.js';
-import * as cloudProjectManager from '../Scripts/drive/cloudProjectManager.js';
 import { openProjectManagerModal } from '../Scripts/projectManagerModal.js';
+import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from '../Scripts/projectLoader.js';
 
 const simulatedPlayController = new SimulatedPlayController();
 
@@ -1249,91 +1249,35 @@ function setDataEmpty() {
 }
 
 async function handleFolderInput(files) {
-    // Normalize input into an array of File-like objects (supports FileList, Array, or JSZip.files mapping)
-    const entries = [];
-    if (files && typeof files.length === 'number' && typeof files.item === 'function') {
-        for (let i = 0; i < files.length; i++) {
-            const f = files.item(i);
-            if (f) entries.push(f);
-        }
-    } else if (Array.isArray(files)) {
-        for (let i = 0; i < files.length; i++) if (files[i]) entries.push(files[i]);
-    } else if (files && typeof files === 'object') {
-        // Assume JSZip.files mapping
-        for (const name in files) {
-            if (!Object.prototype.hasOwnProperty.call(files, name)) continue;
-            const zf = files[name];
-            if (zf.dir) continue; // skip directories
-            if (typeof zf.async === 'function') {
-                try {
-                    const blob = await zf.async('blob');
-                    const baseName = name.replace(/\\/g, '/').split('/').pop();
-                    entries.push(new File([blob], baseName, { type: blob.type || '' }));
-                } catch (e) {
-                    console.warn('從 zip 讀取檔案失敗', name, e);
-                }
-            }
-        }
-    } else {
-        console.warn('handleFolderInput：未知的 files 參數型別', files);
-        return;
+    const entries = await normalizeFiles(files);
+    const bundle = await parseProjectBundle(entries);
+
+    if (currentProjectId) {
+        await saveProjectToIdb(currentProjectId, bundle);
     }
 
-    for (let i = 0; i < entries.length; i++) {
-        const file = entries[i];
-        const baseName = (file.name || '').replace(/.*[\\/]/, '');
-        const lowerName = baseName.toLowerCase();
-        const ext = (baseName.split('.').pop() || '').toLowerCase();
-
-        // Fallback to extension check when file.type is missing (common for zip blobs)
-        const isVideo = ((file.type || '').startsWith('video/')) || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
-        const isImage = ((file.type || '').startsWith('image/')) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext);
-
-        if (lowerName.startsWith('track.')) {
-            // 音樂檔
-            const url = URL.createObjectURL(file);
-            await audioManager.setBackgroundMusic(url, file);
-        }
-        if (lowerName.startsWith('maidata.')) {
-            // 譜面檔
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                maidataProcess(e.target.result);
-                resize();
-            };
-            reader.readAsText(file);
-        }
-        if (lowerName.startsWith('bg.')) {
-            /*if (isVideo) {
-                // 可能為命名錯誤
-                // 背景影片
-                backgroundVideo = file;
-                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                editorBackgroundVideo.style.display = 'none';
-                editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                projSet('background_video', file).catch((error) => {
-                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
-                });
-                continue;
-            }*/
-            if (isImage) {
-                // 背景圖
-                backgroundImage = file;
-                gameBackgroundImage.src = URL.createObjectURL(backgroundImage);
-                gameBackgroundImage.style.display = 'block';
-                continue;
-            }
-        }
-        if (lowerName.startsWith('pv.')) {
-            if (isVideo) {
-                // 背景影片
-                backgroundVideo = file;
-                gameBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                gameBackgroundVideo.style.display = 'none';
-                continue;
-            }
-        }
+    if (bundle.bgm) {
+        const url = URL.createObjectURL(bundle.bgm);
+        await audioManager.setBackgroundMusic(url, bundle.bgm);
     }
+
+    if (bundle.maidata) {
+        maidataProcess(bundle.maidata);
+        resize();
+    }
+
+    if (bundle.bgImage) {
+        backgroundImage = bundle.bgImage;
+        gameBackgroundImage.src = URL.createObjectURL(backgroundImage);
+        gameBackgroundImage.style.display = 'block';
+    }
+
+    if (bundle.bgVideo) {
+        backgroundVideo = bundle.bgVideo;
+        gameBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+        gameBackgroundVideo.style.display = 'none';
+    }
+
     tryUpdateBackgroundBrightness();
 }
 
@@ -1593,9 +1537,17 @@ function updatePauseBackgroundDisplay() {
         gameBackgroundImage.style.display = hasImage ? 'block' : 'none';
         gameBackgroundVideo.style.display = 'none';
     } else {
-        // [ ] 隱藏 + [ ] 顯示封面圖 -> 顯示影片，無影片直接全部隱藏
-        gameBackgroundImage.style.display = 'none';
-        gameBackgroundVideo.style.display = hasVideo ? 'block' : 'none';
+        // [ ] 隱藏 + [ ] 顯示封面圖 -> 優先顯示影片，若無影片但有背景圖則顯示背景圖
+        if (hasVideo) {
+            gameBackgroundImage.style.display = 'none';
+            gameBackgroundVideo.style.display = 'block';
+        } else if (hasImage) {
+            gameBackgroundImage.style.display = 'block';
+            gameBackgroundVideo.style.display = 'none';
+        } else {
+            gameBackgroundImage.style.display = 'none';
+            gameBackgroundVideo.style.display = 'none';
+        }
     }
 }
 
@@ -2509,7 +2461,12 @@ async function openProjectManager() {
                     localStorage.setItem('simai_lastProjectId', currentProjectId);
                     setDataEmpty();
                     await handleFolderInput(files);
-                    await loadProject(newId);
+                    if (rawdata?.title) {
+                        await projectUpdateName(newId, rawdata.title);
+                    }
+                    draw();
+                    resize();
+                    updateTimeControlUI();
                     simpleToast({ content: '已匯入並播放專案', type: 'success', timeout: 1500 });
                     if (typeof onSuccess === 'function') onSuccess();
                 }
@@ -2530,7 +2487,12 @@ async function openProjectManager() {
                         setDataEmpty();
                         const zip = await JSZip.loadAsync(file);
                         await handleFolderInput(zip.files);
-                        await loadProject(newId);
+                        if (rawdata?.title) {
+                            await projectUpdateName(newId, rawdata.title);
+                        }
+                        draw();
+                        resize();
+                        updateTimeControlUI();
                         simpleToast({ content: '已匯入並播放專案', type: 'success', timeout: 1500 });
                         if (typeof onSuccess === 'function') onSuccess();
                     } catch (err) {

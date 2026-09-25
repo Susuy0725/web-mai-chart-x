@@ -12,7 +12,7 @@ export function imgNotExists(image) {
     return false;
 }
 
-const baseURL = './Skin/', baseImageKeys = [
+const baseURL = new URL('../Skin/', import.meta.url).href, baseImageKeys = [
     'no_image',
     'tap', 'tap_break', 'tap_each', 'tap_ex', 'tap_mine',
     'NormalArc', 'BreakArc', 'EachArc', 'SlideArc', 'MineArc',
@@ -1842,7 +1842,7 @@ export async function videoRender(audioManager, canvas, renderer, {
 
     const outlineImage = await (async () => {
         try {
-            const response = await fetch('./Skin/outline.png');
+            const response = await fetch(new URL('../Skin/outline.png', import.meta.url).href);
             if (!response.ok) throw new Error('fetch failed: ' + response.status);
             const blob = await response.blob();
             try {

@@ -13,8 +13,8 @@ import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
 import { editorSync } from './sync/editorSync.js';
 import * as googleDriveService from './drive/googleDriveService.js';
-import * as cloudProjectManager from './drive/cloudProjectManager.js';
 import { openProjectManagerModal } from './projectManagerModal.js';
+import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from './projectLoader.js';
 
 // 初始化進行靜態翻譯
 applyI18nToDOM();
@@ -4897,112 +4897,37 @@ function maidataProcess(e) {
 }
 
 async function handleFolderInput(files) {
-    // Normalize input into an array of File-like objects (supports FileList, Array, or JSZip.files mapping)
-    const entries = [];
-    if (files && typeof files.length === 'number' && typeof files.item === 'function') {
-        for (let i = 0; i < files.length; i++) {
-            const f = files.item(i);
-            if (f) entries.push(f);
-        }
-    } else if (Array.isArray(files)) {
-        for (let i = 0; i < files.length; i++) if (files[i]) entries.push(files[i]);
-    } else if (files && typeof files === 'object') {
-        // Assume JSZip.files mapping
-        for (const name in files) {
-            if (!Object.prototype.hasOwnProperty.call(files, name)) continue;
-            const zf = files[name];
-            if (zf.dir) continue; // skip directories
-            if (typeof zf.async === 'function') {
-                try {
-                    const blob = await zf.async('blob');
-                    const baseName = name.replace(/\\/g, '/').split('/').pop();
-                    entries.push(new File([blob], baseName, { type: blob.type || '' }));
-                } catch (e) {
-                    console.warn('從 zip 讀取檔案失敗', name, e);
-                }
-            }
-        }
-    } else {
-        console.warn('handleFolderInput：未知的 files 參數型別', files);
-        return;
+    const entries = await normalizeFiles(files);
+    const bundle = await parseProjectBundle(entries);
+
+    if (currentProjectId) {
+        await saveProjectToIdb(currentProjectId, bundle);
     }
 
-    for (let i = 0; i < entries.length; i++) {
-        const file = entries[i];
-        const baseName = (file.name || '').replace(/.*[\\/]/, '');
-        const lowerName = baseName.toLowerCase();
-        const ext = (baseName.split('.').pop() || '').toLowerCase();
-
-        // Fallback to extension check when file.type is missing (common for zip blobs)
-        const isVideo = ((file.type || '').startsWith('video/')) || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
-        const isImage = ((file.type || '').startsWith('image/')) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext);
-
-        if (lowerName.startsWith('track.')) {
-            // 音樂檔
-            const url = URL.createObjectURL(file);
-            await audioManager.setBackgroundMusic(url, file);
-            setEndtime(endTime);
-            projSet('resource_bgm', file).then(() => {
-                console.log('已儲存音樂檔到 IndexedDB');
-            }).catch((error) => {
-                console.error('儲存音樂檔到 IndexedDB 失敗:', error);
-            });
-        }
-        if (lowerName.startsWith('maidata.')) {
-            // 譜面檔
-            await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    maidataProcess(e.target.result);
-                    resize();
-                    resolve();
-                };
-                reader.onerror = (err) => {
-                    console.error('讀取 maidata 失敗:', err);
-                    resolve();
-                };
-                reader.readAsText(file);
-            });
-        }
-        if (lowerName.startsWith('bg.')) {
-            if (isVideo) {
-                console.log('載入背景影片:', file.name);
-                backgroundVideo = file;
-                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                editorBackgroundVideo.style.display = 'none';
-                projSet('background_video', file).catch((error) => {
-                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
-                });
-                continue;
-            }
-            if (isImage) {
-                // 背景圖
-                backgroundImage = file;
-                editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
-                editorBackgroundImage.style.display = 'block';
-                projSet('background_image', file).catch((error) => {
-                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
-                });
-                continue;
-
-            }
-            console.warn('選擇的背景檔案不是圖片類型：', file.name);
-        }
-        if (lowerName.startsWith('pv.')) {
-            if (isVideo) {
-                console.log('載入背景影片:', file.name);
-                backgroundVideo = file;
-                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                editorBackgroundVideo.style.display = 'none';
-                editorBackgroundVideo.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
-                projSet('background_video', file).catch((error) => {
-                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
-                });
-                continue;
-            }
-            console.warn('選擇的背景影片檔案不是影片類型：', file.name);
-        }
+    if (bundle.bgm) {
+        const url = URL.createObjectURL(bundle.bgm);
+        await audioManager.setBackgroundMusic(url, bundle.bgm);
+        setEndtime(endTime);
     }
+
+    if (bundle.maidata) {
+        maidataProcess(bundle.maidata);
+        resize();
+    }
+
+    if (bundle.bgImage) {
+        backgroundImage = bundle.bgImage;
+        editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
+        editorBackgroundImage.style.display = 'block';
+    }
+
+    if (bundle.bgVideo) {
+        backgroundVideo = bundle.bgVideo;
+        editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+        editorBackgroundVideo.style.display = 'none';
+        editorBackgroundVideo.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
+    }
+
     applyMovieBrightness(settings.moviebrightness);
 }
 

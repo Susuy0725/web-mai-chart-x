@@ -219,8 +219,7 @@ function getControlButton(action) {
 
 function linkChainSlides(notes) {
     if (!notes || !Array.isArray(notes)) return;
-    let currentChainLeader = null;
-    let prevSlide = null;
+    let currentChain = [];
 
     // 建立 (time, pos) -> tap/star note 快速查找表
     const starMap = new Map();
@@ -234,13 +233,22 @@ function linkChainSlides(notes) {
         }
     }
 
+    const finalizeChain = (chain) => {
+        if (!chain || chain.length === 0) return;
+        const tail = chain[chain.length - 1];
+        for (let j = 0; j < chain.length; j++) {
+            chain[j].chainTail = tail;
+            chain[j].chainList = chain;
+        }
+    };
+
     for (let i = 0; i < notes.length; i++) {
         const n = notes[i];
         if (n.type !== 'slide') continue;
 
         if (n.firstSlide) {
-            currentChainLeader = n;
-            prevSlide = n;
+            finalizeChain(currentChain);
+            currentChain = [n];
             n.prevSlide = null;
             n.chainLeader = n;
 
@@ -248,19 +256,29 @@ function linkChainSlides(notes) {
             if (starMap.has(key)) {
                 n.headNote = starMap.get(key);
             }
-        } else if (currentChainLeader) {
-            n.prevSlide = prevSlide;
-            n.chainLeader = currentChainLeader;
-            if (prevSlide) {
-                prevSlide.nextSlide = n;
-            }
-            prevSlide = n;
+
             if (n.lastSlide) {
-                currentChainLeader = null;
-                prevSlide = null;
+                finalizeChain(currentChain);
+                currentChain = [];
             }
+        } else if (currentChain.length > 0) {
+            const prev = currentChain[currentChain.length - 1];
+            n.prevSlide = prev;
+            prev.nextSlide = n;
+            n.chainLeader = currentChain[0];
+            currentChain.push(n);
+
+            if (n.lastSlide) {
+                finalizeChain(currentChain);
+                currentChain = [];
+            }
+        } else {
+            n.chainLeader = n;
+            n.chainTail = n;
+            n.chainList = [n];
         }
     }
+    finalizeChain(currentChain);
 }
 
 let datas = simaiDecode();
@@ -390,6 +408,23 @@ function resize() {
     draw();
 }
 
+
+if (typeof document !== 'undefined' && document.fonts) {
+    Promise.all([
+        document.fonts.load('10px combo'),
+        document.fonts.load('10px mono'),
+        document.fonts.load('10px title'),
+    ]).then(() => {
+        if (renderer) {
+            renderer._sensorCacheParams = { w: 0, h: 0, scale: 0 };
+            renderer._middleDisplayCacheParams = { w: 0, h: 0, scale: 0 };
+        }
+        if (typeof draw === 'function') {
+            draw();
+        }
+    });
+}
+
 resize();
 
 window.addEventListener('resize', resize);
@@ -433,6 +468,29 @@ const slideDebugBtn = getControlButton("slideDebug");
 
 const gameBackgroundImage = document.getElementById("backgroundImage");
 const gameBackgroundVideo = document.getElementById("backgroundVideo");
+if (gameBackgroundVideo) {
+    gameBackgroundVideo.playsInline = true;
+    gameBackgroundVideo.defaultMuted = true;
+    gameBackgroundVideo.muted = true;
+    gameBackgroundVideo.setAttribute('playsinline', '');
+    gameBackgroundVideo.setAttribute('webkit-playsinline', '');
+    gameBackgroundVideo.setAttribute('x5-playsinline', '');
+    gameBackgroundVideo.setAttribute('disablePictureInPicture', '');
+    gameBackgroundVideo.setAttribute('disableRemotePlayback', '');
+    gameBackgroundVideo.addEventListener('webkitbeginfullscreen', (e) => {
+        e.preventDefault();
+        try {
+            if (typeof gameBackgroundVideo.webkitExitFullscreen === 'function') {
+                gameBackgroundVideo.webkitExitFullscreen();
+            }
+        } catch (_) { }
+    });
+    gameBackgroundVideo.addEventListener('webkitpresentationmodechanged', () => {
+        if (gameBackgroundVideo.webkitPresentationMode === 'fullscreen' && typeof gameBackgroundVideo.webkitSetPresentationMode === 'function') {
+            gameBackgroundVideo.webkitSetPresentationMode('inline');
+        }
+    });
+}
 const canvasOutline = document.getElementById("canvasOutline");
 
 const timeControl = document.getElementById("timeControl");
@@ -610,8 +668,28 @@ function spawnJudgeEffect(note, judgeResult) {
         y = noteRefPos[note.pos - 1].y;
     }
 
+    const isBreak = !!note.isBreak;
+    let breakScoreValue = judgeResult.breakScoreValue;
+    if (isBreak && (breakScoreValue === undefined || breakScoreValue === null)) {
+        if (judgeResult.grade === 'CRITICAL_PERFECT') {
+            breakScoreValue = 2600;
+        } else if (judgeResult.grade === 'PERFECT') {
+            breakScoreValue = (judgeResult.breakMultiplier === 0.5) ? 2500 : 2550;
+        } else if (judgeResult.grade === 'GREAT') {
+            breakScoreValue = (judgeResult.scoreMultiplier <= 0.5) ? 1250 : ((judgeResult.scoreMultiplier <= 0.6) ? 1500 : 2000);
+        } else if (judgeResult.grade === 'GOOD') {
+            breakScoreValue = 1000;
+        } else {
+            breakScoreValue = 0;
+        }
+    }
+
+    const text = isBreak ? `${breakScoreValue}` : (judgeResult.grade === 'CRITICAL_PERFECT' ? 'PERFECT' : judgeResult.grade);
+
     judgeEffects.push({
-        text: judgeResult.grade === 'CRITICAL_PERFECT' ? 'PERFECT' : judgeResult.grade,
+        text,
+        isBreak,
+        breakScoreValue,
         subGrade: judgeResult.subGrade,
         grade: judgeResult.grade,
         startTime: performance.now(),
@@ -649,22 +727,40 @@ function renderJudgeEffects(ctx) {
         ctx.translate(curX, curY);
 
         let mainColor = '#ffd700';
-        let mainText = 'PERFECT';
-        if (eff.grade === 'CRITICAL_PERFECT') {
-            mainColor = '#ffe14d';
-            mainText = 'PERFECT';
-        } else if (eff.grade === 'PERFECT') {
-            mainColor = '#ffbb00';
-            mainText = 'PERFECT';
-        } else if (eff.grade === 'GREAT') {
-            mainColor = '#ff5fa2';
-            mainText = 'GREAT';
-        } else if (eff.grade === 'GOOD') {
-            mainColor = '#43c122';
-            mainText = 'GOOD';
-        } else if (eff.grade === 'MISS') {
-            mainColor = '#a0a0a0';
-            mainText = 'MISS';
+        let mainText = eff.text;
+
+        if (eff.isBreak) {
+            mainText = `${eff.breakScoreValue ?? eff.text}`;
+            if (eff.breakScoreValue === 2600) {
+                mainColor = '#ffe14d'; // CRITICAL PERFECT: 耀眼金黃
+            } else if (eff.breakScoreValue === 2550) {
+                mainColor = '#ffbb00'; // 2550: 亮黃橙
+            } else if (eff.breakScoreValue === 2500) {
+                mainColor = '#ff9100'; // 2500: 深橙色
+            } else if (eff.breakScoreValue >= 1250) {
+                mainColor = '#ff5fa2'; // GREAT: 粉紅色
+            } else if (eff.breakScoreValue === 1000) {
+                mainColor = '#43c122'; // GOOD: 綠色
+            } else {
+                mainColor = '#a0a0a0'; // MISS: 灰色
+            }
+        } else {
+            if (eff.grade === 'CRITICAL_PERFECT') {
+                mainColor = '#ffe14d';
+                mainText = 'PERFECT';
+            } else if (eff.grade === 'PERFECT') {
+                mainColor = '#ffbb00';
+                mainText = 'PERFECT';
+            } else if (eff.grade === 'GREAT') {
+                mainColor = '#ff5fa2';
+                mainText = 'GREAT';
+            } else if (eff.grade === 'GOOD') {
+                mainColor = '#43c122';
+                mainText = 'GOOD';
+            } else if (eff.grade === 'MISS') {
+                mainColor = '#a0a0a0';
+                mainText = 'MISS';
+            }
         }
 
         ctx.font = 'bold 3.2px combo';
@@ -700,6 +796,8 @@ function evaluateHitGrade(diffSec, note) {
     let grade = 'MISS';
     let subGrade = '';
     let scoreMultiplier = 0;
+    let breakMultiplier = 0;
+    let breakScoreValue = 0;
 
     if (isTouch) {
         const win = JUDGE_WINDOWS.TOUCH;
@@ -711,36 +809,88 @@ function evaluateHitGrade(diffSec, note) {
         if (absDiff <= win.CRITICAL_PERFECT) {
             grade = 'CRITICAL_PERFECT';
             scoreMultiplier = 1.0;
+            breakMultiplier = 1.0;
+            breakScoreValue = 2600;
+        } else if (absDiff <= win.PERFECT_2ND) {
+            grade = 'PERFECT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 1.0;
+            breakMultiplier = 0.75;
+            breakScoreValue = 2550;
         } else if (absDiff <= win.PERFECT_3RD) {
             grade = 'PERFECT';
             subGrade = isFast ? 'FAST' : 'LATE';
             scoreMultiplier = 1.0;
-        } else if (absDiff <= win.GREAT_3RD) {
+            breakMultiplier = 0.5;
+            breakScoreValue = 2500;
+        } else if (absDiff <= win.GREAT_1ST) {
             grade = 'GREAT';
             subGrade = isFast ? 'FAST' : 'LATE';
             scoreMultiplier = 0.8;
+            breakMultiplier = 0.4;
+            breakScoreValue = 2000;
+        } else if (absDiff <= win.GREAT_2ND) {
+            grade = 'GREAT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = note.isBreak ? 0.6 : 0.8;
+            breakMultiplier = 0.4;
+            breakScoreValue = 1500;
+        } else if (absDiff <= win.GREAT_3RD) {
+            grade = 'GREAT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = note.isBreak ? 0.5 : 0.8;
+            breakMultiplier = 0.4;
+            breakScoreValue = 1250;
         } else if (absDiff <= win.GOOD) {
             grade = 'GOOD';
             subGrade = isFast ? 'FAST' : 'LATE';
-            scoreMultiplier = 0.5;
+            scoreMultiplier = note.isBreak ? 0.4 : 0.5;
+            breakMultiplier = 0.3;
+            breakScoreValue = 1000;
         }
     } else {
         const win = JUDGE_WINDOWS.TAP;
         if (absDiff <= win.CRITICAL_PERFECT) {
             grade = 'CRITICAL_PERFECT';
             scoreMultiplier = 1.0;
+            breakMultiplier = 1.0;
+            breakScoreValue = 2600;
+        } else if (absDiff <= win.PERFECT_2ND) {
+            grade = 'PERFECT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = 1.0;
+            breakMultiplier = 0.75;
+            breakScoreValue = 2550;
         } else if (absDiff <= win.PERFECT_3RD) {
             grade = 'PERFECT';
             subGrade = isFast ? 'FAST' : 'LATE';
             scoreMultiplier = 1.0;
-        } else if (absDiff <= win.GREAT_3RD) {
+            breakMultiplier = 0.5;
+            breakScoreValue = 2500;
+        } else if (absDiff <= win.GREAT_1ST) {
             grade = 'GREAT';
             subGrade = isFast ? 'FAST' : 'LATE';
             scoreMultiplier = 0.8;
+            breakMultiplier = 0.4;
+            breakScoreValue = 2000;
+        } else if (absDiff <= win.GREAT_2ND) {
+            grade = 'GREAT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = note.isBreak ? 0.6 : 0.8;
+            breakMultiplier = 0.4;
+            breakScoreValue = 1500;
+        } else if (absDiff <= win.GREAT_3RD) {
+            grade = 'GREAT';
+            subGrade = isFast ? 'FAST' : 'LATE';
+            scoreMultiplier = note.isBreak ? 0.5 : 0.8;
+            breakMultiplier = 0.4;
+            breakScoreValue = 1250;
         } else if (absDiff <= win.GOOD) {
             grade = 'GOOD';
             subGrade = isFast ? 'FAST' : 'LATE';
-            scoreMultiplier = 0.5;
+            scoreMultiplier = note.isBreak ? 0.4 : 0.5;
+            breakMultiplier = 0.3;
+            breakScoreValue = 1000;
         }
     }
 
@@ -749,6 +899,8 @@ function evaluateHitGrade(diffSec, note) {
         grade = 'CRITICAL_PERFECT';
         subGrade = '';
         scoreMultiplier = 1.0;
+        breakMultiplier = 1.0;
+        breakScoreValue = 2600;
     }
 
     // 地雷音符 Mine：碰觸判定為 MISS
@@ -756,9 +908,11 @@ function evaluateHitGrade(diffSec, note) {
         grade = 'MISS';
         subGrade = 'TOO_FAST';
         scoreMultiplier = 0;
+        breakMultiplier = 0;
+        breakScoreValue = 0;
     }
 
-    return { grade, subGrade, isFast, diffMSec, scoreMultiplier };
+    return { grade, subGrade, isFast, diffMSec, scoreMultiplier, breakMultiplier, breakScoreValue };
 }
 
 /**
@@ -784,40 +938,60 @@ function evaluateSlideGrade(diffSec, note) {
 
     let grade = 'GOOD';
     let subGrade = isFast ? 'FAST' : 'LATE';
-    let scoreMultiplier = 0.5;
+    let scoreMultiplier = note.isBreak ? 0.4 : 0.5;
+    let breakMultiplier = 0.3;
+    let breakScoreValue = 1000;
 
     if (absDiff <= PERFECT_1ST_SEC) {
         grade = 'CRITICAL_PERFECT';
         subGrade = '';
         scoreMultiplier = 1.0;
+        breakMultiplier = 1.0;
+        breakScoreValue = 2600;
+    } else if (absDiff <= PERFECT_2ND_SEC) {
+        grade = 'PERFECT';
+        subGrade = isFast ? 'FAST' : 'LATE';
+        scoreMultiplier = 1.0;
+        breakMultiplier = 0.75;
+        breakScoreValue = 2550;
     } else if (absDiff <= PERFECT_3RD_SEC) {
         grade = 'PERFECT';
         subGrade = isFast ? 'FAST' : 'LATE';
         scoreMultiplier = 1.0;
+        breakMultiplier = 0.5;
+        breakScoreValue = 2500;
     } else if (absDiff <= JUDGE_WINDOWS.SLIDE.GREAT_3RD_SEC) {
         grade = 'GREAT';
         subGrade = isFast ? 'FAST' : 'LATE';
-        scoreMultiplier = 0.8;
+        scoreMultiplier = note.isBreak ? 0.8 : 0.8;
+        breakMultiplier = 0.4;
+        breakScoreValue = 2000;
     } else {
         // 參照 MajdataPlay: 只要劃完全程，哪怕超出 0.6s，最低保底均為 GOOD，絕不判 MISS
         grade = 'GOOD';
         subGrade = isFast ? 'FAST' : 'LATE';
-        scoreMultiplier = 0.5;
+        scoreMultiplier = note.isBreak ? 0.4 : 0.5;
+        breakMultiplier = 0.3;
+        breakScoreValue = 1000;
     }
 
     if (note.isEx && grade !== 'MISS') {
         grade = 'CRITICAL_PERFECT';
         subGrade = '';
         scoreMultiplier = 1.0;
+        breakMultiplier = 1.0;
+        breakScoreValue = 2600;
     }
 
     if (note.isMine) {
         grade = 'MISS';
         subGrade = 'TOO_FAST';
         scoreMultiplier = 0;
+        breakMultiplier = 0;
+        breakScoreValue = 0;
     }
 
-    return { grade, subGrade, isFast, diffMSec, scoreMultiplier };
+    return { grade, subGrade, isFast, diffMSec, scoreMultiplier, breakMultiplier, breakScoreValue };
 }
 
 function resetNotesForSeek(targetGlobalTime) {
@@ -833,10 +1007,19 @@ function resetNotesForSeek(targetGlobalTime) {
             note._endEffectPlayed = false;
             note._hanabiSoundPlayed = false;
             note.holdFinish = false;
+            note.isHolding = false;
+            note._holdPressed = false;
+            note._releaseDuration = 0;
+            note._headMiss = false;
+            note._headJudge = null;
             note.slideFinish = false;
+            note.chainFinished = false;
+            note.hideStar = false;
             note._slideJudged = false;
+            note._judgeEffectSpawned = false;
             note.unlocked = false;
             note.judgeQueue = null;
+            note.judgeQueues = null;
             note._fullJudgeQueue = null;
             note._totalAreasCount = 0;
         }
@@ -849,6 +1032,7 @@ function resetNotesForSeek(targetGlobalTime) {
             note.unlocked = false;
             note.headTriggered = false;
             note.judgeQueue = null;
+            note.judgeQueues = null;
             note._fullJudgeQueue = null;
             note._totalAreasCount = 0;
         }
@@ -867,6 +1051,8 @@ function resetNotesForSeek(targetGlobalTime) {
             note.isHolding = false;
             note._holdPressed = false;
             note._releaseDuration = 0;
+            note._headMiss = false;
+            note._headJudge = null;
         }
 
         if (note.time > targetGlobalTime) {
@@ -972,15 +1158,21 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
             const evalRes = evaluateHitGrade(diffForEval, hn);
             if (!evalRes) continue;
 
+            const isHoldNote = (hn.holdDuration > 0 || hn.isHold || hn.type === 'hold');
+
             hn.triggered = true;
             hn.triggeredTime = globalTime;
-            hn.judgeResult = evalRes;
-            spawnJudgeEffect(hn, evalRes);
 
-            if (hn.holdDuration > 0) {
+            if (isHoldNote) {
                 hn._holdPressed = true;
                 hn.isHolding = true;
+                hn._headJudge = evalRes;
+                // Hold 判定不是在開始時進行的，不在起手呼叫 spawnJudgeEffect 與設置最終 judgeResult
+            } else {
+                hn.judgeResult = evalRes;
+                spawnJudgeEffect(hn, evalRes);
             }
+
             audioManager.queueHitSound(hn, globalTime);
 
             // Touch Hanabi 判定音效：需要判定命中且非 TouchHold 時在此播放
@@ -1285,7 +1477,7 @@ async function handleFolderInput(files) {
 function tryUpdateBackgroundBrightness() {
     gameBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
     gameBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-    console.log(gameBackgroundVideo);
+    //console.log(gameBackgroundVideo);
 }
 
 function calculatePlayScoreRes(datas) {
@@ -1456,7 +1648,7 @@ async function play(isRemote = false, startAt = null) {
         gameBackgroundVideo.playbackRate = speed;
     }
     if (gameBackgroundVideo.paused && gameBackgroundVideo.readyState >= 1) {
-        gameBackgroundVideo.play();
+        gameBackgroundVideo.play().catch(() => { });
     }
 
     audioManager.setPlaybackRate(speed);
@@ -1501,15 +1693,21 @@ function restart(isRemote = false) {
             n.holdFinish = false;
             n.slideProgress = 0;
             n.slideFinish = false;
+            n.chainFinished = false;
+            n.hideStar = false;
             n._slideJudged = false;
+            n._judgeEffectSpawned = false;
             n.unlocked = false;
             n.headTriggered = false;
             n.judgeQueue = null;
+            n.judgeQueues = null;
             n._totalAreasCount = 0;
             n._checkedCps = null;
             n._holdPressed = false;
             n._releaseDuration = 0;
             n.judgeResult = null;
+            n._headJudge = null;
+            n._headMiss = false;
             n._missReported = false;
         });
     }
@@ -1719,12 +1917,47 @@ function forceFinishParentSlide(parent) {
     if (!parent) return;
     parent.slideFinish = true;
     parent.slideProgress = 1;
+    if (parent.judgeQueues) {
+        for (let i = 0; i < parent.judgeQueues.length; i++) {
+            parent.judgeQueues[i].length = 0;
+        }
+    }
     parent.judgeQueue = [];
     if (parent.nextSlide) {
         parent.nextSlide.unlocked = true;
     }
     if (parent.prevSlide && !parent.prevSlide.slideFinish) {
         forceFinishParentSlide(parent.prevSlide);
+    }
+}
+
+function finishSlideNote(note) {
+    note.slideFinish = true;
+    note.slideProgress = 1;
+    if (note.judgeQueues) {
+        for (let i = 0; i < note.judgeQueues.length; i++) {
+            note.judgeQueues[i].length = 0;
+        }
+    }
+    note.judgeQueue = [];
+    if (note.nextSlide) {
+        note.nextSlide.unlocked = true;
+    }
+    if (note.prevSlide && !note.prevSlide.slideFinish) {
+        forceFinishParentSlide(note.prevSlide);
+    }
+    // 若該段為末段 (chainTail / lastSlide)，整條 chain 的星星全部不顯示，且標記整條 chain 完成
+    if (note.lastSlide || !note.nextSlide) {
+        note.hideStar = true;
+        note.chainFinished = true;
+        if (note.chainList) {
+            for (let i = 0; i < note.chainList.length; i++) {
+                const seg = note.chainList[i];
+                seg.slideFinish = true;
+                seg.hideStar = true;
+                seg.chainFinished = true;
+            }
+        }
     }
 }
 
@@ -1738,22 +1971,10 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
         const note = notes[i];
         const noteT = note.time - globalTime;
         const noteType = note.type;
-        const isHold = (note.holdDuration > 0);
-
-        // 0. Touch 音符支援手預先接觸或劃過感應區判定 (統一觸發 triggerManualHit)
-        if (noteType === 'touch' && !note.triggered) {
-            // MajdataPlay 規範：早按視窗為 150ms，晚按視窗為 300ms
-            // noteT = note.time - globalTime (正數代表音符在未來)
-            if (noteT <= JUDGE_WINDOWS.TOUCH.FAST_PERFECT && noteT >= -JUDGE_WINDOWS.TOUCH.GOOD) {
-                const noteSensor = note.touchPos + note.pos;
-                const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
-                if (currentSensors.has(normSensor)) {
-                    triggerManualHit(normSensor);
-                }
-            }
-        }
+        const isHold = (note.holdDuration > 0 || note.isHold || noteType === 'hold');
 
         // 1. Hold & TouchHold 按壓與結算判定
+        // （註：Touch 音符與 Tap 一樣必須由玩家在窗口內主動按下 pointerdown/keydown 或剛劃入 newlyAdded 觸發，不支援按住自動判定）
         if (isHold) {
             const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
             const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
@@ -1761,6 +1982,7 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                 (noteType !== 'touch' && (currentSensors.has('A' + note.pos) || currentSensors.has('B' + note.pos)));
 
             if (noteT <= 0.05 && -noteT <= note.holdDuration) {
+                // 支援任意時刻中途補按/續按：只要在 Hold 持續時間內按壓即可生效長按，非必須起手擊中
                 if (isSensorPressed) {
                     note.isHolding = true;
                     note._holdPressed = true;
@@ -1768,27 +1990,32 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                 } else {
                     note.isHolding = false;
                     // MajdataPlay 鬆手容錯: DELUXE_HOLD_RELEASE_IGNORE_TIME_SEC = 2 * FRAME_SEC (約 33.3ms)
-                    if ((note._waitReleaseSec || 0) <= JUDGE_WINDOWS.HOLD.RELEASE_IGNORE_SEC) {
-                        note._waitReleaseSec = (note._waitReleaseSec || 0) + dt;
+                    if (note._holdPressed) {
+                        if ((note._waitReleaseSec || 0) <= JUDGE_WINDOWS.HOLD.RELEASE_IGNORE_SEC) {
+                            note._waitReleaseSec = (note._waitReleaseSec || 0) + dt;
+                        } else {
+                            note._releaseDuration = (note._releaseDuration || 0) + dt;
+                        }
                     } else {
+                        // 尚未按壓過時，流逝時間直接計入 releaseDuration
                         note._releaseDuration = (note._releaseDuration || 0) + dt;
                     }
                 }
             } else if (-noteT > note.holdDuration) {
                 note.isHolding = false;
-                if (note._holdPressed || note.triggered) {
-                    if (!note.holdFinish) {
-                        note.holdFinish = true;
+                if (!note.holdFinish) {
+                    note.holdFinish = true;
+                    if (note._holdPressed || note.triggered) {
                         // MajdataPlay HoldEndJudge: 扣除頭尾忽略時間 (合計 0.45s / 0.30s)
                         const ignoreSec = (noteType === 'touch')
                             ? (JUDGE_WINDOWS.HOLD.HEAD_IGNORE_SEC + JUDGE_WINDOWS.HOLD.TAIL_IGNORE_SEC) // 0.45s
                             : (6 * FRAME_SEC + 12 * FRAME_SEC); // 0.30s
                         const realityHT = Math.max(0, note.holdDuration - ignoreSec);
                         const release = note._releaseDuration || 0;
-                        const pressRatio = (realityHT <= 0) ? 1.0 : Math.max(0, Math.min(1, (realityHT - release) / realityHT));
+                        const pressRatio = (realityHT <= 0) ? (note._holdPressed ? 1.0 : 0) : Math.max(0, Math.min(1, (realityHT - release) / realityHT));
 
                         // 階梯降級邏輯 (參照 MajdataPlay NoteLongDrop.HoldEndJudge)
-                        const headGrade = note.judgeResult ? note.judgeResult.grade : 'PERFECT';
+                        const headGrade = note._headJudge ? note._headJudge.grade : (note._headMiss ? 'MISS' : 'MISS');
                         let finalGrade = headGrade;
                         let finalScoreMult = 1.0;
 
@@ -1810,36 +2037,82 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                             } else if (headGrade === 'MISS') {
                                 finalGrade = 'GOOD';
                                 finalScoreMult = 0.5;
+                            } else if (headGrade === 'GOOD') {
+                                finalGrade = 'GREAT';
+                                finalScoreMult = 0.8;
                             } else {
                                 finalGrade = headGrade;
-                                finalScoreMult = (headGrade === 'PERFECT') ? 1.0 : (headGrade === 'GREAT' ? 0.8 : 0.5);
+                                finalScoreMult = (headGrade === 'PERFECT') ? 1.0 : 0.8;
                             }
                         } else if (pressRatio >= 0.33) {
-                            finalGrade = 'GREAT';
-                            finalScoreMult = 0.8;
+                            if (headGrade === 'MISS') {
+                                finalGrade = 'GOOD';
+                                finalScoreMult = 0.5;
+                            } else {
+                                finalGrade = 'GREAT';
+                                finalScoreMult = 0.8;
+                            }
                         } else if (pressRatio >= 0.05) {
                             finalGrade = 'GOOD';
                             finalScoreMult = 0.5;
                         } else {
-                            finalGrade = 'MISS';
-                            finalScoreMult = 0;
+                            if (headGrade === 'MISS') {
+                                finalGrade = 'MISS';
+                                finalScoreMult = 0;
+                            } else {
+                                finalGrade = 'GOOD';
+                                finalScoreMult = 0.5;
+                            }
+                        }
+
+                        let breakMult = 0;
+                        let breakScoreValue = 0;
+                        if (note.isBreak) {
+                            if (finalGrade === 'CRITICAL_PERFECT') {
+                                breakMult = 1.0;
+                                breakScoreValue = 2600;
+                            } else if (finalGrade === 'PERFECT') {
+                                breakMult = note._headJudge?.breakMultiplier ?? 0.75;
+                                breakScoreValue = (breakMult === 0.5) ? 2500 : 2550;
+                            } else if (finalGrade === 'GREAT') {
+                                breakMult = 0.4;
+                                breakScoreValue = (finalScoreMult <= 0.5) ? 1250 : ((finalScoreMult <= 0.6) ? 1500 : 2000);
+                            } else if (finalGrade === 'GOOD') {
+                                breakMult = 0.3;
+                                breakScoreValue = 1000;
+                            } else {
+                                breakMult = 0;
+                                breakScoreValue = 0;
+                            }
                         }
 
                         if (note.isEx && finalGrade !== 'MISS') {
                             finalGrade = 'CRITICAL_PERFECT';
                             finalScoreMult = 1.0;
+                            breakMult = 1.0;
+                            breakScoreValue = 2600;
                         }
 
                         note.judgeResult = {
                             grade: finalGrade,
                             subGrade: '',
-                            scoreMultiplier: finalScoreMult
+                            scoreMultiplier: finalScoreMult,
+                            breakMultiplier: breakMult,
+                            breakScoreValue: breakScoreValue
                         };
+                        spawnJudgeEffect(note, note.judgeResult);
 
                         // TouchHold Hanabi 結算音效：成功按壓結算且非 MISS 時播放
                         if (note.isHanabi && finalGrade !== 'MISS' && !note._hanabiSoundPlayed) {
                             note._hanabiSoundPlayed = true;
                             audioManager.queueSoundSingle('hanabi', globalTime);
+                        }
+                    } else {
+                        // 全程未曾按壓
+                        note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0, breakMultiplier: 0, breakScoreValue: 0 };
+                        if (!note._missReported) {
+                            note._missReported = true;
+                            spawnJudgeEffect(note, note.judgeResult);
                         }
                     }
                 }
@@ -1857,13 +2130,27 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             const arriveTiming = startTiming + slideDuration;
 
             // 尚未建立隊列時，從 slidetables 取得標準 SlideArea 隊列
-            if (!note.judgeQueue) {
+            if (!note.judgeQueue && !note.judgeQueues) {
                 const baseQueue = getSlideJudgeQueue(note, renderer);
-                note.judgeQueue = baseQueue.map(a => a.clone());
-                note._totalAreasCount = note.judgeQueue.length;
-                note._fullJudgeQueue = baseQueue.map(a => a.clone());
                 note.tableConst = baseQueue.tableConst ?? (note.tableConst || 0.18);
                 note._debugMeta = baseQueue._debugMeta || note._debugMeta;
+                if (baseQueue.isWifi && baseQueue.branches) {
+                    note.isWifi = true;
+                    note.judgeQueues = [
+                        baseQueue.branches.left.map(a => a.clone()),
+                        baseQueue.branches.center.map(a => a.clone()),
+                        baseQueue.branches.right.map(a => a.clone())
+                    ];
+                    note.judgeQueue = note.judgeQueues[1];
+                    note._totalAreasCount = 4;
+                    note._fullJudgeQueue = baseQueue.branches.center.map(a => a.clone());
+                } else {
+                    note.isWifi = false;
+                    note.judgeQueue = baseQueue.map(a => a.clone());
+                    note.judgeQueues = [note.judgeQueue];
+                    note._totalAreasCount = note.judgeQueue.length;
+                    note._fullJudgeQueue = baseQueue.map(a => a.clone());
+                }
             }
 
             // 計算 MajdataPlay 官方基準判定時機與最後等待時間
@@ -1887,9 +2174,11 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         note.unlocked = true;
                     }
                 } else {
-                    // 連鎖 Slide 的後續段：嚴格在前一段判定完成後解鎖進入判定，避免提早偷吃後續軌跡
+                    // 連鎖 Slide 的後續段：在前一段判定完成，或前段已劃至終點 (隊列剩 <=1 且已摸到終點) 時解鎖進入判定
                     const parentFinished = note.prevSlide ? !!note.prevSlide.slideFinish : true;
-                    if (parentFinished || note.unlocked) {
+                    const prevQueues = note.prevSlide ? (note.prevSlide.judgeQueues || (note.prevSlide.judgeQueue ? [note.prevSlide.judgeQueue] : [])) : [];
+                    const parentReachedEnd = prevQueues.length > 0 && Math.max(...prevQueues.map(q => q.length)) <= 1 && prevQueues.every(q => q.length === 0 || q[0]?.on);
+                    if (parentFinished || parentReachedEnd || note.unlocked) {
                         isCheckable = true;
                         note.unlocked = true;
                     }
@@ -1910,91 +2199,123 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             }
 
             // 若尚未結束且隊列中仍有判定區，進行隊列狀態機檢查 (含 Lookahead 容錯)
-            if (!note.slideFinish && note.judgeQueue && note.judgeQueue.length > 0) {
-                while (note.judgeQueue.length > 0) {
-                    const first = note.judgeQueue[0];
-                    const second = note.judgeQueue.length >= 2 ? note.judgeQueue[1] : null;
+            // 只要 noteT 到達即可滑動推進，不再使用 slideDelay 延遲阻擋
+            const queues = note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
+            const hasRemaining = queues.some(q => q.length > 0);
+            if (!note.slideFinish && hasRemaining) {
+                for (let x = 0; x < queues.length; x++) {
+                    const queue = queues[x];
+                    while (queue.length > 0) {
+                        const first = queue[0];
+                        const second = queue.length >= 2 ? queue[1] : null;
 
-                    first.check(currentSensors);
+                        first.check(currentSensors);
 
-                    let consumed = 0;
-                    if (second && (first.isSkippable || first.on)) {
-                        second.check(currentSensors);
-                        if (second.isFinished) {
-                            consumed = 2;
-                        } else if (second.on) {
+                        let consumed = 0;
+                        if (second) {
+                            second.check(currentSensors);
+                            if (second.isFinished) {
+                                consumed = 2;
+                            } else if (second.on && !first.on && first.isSkippable) {
+                                consumed = 1;
+                            }
+                        }
+
+                        if (consumed === 0 && first.isFinished) {
                             consumed = 1;
                         }
-                    }
 
-                    if (consumed === 0) {
-                        if (first.isFinished) {
-                            consumed = 1;
+                        if (consumed > 0) {
+                            queue.splice(0, consumed);
+                            if (note.prevSlide && !note.prevSlide.slideFinish) {
+                                forceFinishParentSlide(note.prevSlide);
+                            }
+                            continue;
                         }
-                    }
 
-                    if (consumed > 0) {
-                        note.judgeQueue.splice(0, consumed);
-                        if (note.prevSlide && !note.prevSlide.slideFinish) {
-                            forceFinishParentSlide(note.prevSlide);
+                        if (first.on) {
+                            if (note.prevSlide && !note.prevSlide.slideFinish) {
+                                forceFinishParentSlide(note.prevSlide);
+                            }
                         }
-                        continue;
+                        break;
                     }
-
-                    if (first.on) {
-                        if (note.prevSlide && !note.prevSlide.slideFinish) {
-                            forceFinishParentSlide(note.prevSlide);
-                        }
-                    }
-                    break;
                 }
 
-                // 實時更新滑條視覺進度
+                const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
+
+                // 實時更新滑條視覺進度 (依已放開感應區比例更新，放開時 track 箭頭才消失)
                 if (note._totalAreasCount > 0) {
-                    const finishedCount = note._totalAreasCount - note.judgeQueue.length;
+                    const finishedCount = note._totalAreasCount - queueRemaining;
                     note.slideProgress = Math.min(1, Math.max(note.slideProgress || 0, finishedCount / note._totalAreasCount));
                 }
 
-                // 若隊列清空，標記本段完成
-                if (note.judgeQueue.length === 0) {
-                    note.slideFinish = true;
-                    note.slideProgress = 1;
-                    if (note.nextSlide) {
-                        note.nextSlide.unlocked = true;
-                    }
-                    if (note.prevSlide && !note.prevSlide.slideFinish) {
-                        forceFinishParentSlide(note.prevSlide);
-                    }
+                // 若隊列清空，標記本段完成 (在感應區放開後正式清空觸發)
+                if (queueRemaining === 0) {
+                    finishSlideNote(note);
 
-                    // 僅在最後一段結算總評級 (以 MajdataPlay 官方 judgeTiming 基準計算時間差)
+                    // 僅在最後一段結算總評級 (以 MajdataPlay 官方 judgeTiming 基準計算放開當下的時間差)
                     if (isGroupPartEnd && !note._slideJudged) {
                         note._slideJudged = true;
-                        const diffSec = globalTime - judgeTiming;
+                        const diffSec = (settings.autoPlay !== false) ? 0 : (globalTime - judgeTiming);
                         note.judgeResult = evaluateSlideGrade(diffSec, note);
-                        spawnJudgeEffect(note, note.judgeResult);
                     }
                 }
             }
 
-            // 超時判定 (TooLateJudge - 600ms 寬容窗口: StartTiming + Length + 0.60s)
-            const tooLateTiming = startTiming + slideDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
-            if (globalTime > tooLateTiming && !note.slideFinish) {
-                note.slideFinish = true;
-                if (note.nextSlide) {
-                    note.nextSlide.unlocked = true;
-                }
-                if (isGroupPartEnd && !note._slideJudged) {
-                    note._slideJudged = true;
-                    // 參照 MajdataPlay SlideBase.cs lines 639-646:
-                    // 若超時時只剩最後 1 區未完成，給予 LATE GOOD 容錯保底；剩餘 2 區以上才判定為 MISS
-                    if (note.judgeQueue && note.judgeQueue.length === 1) {
-                        note.judgeResult = { grade: 'GOOD', subGrade: 'LATE', isFast: false, diffMSec: 600, scoreMultiplier: 0.5 };
-                    } else {
-                        note.judgeResult = { grade: 'MISS', subGrade: '', isFast: false, diffMSec: 600, scoreMultiplier: 0 };
-                    }
+            // 判定特效顯示：在 slideDelay 後顯示 (若提前完成，等待至超過 slideDelay 時觸發顯示)
+            if (isGroupPartEnd && note._slideJudged && !note._judgeEffectSpawned) {
+                const minDelayTiming = (note.chainLeader || note).time + ((note.chainLeader || note).slideDelay ?? 0);
+                if (globalTime >= minDelayTiming) {
+                    note._judgeEffectSpawned = true;
                     spawnJudgeEffect(note, note.judgeResult);
                 }
-                note.judgeQueue = [];
+            }
+
+            // 超時判定 (TooLateJudge - 600ms 寬容窗口: StartTiming + Length + 0.60s)
+            // 連鎖 Slide 只有在末段 (isGroupPartEnd) 才進行超時判定，非末段不單獨超時與清空隊列
+            const isChainNonEnd = !isGroupPartEnd && note.chainTail && note.chainTail !== note;
+            if (!isChainNonEnd) {
+                const tooLateTiming = startTiming + slideDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
+                if (globalTime > tooLateTiming && !note.slideFinish) {
+                    const queues = note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
+                    const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
+                    finishSlideNote(note);
+                    if (isGroupPartEnd && !note._slideJudged) {
+                        note._slideJudged = true;
+                        // 參照 MajdataPlay SlideBase.cs lines 639-646:
+                        // 若超時時只剩最後 1 區未完成，給予 LATE GOOD 容錯保底；剩餘 2 區以上才判定為 MISS
+                        if (queueRemaining === 1) {
+                            note.judgeResult = {
+                                grade: 'GOOD',
+                                subGrade: 'LATE',
+                                isFast: false,
+                                diffMSec: 600,
+                                scoreMultiplier: note.isBreak ? 0.4 : 0.5,
+                                breakMultiplier: note.isBreak ? 0.3 : 0,
+                                breakScoreValue: note.isBreak ? 1000 : 0
+                            };
+                        } else {
+                            note.judgeResult = {
+                                grade: 'MISS',
+                                subGrade: '',
+                                isFast: false,
+                                diffMSec: 600,
+                                scoreMultiplier: 0,
+                                breakMultiplier: 0,
+                                breakScoreValue: 0
+                            };
+                        }
+                        note._judgeEffectSpawned = true;
+                        spawnJudgeEffect(note, note.judgeResult);
+                    }
+                    if (note.judgeQueues) {
+                        for (let i = 0; i < note.judgeQueues.length; i++) {
+                            note.judgeQueues[i].length = 0;
+                        }
+                    }
+                    note.judgeQueue = [];
+                }
             }
         }
     }
@@ -2061,11 +2382,11 @@ function draw() {
         const note = notes[i];
         const noteT = note.time - globalTime;
         const noteType = note.type;
-        const isHold = (noteType === 'hold' || (noteType === 'touch' && (note.holdDuration ?? 0) > 0));
+        const isHold = (noteType === 'hold' || note.isHold || (noteType === 'touch' && ((note.holdDuration ?? 0) > 0 || note.isHold)));
         const holdDuration = note.holdDuration ?? 0;
         const slideDelay = note.slideDelay ?? 0;
         const slideDuration = note.slideDuration ?? 0;
-        const skipT = holdDuration + slideDuration + slideDelay + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
+        const skipT = holdDuration + slideDuration + slideDelay + (note.cullSkipExtend ?? 0);
 
         const isTouch = (noteType === 'touch');
         const lateJudgeWindow = isTouch ? JUDGE_WINDOWS.TOUCH.GOOD : JUDGE_WINDOWS.TAP.GOOD;
@@ -2078,8 +2399,18 @@ function draw() {
             const isGroupPartEnd = note.lastSlide || !note.nextSlide;
             if (!isGroupPartEnd) continue;
 
-            const slideEndT = skipT + noteT;
-            if (slideEndT > 0 && !note.slideFinish) continue;
+            const startTiming = note.time + slideDelay;
+            const minDelayTiming = (note.chainLeader || note).time + ((note.chainLeader || note).slideDelay ?? 0);
+            const tooLateTiming = startTiming + slideDuration + (JUDGE_WINDOWS.SLIDE?.GOOD_AREA_SEC ?? 0.6);
+
+            // 若尚未結算且尚未超時，說明仍處於滑動中或終點放開判定等待窗口，繼續等待判定，絕不提前斷連
+            if (!note.slideFinish && !note._slideJudged && globalTime <= tooLateTiming) {
+                continue;
+            }
+            // 若已滑動完成但尚未到達 slideDelay，繼續等待至超過 slideDelay 後才結算顯示
+            if (note.slideFinish && globalTime < minDelayTiming) {
+                continue;
+            }
 
             const baseW = note.isBreak ? 5 : 3;
             const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
@@ -2087,10 +2418,11 @@ function draw() {
             const isHit = (note.judgeResult && note.judgeResult.grade !== 'MISS') || (note.slideFinish && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
             if (isHit) {
                 const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
+                const breakMult = note.isBreak ? (note.judgeResult?.breakMultiplier ?? (note.judgeResult?.grade === 'CRITICAL_PERFECT' ? 1.0 : (note.judgeResult?.grade === 'PERFECT' ? 0.75 : 0.4))) : 0;
                 if (note.isBreak) noteQuantity.break++;
                 else noteQuantity.slide++;
                 playCombo++;
-                const earnedScore = ((note.isBreak ? 5 : 3) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * mult : 0);
+                const earnedScore = ((note.isBreak ? 5 : 3) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * breakMult : 0);
                 playScore += earnedScore;
                 lostScore += (maxNoteScore - earnedScore);
             } else {
@@ -2100,16 +2432,21 @@ function draw() {
         } else if (isHold) {
             const holdEndT = holdDuration + noteT;
 
-            // 若音符尚未被觸發，且仍在起手有效判定窗口內，繼續等待判定
+            // 若音符尚未被觸發且未被按壓
             if (!note.triggered && !note._holdPressed && !note.isHolding) {
+                // 若仍在起手有效判定窗口內，繼續等待判定
                 if (noteT >= -lateJudgeWindow) {
                     continue;
                 }
-                // 超過起手晚判定視窗仍未觸發，判定為 MISS
-                if (!note._missReported) {
-                    note._missReported = true;
-                    note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
-                    spawnJudgeEffect(note, note.judgeResult);
+                // 超過起手晚判定視窗仍未觸發，標記起手頭部 MISS（但不立即結算或彈出 MISS 特效，等待 Hold 結束結算）
+                if (!note._headMiss) {
+                    note._headMiss = true;
+                    note._headJudge = { grade: 'MISS', subGrade: '', scoreMultiplier: 0, breakMultiplier: 0 };
+                }
+                // 若 Hold 仍在進行中 (holdEndT > 0)，允許玩家隨時中途補按續按，此時 Combo 暫時中斷但等待後續補按或結算
+                if (holdEndT > 0 && !note.holdFinish) {
+                    playCombo = 0;
+                    continue;
                 }
                 playCombo = 0;
                 const baseW = note.isBreak ? 5 : 2;
@@ -2118,8 +2455,8 @@ function draw() {
                 continue;
             }
 
-            // 音符已被觸發，若 Hold 尚未結束，繼續等待長按完成
-            if (holdEndT > 0) {
+            // 音符已被觸發或正在長按，若 Hold 尚未結束，繼續等待長按完成
+            if (holdEndT > 0 && !note.holdFinish) {
                 continue;
             }
 
@@ -2127,13 +2464,14 @@ function draw() {
             const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
 
             // Hold 已結束結算
-            const isHit = (note.judgeResult && note.judgeResult.grade !== 'MISS') || note.holdFinish;
+            const isHit = (note.judgeResult && note.judgeResult.grade !== 'MISS') || (note.holdFinish && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
             if (isHit) {
                 const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
+                const breakMult = note.isBreak ? (note.judgeResult?.breakMultiplier ?? (note.judgeResult?.grade === 'CRITICAL_PERFECT' ? 1.0 : (note.judgeResult?.grade === 'PERFECT' ? 0.75 : 0.4))) : 0;
                 if (note.isBreak) noteQuantity.break++;
                 else noteQuantity.hold++;
                 playCombo++;
-                const earnedScore = ((note.isBreak ? 5 : 2) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * mult : 0);
+                const earnedScore = ((note.isBreak ? 5 : 2) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * breakMult : 0);
                 playScore += earnedScore;
                 lostScore += (maxNoteScore - earnedScore);
             } else {
@@ -2147,6 +2485,7 @@ function draw() {
 
             if (note.triggered) {
                 const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
+                const breakMult = note.isBreak ? (note.judgeResult?.breakMultiplier ?? (note.judgeResult?.grade === 'CRITICAL_PERFECT' ? 1.0 : (note.judgeResult?.grade === 'PERFECT' ? 0.75 : 0.4))) : 0;
                 if (note.judgeResult && note.judgeResult.grade === 'MISS') {
                     playCombo = 0;
                     lostScore += maxNoteScore;
@@ -2154,7 +2493,7 @@ function draw() {
                     if (note.isBreak) noteQuantity.break++;
                     else noteQuantity[noteType]++;
                     playCombo++;
-                    const earnedScore = ((note.isBreak ? 5 : 1) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * mult : 0);
+                    const earnedScore = ((note.isBreak ? 5 : 1) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * breakMult : 0);
                     playScore += earnedScore;
                     lostScore += (maxNoteScore - earnedScore);
                 }
@@ -2163,7 +2502,7 @@ function draw() {
                 if (noteT < -lateJudgeWindow) {
                     if (!note._missReported) {
                         note._missReported = true;
-                        note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0 };
+                        note.judgeResult = { grade: 'MISS', subGrade: '', scoreMultiplier: 0, breakMultiplier: 0, breakScoreValue: 0 };
                         spawnJudgeEffect(note, note.judgeResult);
                     }
                     playCombo = 0;
@@ -2247,7 +2586,7 @@ function draw() {
             if (endNoteT <= lookAhead && !note._endEffectPlayed) {
                 const shouldPlayEndSound =
                     (noteType === "slide" && note.lastSlide && note.isBreak && (note.slideFinish || (note.slideProgress ?? 0) >= 0.5)) ||
-                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd && (note._holdPressed || note.holdFinish));
+                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd && (note._holdPressed || note.holdFinish) && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
                 if (shouldPlayEndSound && endNoteT >= -0.1) {
                     audioManager.queueSound(note, endTargetT);
                 }
@@ -2284,12 +2623,14 @@ function draw() {
             (noteType === "slide" ? t >= middleDistance :
                 noteType === "touch" ? touchT >= -1 :
                     t >= -1)
-            && -noteT <= skipT + (note.isHanabi ? hanabiEffectDecayTime : effectDecayTime);
+            && -noteT <= skipT + (noteType === "slide" ? (JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC + effectDecayTime) : (note.isHanabi ? hanabiEffectDecayTime : effectDecayTime));
 
         // 快速分類到桶子
         if (isVisible) {
             if (noteType === 'slide') {
-                if (slideOnScreenCount < maxSlideCount) {
+                const tail = note.chainTail || note;
+                const isFinished = tail.slideFinish || note.chainFinished;
+                if (!isFinished && slideOnScreenCount < maxSlideCount) {
                     buckets.slide.push(note);
                     slideOnScreenCount++;
                 }
@@ -2537,12 +2878,10 @@ function openSettings(initialTabIndex = 0) {
 
     const switchTab = (index) => {
         tabs.forEach((tab, i) => {
-            tab.style.borderLeftColor = i === index ? '#4a90e2' : 'transparent';
-            tab.style.color = i === index ? '#fff' : '#888';
-            tab.style.fontWeight = i === index ? 'bold' : 'normal';
+            tab.classList.toggle('active', i === index);
         });
         sections.forEach((sec, i) => {
-            sec.style.display = i === index ? 'flex' : 'none';
+            sec.classList.toggle('active', i === index);
         });
     };
 
@@ -2575,7 +2914,6 @@ function openSettings(initialTabIndex = 0) {
             const text = document.createElement('span');
             text.textContent = labelText;
             text.className = 'popup-setting-text';
-            element.style.cssText = 'width:20px; height:20px; flex:0 0 auto; cursor:pointer; margin: 0;';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -2591,6 +2929,7 @@ function openSettings(initialTabIndex = 0) {
             text.className = 'popup-setting-text';
 
             element.style.width = '140px';
+            element.style.flexShrink = '0';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -2599,23 +2938,18 @@ function openSettings(initialTabIndex = 0) {
 
         // 3. Object (子屬性折疊選單)
         if (element.dataset && element.dataset.type === 'object-container') {
-            row.className = 'popup-setting-row';
-            row.style.flexDirection = 'column';
-            row.style.alignItems = 'stretch';
+            row.className = 'popup-setting-row popup-setting-row-object';
 
             const header = document.createElement('div');
-            header.className = 'popup-setting-wrapper';
-            header.style.padding = '4px 0';
-            header.style.userSelect = 'none';
-            header.innerHTML = `<span>${labelText}</span><span class="arrow-icon" style="transition:transform 0.2s; transform: rotate(0deg); font-size:12px;">▼</span>`;
+            header.className = 'popup-setting-object-header';
+            header.innerHTML = `<span>${labelText}</span><span class="popup-setting-arrow-icon">▼</span>`;
 
             const subBody = element;
             subBody.className = 'popup-setting-subbody';
 
             header.addEventListener('click', () => {
-                const isHidden = subBody.style.display === 'none';
-                subBody.style.display = isHidden ? 'flex' : 'none';
-                header.querySelector('.arrow-icon').style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+                const isExpanded = subBody.classList.toggle('open');
+                header.querySelector('.popup-setting-arrow-icon').classList.toggle('expanded', isExpanded);
             });
 
             row.appendChild(header);
@@ -2647,14 +2981,15 @@ function openSettings(initialTabIndex = 0) {
     const createCheckbox = (checked, id) => {
         const input = document.createElement('input');
         input.type = 'checkbox';
+        input.className = 'popup-setting-checkbox';
         input.id = id;
         input.checked = checked;
-        input.style.cursor = 'pointer';
         return input;
     };
 
     const createDropdown = (value, options = []) => {
         const select = document.createElement('select');
+        select.className = 'popup-setting-dropdown';
         options.forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
@@ -2662,7 +2997,6 @@ function openSettings(initialTabIndex = 0) {
             if (opt.value == value) o.selected = true;
             select.appendChild(o);
         });
-        select.style.cursor = 'pointer';
         return select;
     };
 

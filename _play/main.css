@@ -88,6 +88,8 @@ html, body {
     object-fit: contain;
     scale: 0.98;
     background: black;
+    pointer-events: none;
+    -webkit-touch-callout: none;
 }
 
 #main {

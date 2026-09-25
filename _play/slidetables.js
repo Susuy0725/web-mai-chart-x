@@ -18,9 +18,9 @@ export class SlideArea {
 
     get isFinished() {
         if (this.isLast) {
-            return this._wasOn; // 終點區只要觸摸到即完成
+            return this._wasOn;
         }
-        return this._wasOn && this._wasOff; // 中間路徑區需摸到且劃過離開
+        return this._wasOn && this._wasOff;
     }
 
     check(currentSensors) {
@@ -361,12 +361,35 @@ export const PREDEFINED_SLIDE_TABLES = {
         createArea(['B1', 'A1'], false, true), createArea('A8', true, true)
     ],
 
-    // 扇形滑條 (wifi - 合併三分支所有判定點)
+    // 扇形滑條預定義表格 (兼容舊版單一隊列引用)
     wifi: [
         createArea('A1', false, true),
-        createArea(['B1', 'B8', 'B2'], false, true),
-        createArea(['C', 'B7', 'B3'], false, true),
-        createArea(['A4', 'A5', 'A6', 'B5', 'D5', 'D6'], true, true)
+        createArea('B1', false, true),
+        createArea('C', false, true),
+        createArea(['A5', 'B5'], true, true)
+    ]
+};
+
+// MajdataPlay 標準預定義 Wifi 三分支判定隊列 (基準起點為 1)
+// 參考 MajdataPlay: WIFISLIDE_JUDGE_QUEUE (Left, Center, Right)
+export const PREDEFINED_WIFI_TABLE = {
+    left: [
+        createArea('A1', false, true),
+        createArea('B8', false, true),
+        createArea('B7', false, true),
+        createArea(['A6', 'D6'], true, true)
+    ],
+    center: [
+        createArea('A1', false, true),
+        createArea('B1', false, true),
+        createArea('C', false, true),
+        createArea(['A5', 'B5'], true, true)
+    ],
+    right: [
+        createArea('A1', false, true),
+        createArea('B2', false, true),
+        createArea('B3', false, true),
+        createArea(['A4', 'D5'], true, true)
     ]
 };
 
@@ -512,9 +535,38 @@ export function getSlideJudgeQueue(note, renderer = null) {
             needMirror = true;
             break;
         }
-        case 'w':
-            baseKey = 'wifi';
-            break;
+        case 'w': {
+            const isChainChild = note && (note.firstSlide === false || !!note.prevSlide);
+            const buildBranch = (template) => {
+                const queue = [];
+                for (let i = 0; i < template.length; i++) {
+                    const item = template[i];
+                    const mappedAreas = item.areas.map(sensor => {
+                        let s = sensor;
+                        if (diff !== 0) s = rotateSensor(s, diff);
+                        return s;
+                    });
+                    const isSkippable = isChainChild ? true : ((i === 0) ? false : item.isSkippable);
+                    queue.push(new SlideArea(mappedAreas, item.isLast, isSkippable));
+                }
+                return queue;
+            };
+
+            const leftQueue = buildBranch(PREDEFINED_WIFI_TABLE.left);
+            const centerQueue = buildBranch(PREDEFINED_WIFI_TABLE.center);
+            const rightQueue = buildBranch(PREDEFINED_WIFI_TABLE.right);
+
+            const queue = centerQueue.slice();
+            queue.isWifi = true;
+            queue.branches = { left: leftQueue, center: centerQueue, right: rightQueue };
+            queue.queues = [leftQueue, centerQueue, rightQueue];
+            const tableConst = PREDEFINED_SLIDE_CONSTANTS.wifi ?? 0.16287;
+            queue.tableConst = tableConst;
+            const meta = { baseKey: 'wifi', relEnd: 5, diff, needMirror: false, type: 'w', head, end, isPredefined: true, isWifi: true, tableConst };
+            queue._debugMeta = meta;
+            if (note) note._debugMeta = meta;
+            return queue;
+        }
     }
 
     // 1. 若找到 MajdataPlay 標準預定義表格，使用標準表格並做旋轉與鏡像
@@ -529,7 +581,11 @@ export function getSlideJudgeQueue(note, renderer = null) {
                 if (diff !== 0) s = rotateSensor(s, diff);
                 return s;
             });
-            queue.push(new SlideArea(mappedAreas, item.isLast, item.isSkippable));
+            // 只有第一條 slide (獨立 slide 或連鎖 slide 的第一段) 的起點不可被跳過；
+            // 連鎖 slide 的後續段起點一律允許被跳過 (即使模板如 circle2 起點標記為 false)，避免快劃時起點卡死必須重按
+            const isChainChild = note && (note.firstSlide === false || !!note.prevSlide);
+            const isSkippable = isChainChild ? true : ((i === 0) ? false : item.isSkippable);
+            queue.push(new SlideArea(mappedAreas, item.isLast, isSkippable));
         }
         const tableConst = PREDEFINED_SLIDE_CONSTANTS[baseKey] ?? 0.18;
         queue.tableConst = tableConst;
@@ -550,9 +606,11 @@ export function getSlideJudgeQueue(note, renderer = null) {
 }
 
 function fallbackGeometricQueue(note, renderer) {
+    const isChainChild = note && (note.firstSlide === false || !!note.prevSlide);
+    const startSkippable = isChainChild ? true : false;
     if (!renderer || typeof renderer.getSensorIdAtPoint !== 'function') {
         return [
-            new SlideArea(`A${note.pos}`, false, true),
+            new SlideArea(`A${note.pos}`, false, startSkippable),
             new SlideArea(`A${note.slideEnd}`, true, true)
         ];
     }
@@ -560,7 +618,7 @@ function fallbackGeometricQueue(note, renderer) {
     const path = note.path;
     if (!path || path.totalLength < 1e-4) {
         return [
-            new SlideArea(`A${note.pos}`, false, true),
+            new SlideArea(`A${note.pos}`, false, startSkippable),
             new SlideArea(`A${note.slideEnd}`, true, true)
         ];
     }

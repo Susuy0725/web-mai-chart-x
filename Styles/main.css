@@ -1,15 +1,14 @@
 :root {
     --split-ratio: 0.5;
-    --utility-hidden-height: 16px;
+    --utility-hidden-height: 24px;
     --const-max-playControls-height: 150px;
     --const-collapsed-playControls-height: 90px;
     --playControls-height: 150px;
     --editor-background: #1F1F1F;
     --player-background: #111;
-    --accent-color: #28f;
-    --main-color: #111;
+    --accent-color: #49e;
+    --main-color: #131313;
     --button-ouline: #2c2c2c;
-    --button-background: #1c1c1c;
     --timeline-color: rgb(212, 49, 57);
 }
 
@@ -27,7 +26,7 @@
 
 @font-face {
     font-family: 'title';
-    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
+    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('opentype');
     font-display: swap;
 }
 
@@ -37,7 +36,7 @@ body {
     overflow: hidden;
     background: var(--player-background);
 
-    font-family: "Google Sans", sans-serif;
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
     font-optical-sizing: auto;
     font-weight: 400;
     font-style: normal;
@@ -126,6 +125,8 @@ body {
     object-fit: contain;
     scale: 0.98;
     background: black;
+    pointer-events: none;
+    -webkit-touch-callout: none;
 }
 
 #main {
@@ -162,12 +163,11 @@ body {
     -webkit-appearance: none;
     width: calc(100% - 16px);
     height: 10px;
-    background: #222;
+    background: linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) var(--timeline-progress, 0%), var(--timeline-color-background, #222) var(--timeline-progress, 0%), var(--timeline-color-background, #222) 100%);
     margin: 10px 8px;
     border-radius: 7px;
     border: none;
     outline: none;
-    transition: background 0.3s ease;
 }
 
 #timeControl:hover::-webkit-slider-thumb {
@@ -386,6 +386,7 @@ body {
     background-color: var(--main-color);
     overflow: hidden;
     width: 30%;
+    max-width: 200px;
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
@@ -395,9 +396,10 @@ body {
     text-align: center;
     display: flex;
     justify-content: center;
+    align-items: center;
     cursor: pointer;
     box-sizing: border-box;
-    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
     border-radius: 0 0 10px 10px;
     transition: background-color 100ms ease;
 }
@@ -411,13 +413,13 @@ body {
     position: inherit;
     background: rgba(0, 0, 0, 0.3);
     width: 60px;
-    height: 20px;
+    height: 24px;
     color: white;
-    margin: 4px;
+    margin: 0 8px;
     right: 0;
     display: flex;
     align-items: center;
-    border-radius: 20px;
+    border-radius: 0 0 10px 10px;
     cursor: pointer;
     justify-content: space-around;
 }
@@ -443,7 +445,8 @@ body {
     gap: 5px;
     scrollbar-width: none;
     box-sizing: border-box;
-    font-family: "Google Sans", sans-serif;
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
+    align-items: center;
 }
 
 .utilityButton {
@@ -453,10 +456,9 @@ body {
     flex: 0 0 auto;
     padding: 5px;
     background: transparent;
-    border: var(--button-ouline) 1px solid;
     box-sizing: border-box;
     color: white;
-    width: 60px;
+    width: 30px;
     height: 30px;
     text-align: center;
     font-size: 12px;
@@ -464,6 +466,15 @@ body {
     word-break: keep-all;
     cursor: pointer;
     overflow: hidden;
+    transition: background 100ms ease;
+}
+
+.utilitySeparator {
+    width: 1px;
+    height: 20px;
+    background-color: var(--button-ouline);
+    flex: none;
+    margin: 0 1px;
 }
 
 .utilityButton.disabled,
@@ -484,12 +495,6 @@ body {
     padding: 5px 10px;
 }
 
-.utilityButton.miniButton {
-    width: 30px;
-    height: 30px;
-    padding: 5px;
-}
-
 .utilityButton span.material-symbols-outlined {
     font-size: 22px;
     font-variation-settings:
@@ -508,7 +513,7 @@ body {
     box-sizing: border-box;
     color: white;
     text-align: center;
-    font-family: "Google Sans", sans-serif;
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
 .utilityButton input[type="checkbox"] {
@@ -530,7 +535,7 @@ body {
     box-sizing: border-box;
     color: white;
     text-align: center;
-    font-family: "Google Sans", sans-serif;
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
 .utilityButton select option {
@@ -715,7 +720,7 @@ body {
     background-color: var(--main-color);
     min-width: 120px;
     box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
-    z-index: 100;
+    z-index: 10;
     border: 1px solid var(--button-ouline);
     border-radius: 10px;
     padding: 5px;
@@ -729,6 +734,10 @@ body {
     transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s;
 }
 
+.utilityButton:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
 .utilityDropdown-content .utilityButton {
     padding: 10px;
     border: none;
@@ -740,7 +749,7 @@ body {
 }
 
 .utilityDropdown-content .utilityButton:hover {
-    background-color: var(--button-ouline);
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .utilityDropdown-content .utilityMenuTitle {

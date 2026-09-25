@@ -12,21 +12,30 @@ export function imgNotExists(image) {
     return false;
 }
 
-const baseURL = new URL('../Skin/', import.meta.url).href.replace(/\/?$/, '/'), baseImageKeys = [
+const baseURL = new URL('../Skin/', import.meta.url).href.replace(/\/?$/, '/'), coreImageKeys = [
     'no_image',
-    'tap', 'tap_break', 'tap_each', 'tap_ex', 'tap_mine',
-    'NormalArc', 'BreakArc', 'EachArc', 'SlideArc', 'MineArc',
-    'hold', 'hold_break', 'hold_each', 'hold_ex', 'hold_mine',
+    'tap', 'tap_break', 'tap_each', 'tap_ex',
+    'NormalArc', 'BreakArc', 'EachArc', 'SlideArc',
+    'hold', 'hold_break', 'hold_each', 'hold_ex',
     'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
-    'Hold_End', 'Hold_Break_End', 'Hold_Each_End', 'Hold_Mine_End',
-    'touch', 'touch_each', 'touch_mine', 'touch_point', 'touch_point_each', 'touch_point_mine',
-    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each', 'touch_border_2_mine', 'touch_border_3_mine',
-    'star', 'star_pink', 'star_break', 'star_each', 'star_ex', 'star_mine',
-    'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
-    'slide', 'slide_each', 'slide_break', 'slide_mine',
+    'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
+    'touch', 'touch_each', 'touch_point', 'touch_point_each',
+    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each',
+    'star', 'star_pink', 'star_break', 'star_each', 'star_ex',
+    'slide', 'slide_each', 'slide_break',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
-    'touch_just', 'touchhold_off', 'ColorBall',
-    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine',
+    'touch_just', 'touchhold_off'
+];
+
+// 次要/特殊素材（WiFi 連續動畫幀、地雷、雙押星等，由背景非同步載入不阻塞首屏）
+const secondaryImageKeys = [
+    'tap_mine', 'MineArc',
+    'hold_mine', 'Hold_Mine_End',
+    'touch_mine', 'touch_point_mine', 'touch_border_2_mine', 'touch_border_3_mine',
+    'star_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
+    'slide_mine',
+    'ColorBall',
+    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine'
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
 
@@ -353,7 +362,7 @@ export const touchPaths = [];
 for (let i = 1; i <= 8; i++) {
     // 根據圖片，A/B 的 base 與 D/E 的 base 角度有位移
     // 這裡我們把 A/B 設在中心，D/E 設在間隔處
-    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 2, E: i - 3 };
+    const baseAngles = { A: i - 2.5, B: i - 2.5, D: i - 3, E: i - 3 };
 
     ['B', 'E', 'A', 'D'].forEach(type => {
         const path = new Path2D();
@@ -609,7 +618,7 @@ export function popupWindow({
     popup.style.maxHeight = popupMaxHeight;
 
     // 3. 內部組件
-    const titleElem = document.createElement('h3');
+    const titleElem = document.createElement('h2');
     titleElem.className = 'popup-title';
     if (!title) titleElem.style.display = 'none';
     titleElem.innerText = title;
@@ -709,7 +718,7 @@ export function popupWindow({
         backdrop.onclick = (e) => e.target === backdrop && closePopup();
         const closeX = document.createElement('div');
         closeX.className = 'popup-close-btn';
-        closeX.innerText = '×';
+        closeX.innerHTML = '<span class="material-symbols-outlined" translate="no">close_small</span>';
         closeX.onclick = closePopup;
         popup.appendChild(closeX);
     }
@@ -881,40 +890,53 @@ export function simpleToast({
 export async function loadAllImages(onProgress) {
     const images = {};
 
-    // 1. 先把所有要載入的 Key 整理成一個陣列
-    const allKeys = [...baseImageKeys];
-    wifiPrefixes.forEach(prefix => {
-        for (let i = 0; i < 11; i++) {
-            allKeys.push(prefix + i);
-        }
-    });
-
-    // 2. 直接用陣列長度當總數，絕對不會算錯
-    const total = allKeys.length;
-    let loaded = 0;
+    const totalCore = coreImageKeys.length;
+    let loadedCore = 0;
 
     const report = (key) => {
-        loaded++;
-        if (onProgress) onProgress((loaded / total) * 100, key);
+        loadedCore++;
+        if (onProgress) onProgress((loadedCore / totalCore) * 100, key);
     };
 
-    // 3. 使用 map 建立任務隊列，確保每一個 key 都會回報進度
-    const loadQueue = allKeys.map(async key => {
+    // 1. 優先載入首屏必需的核心元件（大幅縮減 LCP 阻塞時間）
+    const coreQueue = coreImageKeys.map(async key => {
         const url = `${baseURL.replace(/\/?$/, '/')}${key}.png`;
         try {
             try {
                 const img = await getImgWithCache(url, key);
                 if (img) images[key] = img;
             } catch (err) {
-                // 如果是那個忘記刪的舊 Key，這裡會抓到錯誤但不會卡住
                 console.warn(`[資源缺失] 無法載入 ${key}:`, err);
             }
         } finally {
-            return report(key);
-        } // 無論成功失敗都必須 report
+            report(key);
+        }
     });
 
-    await Promise.all(loadQueue);
+    await Promise.all(coreQueue);
+
+    // 2. 次要素材（44 張 WiFi 動畫幀、地雷變形等）改於背景以小批次非同步載入，不阻塞首屏渲染與彈窗關閉
+    const secondaryKeys = [
+        ...secondaryImageKeys,
+        ...wifiPrefixes.flatMap(prefix => Array.from({ length: 11 }, (_, i) => `${prefix}${i}`))
+    ];
+
+    (async () => {
+        const batchSize = 6;
+        for (let i = 0; i < secondaryKeys.length; i += batchSize) {
+            const batch = secondaryKeys.slice(i, i + batchSize);
+            await Promise.all(batch.map(async key => {
+                const url = `${baseURL}${key}.png`;
+                try {
+                    const img = await getImgWithCache(url, key);
+                    if (img) images[key] = img;
+                } catch (err) {
+                    console.warn(`[背景資源缺失] 無法載入 ${key}:`, err);
+                }
+            }));
+        }
+    })();
+
     return images;
 }
 async function getImgWithCache(url, key) {
@@ -1472,116 +1494,151 @@ export const createLabeledInput1 = ({
 };
 
 export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, onInputCallback) => {
-    const thumbSize = 24;
-    const animation = "ease 0.3s";
+    const thumbWidth = 4;
+    const thumbHeight = 34;
+    const trackHeight = 24;
+    const gap = 4; // 滑鈕兩側 4px 間隙
+    const halfThumb = thumbWidth / 2; // 2px
 
-    // 1. 主容器 (模擬 input 元素，讓外部可以讀取 .value)
+    // 1. 主容器 (模擬 input[type="range"] 讓外部能夠讀取與賦值 .value)
     const container = document.createElement('div');
-    container.type = 'range'; // 欺騙 createRow 的判斷
+    container.className = 'custom-slider-container';
+    container.setAttribute('type', 'range');
+    container.type = 'range';
     container.value = initialValue;
     container.min = min;
     container.max = max;
     container.step = step;
     container.style.cssText = `
-        height: 24px;
+        width: 140px;
+        min-width: 120px;
+        flex-shrink: 0;
+        height: ${trackHeight}px;
+        margin-top: 14px;
+        margin-bottom: 4px;
         display: flex;
         align-items: center;
         position: relative;
         cursor: pointer;
         user-select: none;
         touch-action: none;
-        border: 2px solid #fff;
-        border-radius: 999px;
+        box-sizing: border-box;
     `;
 
-    // 2. 底層軌道 (Track)
+    // 2. 軌道主體容器 (Track)
     const track = document.createElement('div');
     track.style.cssText = `
-        right: 0;
         width: 100%;
-        height: 100%;
-        background: #222;
-        border-radius: 999px;
+        height: ${trackHeight}px;
         position: relative;
+        display: flex;
+        align-items: center;
     `;
 
-    // 3. 已填滿進度條 (Fill)
+    // 3. 填滿進度軌道 (Active Fill)
     const fill = document.createElement('div');
     fill.style.cssText = `
         height: 100%;
-        background: #4a90e2;
-        border-radius: 40px 0 0 40px;
+        background: var(--accent-color);
+        border-radius: 999px 4px 4px 999px;
         position: absolute;
         left: 0;
         top: 0;
         width: 0%;
-        transition: width ${animation};
+        pointer-events: none;
+        transition: width 0.15s ease-out;
     `;
 
-    // 4. 滑鈕 (Thumb)
+    // 4. 未填滿軌道 (Inactive Track)
+    const unfill = document.createElement('div');
+    unfill.style.cssText = `
+        height: 100%;
+        background: rgba(255, 255, 255, 0.14);
+        border-radius: 4px 999px 999px 4px;
+        position: absolute;
+        right: 0;
+        top: 0;
+        left: 0%;
+        pointer-events: none;
+        transition: left 0.15s ease-out;
+    `;
+
+    // 5. 垂直膠囊滑鈕 (Vertical Capsule Thumb)
     const thumb = document.createElement('div');
     thumb.style.cssText = `
-        width: ${thumbSize}px;
-        height: ${thumbSize}px;
-        background: #4a90e2;
-        border-radius: 20px;
+        width: ${thumbWidth}px;
+        height: ${thumbHeight}px;
+        background: var(--accent-color);
+        border-radius: 999px;
         position: absolute;
         top: 50%;
-        transform: translateY(-50%);
-        transition: left ${animation}, background 0.2s, transform 0.2s;
-        user-select: none;
+        left: 0%;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
         box-sizing: border-box;
+        pointer-events: none;
+        transition: left 0.15s ease-out, transform 0.15s ease-out, box-shadow 0.15s ease-out;
     `;
 
-    const text = document.createElement('div');
-    text.style.cssText = `
+    // 6. 頂部浮動數值氣泡 (Value Bubble)
+    const bubble = document.createElement('div');
+    bubble.style.cssText = `
+        position: absolute;
+        left: 0%;
+        opacity: 0;
+        transform: translateX(-50%);
+        min-width: 22px;
+        height: 22px;
+        padding: 0 5px;
+        box-sizing: border-box;
+        border-radius: 4px;
+        background: #f2effa;
+        color: #1a1721;
+        font-family: 'mono', monospace, sans-serif;
+        font-size: 11px;
+        font-weight: 700;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: ${thumbSize}px;
-        height: ${thumbSize}px;
-        position: absolute;
-        top: 50%;
-        left: 10px;
-        transform: translateY(-50%);
-        transition: left ${animation}, background 0.2s, transform 0.2s, box-shadow 0.2s;
-        user-select: none;
-        text-align: center;
-        font-size: 12px;
-        text-shadow: 0px 1px 2px black;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        pointer-events: none;
+        white-space: nowrap;
+        transition: left 0.3s ease-out, transform 0.1s ease-out, opacity 0.1s ease-out;
     `;
-    text.textContent = initialValue.toFixed(2);
 
+    track.appendChild(unfill);
     track.appendChild(fill);
     track.appendChild(thumb);
-    track.appendChild(text);
+    track.appendChild(bubble);
     container.appendChild(track);
 
-    // 內部更新視覺與數值的函式
+    // 格式化顯示數值（整數不帶贅餘 0，小數依步長自適應）
+    const formatValue = (v) => {
+        if (step >= 1) return Math.round(v).toString();
+        const precision = step < 0.01 ? 3 : (step < 0.1 ? 2 : 1);
+        return parseFloat(v.toFixed(precision)).toString();
+    };
+
+    // 內部更新視覺與數值函式
     const updateVisuals = (val) => {
-        // 限制範圍 (Clamp)
         val = Math.max(min, Math.min(max, val));
+        const percent = (max === min) ? 0 : Math.max(0, Math.min(1, (val - min) / (max - min)));
 
-        // 四捨五入到最接近的 step
-        const percent = (val - min) / (max - min);
+        const offsetGap = halfThumb + gap; // 2 + 4 = 6px
 
-        // 更新這群 div 的樣式
-        /*if (!triggerAnimate) {
-            fill.style.transition = 'none';
-            thumb.style.transition = 'none';
-        } else {
-            fill.style.transition = 'width ease 0.15s';
-            thumb.style.transition = 'left ease 0.15s, background 0.2s, transform 0.2s';
-        }*/
-        // 🟢 這裡同步調整：Fill 寬度可以稍微扣除滑鈕半寬，看起來會更貼合滑鈕中心
-        fill.style.width = `calc(${percent * 100}% - ${(percent - 0.5) * thumbSize}px)`;
+        fill.style.display = 'block';
+        fill.style.width = `calc(${percent * 100}% - ${offsetGap}px)`;
+        fill.style.borderRadius = '10px 4px 4px 10px';
 
-        // 🔴 核心修正：利用神奇公式，讓滑鈕永遠不超出邊界
-        thumb.style.left = `calc(${percent * 100}% - ${percent * thumbSize}px)`;
+        unfill.style.display = 'block';
+        unfill.style.left = `calc(${percent * 100}% + ${offsetGap}px)`;
+        unfill.style.borderRadius = '4px 10px 10px 4px';
 
-        text.textContent = val.toFixed(2); // 顯示數值，保留兩位小數
+        thumb.style.left = `${percent * 100}%`;
+        bubble.style.left = `${percent * 100}%`;
 
-        container.value = val; // 寫回主容器
+        bubble.textContent = formatValue(val);
+        container.value = val;
     };
 
     // 處理拖曳/點擊邏輯
@@ -1589,13 +1646,10 @@ export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, o
 
     const handlePointerMove = (e) => {
         const rect = track.getBoundingClientRect();
+        if (rect.width <= 0) return;
 
-        // 🔴 修正：扣除滑鈕本身的寬度影響，算出正確的點擊/拖曳比例
-        let clickX = e.clientX - rect.left;
-        let availableWidth = rect.width;
-
-        let pct = clickX / availableWidth;
-        pct = Math.max(0, Math.min(1, pct));
+        const clickX = e.clientX - rect.left;
+        let pct = Math.max(0, Math.min(1, clickX / rect.width));
 
         let rawVal = min + pct * (max - min);
         let steppedVal = Math.round(rawVal / step) * step;
@@ -1603,16 +1657,16 @@ export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, o
         steppedVal = parseFloat(steppedVal.toFixed(4));
         steppedVal = Math.max(min, Math.min(max, steppedVal));
 
-        updateVisuals(steppedVal, !isDragging);
+        updateVisuals(steppedVal);
         if (onInputCallback) onInputCallback(steppedVal);
     };
 
     container.addEventListener('pointerdown', (e) => {
         isDragging = true;
         container.setPointerCapture(e.pointerId);
-        thumb.style.transform = 'translateY(-50%) scale(1.2)'; // 🔴 只縮放，不改 X 軸
-        thumb.style.background = '#5ca0f2';
-        thumb.style.boxShadow = '0 0 4px rgba(0,0,0,0.5)';
+        thumb.style.transform = 'translate(-50%, -50%) scaleY(1.1) scaleX(1.3)';
+        bubble.style.opacity = 1;
+        bubble.style.transform = 'translateX(-50%) translateY(-75%)';
         handlePointerMove(e);
     });
 
@@ -1621,29 +1675,22 @@ export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, o
         handlePointerMove(e);
     });
 
-    const stopDrag = (e) => {
+    const stopDrag = () => {
         if (!isDragging) return;
         isDragging = false;
-        thumb.style.transform = 'translateY(-50%) scale(1)'; // 🔴 還原
-        thumb.style.background = '#4a90e2';
-        thumb.style.boxShadow = 'none';
+        thumb.style.transform = 'translate(-50%, -50%) scale(1)';
+        bubble.style.opacity = 0;
+        bubble.style.transform = 'translateX(-50%)';
+        updateVisuals(container.value);
     };
 
     container.addEventListener('pointerup', stopDrag);
     container.addEventListener('pointercancel', stopDrag);
 
-    // 懸停動畫效果
-    container.addEventListener('mouseenter', () => {
-        if (!isDragging) thumb.style.transform = 'translateY(-50%) scale(1.1)';
-    });
-    container.addEventListener('mouseleave', () => {
-        if (!isDragging) thumb.style.transform = 'translateY(-50%) scale(1)';
-    });
-
     // 初始化數值視覺
     updateVisuals(initialValue);
 
-    // 外掛一個外部重置更新介面
+    // 提供外部更新或重置介面
     container._updateDisplay = () => {
         updateVisuals(container.value);
     };
@@ -1835,6 +1882,9 @@ export async function videoRender(audioManager, canvas, renderer, {
     playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
     chartInfo = {},
 } = {}) {
+    if (!window.Mediabunny) {
+        await ensureMediabunny();
+    }
     const settings = renderer.settings || window.settings || {};
     const {
         Output,
@@ -1843,7 +1893,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         CanvasSource,
         AudioBufferSource,
         QUALITY_HIGH
-    } = window.Mediabunny;
+    } = window.Mediabunny || {};
 
     const introDuration = includeIntro ? 6 : 0;
 
@@ -1944,7 +1994,14 @@ export async function videoRender(audioManager, canvas, renderer, {
                 try {
                     exportVideo = document.createElement('video');
                     exportVideo.src = editorBackgroundVideo.src;
+                    exportVideo.playsInline = true;
+                    exportVideo.defaultMuted = true;
                     exportVideo.muted = true;
+                    exportVideo.setAttribute('playsinline', '');
+                    exportVideo.setAttribute('webkit-playsinline', '');
+                    exportVideo.setAttribute('x5-playsinline', '');
+                    exportVideo.setAttribute('disablePictureInPicture', '');
+                    exportVideo.setAttribute('disableRemotePlayback', '');
                     exportVideo.crossOrigin = 'anonymous';
                     exportVideo.preload = 'auto';
                     exportVideo.style.position = 'fixed';
@@ -2715,6 +2772,16 @@ export class SimaiLogicControler {
         let playScore = 0;
         let foundIndexForThisFrame = false;
 
+        const baseSpeed = settings.speed || 1;
+        const baseTouchSpeed = settings.touchSpeed || 1;
+        const calcPiecewiseSpeed = (x) => {
+            if (x >= 1) return x * 0.8833 + 0.8167;
+            if (x <= -1) return x * 0.8833 - 0.8167;
+            return x * 1.7;
+        };
+        const baseSpeedCoeff = calcPiecewiseSpeed(baseSpeed);
+        const baseTouchSpeedCoeff = calcPiecewiseSpeed(baseTouchSpeed);
+
         // 核心音符迴圈
         for (let i = notesLength - 1; i >= 0; i--) {
             const note = notes[i];
@@ -2722,20 +2789,9 @@ export class SimaiLogicControler {
             const noteType = note.type;
             const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
 
-            const calcPiecewiseSpeed = (x) => {
-                if (x >= 1) {
-                    return x * 0.8833 + 0.8167;
-                } else if (x <= -1) {
-                    return x * 0.8833 - 0.8167;
-                } else {
-                    return x * 1.7;
-                }
-            };
             const noteHispeed = note.hispeed ?? 1;
-            // 2. 精準套用至常規速度與 Touch 速度
-            const speedCoeff = calcPiecewiseSpeed(settings.speed * noteHispeed);
-            const touchSpeedCoeff = calcPiecewiseSpeed(settings.touchSpeed * noteHispeed);
-
+            const speedCoeff = noteHispeed === 1 ? baseSpeedCoeff : calcPiecewiseSpeed(baseSpeed * noteHispeed);
+            const touchSpeedCoeff = noteHispeed === 1 ? baseTouchSpeedCoeff : calcPiecewiseSpeed(baseTouchSpeed * noteHispeed);
 
             // 索引追蹤（早期完成以減少迴圈計算）
             if (!foundIndexForThisFrame && realTime >= (note.time + musicDelay) && noteType !== "slide") {
@@ -2826,18 +2882,20 @@ export class SimaiLogicControler {
                 }
             }
 
-            // 繪製可見性判斷
-            const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
-            const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
-
+            // 繪製可見性判斷（快速提前剔除過期或太遠的音符，避免不必要的 timeFunction 三次多項式計算）
             const renderSkipT = noteType === 'slide' ? ((note.slideDelay ?? 0) + (note.slideDuration ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0)) : skipT;
             const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
 
-            const isVisible =
-                (noteType === "slide" ? t >= middleDistance :
-                    noteType === "touch" ? touchT >= -1 :
-                        t >= -1)
-                && -noteT <= renderSkipT + decay;
+            let isVisible = false;
+            if (-noteT <= renderSkipT + decay && noteT < 6) {
+                const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
+                const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
+
+                isVisible =
+                    (noteType === "slide" ? t >= middleDistance :
+                        noteType === "touch" ? touchT >= -1 :
+                            t >= -1);
+            }
 
             const isVisualVisible = noteT >= 0
                 ? Math.abs(noteT) <= V
@@ -2896,4 +2954,50 @@ export function easeInBack(x) {
     const c3 = c1 + 1;
 
     return c3 * x * x * x - c1 * x * x;
+}
+
+export function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+            if (existing.dataset.loaded === 'true') {
+                return resolve();
+            }
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', (e) => reject(e), { once: true });
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = (err) => reject(err);
+        document.head.appendChild(script);
+    });
+}
+
+export async function ensureMediabunny() {
+    if (window.Mediabunny) return window.Mediabunny;
+    await loadScript('Scripts/mediabunny.cjs');
+    return window.Mediabunny;
+}
+
+export async function ensureJSZip() {
+    if (window.JSZip) return window.JSZip;
+    await loadScript('Scripts/jszip.min.js');
+    return window.JSZip;
+}
+
+export async function ensureSupabase() {
+    if (globalThis.supabase?.createClient) return globalThis.supabase;
+    await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+    return globalThis.supabase;
+}
+
+export async function ensureJsMediaTags() {
+    if (window.jsmediatags) return window.jsmediatags;
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js');
+    return window.jsmediatags;
 }

@@ -3,7 +3,8 @@ import {
     scaleBase, getButton, debounce, throttle,
     getHighlight, parseMaidata, popupWindow, loadAllImages,
     simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText,
-    clamp, createLabeledInput1, createCustomSlider, videoRender
+    clamp, createLabeledInput1, createCustomSlider, videoRender,
+    ensureMediabunny, ensureJSZip, ensureSupabase, ensureJsMediaTags
 } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
@@ -47,7 +48,7 @@ function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' }
                 <span class="sw-update-percent">${progress}%</span>
             </div>
             <div class="sw-update-progress-bar-bg">
-                <div class="sw-update-progress-bar-fill" style="width: ${progress}%"></div>
+                <div class="sw-update-progress-bar-fill" style="transform: scaleX(${progress / 100})"></div>
             </div>
             <div class="sw-update-details">
                 <span class="sw-update-file">${file ? file.replace('./', '') : ''}</span>
@@ -61,12 +62,14 @@ function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' }
         const fileEl = swProgressToast.querySelector('.sw-update-file');
         const countEl = swProgressToast.querySelector('.sw-update-count');
 
-        if (fill) fill.style.width = `${progress}%`;
+        if (fill) fill.style.transform = `scaleX(${progress / 100})`;
         if (percent) percent.textContent = `${progress}%`;
         if (fileEl && file) fileEl.textContent = file.replace('./', '');
         if (countEl) countEl.textContent = `${loaded} / ${total}`;
     }
 }
+
+window.showSwUpdateComplete = showSwUpdateComplete;
 
 function showSwUpdateComplete() {
     if (!swProgressToast) {
@@ -77,14 +80,14 @@ function showSwUpdateComplete() {
     swProgressToast.className = 'sw-update-toast show completed';
     swProgressToast.innerHTML = `
         <div class="sw-update-header">
-            <span class="sw-update-title" style="color: #00ffcc;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span class="sw-update-title">
+                <svg style="color: var(--sw-complete-color);" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                 <span>${t('toast.swUpdated') || '版本更新已就緒！'}</span>
             </span>
             <span class="sw-update-percent">100%</span>
         </div>
         <div class="sw-update-progress-bar-bg">
-            <div class="sw-update-progress-bar-fill" style="width: 100%"></div>
+            <div class="sw-update-progress-bar-fill" style="transform: scaleX(1)"></div>
         </div>
         <div class="sw-update-details">
             <span>${t('toast.swUpdateDetail') || '快取已更新，請重新整理以套用最新版本'}</span>
@@ -275,6 +278,29 @@ const fVerticalButton = getButton("flipVertical", "utility");
 const fHorizontalButton = getButton("flipHorizontal", "utility");
 const editorBackgroundImage = document.getElementById('backgroundImage');
 const editorBackgroundVideo = document.getElementById('backgroundVideo');
+if (editorBackgroundVideo) {
+    editorBackgroundVideo.playsInline = true;
+    editorBackgroundVideo.defaultMuted = true;
+    editorBackgroundVideo.muted = true;
+    editorBackgroundVideo.setAttribute('playsinline', '');
+    editorBackgroundVideo.setAttribute('webkit-playsinline', '');
+    editorBackgroundVideo.setAttribute('x5-playsinline', '');
+    editorBackgroundVideo.setAttribute('disablePictureInPicture', '');
+    editorBackgroundVideo.setAttribute('disableRemotePlayback', '');
+    editorBackgroundVideo.addEventListener('webkitbeginfullscreen', (e) => {
+        e.preventDefault();
+        try {
+            if (typeof editorBackgroundVideo.webkitExitFullscreen === 'function') {
+                editorBackgroundVideo.webkitExitFullscreen();
+            }
+        } catch (_) { }
+    });
+    editorBackgroundVideo.addEventListener('webkitpresentationmodechanged', () => {
+        if (editorBackgroundVideo.webkitPresentationMode === 'fullscreen' && typeof editorBackgroundVideo.webkitSetPresentationMode === 'function') {
+            editorBackgroundVideo.webkitSetPresentationMode('inline');
+        }
+    });
+}
 const tapBpmButton = getButton("tapBpm", "utility");
 const manageResourcesButton = getButton("manageResources", "utility");
 const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
@@ -1547,7 +1573,7 @@ const updateSlider = (time) => {
     timeline.value = time;
     const thumbWidth = 16;
     const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-    timeline.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
+    timeline.style.setProperty('--timeline-progress', stopPos);
 };
 
 async function openResourceManager() {
@@ -2562,8 +2588,9 @@ function setDataEmpty() {
     //projSet('timeControl', 0).catch(() => { });
 }
 
-fetchFromMainoteButton.addEventListener('click', () => {
+fetchFromMainoteButton.addEventListener('click', async () => {
     let mainctx = null;
+    await ensureSupabase();
 
     // 以 globalThis 取得 Supabase，避免在 module/非 module 環境中直接存取未宣告的全域變數導致錯誤
     const createClient = globalThis.supabase?.createClient;
@@ -3103,7 +3130,7 @@ warnEl.addEventListener('click', () => {
         const errpos = warningPositionsConst[i];
         console.log(warningPositionsConst, i, errpos);
         if (errpos !== undefined) {
-            return `<div class="warning-item" style="cursor: pointer; color: #ccc; text-decoration: underline; margin-bottom: 8px; font-family: Google Sans; font-size: 13px;" data-errpos="${errpos}">• ${w}</div>`;
+            return `<div class="warning-item" style="cursor: pointer; color: #ccc; text-decoration: underline; margin-bottom: 8px; font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif; font-size: 13px;" data-errpos="${errpos}">• ${w}</div>`;
         }
         return `<div style="margin-bottom: 8px; color: #ccc; font-family: sans-serif; font-size: 13px;">• ${w}</div>`;
     }).join('');
@@ -3395,12 +3422,10 @@ function openSettings(initialTabIndex = 0) {
 
     const switchTab = (index) => {
         tabs.forEach((tab, i) => {
-            tab.style.borderLeftColor = i === index ? '#4a90e2' : 'transparent';
-            tab.style.color = i === index ? '#fff' : '#888';
-            tab.style.fontWeight = i === index ? 'bold' : 'normal';
+            tab.classList.toggle('active', i === index);
         });
         sections.forEach((sec, i) => {
-            sec.style.display = i === index ? 'flex' : 'none';
+            sec.classList.toggle('active', i === index);
         });
     };
 
@@ -3433,7 +3458,6 @@ function openSettings(initialTabIndex = 0) {
             const text = document.createElement('span');
             text.textContent = labelText;
             text.className = 'popup-setting-text';
-            element.style.cssText = 'width:20px; height:20px; flex:0 0 auto; cursor:pointer; margin: 0;';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -3448,7 +3472,8 @@ function openSettings(initialTabIndex = 0) {
             text.textContent = labelText;
             text.className = 'popup-setting-text';
 
-            element.style.width = '140px'; // 調寬一點排版更好看
+            element.style.width = '140px';
+            element.style.flexShrink = '0';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -3457,23 +3482,18 @@ function openSettings(initialTabIndex = 0) {
 
         // 3. Object (子屬性折疊選單)
         if (element.dataset && element.dataset.type === 'object-container') {
-            row.className = 'popup-setting-row';
-            row.style.flexDirection = 'column';
-            row.style.alignItems = 'stretch';
+            row.className = 'popup-setting-row popup-setting-row-object';
 
             const header = document.createElement('div');
-            header.className = 'popup-setting-wrapper';
-            header.style.padding = '4px 0';
-            header.style.userSelect = 'none';
-            header.innerHTML = `<span>${labelText}</span><span class="arrow-icon" style="transition:transform 0.2s; transform: rotate(0deg); font-size:12px;">▼</span>`;
+            header.className = 'popup-setting-object-header';
+            header.innerHTML = `<span>${labelText}</span><span class="popup-setting-arrow-icon">▼</span>`;
 
             const subBody = element;
             subBody.className = 'popup-setting-subbody';
 
             header.addEventListener('click', () => {
-                const isHidden = subBody.style.display === 'none';
-                subBody.style.display = isHidden ? 'flex' : 'none';
-                header.querySelector('.arrow-icon').style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+                const isExpanded = subBody.classList.toggle('open');
+                header.querySelector('.popup-setting-arrow-icon').classList.toggle('expanded', isExpanded);
             });
 
             row.appendChild(header);
@@ -3558,9 +3578,9 @@ function openSettings(initialTabIndex = 0) {
     const createCheckbox = (checked, id) => {
         const input = document.createElement('input');
         input.type = 'checkbox';
+        input.className = 'popup-setting-checkbox';
         input.id = id;
         input.checked = checked;
-        input.style.cursor = 'pointer';
         return input;
     };
 
@@ -3574,6 +3594,7 @@ function openSettings(initialTabIndex = 0) {
 
     const createDropdown = (value, options = []) => {
         const select = document.createElement('select');
+        select.className = 'popup-setting-dropdown';
         options.forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
@@ -3581,7 +3602,6 @@ function openSettings(initialTabIndex = 0) {
             if (opt.value == value) o.selected = true;
             select.appendChild(o);
         });
-        select.style.cursor = 'pointer';
         return select;
     };
 
@@ -3894,7 +3914,7 @@ chartInfoButton.addEventListener('click', () => {
      * 核心邏輯：處理音訊 Metadata 並更新 tempData 與 UI
      * @param {File} file 音訊檔案
      */
-    const processAudioMetadata = (file) => {
+    const processAudioMetadata = async (file) => {
         if (!file) {
             simpleToast({ content: t('toast.noAudioFile'), type: "error" });
             return;
@@ -3912,19 +3932,27 @@ chartInfoButton.addEventListener('click', () => {
         };
 
         // 1. 優先嘗試使用 jsmediatags 讀取 ID3 標籤
-        if (window.jsmediatags) {
-            window.jsmediatags.read(file, {
-                onSuccess: (tag) => {
-                    const { title, artist } = tag.tags;
-                    applyData(title, artist);
-                    simpleToast({ content: t('toast.tagReadSuccess', { title: title || t('popup.chartInfo.noTitle') }), type: "success" });
-                },
-                onError: (error) => {
-                    console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
-                    fallbackToFileName(file);
-                }
-            });
-        } else {
+        let parsed = false;
+        try {
+            await ensureJsMediaTags();
+            if (window.jsmediatags) {
+                parsed = true;
+                window.jsmediatags.read(file, {
+                    onSuccess: (tag) => {
+                        const { title, artist } = tag.tags;
+                        applyData(title, artist);
+                        simpleToast({ content: t('toast.tagReadSuccess', { title: title || t('popup.chartInfo.noTitle') }), type: "success" });
+                    },
+                    onError: (error) => {
+                        console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
+                        fallbackToFileName(file);
+                    }
+                });
+            }
+        } catch (err) {
+            console.warn("載入 jsmediatags 失敗，改用檔名解析:", err);
+        }
+        if (!parsed) {
             fallbackToFileName(file);
         }
 
@@ -3943,28 +3971,28 @@ chartInfoButton.addEventListener('click', () => {
 
     const createPopupContent = () => {
         const container = document.createElement('div');
-        container.style.cssText = "display:flex; gap: 10px;";
+        container.className = 'chart-info-container';
         const createButton = (text, eventHandler) => {
             const btn = document.createElement('button');
+            btn.className = 'chart-info-btn';
             btn.textContent = text;
-            btn.style.cssText = "padding:8px 12px; background:rgb(32, 32, 32); color:#fff; border:1px solid rgb(64, 64, 64); border-radius:5px; cursor:pointer; font-size:12px; width:100%;";
             if (eventHandler) {
                 btn.addEventListener('click', eventHandler);
             }
             return btn;
-        }
+        };
         // 左側：圖片更換
         const imgContainer = document.createElement('div');
-        imgContainer.style.cssText = "width:50%; display:flex; align-items: flex-start;flex-wrap: wrap;flex-direction: column;align-items: center;justify-content: flex-start;gap: 10px;";
+        imgContainer.className = 'chart-info-img-container';
         const img = document.createElement('img');
+        img.className = 'chart-info-img';
         img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['no_image'].src;
-        img.style.cssText = "width:100%; height:100%; display:block; object-fit:contain;";
 
         const imgWrapper = document.createElement('div');
-        imgWrapper.style.cssText = "width:100%; aspect-ratio:1/1; overflow:hidden; border:1px solid #333; border-radius:8px; cursor:pointer; position:relative; background:#000;";
+        imgWrapper.className = 'chart-info-img-wrapper';
 
         const overlay = document.createElement('div');
-        overlay.style.cssText = "position:absolute; bottom:0; width:100%; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; text-align:center; padding:4px 0;";
+        overlay.className = 'chart-info-overlay';
         overlay.textContent = t('popup.chartInfo.clickToChangeImage');
 
         imgWrapper.appendChild(img);
@@ -4000,7 +4028,7 @@ chartInfoButton.addEventListener('click', () => {
 
         // 右側：輸入欄位
         const diffContainer = document.createElement('div');
-        diffContainer.style.cssText = "width:60%; display:flex; flex-direction:column;";
+        diffContainer.className = 'chart-info-diff-container';
 
         // 建立主要欄位並存入 inputRefs (使用 createLabeledInput1)
         const titleField = createLabeledInput1({ value: tempData.title, labelText: t('popup.chartInfo.titleLabel'), type: 'text', assign: "title", data: tempData, ref: inputRefs });
@@ -5154,6 +5182,85 @@ readMaidataButton.addEventListener('click', () => {
     input.click();
 });
 
+const readZipButton = getButton("readZip", "utility");
+if (readZipButton) {
+    readZipButton.addEventListener('click', () => {
+        const maidataHaveContext = (() => {
+            if (audioManager.haveBGM()) {
+                return true;
+            }
+            for (let i = 1; i <= 7; i++) {
+                if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
+                    return true;
+                }
+            }
+            return false;
+        })();
+
+        const triggerZipInput = (mode) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    await ensureJSZip();
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        if (mode === 'new') {
+                            const newId = await projectCreate(t('popup.projectManager.untitled'));
+                            currentProjectId = newId;
+                            localStorage.setItem('simai_lastProjectId', currentProjectId);
+                            console.log(`[Project] 已建立新專案: ${newId}`);
+                        }
+                        setDataEmpty();
+                        JSZip.loadAsync(file).then(async (zip) => {
+                            await handleFolderInput(zip.files);
+                            setEndtime(endTime);
+                            draw();
+                            if (maidata?.title && currentProjectId) {
+                                projectUpdateName(currentProjectId, maidata.title).catch(() => { });
+                            }
+                            simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
+                        });
+                        resize();
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            };
+            input.click();
+        };
+
+        if (maidataHaveContext) {
+            popupWindow({
+                title: t('popup.loadConfirm.titleZip'),
+                content: t('popup.loadConfirm.content'),
+                buttons: [
+                    {
+                        text: t('popup.loadConfirm.overwrite'),
+                        onClick: (ctx) => {
+                            ctx.close();
+                            triggerZipInput('overwrite');
+                        }
+                    },
+                    {
+                        text: t('popup.loadConfirm.newProject'),
+                        onClick: (ctx) => {
+                            ctx.close();
+                            triggerZipInput('new');
+                        }
+                    },
+                    {
+                        text: t('popup.cancel'),
+                        hideOnClick: true
+                    }
+                ]
+            });
+        } else {
+            triggerZipInput('overwrite');
+        }
+    });
+}
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
@@ -5452,10 +5559,10 @@ editorInput.addEventListener('scroll', () => {
 });
 editorInput.addEventListener('touchmove', () => {
     syncHighlightLayerScroll();
-});
+}, { passive: true });
 editorInput.addEventListener('touchstart', () => {
     syncHighlightLayerScroll();
-});
+}, { passive: true });
 
 /**
  * 1. 狀態管理
@@ -5832,6 +5939,8 @@ downloadButton.addEventListener('click', () => {
             {
                 text: t('popup.download.packZip'),
                 onClick: async (ctx) => {
+                    ctx.setProgress(5);
+                    await ensureJSZip();
                     ctx.setProgress(10);
                     const zip = new JSZip();
                     const fileName = sanitize(getFinalName());
@@ -6035,7 +6144,7 @@ playButton.addEventListener('click', () => {
             ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
         editorBackgroundVideo.currentTime = realTime;
         if (editorBackgroundVideo.paused && editorBackgroundVideo.readyState >= 1) {
-            editorBackgroundVideo.play();
+            editorBackgroundVideo.play().catch(() => { });
         }
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
@@ -6074,6 +6183,8 @@ resetButton.addEventListener('click', () => {
     audioManager.stopAllLongSounds();
     audioManager.stopBGM();
 
+    videoSeekDebounce(0);
+
     notes.forEach(n => n._riserActive = false); // 強制重置標記
 
     if (majdataWs.isConnected()) {
@@ -6089,7 +6200,6 @@ resetButton.addEventListener('click', () => {
 stopButton.addEventListener('click', () => {
     updatePauseBackgroundDisplay();
     editorBackgroundVideo.pause();
-    editorBackgroundVideo.style.display = 'none';
     playButton.dataset.playing = 'false';
     playButton.children[0].innerText = "play_arrow";
     bgmUpdateTimer = null;
@@ -6537,7 +6647,7 @@ function openSecondWindow() {
             padding: 0;
             overflow: hidden;
             background-color: #000;
-            font-family: "Google Sans", sans-serif;
+            font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
         }
         #canvasContainer {
             position: absolute;
@@ -6582,6 +6692,8 @@ function openSecondWindow() {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            pointer-events: none;
+            -webkit-touch-callout: none;
         }
     `;
     externalWindow.document.head.appendChild(style);
@@ -6589,7 +6701,7 @@ function openSecondWindow() {
         <div id="canvasContainer">
             <div class="backgroundContainer" id="secBackgroundContainer">
                 <img id="secBackgroundImage" src="" alt="" onerror="this.style.display='none'">
-                <video id="secBackgroundVideo" src="" alt="" onerror="this.style.display='none'" muted></video>
+                <video id="secBackgroundVideo" src="" alt="" onerror="this.style.display='none'" muted playsinline webkit-playsinline x5-playsinline disablePictureInPicture disableRemotePlayback></video>
             </div>
             <img src="./Skin/outline.png" alt="" id="secOutline" onerror="this.style.display='none'">
             <canvas id="secondary"></canvas>
@@ -6600,6 +6712,30 @@ function openSecondWindow() {
     const secBgImg = externalWindow.document.getElementById('secBackgroundImage');
     const secBgVideo = externalWindow.document.getElementById('secBackgroundVideo');
     const secBgContainer = externalWindow.document.getElementById('secBackgroundContainer');
+
+    if (secBgVideo) {
+        secBgVideo.playsInline = true;
+        secBgVideo.defaultMuted = true;
+        secBgVideo.muted = true;
+        secBgVideo.setAttribute('playsinline', '');
+        secBgVideo.setAttribute('webkit-playsinline', '');
+        secBgVideo.setAttribute('x5-playsinline', '');
+        secBgVideo.setAttribute('disablePictureInPicture', '');
+        secBgVideo.setAttribute('disableRemotePlayback', '');
+        secBgVideo.addEventListener('webkitbeginfullscreen', (e) => {
+            e.preventDefault();
+            try {
+                if (typeof secBgVideo.webkitExitFullscreen === 'function') {
+                    secBgVideo.webkitExitFullscreen();
+                }
+            } catch (_) { }
+        });
+        secBgVideo.addEventListener('webkitpresentationmodechanged', () => {
+            if (secBgVideo.webkitPresentationMode === 'fullscreen' && typeof secBgVideo.webkitSetPresentationMode === 'function') {
+                secBgVideo.webkitSetPresentationMode('inline');
+            }
+        });
+    }
 
     extCanvas.width = 800;
     extCanvas.height = 800;
@@ -6692,6 +6828,13 @@ function openSecondWindow() {
 }
 
 recordVideoButton.addEventListener('click', async () => {
+    if (!window.Mediabunny) {
+        try {
+            await ensureMediabunny();
+        } catch (e) {
+            console.warn('載入 Mediabunny 失敗:', e);
+        }
+    }
     if (!window.Mediabunny) {
         simpleToast({ content: t('toast.mediabunnyMissing'), type: 'error' });
         return;
@@ -7105,7 +7248,6 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 window.addEventListener("pagehide", closeExternalWindow);
-window.addEventListener("unload", closeExternalWindow);
 
 let playedClock = [false, false, false, false];
 
@@ -7132,7 +7274,7 @@ function drawMainCanvasOpenedInExternalWindow() {
 
     // 繪製居中文字
     ctx.fillStyle = 'rgba(74, 144, 226, 0.9)';
-    ctx.font = `600 ${Math.max(14, Math.round(18 * dpr))}px "Google Sans", sans-serif`;
+    ctx.font = `600 ${Math.max(14, Math.round(18 * dpr))}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`🗔 ${text}`, w / 2, h / 2);
@@ -7486,9 +7628,24 @@ function _init() {
         onOpen: async (ctx) => {
             try {
                 const step = (p, msg) => (ctx.setProgress(p), ctx.setContent(msg));
-                await audioManager.init((pct, key) => step(pct * 0.4, t('popup.init.loadingSfx', { key, percent: Math.round(pct) })));
+                let sfxPct = 0;
+                let imgPct = 0;
+                const updateCombinedStep = (msg) => {
+                    const combinedPct = Math.min(78, Math.round((sfxPct * 0.38) + (imgPct * 0.40)));
+                    step(combinedPct, msg);
+                };
 
-                images = await loadAllImages((pct, key) => step(40 + pct * 0.4, t('popup.init.loadingAssets', { key, percent: Math.round(pct) })));
+                const [_, loadedImages] = await Promise.all([
+                    audioManager.init((pct, key) => {
+                        sfxPct = pct;
+                        updateCombinedStep(t('popup.init.loadingSfx', { key, percent: Math.round(pct) }));
+                    }),
+                    loadAllImages((pct, key) => {
+                        imgPct = pct;
+                        updateCombinedStep(t('popup.init.loadingAssets', { key, percent: Math.round(pct) }));
+                    })
+                ]);
+                images = loadedImages;
 
                 // === 專案系統初始化 ===
                 step(78, t('popup.init.initProjects'));
@@ -7702,4 +7859,4 @@ const unlockAudio = () => {
 };
 window.addEventListener('click', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
-window.addEventListener('touchstart', unlockAudio, { once: true });
+window.addEventListener('touchstart', unlockAudio, { once: true, passive: true });

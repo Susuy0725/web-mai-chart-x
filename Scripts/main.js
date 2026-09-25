@@ -5479,53 +5479,7 @@ hideUtilityButton.addEventListener('click', () => {
     resize();
 });
 
-// 支援所有下拉選單（漢堡選單、編輯選單等），並支援觸控設備切換子選單
-const allUtilityDropdowns = document.querySelectorAll('.utilityDropdown');
-allUtilityDropdowns.forEach(dropdown => {
-    const btn = dropdown.querySelector('.utilityDropdown-btn');
-    if (btn) {
-        btn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const isOpen = dropdown.classList.contains('open');
-            allUtilityDropdowns.forEach(d => {
-                if (d !== dropdown) {
-                    d.classList.remove('open');
-                    d.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
-                }
-            });
-            dropdown.classList.toggle('open', !isOpen);
-        });
-    }
 
-    // 子選單項目（如檔案、功能/工具）在觸控螢幕上點擊切換展開
-    const menuTitles = dropdown.querySelectorAll('.utilityMenuTitle');
-    menuTitles.forEach(title => {
-        title.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = title.classList.contains('open');
-            menuTitles.forEach(t => { if (t !== title) t.classList.remove('open'); });
-            title.classList.toggle('open', !isOpen);
-        });
-    });
-
-    // 點擊選單內部動作按鈕時自動關閉選單（避免觸控螢幕選單殘留）
-    const actionButtons = dropdown.querySelectorAll('.utilityButton:not(.utilityMenuTitle)');
-    actionButtons.forEach(actionBtn => {
-        actionBtn.addEventListener('click', () => {
-            dropdown.classList.remove('open');
-            dropdown.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
-        });
-    });
-});
-
-document.addEventListener('click', (event) => {
-    allUtilityDropdowns.forEach(dropdown => {
-        if (!dropdown.contains(event.target)) {
-            dropdown.classList.remove('open');
-            dropdown.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
-        }
-    });
-});
 
 quickGenerateButton.addEventListener('click', () => {
     popupWindow({

@@ -705,7 +705,6 @@ body {
     margin-bottom: -5px;
 }
 
-.utilityDropdown.open .utilityDropdown-content,
 .utilityDropdown:hover .utilityDropdown-content {
     opacity: 1;
     visibility: visible;
@@ -790,7 +789,6 @@ body {
     transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.18s;
 }
 
-.utilityDropdown-content .utilityMenuTitle.open .utilitySubmenu,
 .utilityDropdown-content .utilityMenuTitle:hover .utilitySubmenu {
     opacity: 1;
     visibility: visible;

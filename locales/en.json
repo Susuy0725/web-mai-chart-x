@@ -490,6 +490,16 @@
       "changelogLoading": "Loading changelog...",
       "changelogError": "Failed to load changelog",
       "shortcutItems[7]": "<b>Quick Panel</b>: After setting is opened, press <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> and move the mouse to the function you want to perform, then release <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>."
+    },
+    "import": {
+      "title": "Importing Project...",
+      "readingFolder": "Reading folder files ({percent}%)...",
+      "readingZip": "Extracting archive ({percent}%)...",
+      "parsingFiles": "Parsing project contents...",
+      "savingDatabase": "Saving to database ({percent}%)...",
+      "rendering": "Applying and rendering...",
+      "complete": "Complete! Applying project...",
+      "failed": "Import failed:"
     }
   },
   "rpc": {
@@ -512,3 +522,4 @@
     "toastToggleExFull": "Toggled EX (ex) status for all text"
   }
 }
+

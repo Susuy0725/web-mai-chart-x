@@ -758,14 +758,14 @@ export class SimaiRenderer {
             ctx.font = "1.9px title";
             ctx.textAlign = "center";
             ctx.fillText(chartInfo.title || '', 0, 11);
-            ctx.font = "1.8px Google Sans";
+            ctx.font = '1.8px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.fillText(chartInfo.artist || '', 0, 14.8);
 
             ctx.fillStyle = "#093F80";
             ctx.textAlign = "left";
             ctx.font = "1.2px title";
             ctx.fillText("NOTES DESIGNER", -17, 23.5);
-            ctx.font = "1.8px Google Sans";
+            ctx.font = '1.8px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.fillText(chartInfo.des || '', -17, 25.5);
 
             ctx.font = "bold 2.5px title";
@@ -787,7 +787,7 @@ export class SimaiRenderer {
             ctx.shadowBlur = 4;
             ctx.textAlign = "center";
             ctx.lineWidth = 0.75;
-            ctx.font = "bold 3.5px Google Sans";
+            ctx.font = 'bold 3.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             outlineText(ctx, difficultyText, -6.4, 6);
 
             ctx.shadowColor = "";
@@ -795,16 +795,16 @@ export class SimaiRenderer {
             ctx.strokeStyle = levelColorDark;
             ctx.textAlign = "left";
             ctx.lineWidth = 0.4;
-            ctx.font = "bold 2.5px Google Sans";
+            ctx.font = 'bold 2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             outlineText(ctx, "LV", 6.4, 6);
 
             ctx.textAlign = "center";
-            ctx.font = "bold 5.5px Google Sans";
+            ctx.font = 'bold 5.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.letterSpacing = "-0.5px";
             ctx.lineWidth = 0.5;
             outlineText(ctx, lvText, 12, 6.5);
 
-            ctx.font = "bold 3.6px Google Sans";
+            ctx.font = 'bold 3.6px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.textAlign = "left";
             outlineText(ctx, isPlus ? "+" : "", 13.8 + (lvText.length - 1), 3.5);
             ctx.restore();
@@ -911,7 +911,7 @@ export class SimaiRenderer {
         const timeText = `Time: ${minTime}:${absTime}`;
 
         ctx.save();
-        ctx.font = "3px Google Sans";
+        ctx.font = '3px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
@@ -945,9 +945,9 @@ export class SimaiRenderer {
         ctx.fillText(`${minTime}:${absTime}`, scaleBase / -2 - 5, -1);
 
         ctx.letterSpacing = "0px";
-        ctx.font = "4px Google Sans";
+        ctx.font = '4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillText('Powered by', scaleBase / -2 - 3, h * 0.5 - 5);
-        ctx.font = "2.5px Google Sans";
+        ctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillText('susuy0725/web-mai-chart-x', scaleBase / -2 - 3, h * 0.5 - 2);
 
         const allPassed = noteQuantity.break + noteQuantity.touch + noteQuantity.slide + noteQuantity.hold + noteQuantity.tap;

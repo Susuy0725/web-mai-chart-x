@@ -268,6 +268,23 @@ function resize() {
     draw();
 }
 
+
+if (typeof document !== 'undefined' && document.fonts) {
+    Promise.all([
+        document.fonts.load('10px combo'),
+        document.fonts.load('10px mono'),
+        document.fonts.load('10px title'),
+    ]).then(() => {
+        if (renderer) {
+            renderer._sensorCacheParams = { w: 0, h: 0, scale: 0 };
+            renderer._middleDisplayCacheParams = { w: 0, h: 0, scale: 0 };
+        }
+        if (typeof draw === 'function') {
+            draw();
+        }
+    });
+}
+
 resize();
 
 window.addEventListener('resize', resize);
@@ -289,6 +306,29 @@ const slideDebugBtn = getControlButton("slideDebug");
 
 const gameBackgroundImage = document.getElementById("backgroundImage");
 const gameBackgroundVideo = document.getElementById("backgroundVideo");
+if (gameBackgroundVideo) {
+    gameBackgroundVideo.playsInline = true;
+    gameBackgroundVideo.defaultMuted = true;
+    gameBackgroundVideo.muted = true;
+    gameBackgroundVideo.setAttribute('playsinline', '');
+    gameBackgroundVideo.setAttribute('webkit-playsinline', '');
+    gameBackgroundVideo.setAttribute('x5-playsinline', '');
+    gameBackgroundVideo.setAttribute('disablePictureInPicture', '');
+    gameBackgroundVideo.setAttribute('disableRemotePlayback', '');
+    gameBackgroundVideo.addEventListener('webkitbeginfullscreen', (e) => {
+        e.preventDefault();
+        try {
+            if (typeof gameBackgroundVideo.webkitExitFullscreen === 'function') {
+                gameBackgroundVideo.webkitExitFullscreen();
+            }
+        } catch (_) { }
+    });
+    gameBackgroundVideo.addEventListener('webkitpresentationmodechanged', () => {
+        if (gameBackgroundVideo.webkitPresentationMode === 'fullscreen' && typeof gameBackgroundVideo.webkitSetPresentationMode === 'function') {
+            gameBackgroundVideo.webkitSetPresentationMode('inline');
+        }
+    });
+}
 const canvasOutline = document.getElementById("canvasOutline");
 
 const timeControl = document.getElementById("timeControl");
@@ -1451,7 +1491,7 @@ function play() {
         gameBackgroundVideo.playbackRate = speed;
     }
     if (gameBackgroundVideo.paused && gameBackgroundVideo.readyState >= 1) {
-        gameBackgroundVideo.play();
+        gameBackgroundVideo.play().catch(() => { });
     }
 
     audioManager.setPlaybackRate(speed);
@@ -2802,12 +2842,10 @@ function openSettings() {
 
     const switchTab = (index) => {
         tabs.forEach((tab, i) => {
-            tab.style.borderLeftColor = i === index ? '#4a90e2' : 'transparent';
-            tab.style.color = i === index ? '#fff' : '#888';
-            tab.style.fontWeight = i === index ? 'bold' : 'normal';
+            tab.classList.toggle('active', i === index);
         });
         sections.forEach((sec, i) => {
-            sec.style.display = i === index ? 'flex' : 'none';
+            sec.classList.toggle('active', i === index);
         });
     };
 
@@ -2840,7 +2878,6 @@ function openSettings() {
             const text = document.createElement('span');
             text.textContent = labelText;
             text.className = 'popup-setting-text';
-            element.style.cssText = 'width:20px; height:20px; flex:0 0 auto; cursor:pointer; margin: 0;';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -2856,6 +2893,7 @@ function openSettings() {
             text.className = 'popup-setting-text';
 
             element.style.width = '140px';
+            element.style.flexShrink = '0';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -2864,23 +2902,18 @@ function openSettings() {
 
         // 3. Object (子屬性折疊選單)
         if (element.dataset && element.dataset.type === 'object-container') {
-            row.className = 'popup-setting-row';
-            row.style.flexDirection = 'column';
-            row.style.alignItems = 'stretch';
+            row.className = 'popup-setting-row popup-setting-row-object';
 
             const header = document.createElement('div');
-            header.className = 'popup-setting-wrapper';
-            header.style.padding = '4px 0';
-            header.style.userSelect = 'none';
-            header.innerHTML = `<span>${labelText}</span><span class="arrow-icon" style="transition:transform 0.2s; transform: rotate(0deg); font-size:12px;">▼</span>`;
+            header.className = 'popup-setting-object-header';
+            header.innerHTML = `<span>${labelText}</span><span class="popup-setting-arrow-icon">▼</span>`;
 
             const subBody = element;
             subBody.className = 'popup-setting-subbody';
 
             header.addEventListener('click', () => {
-                const isHidden = subBody.style.display === 'none';
-                subBody.style.display = isHidden ? 'flex' : 'none';
-                header.querySelector('.arrow-icon').style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+                const isExpanded = subBody.classList.toggle('open');
+                header.querySelector('.popup-setting-arrow-icon').classList.toggle('expanded', isExpanded);
             });
 
             row.appendChild(header);
@@ -2912,14 +2945,15 @@ function openSettings() {
     const createCheckbox = (checked, id) => {
         const input = document.createElement('input');
         input.type = 'checkbox';
+        input.className = 'popup-setting-checkbox';
         input.id = id;
         input.checked = checked;
-        input.style.cursor = 'pointer';
         return input;
     };
 
     const createDropdown = (value, options = []) => {
         const select = document.createElement('select');
+        select.className = 'popup-setting-dropdown';
         options.forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
@@ -2927,7 +2961,6 @@ function openSettings() {
             if (opt.value == value) o.selected = true;
             select.appendChild(o);
         });
-        select.style.cursor = 'pointer';
         return select;
     };
 

@@ -12,13 +12,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Noto+Sans+TC:wght@100..900&display=swap">
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap">
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Noto+Sans+TC:wght@100..900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap"
         media="print" onload="this.media='all'">
     <noscript>
         <link rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Noto+Sans+TC:wght@100..900&display=swap">
+            href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap">
     </noscript>
 
     <link rel="preload" as="style"
@@ -32,6 +32,7 @@
     </noscript>
 
     <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="../Styles/settings.css">
     <link rel="preload" as="style" href="../Styles/popup.css">
     <link rel="stylesheet" href="../Styles/popup.css" media="print" onload="this.media='all'">
     <noscript>
@@ -41,7 +42,7 @@
 
 <body>
     <div
-        style="user-select:none;z-index: 100;position: fixed; top: 0; right: 0; background-color: #00000080;color: whitesmoke;margin: 10px; padding: 10px; border-radius: 0 0 10px 0;">
+        style="user-select:none;z-index: 100;position: fixed; top: 0; right: 0; background-color: #00000080;color: whitesmoke;margin: 10px; padding: 10px; border-radius: 40px; user-select: none;">
         BETA</div>
 
     <main id="app" role="main"
@@ -52,7 +53,8 @@
             <canvas id="main" aria-label="譜面播放畫布"></canvas>
             <div class="backgroundContainer">
                 <img src="" alt="背景圖片" onerror="this.style.display='none'" id="backgroundImage">
-                <video src="" alt="背景影片" onerror="this.style.display = 'none'" id="backgroundVideo" muted></video>
+                <video src="" alt="背景影片" onerror="this.style.display = 'none'" id="backgroundVideo" muted playsinline
+                    webkit-playsinline x5-playsinline disablePictureInPicture disableRemotePlayback></video>
             </div>
         </div>
         <div id="playControls">

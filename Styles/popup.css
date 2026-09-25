@@ -8,6 +8,7 @@
    -------------------------------------------------------------------------- */
 :root {
     --window-padding: 14px;
+    --sw-complete-color: rgb(93, 207, 109);
 }
 
 .popup-backdrop {
@@ -45,7 +46,6 @@
 
 .popup-title {
     margin: 0;
-    margin-left: calc(var(--window-padding) / 2);
     margin-bottom: var(--window-padding);
     min-height: 30px;
     display: flex;
@@ -91,7 +91,7 @@
 .popup-progress-bar {
     width: 0%;
     height: 100%;
-    background: #00ffcc;
+    background: var(--accent-color);
     transition: width 0.3s ease;
 }
 
@@ -226,13 +226,11 @@
     bottom: 24px;
     right: 24px;
     z-index: 100000;
-    min-width: 320px;
+    min-width: 240px;
     max-width: 400px;
-    background: rgba(26, 26, 26, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #262626;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-left: 4px solid #00bbff;
+    border-left: 4px solid var(--accent-color);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 187, 255, 0.15);
     padding: 14px 16px;
@@ -255,7 +253,7 @@
 }
 
 .sw-update-toast.completed {
-    border-left-color: #00ffcc;
+    border-left-color: var(--sw-complete-color);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 255, 204, 0.2);
 }
 
@@ -278,12 +276,12 @@
 .sw-update-percent {
     font-size: 12px;
     font-weight: bold;
-    color: #00bbff;
+    color: var(--accent-color);
     font-family: 'ShareTechMono', monospace;
 }
 
 .sw-update-toast.completed .sw-update-percent {
-    color: #00ffcc;
+    color: var(--sw-complete-color);
 }
 
 .sw-update-progress-bar-bg {
@@ -304,7 +302,7 @@
 }
 
 .sw-update-toast.completed .sw-update-progress-bar-fill {
-    background: linear-gradient(90deg, #00bbff, #00ffcc);
+    background: var(--sw-complete-color);
 }
 
 .sw-update-details {
@@ -342,14 +340,13 @@
 }
 
 .sw-update-btn-reload {
-    background: #00ffcc;
+    background: var(--sw-complete-color);
+    font-weight: bold;
     color: #121212;
-    box-shadow: 0 2px 8px rgba(0, 255, 204, 0.3);
 }
 
 .sw-update-btn-reload:hover {
-    background: #33ffd6;
-    box-shadow: 0 4px 12px rgba(0, 255, 204, 0.45);
+    filter: brightness(0.8);
 }
 
 .sw-update-btn-dismiss {
@@ -364,8 +361,13 @@
 }
 
 @keyframes sw-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 

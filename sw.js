@@ -34,6 +34,13 @@ const ASSETS = [
     './locales/ja.js',
     './locales/zh-TW.js',
     './rpc.js',
+    './_play/index.html',
+    './_play/main.css',
+    './_play/main.js',
+    './_play/simplay.js',
+    './_play/renderer.js',
+    './_play/slideDebug.js',
+    './_play/slidetables.js',
 ];
 
 async function broadcast(message) {

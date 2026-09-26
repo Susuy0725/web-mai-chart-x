@@ -219,7 +219,8 @@ body {
     position: absolute;
     margin: 16px;
     bottom: 0;
-    left: calc(var(--split-ratio) * 100%);
+    left: calc(min(var(--split-ratio) * 100%, 85% - 90px));
+    border: 1px solid var(--button-ouline);
     color: white;
     display: flex;
     align-content: center;

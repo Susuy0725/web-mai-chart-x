@@ -6,8 +6,139 @@ import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
+import { SyncManager } from '../Scripts/sync/syncManager.js';
+import * as googleDriveService from '../Scripts/drive/googleDriveService.js';
+import { createGoogleSignInButton } from '../Scripts/drive/googleButton.js';
+import { openProjectManagerModal } from '../Scripts/projectManagerModal.js';
+import { normalizeFiles, parseProjectBundle, saveProjectToIdb } from '../Scripts/projectLoader.js';
 
 const simulatedPlayController = new SimulatedPlayController();
+
+// -------------------------------------------------------------
+// 統一 WebRTC 同步管理器 (SyncManager)
+// -------------------------------------------------------------
+const syncManager = new SyncManager({
+    onStatusChange: () => {
+        updateSyncStatusUI();
+    },
+    onPlay: async (startAt, speed) => {
+        if (settings.playbackSpeed !== speed) {
+            settings.playbackSpeed = speed;
+            if (playbackSpeedInput) playbackSpeedInput.value = speed.toFixed(2);
+        }
+        await play(true, startAt);
+    },
+    onPause: () => {
+        if (playing) {
+            pause(true);
+        }
+    },
+    onSeek: (time) => {
+        realTime = time;
+        pausedTime = time;
+        globalTime = realTime - musicDelay;
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
+        resetNotesForSeek(globalTime);
+        if (playing) {
+            audioManager.playBGM(realTime);
+        }
+        updateTimeControlUI();
+        draw();
+    },
+    onRestart: () => {
+        restart(true);
+    },
+    onSpeed: (speed) => {
+        setPlaybackSpeed(speed, true);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: speed.toFixed(2) }), type: 'info', timeout: 1500 });
+    },
+    onChart: async (data) => {
+        if (playing) {
+            pause(true);
+        }
+        realTime = 0;
+        pausedTime = 0;
+        setDataEmpty();
+        if (data.selectedDifficulty) {
+            selectedDifficulty = String(data.selectedDifficulty);
+        }
+        if (data.fullMaidata) {
+            maidataProcess(data.fullMaidata);
+        } else if (data.fumen) {
+            if (data.fumen.includes('&inote_') || data.fumen.includes('&title=')) {
+                maidataProcess(data.fumen);
+            } else {
+                const diffKey = "inote_" + (data.selectedDifficulty || selectedDifficulty || '3');
+                rawdata = {
+                    title: data.title || '',
+                    artist: data.artist || '',
+                    first: data.musicDelay !== undefined ? String(data.musicDelay) : '0',
+                    [diffKey]: data.fumen
+                };
+                musicDelay = parseFloat(rawdata.first) || 0;
+                getResult();
+            }
+        }
+        globalTime = -musicDelay;
+        updateTimeControlUI();
+        resetNotesForSeek(0);
+        draw();
+    },
+    onAudio: async (audioBlob) => {
+        await audioManager.setBackgroundMusic(audioBlob);
+    },
+    onAudioClear: async () => {
+        if (playing) {
+            pause(true);
+        }
+        await audioManager.removeBackgroundMusic().catch(() => {});
+    },
+    getProjectData: async () => {
+        if (!rawdata) return null;
+        const fumenText = rawdata['inote_' + selectedDifficulty] || rawdata.inote_3 || '';
+        let fullMaidata = '';
+        if (rawdata.title || rawdata.artist || rawdata.first || fumenText) {
+            const parts = [];
+            if (rawdata.title) parts.push(`&title=${rawdata.title}`);
+            if (rawdata.artist) parts.push(`&artist=${rawdata.artist}`);
+            if (rawdata.first) parts.push(`&first=${rawdata.first}`);
+            if (rawdata.des) parts.push(`&des=${rawdata.des}`);
+            for (let i = 1; i <= 7; i++) {
+                if (rawdata[`inote_${i}`]) {
+                    parts.push(`&inote_${i}=\n${rawdata[`inote_${i}`]}`);
+                }
+            }
+            fullMaidata = parts.join('\n');
+        }
+
+        let bgm = null;
+        if (audioManager.bgmFile) {
+            bgm = audioManager.bgmFile;
+        } else if (audioManager.bgmBlob) {
+            bgm = audioManager.bgmBlob;
+        } else {
+            const lastId = localStorage.getItem('simai_lastProjectId');
+            if (lastId) {
+                try {
+                    bgm = await idbGetProject(lastId, 'resource_bgm');
+                } catch (_) {}
+            }
+        }
+
+        return {
+            chart: {
+                fumen: fumenText,
+                fullMaidata: fullMaidata,
+                title: rawdata.title || '',
+                artist: rawdata.artist || '',
+                musicDelay: typeof musicDelay !== 'undefined' ? musicDelay : 0,
+                selectedDifficulty: selectedDifficulty || '3'
+            },
+            audio: bgm
+        };
+    }
+});
 
 const defaultSettings = {
     // Game
@@ -254,6 +385,15 @@ let timeControlSliding = false;
 
 const canvasContainer = document.getElementById("canvasContainer");
 
+if (canvasContainer) {
+    canvasContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvasContainer.addEventListener('selectstart', (e) => e.preventDefault());
+}
+if (canvas) {
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('selectstart', (e) => e.preventDefault());
+}
+
 function resize() {
     const dpr = window.devicePixelRatio || 1;
     const w = (canvasContainer ? canvasContainer.clientWidth : window.innerWidth) * dpr;
@@ -297,6 +437,28 @@ const hideShowBtn = document.getElementById("showPlayControlsBtn");
 const projectBtn = getControlButton("openProject");
 const folderBtn = getControlButton("openFolder");
 const settingsBtn = getControlButton("settings");
+const connectionBtn = getControlButton("connection");
+
+function updateSyncStatusUI() {
+    if (connectionBtn && syncManager) {
+        syncManager.updateButtonUI(connectionBtn);
+    }
+}
+
+if (connectionBtn) {
+    connectionBtn.addEventListener("click", () => {
+        syncManager.openSyncModal({
+            onBeforeConnect: async () => {
+                if (audioManager.ctx && audioManager.ctx.state === 'suspended') {
+                    try {
+                        await audioManager.ctx.resume();
+                    } catch (_) { }
+                }
+            }
+        });
+    });
+}
+
 
 const playbackSpeedInput = document.getElementById("playbackSpeedInput");
 const playbackSpeedBtn = getControlButton("playbackSpeed");
@@ -1115,7 +1277,7 @@ if (canvas) {
 }
 
 if (restartBtn) {
-    restartBtn.addEventListener("click", restart);
+    restartBtn.addEventListener("click", () => restart(false));
 }
 
 if (playbackSpeedInput) {
@@ -1280,91 +1442,35 @@ function setDataEmpty() {
 }
 
 async function handleFolderInput(files) {
-    // Normalize input into an array of File-like objects (supports FileList, Array, or JSZip.files mapping)
-    const entries = [];
-    if (files && typeof files.length === 'number' && typeof files.item === 'function') {
-        for (let i = 0; i < files.length; i++) {
-            const f = files.item(i);
-            if (f) entries.push(f);
-        }
-    } else if (Array.isArray(files)) {
-        for (let i = 0; i < files.length; i++) if (files[i]) entries.push(files[i]);
-    } else if (files && typeof files === 'object') {
-        // Assume JSZip.files mapping
-        for (const name in files) {
-            if (!Object.prototype.hasOwnProperty.call(files, name)) continue;
-            const zf = files[name];
-            if (zf.dir) continue; // skip directories
-            if (typeof zf.async === 'function') {
-                try {
-                    const blob = await zf.async('blob');
-                    const baseName = name.replace(/\\/g, '/').split('/').pop();
-                    entries.push(new File([blob], baseName, { type: blob.type || '' }));
-                } catch (e) {
-                    console.warn('從 zip 讀取檔案失敗', name, e);
-                }
-            }
-        }
-    } else {
-        console.warn('handleFolderInput：未知的 files 參數型別', files);
-        return;
+    const entries = await normalizeFiles(files);
+    const bundle = await parseProjectBundle(entries);
+
+    if (currentProjectId) {
+        await saveProjectToIdb(currentProjectId, bundle);
     }
 
-    for (let i = 0; i < entries.length; i++) {
-        const file = entries[i];
-        const baseName = (file.name || '').replace(/.*[\\/]/, '');
-        const lowerName = baseName.toLowerCase();
-        const ext = (baseName.split('.').pop() || '').toLowerCase();
-
-        // Fallback to extension check when file.type is missing (common for zip blobs)
-        const isVideo = ((file.type || '').startsWith('video/')) || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
-        const isImage = ((file.type || '').startsWith('image/')) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext);
-
-        if (lowerName.startsWith('track.')) {
-            // 音樂檔
-            const url = URL.createObjectURL(file);
-            await audioManager.setBackgroundMusic(url, file);
-        }
-        if (lowerName.startsWith('maidata.')) {
-            // 譜面檔
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                maidataProcess(e.target.result);
-                resize();
-            };
-            reader.readAsText(file);
-        }
-        if (lowerName.startsWith('bg.')) {
-            /*if (isVideo) {
-                // 可能為命名錯誤
-                // 背景影片
-                backgroundVideo = file;
-                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                editorBackgroundVideo.style.display = 'none';
-                editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                projSet('background_video', file).catch((error) => {
-                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
-                });
-                continue;
-            }*/
-            if (isImage) {
-                // 背景圖
-                backgroundImage = file;
-                gameBackgroundImage.src = URL.createObjectURL(backgroundImage);
-                gameBackgroundImage.style.display = 'block';
-                continue;
-            }
-        }
-        if (lowerName.startsWith('pv.')) {
-            if (isVideo) {
-                // 背景影片
-                backgroundVideo = file;
-                gameBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                gameBackgroundVideo.style.display = 'none';
-                continue;
-            }
-        }
+    if (bundle.bgm) {
+        const url = URL.createObjectURL(bundle.bgm);
+        await audioManager.setBackgroundMusic(url, bundle.bgm);
     }
+
+    if (bundle.maidata) {
+        maidataProcess(bundle.maidata);
+        resize();
+    }
+
+    if (bundle.bgImage) {
+        backgroundImage = bundle.bgImage;
+        gameBackgroundImage.src = URL.createObjectURL(backgroundImage);
+        gameBackgroundImage.style.display = 'block';
+    }
+
+    if (bundle.bgVideo) {
+        backgroundVideo = bundle.bgVideo;
+        gameBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
+        gameBackgroundVideo.style.display = 'none';
+    }
+
     tryUpdateBackgroundBrightness();
 }
 
@@ -1407,10 +1513,11 @@ function updateTimeControlUI() {
     if (!timeControl) return;
     const totalTime = getTotalTime();
     timeControl.max = totalTime;
+    const displayTime = timeControlSliding ? parseFloat(timeControl.value) : realTime;
     if (!timeControlSliding) {
         timeControl.value = realTime;
     }
-    const ratio = Math.max(0, Math.min(1, totalTime > 0 ? (realTime / totalTime) : 0));
+    const ratio = Math.max(0, Math.min(1, totalTime > 0 ? (displayTime / totalTime) : 0));
     const thumbWidth = 16;
     const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
     timeControl.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
@@ -1424,42 +1531,66 @@ const videoSeekDebounce = debounce((time) => {
     }
 }, 50);
 
+const slideInputDebounce = debounce(() => {
+    timeControlSliding = false;
+    if (playing) {
+        const speed = settings.playbackSpeed || 1;
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
+        audioManager.setPlaybackRate(speed);
+        audioManager.playBGM(realTime);
+    }
+    if (syncManager && syncManager.isConnected()) {
+        syncManager.sendSeek(realTime);
+    }
+}, 150);
+
 if (timeControl) {
-    const handleSeek = () => {
+    const handleSeek = (isContinuous = false) => {
+        timeControlSliding = true;
         const newTime = parseFloat(timeControl.value);
         pausedTime = newTime;
         realTime = newTime;
         globalTime = realTime - musicDelay;
-        playStartTimestamp = null;
+        playStartTimestamp = performance.now();
+        playStartRealTime = realTime;
 
         // 拖拽/跳轉時完整重置 Note 音效播放、劃軌進度與遊玩 Hit/判定狀態記錄
         resetNotesForSeek(globalTime);
-
         videoSeekDebounce(realTime);
 
-        if (playing) {
-            const speed = settings.playbackSpeed || 1;
-            startTime = performance.now() - (pausedTime * 1000 / speed);
+        if (isContinuous) {
             audioManager.stopAllLongSounds();
-            audioManager.setPlaybackRate(speed);
-            audioManager.playBGM(realTime);
+            updateTimeControlUI();
+            draw();
+            slideInputDebounce();
         } else {
+            timeControlSliding = false;
             audioManager.stopAllLongSounds();
-            audioManager.clearSoundQueue();
-            audioManager.stopBGM();
+            if (playing) {
+                const speed = settings.playbackSpeed || 1;
+                startTime = performance.now() - (pausedTime * 1000 / speed);
+                audioManager.setPlaybackRate(speed);
+                audioManager.playBGM(realTime);
+            } else {
+                audioManager.clearSoundQueue();
+                audioManager.stopBGM();
+            }
+            updateTimeControlUI();
+            draw();
+
+            if (syncManager && syncManager.isConnected()) {
+                syncManager.sendSeek(realTime);
+            }
         }
-        updateTimeControlUI();
-        draw();
     };
 
     timeControl.addEventListener("input", () => {
-        timeControlSliding = true;
-        handleSeek();
+        handleSeek(true);
     });
 
     timeControl.addEventListener("change", () => {
-        timeControlSliding = false;
-        handleSeek();
+        handleSeek(false);
     });
 
     timeControl.addEventListener("pointerdown", () => {
@@ -1467,17 +1598,43 @@ if (timeControl) {
     });
 
     timeControl.addEventListener("pointerup", () => {
-        timeControlSliding = false;
+        slideInputDebounce();
     });
 }
 
-function play() {
-    if (playing) return;
+async function play(isRemote = false, startAt = null) {
+    const remote = typeof isRemote === 'boolean' ? isRemote : false;
+    if (playing && startAt === null) return;
     playing = true;
-    playStartTimestamp = null;
+
+    // 1. 喚醒 AudioContext，消除硬體延遲
+    if (audioManager && audioManager.ctx && audioManager.ctx.state === 'suspended') {
+        try {
+            await audioManager.ctx.resume();
+        } catch (_) { }
+    }
+
+    // 2. 嚴格對準起始時間
+    const targetTime = (typeof startAt === 'number') ? startAt : realTime;
+    realTime = targetTime;
+    pausedTime = targetTime;
+    globalTime = realTime - musicDelay;
+
+    // 3. 立即重置音符狀態與時間軸 UI
+    resetNotesForSeek(globalTime);
+    updateTimeControlUI();
 
     const speed = settings.playbackSpeed || 1;
-    startTime = performance.now() - (pausedTime * 1000 / speed);
+    const now = performance.now();
+    playStartRealTime = realTime;
+    playStartTimestamp = now;
+    startTime = now - (pausedTime * 1000 / speed);
+
+    if (!remote) {
+        if (syncManager && syncManager.isConnected()) {
+            syncManager.sendPlay(realTime, speed);
+        }
+    }
 
     if (playPauseBtn) {
         playPauseBtn.classList.add("playing");
@@ -1498,8 +1655,15 @@ function play() {
     audioManager.playBGM(realTime);
 }
 
-function restart() {
-    pause();
+function restart(isRemote = false) {
+    const remote = typeof isRemote === 'boolean' ? isRemote : false;
+    pause(remote);
+
+    if (!remote) {
+        if (syncManager && syncManager.isConnected()) {
+            syncManager.sendRestart();
+        }
+    }
 
     activePointers.clear();
     activeKeyboardSensors.clear();
@@ -1510,6 +1674,14 @@ function restart() {
     pausedTime = 0;
     realTime = 0;
     globalTime = realTime - musicDelay;
+    nowIndex = 0;
+
+    // 不論是否正在播放，強制停止所有長音效、清空佇列與 BGM
+    audioManager.stopAllLongSounds();
+    audioManager.clearSoundQueue();
+    audioManager.stopBGM();
+
+    resetNotesForSeek(globalTime);
 
     if (datas && datas.notes) {
         datas.notes.forEach(n => {
@@ -1564,18 +1736,33 @@ function updatePauseBackgroundDisplay() {
         gameBackgroundImage.style.display = hasImage ? 'block' : 'none';
         gameBackgroundVideo.style.display = 'none';
     } else {
-        // [ ] 隱藏 + [ ] 顯示封面圖 -> 顯示影片，無影片直接全部隱藏
-        gameBackgroundImage.style.display = 'none';
-        gameBackgroundVideo.style.display = hasVideo ? 'block' : 'none';
+        // [ ] 隱藏 + [ ] 顯示封面圖 -> 優先顯示影片，若無影片但有背景圖則顯示背景圖
+        if (hasVideo) {
+            gameBackgroundImage.style.display = 'none';
+            gameBackgroundVideo.style.display = 'block';
+        } else if (hasImage) {
+            gameBackgroundImage.style.display = 'block';
+            gameBackgroundVideo.style.display = 'none';
+        } else {
+            gameBackgroundImage.style.display = 'none';
+            gameBackgroundVideo.style.display = 'none';
+        }
     }
 }
 
-function pause() {
+function pause(isRemote = false) {
+    const remote = typeof isRemote === 'boolean' ? isRemote : false;
     if (!playing) return;
     playing = false;
     playStartTimestamp = null;
 
     pausedTime = realTime;
+
+    if (!remote) {
+        if (syncManager && syncManager.isConnected()) {
+            syncManager.sendPause();
+        }
+    }
 
     if (playPauseBtn) {
         playPauseBtn.classList.remove("playing");
@@ -1599,11 +1786,11 @@ function pause() {
     draw();
 }
 
-function togglePlay() {
+async function togglePlay() {
     if (playing) {
         pause();
     } else {
-        play();
+        await play();
     }
     tryUpdateBackgroundBrightness();
 }
@@ -1614,7 +1801,7 @@ const saveSettingsDebounce = debounce(() => {
     });
 }, 300);
 
-function setPlaybackSpeed(speed) {
+function setPlaybackSpeed(speed, isRemote = false) {
     typeof speed === 'string' && (speed = parseFloat(speed));
     speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
 
@@ -1629,6 +1816,10 @@ function setPlaybackSpeed(speed) {
         playStartTimestamp = performance.now();
         playStartRealTime = realTime;
         audioManager.playBGM(realTime);
+        // 本地調速時同步至對端，遠端觸發時不回送（防回聲）
+        if (!isRemote && syncManager && syncManager.isConnected()) {
+            syncManager.sendPlay(realTime, speed);
+        }
     }
     if (gameBackgroundVideo && gameBackgroundVideo.src) {
         gameBackgroundVideo.playbackRate = speed;
@@ -1672,7 +1863,7 @@ function update() {
         let timeUpdatedByBgm = false;
 
         // 1. 優先使用音訊 AudioContext 硬體時脈同步，避免主線程計時器產生時間對不上
-        if (audioManager && typeof audioManager.getBGMTime === 'function') {
+        if (!timeControlSliding && audioManager && typeof audioManager.getBGMTime === 'function') {
             const bgmTime = audioManager.getBGMTime();
             if (bgmTime !== null && bgmTime !== undefined) {
                 realTime = bgmTime;
@@ -1683,8 +1874,8 @@ function update() {
             }
         }
 
-        // 2. 音訊無時脈輸出時使用 Timer Fallback
-        if (!timeUpdatedByBgm) {
+        // 2. 音訊無時脈輸出時使用 Timer Fallback（僅在非使用者手動滑動中推進）
+        if (!timeUpdatedByBgm && !timeControlSliding) {
             if (playStartTimestamp === null) {
                 playStartTimestamp = now;
                 playStartRealTime = realTime;
@@ -2572,6 +2763,12 @@ async function loadProject(projectId, targetDifficulty = null) {
         draw();
         updateTimeControlUI();
 
+        if (syncManager && syncManager.isConnected()) {
+            syncManager.sendPause();
+            syncManager.sendSeek(0);
+            await syncManager.pushProject();
+        }
+
         const list = await projectList();
         const proj = list.find(p => p.id === projectId);
         return proj;
@@ -2583,246 +2780,85 @@ async function loadProject(projectId, targetDifficulty = null) {
 }
 
 async function openProjectManager() {
-    const setStyle = (el, styles) => Object.assign(el.style, styles);
-
-    const buildList = async (container) => {
-        container.innerHTML = '';
-        let list = await projectList();
-
-        if (list.length === 0) {
-            const migratedId = await migrateFromLegacy();
-            if (migratedId) {
-                list = await projectList();
-            }
-        }
-
-        if (list.length === 0) {
-            container.innerHTML = '<div style="color: #888; text-align: center; padding: 24px;">尚無任何專案</div>';
-            return;
-        }
-
-        // 按更新時間排序（最近的在上）
-        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-        for (const proj of list) {
-            const isCurrent = proj.id === currentProjectId;
-            const row = document.createElement('div');
-            setStyle(row, {
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px 12px',
-                background: isCurrent ? 'rgba(74, 144, 226, 0.15)' : '#262626',
-                border: isCurrent ? '1px solid #4a90e2' : '1px solid #383838',
-                borderRadius: '8px',
-                marginBottom: '8px',
-                gap: '8px',
-                transition: 'all 0.15s ease',
-            });
-
-            // 上半部：名稱 + 狀態 + 操作按鈕
-            const topRow = document.createElement('div');
-            setStyle(topRow, {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '8px'
-            });
-
-            // 左側：名稱與標籤
-            const infoDiv = document.createElement('div');
-            setStyle(infoDiv, { flex: '1', minWidth: '0', overflow: 'hidden' });
-
-            const titleContainer = document.createElement('div');
-            setStyle(titleContainer, { display: 'flex', alignItems: 'center', gap: '6px' });
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = proj.name || '未命名專案';
-            setStyle(nameSpan, {
-                fontWeight: '600',
-                fontSize: '14px',
-                color: isCurrent ? '#6ba4f8' : '#eee',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-            });
-            titleContainer.appendChild(nameSpan);
-
-            if (isCurrent) {
-                const currentBadge = document.createElement('span');
-                currentBadge.textContent = '使用中';
-                setStyle(currentBadge, {
-                    fontSize: '10px',
-                    color: '#fff',
-                    background: '#2b6cb0',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    fontWeight: 'bold',
-                    flexShrink: '0'
-                });
-                titleContainer.appendChild(currentBadge);
-            }
-
-            const timeSpan = document.createElement('span');
-            const d = new Date(proj.updatedAt || proj.createdAt);
-            timeSpan.textContent = `最後更新：${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-            setStyle(timeSpan, { fontSize: '11px', color: '#888', display: 'block', marginTop: '2px' });
-
-            infoDiv.appendChild(titleContainer);
-            infoDiv.appendChild(timeSpan);
-
-            // 右側按鈕組
-            const btnGroup = document.createElement('div');
-            setStyle(btnGroup, { display: 'flex', gap: '6px', flexShrink: '0' });
-
-            const makeBtn = (text, onClick, bgColor = '#3a3a3a') => {
-                const btn = document.createElement('button');
-                btn.textContent = text;
-                setStyle(btn, {
-                    background: bgColor,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '5px 10px',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'opacity 0.15s ease'
-                });
-                btn.addEventListener('mouseenter', () => btn.style.opacity = '0.8');
-                btn.addEventListener('mouseleave', () => btn.style.opacity = '1');
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    onClick();
-                };
-                return btn;
+    openProjectManagerModal({
+        currentProjectId,
+        onLoadProject: async (projectId) => {
+            await loadProject(projectId);
+        },
+        onDeleteCurrentProject: async () => {
+            currentProjectId = null;
+            localStorage.removeItem('simai_lastProjectId');
+            setDataEmpty();
+            simpleToast({ content: '已清空播放狀態，未指定專案', type: 'info', timeout: 1500 });
+        },
+        onImportFolder: (onSuccess) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.onchange = async (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    const newId = await projectCreate('匯入專案');
+                    currentProjectId = newId;
+                    localStorage.setItem('simai_lastProjectId', currentProjectId);
+                    setDataEmpty();
+                    await handleFolderInput(files);
+                    if (rawdata?.title) {
+                        await projectUpdateName(newId, rawdata.title);
+                    }
+                    draw();
+                    resize();
+                    updateTimeControlUI();
+                    simpleToast({ content: '已匯入並播放專案', type: 'success', timeout: 1500 });
+                    if (typeof onSuccess === 'function') onSuccess();
+                }
             };
-
-            const openBtn = makeBtn(isCurrent ? '重新載入' : '開啟', async () => {
-                await loadProject(proj.id);
-                simpleToast({ content: `已載入專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
-                buildList(container);
-            }, isCurrent ? '#2d5a88' : '#2e7d32');
-            btnGroup.appendChild(openBtn);
-
-            btnGroup.appendChild(makeBtn('重新命名', async () => {
-                const newName = prompt('請輸入新的專案名稱：', proj.name || '');
-                if (newName !== null && newName.trim() !== '') {
-                    await projectRename(proj.id, newName.trim());
-                    buildList(container);
-                    simpleToast({ content: '專案名稱已更新', type: 'info', timeout: 1200 });
+            input.click();
+        },
+        onImportZip: (onSuccess) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
+                        currentProjectId = newId;
+                        localStorage.setItem('simai_lastProjectId', currentProjectId);
+                        setDataEmpty();
+                        const zip = await JSZip.loadAsync(file);
+                        await handleFolderInput(zip.files);
+                        if (rawdata?.title) {
+                            await projectUpdateName(newId, rawdata.title);
+                        }
+                        draw();
+                        resize();
+                        updateTimeControlUI();
+                        simpleToast({ content: '已匯入並播放專案', type: 'success', timeout: 1500 });
+                        if (typeof onSuccess === 'function') onSuccess();
+                    } catch (err) {
+                        console.error('ZIP 匯入失敗:', err);
+                        simpleToast({ content: `匯入失敗：${err.message || err}`, type: 'error', timeout: 3000 });
+                    }
                 }
-            }));
-
-            btnGroup.appendChild(makeBtn('刪除', async () => {
-                if (isCurrent) {
-                    alert('無法刪除目前正在播放的專案。\n請先切換到其他專案後再刪除。');
-                    return;
-                }
-                if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
-                await projectDelete(proj.id);
-                buildList(container);
-                simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
-            }, '#c62828'));
-
-            topRow.appendChild(infoDiv);
-            topRow.appendChild(btnGroup);
-            row.appendChild(topRow);
-
-            // 下半部：難度選擇標籤 (若有 maidata)
-            const diffRow = document.createElement('div');
-            setStyle(diffRow, {
-                display: 'flex',
-                gap: '6px',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                marginTop: '2px'
-            });
-
-            idbGetProject(proj.id, 'maidata').then(projMaiData => {
-                if (!projMaiData) return;
-                const mData = typeof projMaiData === 'string' ? parseMaidata(projMaiData) : projMaiData;
-                const availableDiffs = [1, 2, 3, 4, 5, 6, 7].filter(d => !!mData[`inote_${d}`]);
-                if (availableDiffs.length === 0) return;
-
-                const diffTitle = document.createElement('span');
-                diffTitle.textContent = '難度：';
-                setStyle(diffTitle, { fontSize: '11px', color: '#999' });
-                diffRow.appendChild(diffTitle);
-
-                availableDiffs.forEach(diffNum => {
-                    const diffBtn = document.createElement('button');
-                    const isSelectedDiff = isCurrent && selectedDifficulty === diffNum;
-                    diffBtn.textContent = `${DIFFICULTY_NAMES[diffNum] || diffNum}`;
-                    setStyle(diffBtn, {
-                        fontSize: '10px',
-                        padding: '2px 8px',
-                        borderRadius: '3px',
-                        border: isSelectedDiff ? '1px solid #fff' : '1px solid transparent',
-                        background: DIFFICULTY_COLORS[diffNum] || '#555',
-                        color: diffNum === 6 ? '#000' : '#fff',
-                        cursor: 'pointer',
-                        fontWeight: isSelectedDiff ? 'bold' : 'normal',
-                        opacity: isSelectedDiff ? '1' : '0.85'
-                    });
-                    diffBtn.title = `點擊切換為此難度播放`;
-                    diffBtn.onclick = async (e) => {
-                        e.stopPropagation();
-                        await loadProject(proj.id, diffNum);
-                        simpleToast({ content: `已切換難度至：${DIFFICULTY_NAMES[diffNum]}`, type: 'success', timeout: 1200 });
-                        buildList(container);
-                    };
-                    diffRow.appendChild(diffBtn);
-                });
-            });
-
-            row.appendChild(diffRow);
-            container.appendChild(row);
-        }
-    };
-
-    const container = document.createElement('div');
-    setStyle(container, {
-        maxHeight: '400px',
-        overflowY: 'auto',
-        scrollbarWidth: 'thin',
-        scrollbarColor: '#555 transparent',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px'
-    });
-
-    buildList(container);
-
-    popupWindow({
-        title: "專案總管",
-        customContent: container,
-        width: 520,
-        maxWidth: 620,
-        buttons: [
-            {
-                text: "新建空白專案",
-                onClick: async () => {
-                    const name = prompt('請輸入專案名稱：', '未命名專案');
-                    if (name === null) return;
-                    const newId = await projectCreate(name.trim() || '未命名專案');
-                    await loadProject(newId);
-                    simpleToast({ content: `已建立並切換至專案：${name.trim() || '未命名專案'}`, type: 'success', timeout: 1500 });
-                    buildList(container);
-                }
-            },
-            {
-                text: "關閉",
-                hideOnClick: true,
-            }
-        ]
+            };
+            input.click();
+        },
+        openSettings,
+        simpleToast,
+        popupWindow,
+        assetPrefix: '../'
     });
 }
+
+
 
 // ============================================================
 // 設定面板 (Settings Popup)
 // ============================================================
 
-function openSettings() {
+function openSettings(initialTabIndex = 0) {
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
 
@@ -2969,7 +3005,7 @@ function openSettings() {
 
     const playSettingsConfig = [
         {
-            label: 'settings.tabs.basic',
+            label: 'settings.tabs.general',
             items: [
                 {
                     id: 'speed', type: 'range', label: 'settings.items.speed', min: 1, max: 20, step: 0.1, def: defaultSettings.speed,
@@ -3220,7 +3256,101 @@ function openSettings() {
         });
     });
 
-    switchTab(0);
+    // =========================================================
+    // 同步 (Sync) 標籤頁
+    // =========================================================
+    const connSection = addTab(t('settings.tabs.sync') || '同步');
+
+    const openSyncBtn = document.createElement('button');
+    openSyncBtn.className = 'popup-button';
+    openSyncBtn.textContent = t('settings.connection.btnOpen') || '開啟';
+    openSyncBtn.style.padding = '6px 18px';
+    openSyncBtn.addEventListener('click', () => {
+        syncManager.openSyncModal({
+            onBeforeConnect: async () => {
+                if (audioManager.ctx && audioManager.ctx.state === 'suspended') {
+                    try {
+                        await audioManager.ctx.resume();
+                    } catch (_) { }
+                }
+            }
+        });
+    });
+
+    // 1. Google Drive 雲端同步區塊
+    const gdriveBox = document.createElement('div');
+    gdriveBox.style.cssText = 'display:flex; flex-direction:column; gap:10px; padding:12px; background:#181818; border:1px solid #333; border-radius:6px; margin-bottom:12px; width:100%; box-sizing:border-box;';
+
+    const gdriveTitle = document.createElement('div');
+    gdriveTitle.style.cssText = 'font-weight:600; font-size:13px; color:#fff; display:flex; align-items:center; gap:6px;';
+    gdriveTitle.innerHTML = `<span class="material-symbols-outlined" style="color:#4a90e2; font-size:20px;">cloud</span>${t('settings.gdrive.title') || 'Google Drive 雲端同步'}`;
+    gdriveBox.appendChild(gdriveTitle);
+
+    const gdriveStatusRow = document.createElement('div');
+    gdriveStatusRow.style.cssText = 'display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px 12px;';
+
+    const statusText = document.createElement('span');
+    statusText.style.lineHeight = '1.4';
+    const gdriveBtnContainer = document.createElement('div');
+    gdriveBtnContainer.style.flexShrink = '0';
+
+    const updateGdriveUI = () => {
+        const loggedIn = googleDriveService.isLoggedIn();
+        const user = googleDriveService.getCurrentUser();
+        gdriveBtnContainer.innerHTML = '';
+
+        if (loggedIn) {
+            statusText.textContent = t('settings.gdrive.loggedInAs', { account: user?.email || user?.name || 'Google 使用者' });
+            statusText.style.color = '#4caf50';
+            statusText.style.whiteSpace = 'normal';
+            statusText.style.wordBreak = 'break-all';
+
+            const logoutBtn = document.createElement('button');
+            logoutBtn.type = 'button';
+            logoutBtn.className = 'popup-button';
+            logoutBtn.style.cssText = 'padding:6px 14px; font-size:12px; cursor:pointer; flex-shrink:0; background:#3a2020; border-color:#662222; color:#fff; border-radius:6px;';
+            logoutBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
+            logoutBtn.onclick = () => {
+                googleDriveService.logout();
+                simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
+                updateGdriveUI();
+            };
+            gdriveBtnContainer.appendChild(logoutBtn);
+        } else {
+            statusText.textContent = t('settings.gdrive.notLoggedIn') || '尚未登入';
+            statusText.style.color = '#888';
+            statusText.style.whiteSpace = 'nowrap';
+
+            const googleBtn = createGoogleSignInButton({
+                theme: 'dark',
+                size: 'small',
+                text: t('settings.gdrive.loginBtn') || '登入 Google 帳號',
+                onClick: async () => {
+                    try {
+                        googleBtn.setLoading(true, t('settings.gdrive.loggingIn') || '正在登入...');
+                        await googleDriveService.login();
+                        simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
+                        updateGdriveUI();
+                    } catch (err) {
+                        console.error('[GoogleDrive] 登入錯誤:', err);
+                        simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
+                        updateGdriveUI();
+                    }
+                }
+            });
+            gdriveBtnContainer.appendChild(googleBtn);
+        }
+    };
+
+    updateGdriveUI();
+    gdriveStatusRow.appendChild(statusText);
+    gdriveStatusRow.appendChild(gdriveBtnContainer);
+    gdriveBox.appendChild(gdriveStatusRow);
+    connSection.appendChild(gdriveBox);
+
+    connSection.appendChild(createRow(t('settings.connection.syncView') || '設定同步檢視', openSyncBtn));
+
+    switchTab(initialTabIndex);
 
     const applyAndSave = () => {
         Object.keys(inputRefs).forEach(id => {
@@ -3317,4 +3447,3 @@ function openSettings() {
         console.warn('初始化載入專案失敗:', e);
     }
 })();
-

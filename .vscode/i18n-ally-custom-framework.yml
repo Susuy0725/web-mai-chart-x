@@ -1,0 +1,9 @@
+languageIds:
+  - javascript
+  - typescript
+  - html
+
+usageMatchRegex:
+  - "[^\\w\\d]t\\(['\"`]({key})['\"`]"
+
+monopoly: true

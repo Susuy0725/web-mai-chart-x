@@ -1,0 +1,8 @@
+{
+  "devDependencies": {
+    "cloudflared": "^0.7.3",
+    "ngrok": "^5.0.0-beta.2",
+    "vite": "^8.3.1"
+  }
+}
+

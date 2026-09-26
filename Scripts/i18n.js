@@ -1,6 +1,6 @@
-import { zhTW } from '../locales/zh-TW.js';
-import { en } from '../locales/en.js';
-import { ja } from '../locales/ja.js';
+import zhTW from '../locales/zh-TW.json';
+import en from '../locales/en.json';
+import ja from '../locales/ja.json';
 
 const translations = {
     'zh-TW': zhTW,
@@ -8,10 +8,45 @@ const translations = {
     'ja': ja,
 };
 
-let currentLang = localStorage.getItem('simai_lang') || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
-if (!translations[currentLang]) {
-    currentLang = 'zh-TW';
+function detectInitialLanguage() {
+    try {
+        const saved = localStorage.getItem('simai_lang');
+        if (saved && translations[saved]) {
+            return saved;
+        }
+    } catch (_) { }
+
+    const candidateLangs = [];
+    if (typeof navigator !== 'undefined') {
+        if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+            candidateLangs.push(...navigator.languages);
+        }
+        if (navigator.language) {
+            candidateLangs.push(navigator.language);
+        }
+        if (navigator.userLanguage) {
+            candidateLangs.push(navigator.userLanguage);
+        }
+    }
+
+    for (const lang of candidateLangs) {
+        if (!lang || typeof lang !== 'string') continue;
+        const lower = lang.toLowerCase().trim();
+        if (lower.startsWith('ja')) {
+            return 'ja';
+        }
+        if (lower.startsWith('zh')) {
+            return 'zh-TW';
+        }
+        if (lower.startsWith('en')) {
+            return 'en';
+        }
+    }
+
+    return 'zh-TW';
 }
+
+let currentLang = detectInitialLanguage();
 
 const listeners = [];
 

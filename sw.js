@@ -14,35 +14,49 @@ const CACHE_NAME = (() => {
 })();
 
 const ASSETS = [
-    './',
+
     './index.html',
+    './CHANGELOG.md',
     './Styles/main.css',
+    './Styles/settings.css',
     './Styles/popup.css',
     './Scripts/main.js',
     './Scripts/renderer.js',
     './Scripts/helper.js',
     './Scripts/decode.js',
     './Scripts/indexDB.js',
+    './Scripts/audioManager.js',
+    './Scripts/majdataWs.js',
+    "./Scripts/banana.js",
     './Scripts/jszip.min.js',
     './Scripts/mediabunny.cjs',
+    './Scripts/projectManagerModal.js',
+    './Scripts/projectLoader.js',
+    './Scripts/drive/googleDriveService.js',
+    './Scripts/drive/cloudProjectManager.js',
+    './Scripts/sync/editorSync.js',
+    './Scripts/sync/syncManager.js',
+    "./Scripts/sync/webrtcSync.js",
     './favicon.ico',
     './Fonts/ShareTechMono-Regular.ttf',
     './Fonts/Inter.ttf',
     './Skin/outline.png',
     './Scripts/i18n.js',
     './locales/en.js',
+    './locales/en.json',
     './locales/ja.js',
+    './locales/ja.json',
     './locales/zh-TW.js',
+    './locales/zh-TW.json',
     './rpc.js',
     './_play/index.html',
     './_play/main.css',
     './_play/main.js',
-    './_play/simplay.js',
     './_play/renderer.js',
+    './_play/simplay.js',
     './_play/slideDebug.js',
-    './_play/slidetables.js',
+    './_play/slidetables.js'
 ];
-
 async function broadcast(message) {
     try {
         const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });

@@ -1,3 +1,4 @@
+@import url('./settings.css');
 /* ==========================================================================
    Popup & Toast Style Sheet - Web mai Chart
    獨立彈窗、通知提示及各類 Popup 模組專用樣式表
@@ -699,6 +700,4 @@
     cursor: pointer;
     transition: transform 0.15s, filter 0.15s;
 }
-
-/* 全域設定彈窗樣式已抽離至獨立的 settings.css */
-@import url('./settings.css');
+

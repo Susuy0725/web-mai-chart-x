@@ -687,7 +687,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                             pushWarn("Invalid hold syntax in note, ", { errpos: noteCommaIndex });
                             continue;
                         }
-                        noteObj.holdDuration = duration;
+                        noteObj.holdDuration = (duration > 0) ? duration : 1e-4;
                         if (duration + noteObj.time > endTime) endTime = duration + noteObj.time;
                     }
 

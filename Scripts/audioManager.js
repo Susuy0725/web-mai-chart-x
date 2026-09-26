@@ -1,4 +1,4 @@
-import { idbGet, idbSet } from "./indexDB.js";
+import { idbGet, idbSet, idbDelete } from "./indexDB.js";
 
 /**
  * Utility helper to clamp volume values strictly within [min, max].
@@ -35,20 +35,20 @@ class AudioManager {
         this.playbackRate = 1.0;
 
         this.soundFiles = {
-            'clock': './Sounds/clock.wav',
-            'judge': './Sounds/judge.wav',
-            'judge_ex': './Sounds/judge_ex.wav',
-            'judge_break': './Sounds/judge_break.wav',
-            'answer': './Sounds/answer.wav',
-            'break': './Sounds/break.wav',
-            'slide': './Sounds/slide.wav',
-            'break_slide_start': './Sounds/break_slide_start.wav',
-            'judge_break_slide': './Sounds/judge_break_slide.wav',
-            'touch': './Sounds/touch.wav',
-            'hanabi': './Sounds/hanabi.wav',
-            'touchHold_riser': './Sounds/touchHold_riser.wav',
-            'track_start': './Sounds/track_start.wav',
-            'all_perfect': './Sounds/all_perfect.wav'
+            'clock': './Sounds/clock.ogg',
+            'judge': './Sounds/judge.ogg',
+            'judge_ex': './Sounds/judge_ex.ogg',
+            'judge_break': './Sounds/judge_break.ogg',
+            'answer': './Sounds/answer.ogg',
+            'break': './Sounds/break.ogg',
+            'slide': './Sounds/slide.ogg',
+            'break_slide_start': './Sounds/break_slide_start.ogg',
+            'judge_break_slide': './Sounds/judge_break_slide.ogg',
+            'touch': './Sounds/touch.ogg',
+            'hanabi': './Sounds/hanabi.ogg',
+            'touchHold_riser': './Sounds/touchHold_riser.ogg',
+            'track_start': './Sounds/track_start.ogg',
+            'all_perfect': './Sounds/all_perfect.ogg'
         };
 
         this.sfxVolumes = {
@@ -369,14 +369,18 @@ class AudioManager {
 
         const loadTasks = Object.entries(this.soundFiles).map(async ([key, url]) => {
             try {
-                let arrayBuffer = await idbGet(`sfx_cache_${key}`);
+                let arrayBuffer = await idbGet(`sfx_cache_v2_${key}`);
 
                 if (!arrayBuffer) {
                     const response = await fetch(url);
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     arrayBuffer = await response.arrayBuffer();
-                    await idbSet(`sfx_cache_${key}`, arrayBuffer);
+                    await idbSet(`sfx_cache_v2_${key}`, arrayBuffer);
                 }
+
+                // 自動清理老用戶原本佔用 7.8MB 的舊版 wav 快取
+                idbDelete(`sfx_cache_${key}`).catch(() => {});
+                idbDelete('sfx_cache_break_slide').catch(() => {});
 
                 const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer.slice(0));
                 this.bufferMap.set(key, audioBuffer);

@@ -23,6 +23,34 @@
     font-display: swap;
 }
 
+*,
+*::before,
+*::after {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+    touch-action: manipulation;
+    height: 100%;
+    width: 100%;
+}
+
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+select {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+}
+
 body {
     background-color: #222;
 }
@@ -73,6 +101,8 @@ body {
     object-fit: contain;
     scale: 0.98;
     background: black;
+    pointer-events: none;
+    -webkit-touch-callout: none;
 }
 
 #main {

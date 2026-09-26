@@ -26,6 +26,8 @@ const LEVEL_COLORS = {
     7: "#FF6EFC",
 };
 
+const RICH_HANABI_COLOR_MAP = ['#ff009dff', '#ff4800', '#ffe100', '#ddff00', '#00bbff'];
+
 const LEVEL_NAMES = {
     1: 'EAZY',
     2: 'BASIC',
@@ -35,6 +37,45 @@ const LEVEL_NAMES = {
     6: 'Re:MASTER',
     7: 'U•TA•GE'
 };
+
+const JUDGE_COLORS = {
+    PERFECT: "#FFFE02",
+    GREAT: "#FE5454",
+    GOOD: "#45FD43",
+};
+
+function hexToRgb(hex) {
+    if (!hex) return { r: 255, g: 254, b: 2 };
+    let c = hex.replace('#', '');
+    if (c.length === 3) {
+        c = c.split('').map(x => x + x).join('');
+    }
+    const num = parseInt(c, 16);
+    return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+    };
+}
+
+function getJudgeRgba(judge, alpha = 1) {
+    let colorHex = JUDGE_COLORS.PERFECT;
+    if (judge) {
+        if (typeof judge === 'object' && judge.grade) {
+            judge = judge.grade;
+        }
+        if (typeof judge === 'string') {
+            const upper = judge.toUpperCase();
+            if (upper.includes('PERFECT')) colorHex = JUDGE_COLORS.PERFECT;
+            else if (upper.includes('GREAT')) colorHex = JUDGE_COLORS.GREAT;
+            else if (upper.includes('GOOD')) colorHex = JUDGE_COLORS.GOOD;
+            else if (JUDGE_COLORS[upper]) colorHex = JUDGE_COLORS[upper];
+            else if (judge.startsWith('#')) colorHex = judge;
+        }
+    }
+    const rgb = hexToRgb(colorHex);
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
 
 const CARD_PATH = new Path2D();
 CARD_PATH.arc(16, 25, 2, 0, Math.PI * 0.5);
@@ -201,8 +242,9 @@ export class SimaiRenderer {
         this.drawnBorders = new Set();
         this.hanabiEffect = Object.create(null);
         this._tempColorConfig = { colorCode: '' };
-        this._tempTransform = { t: 0, displayT: 0, currentScale: 0 };
+        this._tempTransform = { t: 0, displayT: 0, currentScale: 0, scaleX: 1, scaleY: 1 };
         this._auxTextList = new Array(12);
+        this.offscreen = null;
 
         // 中間顯示 Config 樣式
         this._middleDisplayConfig1 = { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" };
@@ -292,7 +334,7 @@ export class SimaiRenderer {
 
     // --- 視覺特效 (Effects) ---
 
-    simpleHitEffect(noteT) {
+    simpleHitEffect(noteT, judge = null) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
         const { ctx } = this;
@@ -300,7 +342,7 @@ export class SimaiRenderer {
         const decayAlpha = 1 - Math.max(0, -t);
         const radius = 0.8 * this.settings.noteBaseSize * (1 - decayAlpha);
 
-        ctx.strokeStyle = `rgba(255, 200, 0, ${0.8 * decayAlpha})`;
+        ctx.strokeStyle = getJudgeRgba(judge, 0.8 * decayAlpha);
         ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
         ctx.globalCompositeOperation = 'lighter';
         ctx.beginPath();
@@ -350,7 +392,104 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
-    simpleHoldEffect(noteT) {
+    richHanabi(noteT) {
+        const t = noteT / this.settings.hanabiEffectDecayTime;
+        if (t < -1) return;
+        const invt = clamp(-t, 0, 1);
+
+        this.offscreen = this.offscreen || (typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas'));
+
+        function easeOutExpo(x) {
+            return x === 1 ? 1 : 1 - Math.pow(2, -40 * x);
+        }
+
+        function getCustomCurveClamped(x) {
+            let val;
+            if (x <= 0.3) {
+                val = 1 - Math.pow(2, -10 * x) + Math.pow(2, -3);
+            } else {
+                const diff = 0.3 - x;
+                val = 1 - (diff * diff) / 0.49;
+            }
+            return Math.max(0, Math.min(1, val));
+        }
+
+        const ctx = this.ctx;
+        const decayAlpha = getCustomCurveClamped(-t);
+
+        const canvasWH = this.getCanvasWH();
+        this.offscreen.width = canvasWH.width;
+        this.offscreen.height = canvasWH.height;
+
+        const offctx = this.offscreen.getContext('2d');
+        if (!offctx) return;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 1;
+        if (this.images && this.images.ColorBall) {
+            this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * 3.8, 0, 0);
+        }
+        const slices = 30;
+        const slicePath = new Path2D();
+        const tOffset = t * 0.1;
+        const tFive = t * 5 + 5;
+
+        for (let slice = 1; slice < slices; slice += 2) {
+            const angle = ((slice - 0.5) / slices + tOffset) * Math.PI * 2;
+            const angle1 = ((slice + 0.5) / slices + tOffset) * Math.PI * 2;
+
+            const cosA = Math.cos(angle);
+            const sinA = Math.sin(angle);
+            const cosA1 = Math.cos(angle1);
+            const sinA1 = Math.sin(angle1);
+
+            offctx.beginPath();
+            offctx.lineWidth = 1.5;
+            offctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
+            offctx.moveTo(0, 0);
+            offctx.lineTo(cosA * 50, sinA * 50);
+            offctx.lineTo(cosA1 * 50, sinA1 * 50);
+            offctx.closePath();
+            offctx.fill();
+
+            slicePath.moveTo(0, 0);
+            slicePath.lineTo(cosA * 50, sinA * 50);
+            slicePath.lineTo(cosA1 * 50, sinA1 * 50);
+            slicePath.closePath();
+        }
+
+        ctx.restore();
+        ctx.save();
+        ctx.clip(slicePath);
+        ctx.fillStyle = "white";
+
+        const tPhase = t * Math.PI * 2.2;
+        const distFactor = Math.PI * 0.08;
+
+        ctx.beginPath();
+        ctx.globalAlpha = 0.3;
+        for (let y = -50; y < 50; y += 1.5) {
+            const y2 = y * y;
+            ctx.lineTo(-50, y - 1.5);
+            for (let x = -50; x < 50; x += 1.5) {
+                const distSq = x * x + y2;
+                if (distSq > 2500) continue;
+                const dist = Math.sqrt(distSq);
+                const size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.5;
+                if (size > 0) {
+                    ctx.arc(x, y, size, 0, 2 * Math.PI);
+                }
+            }
+            ctx.lineTo(50, y + 1.5);
+            ctx.lineTo(50, y);
+            ctx.lineTo(-50, y);
+        }
+        ctx.fill();
+        ctx.restore();
+    }
+
+    simpleHoldEffect(noteT, judge = null) {
         const { ctx } = this;
         ctx.save();
         const t = noteT * -2;
@@ -361,13 +500,13 @@ export class SimaiRenderer {
 
         ctx.globalCompositeOperation = 'lighter';
 
-        ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha})`;
+        ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha);
         ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 * decayAlpha1})`;
+        ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha1);
         ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha1;
         ctx.beginPath();
         ctx.arc(0, 0, radius1, 0, Math.PI * 2);
@@ -376,7 +515,7 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
-    getNoteTransform(noteT, speedMult = 1) {
+    getNoteTransform(noteT, speedMult = 1, size = null) {
         const speed = this.settings.speed * speedMult;
         let piecewiseSpeed;
         if (speed >= 1) {
@@ -394,9 +533,21 @@ export class SimaiRenderer {
             ? Math.max(0, (t + 0.9) / (0.9 + this.settings.middleDistance))
             : 1;
 
+        let scaleX = 1;
+        let scaleY = 1;
+        if (typeof size === 'number') {
+            scaleX = size;
+            scaleY = size;
+        } else if (Array.isArray(size)) {
+            scaleX = size[0] ?? 1;
+            scaleY = size[1] ?? size[0] ?? 1;
+        }
+
         this._tempTransform.t = t;
         this._tempTransform.displayT = displayT;
         this._tempTransform.currentScale = currentScale;
+        this._tempTransform.scaleX = scaleX;
+        this._tempTransform.scaleY = scaleY;
         return this._tempTransform;
     }
 
@@ -473,8 +624,13 @@ export class SimaiRenderer {
         this.drawHanabiEffects();
 
         const slideNotes = buckets.slide || [];
+        // 1. 先繪製所有 Slide 的軌跡 (底層)
         for (let i = 0; i < slideNotes.length; i++) {
-            this.drawSlide(slideNotes[i]);
+            this.drawSlideTrack(slideNotes[i]);
+        }
+        // 2. 再繪製所有 Slide 的星星 (頂層，確保星星不被任何軌跡覆蓋)
+        for (let i = 0; i < slideNotes.length; i++) {
+            this.drawSlideStar(slideNotes[i]);
         }
 
         const tapnHoldNotes = buckets.tapnhold || [];
@@ -602,14 +758,14 @@ export class SimaiRenderer {
             ctx.font = "1.9px title";
             ctx.textAlign = "center";
             ctx.fillText(chartInfo.title || '', 0, 11);
-            ctx.font = "1.8px Google Sans";
+            ctx.font = '1.8px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.fillText(chartInfo.artist || '', 0, 14.8);
 
             ctx.fillStyle = "#093F80";
             ctx.textAlign = "left";
             ctx.font = "1.2px title";
             ctx.fillText("NOTES DESIGNER", -17, 23.5);
-            ctx.font = "1.8px Google Sans";
+            ctx.font = '1.8px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.fillText(chartInfo.des || '', -17, 25.5);
 
             ctx.font = "bold 2.5px title";
@@ -631,7 +787,7 @@ export class SimaiRenderer {
             ctx.shadowBlur = 4;
             ctx.textAlign = "center";
             ctx.lineWidth = 0.75;
-            ctx.font = "bold 3.5px Google Sans";
+            ctx.font = 'bold 3.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             outlineText(ctx, difficultyText, -6.4, 6);
 
             ctx.shadowColor = "";
@@ -639,16 +795,16 @@ export class SimaiRenderer {
             ctx.strokeStyle = levelColorDark;
             ctx.textAlign = "left";
             ctx.lineWidth = 0.4;
-            ctx.font = "bold 2.5px Google Sans";
+            ctx.font = 'bold 2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             outlineText(ctx, "LV", 6.4, 6);
 
             ctx.textAlign = "center";
-            ctx.font = "bold 5.5px Google Sans";
+            ctx.font = 'bold 5.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.letterSpacing = "-0.5px";
             ctx.lineWidth = 0.5;
             outlineText(ctx, lvText, 12, 6.5);
 
-            ctx.font = "bold 3.6px Google Sans";
+            ctx.font = 'bold 3.6px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
             ctx.textAlign = "left";
             outlineText(ctx, isPlus ? "+" : "", 13.8 + (lvText.length - 1), 3.5);
             ctx.restore();
@@ -755,7 +911,7 @@ export class SimaiRenderer {
         const timeText = `Time: ${minTime}:${absTime}`;
 
         ctx.save();
-        ctx.font = "3px Google Sans";
+        ctx.font = '3px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
@@ -789,14 +945,16 @@ export class SimaiRenderer {
         ctx.fillText(`${minTime}:${absTime}`, scaleBase / -2 - 5, -1);
 
         ctx.letterSpacing = "0px";
-        ctx.font = "4px Google Sans";
+        ctx.font = '4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillText('Powered by', scaleBase / -2 - 3, h * 0.5 - 5);
-        ctx.font = "2.5px Google Sans";
+        ctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillText('susuy0725/web-mai-chart-x', scaleBase / -2 - 3, h * 0.5 - 2);
+
+        const allPassed = noteQuantity.break + noteQuantity.touch + noteQuantity.slide + noteQuantity.hold + noteQuantity.tap;
 
         ctx.textAlign = "left";
         const aux = this._auxTextList;
-        aux[0] = `${playCombo}/${allRes}`;
+        aux[0] = `${allPassed}/${allRes}`;
         aux[1] = `ALL:`;
         aux[2] = `${noteQuantity.break}/${playScoreRes.break}`;
         aux[3] = `BRK:`;
@@ -1061,7 +1219,7 @@ export class SimaiRenderer {
     drawTap(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMine, hispeed, triggered, triggeredTime } = s;
         const noteT = noteTime - this.globalTime;
-        const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
+        const { t, displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, hispeed, s.size);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
@@ -1069,7 +1227,7 @@ export class SimaiRenderer {
         if (triggered) {
             ctx.save();
             ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(triggeredTime - this.globalTime);
+            this.simpleHitEffect(triggeredTime - this.globalTime, s.judgeResult);
             ctx.restore();
             return;
         }
@@ -1099,12 +1257,12 @@ export class SimaiRenderer {
         // 繪製 Note 本體
         ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         ctx.rotate(posInfo.rot);
-        this.drawImgAtcenter(img, size);
+        this.drawImgAtcenter(img, size, 0, 0, scaleX, scaleY);
 
         if (s.isEx) {
             this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")];
             const exImg = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
-            this.drawImgAtcenter(exImg, size);
+            this.drawImgAtcenter(exImg, size, 0, 0, scaleX, scaleY);
         }
 
         ctx.restore();
@@ -1113,7 +1271,7 @@ export class SimaiRenderer {
     drawStar(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine, hispeed, triggered, triggeredTime } = s;
         const noteT = noteTime - this.globalTime;
-        const { t, displayT, currentScale } = this.getNoteTransform(noteT, hispeed);
+        const { t, displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, hispeed, s.size);
 
         const posInfo = noteRefPos[pos - 1];
         const ctx = this.ctx;
@@ -1121,7 +1279,7 @@ export class SimaiRenderer {
         if (triggered) {
             ctx.save();
             ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(triggeredTime - this.globalTime);
+            this.simpleHitEffect(triggeredTime - this.globalTime, s.judgeResult);
             ctx.restore();
             return;
         }
@@ -1162,29 +1320,32 @@ export class SimaiRenderer {
             rot += this.globalTime * 2 * Math.PI * speed;
         }
         ctx.rotate(rot);
-        this.drawImgAtcenter(img, size);
+        this.drawImgAtcenter(img, size, 0, 0, scaleX, scaleY);
 
         if (s.isEx) {
             this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")];
             const exImg = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.6, this._tempColorConfig);
-            this.drawImgAtcenter(exImg, size);
+            this.drawImgAtcenter(exImg, size, 0, 0, scaleX, scaleY);
         }
 
         ctx.restore();
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration, hispeed, triggered, triggeredTime, isHolding, holdFinish } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration, hispeed, triggered, triggeredTime, isHolding, holdFinish, judgeResult } = s;
         const noteT = (noteTime - this.globalTime);
         const speedFactor = (this.settings.speed * 0.8833 + 0.8167) * hispeed;
         const t = 1 - this.timeFunction(noteT * speedFactor);
         const posInfo = noteRefPos[pos - 1];
 
         if (holdFinish) {
-            this.ctx.save();
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(holdDuration + noteT);
-            this.ctx.restore();
+            // hold 要有判定才在結束時顯示 simpleHitEffect (非 MISS 且有有效判定)
+            if (judgeResult && judgeResult.grade !== 'MISS') {
+                this.ctx.save();
+                this.ctx.translate(posInfo.x, posInfo.y);
+                this.simpleHitEffect(holdDuration + noteT, judgeResult);
+                this.ctx.restore();
+            }
             return;
         }
 
@@ -1207,13 +1368,18 @@ export class SimaiRenderer {
             img = this.images[holdImgKey];
         }
 
+        function drawHoldImage(ctx, img, size, sizeOffset) {
+            ctx.drawImage(img, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+            ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+            ctx.drawImage(img, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        }
+
         const t1 = 1 - this.timeFunction(Math.max(noteTime - this.globalTime + holdDuration, 0) * (this.settings.speed * 0.8833 + 0.8167));
         const displayT = Math.min(1, Math.max(md, t));
         const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
-
         const sizeOffset = t < md ? 0 :
-            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) - md) * 2.5;
+            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) * 0.98 - md) * 2.5;
 
         this.ctx.save();
         const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
@@ -1233,23 +1399,18 @@ export class SimaiRenderer {
         this.ctx.save();
         this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
         this.ctx.rotate(posInfo.rot);
-        this.ctx.drawImage(img, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-        this.ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-        this.ctx.drawImage(img, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+        drawHoldImage(this.ctx, img, size, sizeOffset);
 
         if (s.isEx) {
             this._tempColorConfig.colorCode = isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap);
             const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
-            this.ctx.drawImage(ex, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-            this.ctx.drawImage(ex, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-            this.ctx.drawImage(ex, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+            drawHoldImage(this.ctx, ex, size, sizeOffset);
         }
         this.ctx.restore();
 
         this.ctx.save();
         this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-        if (triggered) this.simpleHitEffect(triggeredTime - this.globalTime);
-        if (isOn) this.simpleHoldEffect(noteT);
+        if (isOn) this.simpleHoldEffect(noteT, s._headJudge || s.judgeResult);
         this.ctx.restore();
     }
 
@@ -1259,7 +1420,11 @@ export class SimaiRenderer {
         const { time: noteTime, pos, touchPos, holdDuration, triggered, triggeredTime, isHolding, holdFinish } = s;
 
         // 無打擊觸發且非長音按壓/完成狀態時，不觸發煙火特效
-        if (!triggered && !isHolding && !holdFinish) return;
+        if (holdDuration) {
+            if (!holdFinish || !s.judgeResult || s.judgeResult.grade === 'MISS') return;
+        } else {
+            if (!triggered || (s.judgeResult && s.judgeResult.grade === 'MISS')) return;
+        }
 
         const noteT = (triggered && triggeredTime !== undefined)
             ? (triggeredTime - this.globalTime)
@@ -1306,8 +1471,11 @@ export class SimaiRenderer {
 
             this.ctx.save();
             if (holdFinish) {
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.simpleHitEffect(holdDuration + noteT);
+                // touchHold 要有判定才在結束時顯示 simpleHitEffect
+                if (s.judgeResult && s.judgeResult.grade !== 'MISS') {
+                    this.ctx.translate(posInfo.x, posInfo.y);
+                    this.simpleHitEffect(holdDuration + noteT, s.judgeResult);
+                }
             } else {
                 const size = this.settings.noteBaseSize * 0.7;
                 const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
@@ -1334,8 +1502,7 @@ export class SimaiRenderer {
 
                 this.ctx.globalAlpha = 1;
                 this.drawImgAtcenter(touchPoint, size * 0.4);
-                if (triggered) this.simpleHitEffect(noteT);
-                if (isOn && (noteTime - this.globalTime) <= -0.1) this.simpleHoldEffect(noteT);
+                if (isOn && (noteTime - this.globalTime) <= -0.1) this.simpleHoldEffect(noteT, s._headJudge || s.judgeResult);
             }
             this.ctx.restore();
             return;
@@ -1347,7 +1514,7 @@ export class SimaiRenderer {
         this.ctx.save();
         if (triggered) {
             this.ctx.translate(posInfo.x, posInfo.y);
-            this.simpleHitEffect(triggeredTime - this.globalTime);
+            this.simpleHitEffect(triggeredTime - this.globalTime, s.judgeResult);
         } else {
             const size = this.settings.noteBaseSize * 0.7;
             const a = this.touchTimeFunction(18 * Math.max(1 - t, 0) / 1.5) * 1.6;
@@ -1373,67 +1540,105 @@ export class SimaiRenderer {
         this.ctx.restore();
     }
 
-    drawSlide(s) {
-        const prefix = (s.isIllegal && this.settings.slideIllegalRed) ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
-        const standardKey = (s.isIllegal && this.settings.slideIllegalRed) ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
-
-        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths, hispeed } = s;
+    drawSlideTrack(s) {
+        const { time: noteTime, pos, slideEnd, path, hispeed } = s;
         const noteT = noteTime - this.globalTime;
-        const t = 1 - this.timeFunction(noteT * (this.settings.speed * 0.8833 + 0.8167) * hispeed);
+
+        // 若整條鏈尾段已完成 (slideFinish) 或標記完成，整條 chain slide 消失
+        const tail = s.chainTail || s;
+        if (tail.slideFinish || s.chainFinished) {
+            return;
+        }
+
         const p = path || generatePath(pos, slideEnd);
         if (p.totalLength < 1e-4) return;
+
+        const isIllegalRed = (s.isIllegal && this.settings.slideIllegalRed);
+        const prefix = isIllegalRed ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
+        const standardKey = isIllegalRed ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
+
+        const speedFactor = (this.settings.speed * 0.8833 + 0.8167) * (hispeed || 1);
+        const t = 1 - this.timeFunction(noteT * speedFactor);
 
         this.ctx.save();
         const isTaped = -noteT > 0;
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
+
+        const br = ((s.isBreak && !s.isMine) && !isIllegalRed) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
+        const prefixOrKey = s.slideType === "w" ? prefix : standardKey;
+
+        // 音符到達時 (-noteT >= 0) 即可滑動判定，軌跡箭頭進度直接由玩家實際滑動判定進度 s.slideProgress 實時推進消除
+        // 若玩家完全沒碰螢幕 (s.slideProgress === 0)，在整條連鎖未結束前保留全部軌跡箭頭
+        const isNoteReached = -noteT >= 0;
+        const trackProgress = (s.isMine || !isNoteReached) ? 0 : (tail.slideFinish ? 1 : Math.min(1, Math.max(0, s.slideProgress || 0)));
+        this.drawPathWithArrows(p, trackProgress, prefixOrKey, s.slideType === "w", br, isIllegalRed);
+
+        this.ctx.restore();
+    }
+
+    drawSlideStar(s) {
+        const { time: noteTime, pos, slideEnd, slideDelay, slideDuration, path, wPaths } = s;
+        const noteT = noteTime - this.globalTime;
+
+        // 1. 若標記隱藏星星 (例如末段已提早處理或整條連鎖結束)，或本段已完成，直接返回
+        if (s.hideStar) {
+            return;
+        }
+        const tail = s.chainTail || s;
+        if (tail.slideFinish || s.chainFinished) {
+            return;
+        }
+
+        const p = path || generatePath(pos, slideEnd);
+        if (p.totalLength < 1e-4) return;
 
         let displaySlideProgress = 0;
         if (-noteT > slideDelay) {
             displaySlideProgress = Math.min(1, (-noteT - slideDelay) / slideDuration);
         }
 
-        const c = slideDelay + (s.cullSkipExtend ?? 0) + slideDuration;
-        if ((displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c)) {
-            this.ctx.restore();
-            return;
-        }
+        let sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
 
-        const br = ((s.isBreak && !s.isMine) && !(s.isIllegal && this.settings.slideIllegalRed)) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.5 : 0;
-        const prefixOrKey = s.slideType === "w" ? prefix : standardKey;
-        // 修正：slide 軌跡不會自己推進 (由玩家滑動判定進度 s.slideProgress 推進)，但 star 會隨時間自己前進 (displaySlideProgress)
-        const trackProgress = s.isMine ? 0 : Math.min(1, Math.max(0, s.slideProgress || 0));
-        this.drawPathWithArrows(p, trackProgress, prefixOrKey, s.slideType === "w", br, (s.isIllegal && this.settings.slideIllegalRed));
+        const showStar = noteT <= 0
+            && (!s.hideHead || sz >= 1)
+            && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish));
 
-        const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
-        if (noteT <= 0 && (!s.hideHead || sz >= 1) && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish))) {
+        if (showStar) {
             const { x, y, rot } = p.getPointAt(displaySlideProgress);
             this.ctx.save();
-            this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
+            this.ctx.globalAlpha = (slideDelay < 1e-4) ? 1 : sz;
             const starImg = this.images[s.isMine ? "star_mine" : (s.isBreak ? "star_break" : (s.isDouble ? "star_each" : "star"))];
-            const baseTransform = this.ctx.getTransform();
+            const starSize = this.settings.noteBaseSize * sz * 1.45;
+            const isWiFi = s.slideType === "w";
 
-            if (s.slideType === "w") {
+            if (isWiFi && wPaths) {
+                const baseTransform = this.ctx.getTransform();
+
                 const w1Point = wPaths.w1.getPointAt(displaySlideProgress);
                 this.ctx.translate(w1Point.x, w1Point.y);
                 this.ctx.rotate(w1Point.rot + Math.PI * 0.5);
-                this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
+                this.drawImgAtcenter(starImg, starSize);
 
                 this.ctx.setTransform(baseTransform);
 
                 const w2Point = wPaths.w2.getPointAt(displaySlideProgress);
                 this.ctx.translate(w2Point.x, w2Point.y);
                 this.ctx.rotate(w2Point.rot + Math.PI * 0.5);
-                this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
+                this.drawImgAtcenter(starImg, starSize);
 
                 this.ctx.setTransform(baseTransform);
             }
             this.ctx.translate(x, y);
             this.ctx.rotate(rot + Math.PI * 0.5);
-            this.drawImgAtcenter(starImg, this.settings.noteBaseSize * sz * 1.45);
+            this.drawImgAtcenter(starImg, starSize);
 
             this.ctx.restore();
         }
-        this.ctx.restore();
+    }
+
+    drawSlide(s) {
+        this.drawSlideTrack(s);
+        this.drawSlideStar(s);
     }
 
     /**
@@ -1467,9 +1672,10 @@ export class SimaiRenderer {
         }
 
         if (!this._dummyCtx) {
-            const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
-            this._dummyCtx = c.getContext('2d');
+            const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : (typeof document !== 'undefined' ? document.createElement('canvas') : null);
+            this._dummyCtx = c ? c.getContext('2d') : null;
         }
+        if (!this._dummyCtx) return null;
         this._dummyCtx.setTransform(1, 0, 0, 1, 0, 0);
 
         let insideId = null;
@@ -1571,66 +1777,115 @@ export class SimaiRenderer {
         return samples;
     }
 
-    drawPathWithArrows(recorder, starProgress, prefixOrKey, typew, br, isIllegal, spacing = 4.36) {
-        const arrowCount = typew ? 11 : Math.floor((recorder.totalLength - 2) / spacing);
-        const actualSpacing = typew ? 7 : spacing;
+    /**
+     * 預先計算並快取 Slide 路徑所有箭頭的幾何座標與尺寸，避免每幀重複求解三次貝茲曲線
+     */
+    ensureArrowCache(recorder, typew, spacing = 4.36) {
+        const key = typew ? '_wArrowCache' : '_stdArrowCache';
+        if (recorder[key]) return recorder[key];
 
-        const starDist = starProgress * recorder.totalLength;
+        const totalLen = recorder.totalLength;
+        const arrowCount = typew ? 11 : Math.floor((totalLen - 2) / spacing);
+        const actualSpacing = typew ? 7 : spacing;
+        const arrows = [];
+
+        for (let i = arrowCount; i > 0; i--) {
+            const imgIndex = Math.min(i - 1, typew ? 10 : 0);
+            const wOffset = typew ? imgIndex * 4 : 0;
+            const dist = i * actualSpacing + (typew ? wSlideRatio[wOffset + 2] : 0);
+            const pt = recorder.getPointAt(dist / totalLen);
+
+            let rad, dw, dh;
+            if (typew) {
+                rad = pt.rot - 1.176522; // Math.PI * -0.3745
+                const scaleFactor = 0.096 + wSlideRatio[wOffset + 3];
+                dw = wSlideRatio[wOffset] * scaleFactor;
+                dh = wSlideRatio[wOffset + 1] * scaleFactor;
+            } else {
+                rad = pt.rot + Math.PI;
+                dw = 6.3;
+                dh = 8.46;
+            }
+
+            const sensorId = (this.settings.slideArrowHideBySensor !== false)
+                ? this.getSensorIdAtPoint(pt.x, pt.y, true)
+                : null;
+
+            arrows.push({
+                dist,
+                x: pt.x,
+                y: pt.y,
+                rad,
+                dw,
+                dh,
+                imgIndex,
+                sensorId
+            });
+        }
+
+        recorder[key] = arrows;
+        return arrows;
+    }
+
+    drawPathWithArrows(recorder, starProgress, prefixOrKey, typew, br, isIllegal, spacing = 4.36) {
+        if (starProgress >= 1) return;
+
+        const arrows = this.ensureArrowCache(recorder, typew, spacing);
+        if (!arrows || arrows.length === 0) return;
+
+        const totalLen = recorder.totalLength;
+        const starDist = starProgress * totalLen;
         let currentStarSensorId = null;
 
-        if (starProgress > 0 && starProgress < 1) {
+        if (starProgress > 0 && this.settings.slideArrowHideBySensor !== false) {
             const pt = recorder.getPointAt(starProgress);
             currentStarSensorId = this.getSensorIdAtPoint(pt.x, pt.y, true);
         }
 
-        this.ctx.save();
-        for (let i = arrowCount; i > 0; i--) {
-            const imgIndex = Math.min(i - 1, typew ? 10 : 0);
-            const dist = i * actualSpacing + (typew ? wSlideRatio[imgIndex * 4 + 2] : 0);
+        const opacity = isIllegal ? 1 : br;
+        const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
+        const isTinted = isIllegal || br > 0;
+
+        let singleImg = null;
+        if (!typew) {
+            if (isTinted) {
+                this._tempColorConfig.colorCode = colorCode;
+                singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
+            } else {
+                singleImg = this.images[prefixOrKey];
+            }
+            if (!singleImg) return;
+        }
+
+        const baseTransform = this.ctx.getTransform();
+
+        for (let i = 0; i < arrows.length; i++) {
+            const arr = arrows[i];
 
             if (starProgress > 0) {
-                if (starProgress >= 1) break;
-
-                if (dist <= starDist) continue;
-
-                // 只有緊鄰星星前方 (dist - starDist <= 15) 且處於同感應區的箭頭才隱藏，防止遠端重疊路徑箭頭誤消失
-                if (currentStarSensorId && (dist - starDist <= 15)) {
-                    const { x, y } = recorder.getPointAt(dist / recorder.totalLength);
-                    const arrowSensorId = this.getSensorIdAtPoint(x, y, true);
-
-                    if (arrowSensorId && arrowSensorId === currentStarSensorId) {
-                        continue;
-                    }
-                }
+                if (arr.dist <= starDist) continue;
             }
 
-            const imgKey = typew ? (prefixOrKey + imgIndex) : prefixOrKey;
-
-            const opacity = isIllegal ? 1 : br;
-            const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
-
             let img;
-            if (isIllegal || br > 0) {
-                this._tempColorConfig.colorCode = colorCode;
-                img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
+            if (typew) {
+                const imgKey = prefixOrKey + arr.imgIndex;
+                if (isTinted) {
+                    this._tempColorConfig.colorCode = colorCode;
+                    img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
+                } else {
+                    img = this.images[imgKey];
+                }
             } else {
-                img = this.images[imgKey];
+                img = singleImg;
             }
 
             if (!img) continue;
 
-            const { x, y, rot } = recorder.getPointAt(dist / recorder.totalLength);
-
-            this.ctx.save();
-            this.ctx.translate(x, y);
-            // this.ctx.fillText(this.getSensorIdAtPoint(x, y, true), 0, 1);
-            this.ctx.rotate(rot + (typew ? (Math.PI * -0.3745) : Math.PI));
-            const dw = typew ? wSlideRatio[imgIndex * 4] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 6.3;
-            const dh = typew ? wSlideRatio[imgIndex * 4 + 1] * (0.096 + wSlideRatio[imgIndex * 4 + 3]) : 8.46;
-            this.drawImgAtcenter(img, 1, 0, 0, dw, dh);
-            this.ctx.restore();
+            this.ctx.translate(arr.x, arr.y);
+            this.ctx.rotate(arr.rad);
+            this.drawImgAtcenter(img, 1, 0, 0, arr.dw, arr.dh);
+            this.ctx.setTransform(baseTransform);
         }
-        this.ctx.restore();
     }
 
     drawHanabiEffects() {
@@ -1640,7 +1895,11 @@ export class SimaiRenderer {
             if (eff.cleared) continue;
             this.ctx.save();
             this.ctx.translate(eff.x, eff.y);
-            this.simpleHanabi(eff.noteT, eff.isCenter);
+            if (this.settings.drawHanabiEffect === 'rich') {
+                this.richHanabi(eff.noteT);
+            } else {
+                this.simpleHanabi(eff.noteT, eff.isCenter);
+            }
             this.ctx.restore();
         }
     }

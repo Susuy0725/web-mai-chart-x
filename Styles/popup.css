@@ -3,11 +3,15 @@
    獨立彈窗、通知提示及各類 Popup 模組專用樣式表
    ========================================================================== */
 
+/* 全域設定彈窗樣式已抽離至獨立的 settings.css */
+@import url('./settings.css');
+
 /* --------------------------------------------------------------------------
    1. Popup Window 核心組件樣式
    -------------------------------------------------------------------------- */
 :root {
     --window-padding: 14px;
+    --sw-complete-color: rgb(93, 207, 109);
 }
 
 .popup-backdrop {
@@ -45,7 +49,6 @@
 
 .popup-title {
     margin: 0;
-    margin-left: calc(var(--window-padding) / 2);
     margin-bottom: var(--window-padding);
     min-height: 30px;
     display: flex;
@@ -58,8 +61,8 @@
 
 .popup-close-btn {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 16px;
+    right: 16px;
     cursor: pointer;
     font-size: 20px;
     color: #aaa;
@@ -91,7 +94,7 @@
 .popup-progress-bar {
     width: 0%;
     height: 100%;
-    background: #00ffcc;
+    background: var(--accent-color);
     transition: width 0.3s ease;
 }
 
@@ -226,13 +229,11 @@
     bottom: 24px;
     right: 24px;
     z-index: 100000;
-    min-width: 320px;
+    min-width: 240px;
     max-width: 400px;
-    background: rgba(26, 26, 26, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #262626;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-left: 4px solid #00bbff;
+    border-left: 4px solid var(--accent-color);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 187, 255, 0.15);
     padding: 14px 16px;
@@ -255,7 +256,7 @@
 }
 
 .sw-update-toast.completed {
-    border-left-color: #00ffcc;
+    border-left-color: var(--sw-complete-color);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 255, 204, 0.2);
 }
 
@@ -278,12 +279,12 @@
 .sw-update-percent {
     font-size: 12px;
     font-weight: bold;
-    color: #00bbff;
+    color: var(--accent-color);
     font-family: 'ShareTechMono', monospace;
 }
 
 .sw-update-toast.completed .sw-update-percent {
-    color: #00ffcc;
+    color: var(--sw-complete-color);
 }
 
 .sw-update-progress-bar-bg {
@@ -297,14 +298,17 @@
 
 .sw-update-progress-bar-fill {
     height: 100%;
-    width: 0%;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(0);
     background: linear-gradient(90deg, #0077ff, #00e5ff);
     border-radius: 3px;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
 }
 
 .sw-update-toast.completed .sw-update-progress-bar-fill {
-    background: linear-gradient(90deg, #00bbff, #00ffcc);
+    background: var(--sw-complete-color);
 }
 
 .sw-update-details {
@@ -342,14 +346,13 @@
 }
 
 .sw-update-btn-reload {
-    background: #00ffcc;
+    background: var(--sw-complete-color);
+    font-weight: bold;
     color: #121212;
-    box-shadow: 0 2px 8px rgba(0, 255, 204, 0.3);
 }
 
 .sw-update-btn-reload:hover {
-    background: #33ffd6;
-    box-shadow: 0 4px 12px rgba(0, 255, 204, 0.45);
+    filter: brightness(0.8);
 }
 
 .sw-update-btn-dismiss {
@@ -364,8 +367,13 @@
 }
 
 @keyframes sw-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 
@@ -693,111 +701,4 @@
     font-weight: bold;
     cursor: pointer;
     transition: transform 0.15s, filter 0.15s;
-}
-
-/* 全域設定彈窗 (Setting Popup) */
-.popup-setting-container {
-    display: flex;
-    gap: 20px;
-    font-size: 14px;
-    height: 420px;
-}
-
-.popup-setting-sidebar {
-    display: flex;
-    flex-direction: column;
-    width: 80px;
-    border-right: 1px solid #444444;
-    gap: 5px;
-    padding-right: 10px;
-}
-
-.popup-setting-content {
-    overflow-y: auto;
-    padding-right: 10px;
-    display: flex;
-    flex-direction: column;
-    margin-top: 10px;
-    width: stretch;
-}
-
-.popup-setting-tab {
-    padding: 10px 8px;
-    cursor: pointer;
-    border-left: 4px solid transparent;
-    color: #888888;
-    transition: all 0.2s;
-    font-size: 15px;
-    border-radius: 2px;
-}
-
-.popup-setting-section {
-    display: none;
-    flex-direction: column;
-    gap: var(--window-padding);
-}
-
-.popup-setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 15px;
-    margin-bottom: 4px;
-    min-height: 30px;
-}
-
-.popup-setting-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
-    cursor: pointer;
-    color: #dddddd;
-    font-size: 15px;
-}
-
-.popup-setting-text {
-    flex: 1;
-}
-
-.popup-setting-subbody {
-    display: none;
-    flex-direction: column;
-    gap: 6px;
-    padding-left: 12px;
-    border-left: 2px solid #444444;
-    margin-top: 4px;
-}
-
-.popup-setting-label {
-    flex: 1;
-    color: #dddddd;
-    font-size: 15px;
-}
-
-.popup-setting-element {
-    padding: 6px 14px;
-    background: #333333;
-    color: #ffffff;
-    border: 1px solid #555555;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background 0.2s;
-    white-space: nowrap;
-}
-
-.popup-setting-input {
-    width: 100px;
-    flex: 0 0 auto;
-    padding: 6px 8px;
-    border: 1px solid #555555;
-    border-radius: 4px;
-    background: #222222;
-    color: #ffffff;
-    font-size: 14px;
-    text-align: left;
-    transition: border-color 0.2s;
-    box-sizing: border-box;
 }

@@ -1,0 +1,349 @@
+/* ==========================================================================
+   設定彈窗與譜面資訊樣式 (Settings & Chart Info Popup Styles)
+   ========================================================================== */
+
+/* --- 全域設定彈窗主容器 (Setting Popup Container) --- */
+.popup-setting-container {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+    height: 420px;
+}
+
+/* 左側導覽列 (Tabs Sidebar) */
+.popup-setting-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 80px;
+    border-right: 1px solid #444444;
+    gap: 5px;
+    padding-right: 10px;
+    flex-shrink: 0;
+}
+
+.popup-setting-tab {
+    padding: 10px 8px;
+    cursor: pointer;
+    border-left: 4px solid transparent;
+    color: #888888;
+    transition: all 0.2s ease;
+    font-size: 15px;
+    border-radius: 4px;
+    user-select: none;
+}
+
+.popup-setting-tab:hover {
+    color: #cccccc;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.popup-setting-tab.active {
+    border-left-color: var(--accent-color);
+    color: #ffffff;
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* 右側內容區 (Content Area) */
+.popup-setting-content {
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 10px;
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.popup-setting-section {
+    display: none;
+    flex-direction: column;
+    gap: var(--window-padding, 10px);
+}
+
+.popup-setting-section.active {
+    display: flex;
+}
+
+/* 單項設定列 (Setting Rows & Wrappers) */
+.popup-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 4px;
+    min-height: 30px;
+}
+
+.popup-setting-row-object {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.popup-setting-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    cursor: pointer;
+    color: #dddddd;
+    font-size: 15px;
+}
+
+.popup-setting-text {
+    flex: 1;
+}
+
+.popup-setting-label {
+    flex: 1;
+    color: #dddddd;
+    font-size: 15px;
+}
+
+/* 子屬性折疊選單 (Object Accordion Container) */
+.popup-setting-object-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 0;
+    cursor: pointer;
+    user-select: none;
+    color: #dddddd;
+    font-size: 15px;
+    transition: color 0.2s;
+}
+
+.popup-setting-object-header:hover {
+    color: #ffffff;
+}
+
+.popup-setting-arrow-icon {
+    transition: transform 0.2s ease;
+    transform: rotate(0deg);
+    font-size: 12px;
+}
+
+.popup-setting-arrow-icon.expanded {
+    transform: rotate(180deg);
+}
+
+.popup-setting-subbody {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 12px;
+    border-left: 2px solid #444444;
+    margin-top: 4px;
+}
+
+.popup-setting-subbody.open {
+    display: flex;
+}
+
+/* 滑桿容器自訂寬度 (Custom Range Slider in Setting Row) */
+.popup-setting-wrapper>[type="range"],
+.popup-setting-wrapper>.custom-slider-container,
+.custom-slider-container {
+    width: 140px;
+    min-width: 140px;
+    flex: 0 0 140px;
+}
+
+/* --- 自訂核取方塊 (Custom Styled Checkbox) --- */
+.popup-setting-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    margin: 0;
+    cursor: pointer;
+    background-color: #1e1e1e;
+    border: 2px solid #444444;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    outline: none;
+    box-sizing: border-box;
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.2s ease,
+        transform 0.1s ease;
+}
+
+.popup-setting-checkbox:hover {
+    border-color: #666666;
+    background-color: #262626;
+}
+
+.popup-setting-checkbox:active {
+    transform: scale(0.92);
+}
+
+.popup-setting-checkbox:focus-visible {
+    box-shadow: 0 0 0 3px rgba(68, 153, 238, 0.35);
+}
+
+.popup-setting-checkbox:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 13px 13px;
+}
+
+.popup-setting-checkbox:checked:hover {
+    filter: brightness(1.1);
+}
+
+/* --- 下拉選單、按鈕、輸入框 (Dropdown, Buttons, Inputs) --- */
+.popup-setting-dropdown {
+    padding: 6px 10px;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    background: #222222;
+    color: #ffffff;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.popup-setting-dropdown:hover,
+.popup-setting-dropdown:focus {
+    border-color: var(--accent-color);
+}
+
+.popup-setting-dropdown option {
+    background: #202020;
+    color: #ffffff;
+}
+
+.popup-setting-element {
+    padding: 6px 14px;
+    background: #333333;
+    color: #ffffff;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s, border-color 0.2s;
+    white-space: nowrap;
+}
+
+.popup-setting-element:hover {
+    background: #3e3e3e;
+    border-color: var(--accent-color);
+}
+
+.popup-setting-input {
+    width: 100px;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    background: #222222;
+    color: #ffffff;
+    font-size: 14px;
+    text-align: left;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.popup-setting-input:focus {
+    border-color: var(--accent-color);
+}
+
+/* ==========================================================================
+   譜面資訊彈窗樣式 (Chart Info Popup)
+   ========================================================================== */
+.chart-info-container {
+    display: flex;
+    gap: 16px;
+    font-size: 14px;
+}
+
+.chart-info-btn {
+    padding: 8px 12px;
+    background: #202020;
+    color: #ffffff;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    width: 100%;
+    transition: background 0.2s, border-color 0.2s, filter 0.2s;
+}
+
+.chart-info-btn:hover {
+    background: #2a2a2a;
+    border-color: var(--accent-color);
+}
+
+.chart-info-btn:active {
+    filter: brightness(0.9);
+}
+
+.chart-info-img-container {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.chart-info-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+}
+
+.chart-info-img-wrapper {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid #333333;
+    border-radius: 8px;
+    cursor: pointer;
+    position: relative;
+    background: #000000;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.chart-info-img-wrapper:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 8px rgba(68, 153, 238, 0.2);
+}
+
+.chart-info-overlay {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    font-size: 11px;
+    text-align: center;
+    padding: 5px 0;
+    backdrop-filter: blur(2px);
+    transition: background 0.2s;
+}
+
+.chart-info-img-wrapper:hover .chart-info-overlay {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.chart-info-diff-container {
+    width: 60%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}

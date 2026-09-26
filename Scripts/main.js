@@ -882,6 +882,97 @@ function animateCanvasWidth(visible) {
 
     syncResize();
 }
+let currentEditorAnimation = null;
+let currentSplitterAnimation = null;
+
+function animateEditorContainer(visible) {
+    if (!editorContainer) return;
+
+    // 計算分割線平移距離（與 editorContainer 等寬）
+    const width = editorContainer.offsetWidth || (window.innerWidth * (1 - (settings.splitRatio ?? 0.5)));
+    const targetDistance = `${width}px`;
+
+    let editorStart = visible ? 'translateX(100%)' : 'translateX(0)';
+    let splitterStart = visible ? `translateX(${targetDistance})` : 'translateX(0)';
+
+    if (currentEditorAnimation) {
+        const computed = window.getComputedStyle(editorContainer).transform;
+        if (computed && computed !== 'none') {
+            editorStart = computed;
+        }
+        currentEditorAnimation.cancel();
+        currentEditorAnimation = null;
+    }
+
+    if (currentSplitterAnimation) {
+        if (panelSplitter) {
+            const computedS = window.getComputedStyle(panelSplitter).transform;
+            if (computedS && computedS !== 'none') {
+                splitterStart = computedS;
+            }
+        }
+        currentSplitterAnimation.cancel();
+        currentSplitterAnimation = null;
+    }
+
+    // 初始化尚未完成時，不播放過渡動畫，直接靜態設定
+    if (!isInitComplete) {
+        setElementDisplay(editorContainer, visible);
+        if (panelSplitter) {
+            setElementDisplay(panelSplitter, visible);
+            panelSplitter.style.transform = '';
+        }
+        editorContainer.style.transform = '';
+        return;
+    }
+
+    const editorEnd = visible ? 'translateX(0)' : 'translateX(100%)';
+    const splitterEnd = visible ? 'translateX(0)' : `translateX(${targetDistance})`;
+
+    setElementDisplay(editorContainer, true);
+    if (panelSplitter) {
+        setElementDisplay(panelSplitter, true);
+    }
+
+    currentEditorAnimation = editorContainer.animate(
+        [
+            { transform: editorStart },
+            { transform: editorEnd }
+        ],
+        { duration: 400, fill: 'forwards', easing: 'ease' }
+    );
+
+    if (panelSplitter) {
+        currentSplitterAnimation = panelSplitter.animate(
+            [
+                { transform: splitterStart },
+                { transform: splitterEnd }
+            ],
+            { duration: 400, fill: 'forwards', easing: 'ease' }
+        );
+    }
+
+    currentEditorAnimation.onfinish = () => {
+        currentEditorAnimation?.cancel();
+        currentEditorAnimation = null;
+        if (!visible) {
+            setElementDisplay(editorContainer, false);
+        }
+        editorContainer.style.transform = '';
+    };
+
+    if (panelSplitter) {
+        currentSplitterAnimation.onfinish = () => {
+            currentSplitterAnimation?.cancel();
+            currentSplitterAnimation = null;
+            if (!visible) {
+                setElementDisplay(panelSplitter, false);
+            }
+            panelSplitter.style.transform = '';
+        };
+    }
+}
+
 
 function getDPR(win = window) {
     return settings?.lowRes ? 1 : (win.devicePixelRatio || 1);
@@ -968,17 +1059,21 @@ const setEditorCss = (visible = null) => {
     const visualVisible = visible && visualMode;
     const isHidden = hideButton.dataset.hidden === 'true';
 
-    setElementDisplay(editorContainer, visible);
-    setElementDisplay(editorInput, editorVisible);
-    setElementDisplay(highlightLayer, editorVisible);
-    setElementDisplay(visualEditor, visualVisible);
+    if (visible) {
+        setElementDisplay(editorInput, editorVisible);
+        setElementDisplay(highlightLayer, editorVisible);
+        setElementDisplay(visualEditor, visualVisible);
+    }
 
     if (!visible) {
         // 當隱藏 Editor 時：Editor 隱藏，Canvas 必須顯示，分割線隱藏 (保留 canvasSnapped 狀態)
         canvasContainer.style.display = '';
         noRender = false;
-        setElementDisplay(panelSplitter, false);
+        showPlayControlsBtn?.classList.add('editor-hidden');
+        document.body.classList.add('editor-hidden');
     } else {
+        showPlayControlsBtn?.classList.remove('editor-hidden');
+        document.body.classList.remove('editor-hidden');
         // 當顯示 Editor 時：還原到目前的 Snap 狀態
         if (canvasSnapped) {
             noRender = true;
@@ -1000,6 +1095,7 @@ const setEditorCss = (visible = null) => {
     updatePlaycontrol(visualVisible, !isHidden);
 
     animateCanvasWidth(visible);
+    animateEditorContainer(visible);
 };
 
 settingsButton.addEventListener('click', () => {

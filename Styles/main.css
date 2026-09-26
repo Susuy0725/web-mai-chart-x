@@ -220,6 +220,7 @@ body {
     margin: 16px;
     bottom: 0;
     left: calc(min(var(--split-ratio) * 100%, 85% - 90px));
+    right: auto;
     border: 1px solid var(--button-ouline);
     color: white;
     display: flex;
@@ -230,11 +231,28 @@ body {
     cursor: pointer;
     box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
     border-radius: 25px;
-    transition: background-color 100ms ease;
+    transition: background-color 100ms ease, left 300ms cubic-bezier(0.4, 0, 0.2, 1), right 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease, transform 200ms ease;
+    z-index: 100;
 }
 
 #playControls #showPlayControlsBtn:hover {
     background-color: color-mix(in srgb, var(--main-color) 50%, transparent);
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+#playControls #showPlayControlsBtn:active {
+    transform: scale(0.95);
+}
+
+/* 當隱藏編輯器 (hideEditor) 時，將按鈕優雅收至右下角，避免在畫面底部中央遮擋 maimai 圓盤判定區 */
+#playControls #showPlayControlsBtn.editor-hidden,
+body.editor-hidden #playControls #showPlayControlsBtn,
+#app:has(#editorContainer[data-hidden="true"]) #playControls #showPlayControlsBtn,
+#app:has(#editorContainer[style*="display: none"]) #playControls #showPlayControlsBtn {
+    left: auto;
+    right: 0;
+    opacity: 0.85;
 }
 
 #miniPreviewContainer #miniPreview {

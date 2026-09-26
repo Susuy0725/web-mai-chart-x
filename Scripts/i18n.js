@@ -1,6 +1,23 @@
-import zhTW from '../locales/zh-TW.json';
-import en from '../locales/en.json';
-import ja from '../locales/ja.json';
+async function loadLocale(lang) {
+    try {
+        const url = new URL(`../locales/${lang}.json`, import.meta.url).href;
+        const res = await fetch(url);
+        if (!res.ok) {
+            console.error(`Failed to load ${lang}.json: HTTP ${res.status}`);
+            return {};
+        }
+        return await res.json();
+    } catch (e) {
+        console.error(`Failed to fetch ${lang}.json:`, e);
+        return {};
+    }
+}
+
+const [zhTW, en, ja] = await Promise.all([
+    loadLocale('zh-TW'),
+    loadLocale('en'),
+    loadLocale('ja'),
+]);
 
 const translations = {
     'zh-TW': zhTW,

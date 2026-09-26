@@ -30,6 +30,34 @@
     font-display: swap;
 }
 
+*,
+*::before,
+*::after {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+    touch-action: manipulation;
+    height: 100%;
+    width: 100%;
+}
+
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+select {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -184,23 +212,23 @@ body {
 }
 
 #playControls #showPlayControlsBtn {
-    background-color: var(--main-color);
+    background-color: #222;
     overflow: hidden;
-    width: 30%;
+    width: 50px;
+    height: 50px;
     position: absolute;
+    margin: 16px;
     bottom: 0;
-    left: 25%;
-    transform: translateX(-50%);
-    height: 16px;
+    left: calc(var(--split-ratio) * 100%);
     color: white;
-    font-size: 10px;
-    text-align: center;
     display: flex;
+    align-content: center;
+    text-align: center;
     justify-content: center;
+    flex-wrap: wrap;
     cursor: pointer;
-    box-sizing: border-box;
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
-    border-radius: 10px 10px 0 0;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+    border-radius: 25px;
     transition: background-color 100ms ease;
 }
 
@@ -214,7 +242,6 @@ body {
     width: calc(100% - 12px);
     height: 100%;
     margin: 0 6px;
-    border: 1px solid var(--button-ouline);
     box-sizing: border-box;
     border-radius: 6px;
 }
@@ -231,27 +258,25 @@ body {
 
 #miniPreviewContainer #mpzoomOut,
 #miniPreviewContainer #mpzoomIn {
-    backdrop-filter: blur(1px);
     cursor: pointer;
-    width: 32px;
-    height: 32px;
-    background: color-mix(in srgb, var(--main-color) 50%, transparent);
-    ;
-    border: 1px solid var(--button-ouline);
+    width: 34px;
+    height: 34px;
+    background: var(--main-color);
+    box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.6);
     border-radius: 5px;
     z-index: 5;
     color: white;
     display: flex;
-    align-items: center;
     justify-content: center;
     font-size: 20px;
-    transition: background 100ms ease;
+    transition: background 100ms ease, box-shadow 200ms ease;
+    box-sizing: border-box;
 }
 
 #miniPreviewContainer #mpzoomOut:hover,
 #miniPreviewContainer #mpzoomIn:hover {
-    backdrop-filter: blur(0px);
-    background: var(--main-color);
+    box-shadow: 0 1px 4px 2px rgba(0, 0, 0, 0.7);
+    background: var(--button-ouline);
 }
 
 #playControls #playControlContainer {

@@ -47,6 +47,7 @@
 /* 右側內容區 (Content Area) */
 .popup-setting-content {
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 10px;
     display: flex;
     flex-direction: column;

@@ -1,12 +1,13 @@
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from '../Scripts/indexDB.js';
 import { SimaiRenderer } from './renderer.js';
 import { simaiDecode } from '../Scripts/decode.js';
-import { parseMaidata, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, createCustomSlider, clamp } from '../Scripts/helper.js';
+import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, createCustomSlider, clamp } from '../Scripts/helper.js';
 import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 
+disableNavigationGestures();
 const simulatedPlayController = new SimulatedPlayController();
 
 const defaultSettings = {

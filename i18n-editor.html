@@ -692,7 +692,7 @@
                     </div>
                 </div>
                 <div>
-                    拖曳 <code>locales/*.js</code> 至瀏覽器可手動匯入
+                    拖曳 <code>locales/*.json</code> 至瀏覽器可手動匯入
                 </div>
             </div>
         </main>
@@ -929,12 +929,28 @@
         // --- Core: Load Translations ---
         async function loadLocales() {
             try {
-                // 嘗試動態從伺服器載入當前的 locales 檔案
-                const zhModule = await import('/locales/zh-TW.js');
-                const enModule = await import('/locales/en.js');
+                // 嘗試動態從伺服器載入當前的 locales JSON 檔案
+                let zhRaw, enRaw;
+                try {
+                    const [zhRes, enRes] = await Promise.all([
+                        fetch('/locales/zh-TW.json'),
+                        fetch('/locales/en.json')
+                    ]);
+                    if (zhRes.ok && enRes.ok) {
+                        zhRaw = await zhRes.json();
+                        enRaw = await enRes.json();
+                    }
+                } catch (_) {}
 
-                const zhFlat = flattenObject(zhModule.zhTW);
-                const enFlat = flattenObject(enModule.en);
+                if (!zhRaw || !enRaw) {
+                    const zhModule = await import('/locales/zh-TW.js');
+                    const enModule = await import('/locales/en.js');
+                    zhRaw = zhModule.zhTW || zhModule.default;
+                    enRaw = enModule.en || enModule.default;
+                }
+
+                const zhFlat = flattenObject(zhRaw);
+                const enFlat = flattenObject(enRaw);
 
                 // 建立聯集的所有 keys
                 const allKeys = new Set([...Object.keys(zhFlat), ...Object.keys(enFlat)]);
@@ -1082,10 +1098,10 @@
 
             if (currentExportTab === 'zh-TW') {
                 const unflatZh = unflattenObject(flatZh);
-                codeBlock.textContent = serializeToESModule(unflatZh, 'zhTW');
+                codeBlock.textContent = JSON.stringify(unflatZh, null, 2);
             } else {
                 const unflatEn = unflattenObject(flatEn);
-                codeBlock.textContent = serializeToESModule(unflatEn, 'en');
+                codeBlock.textContent = JSON.stringify(unflatEn, null, 2);
             }
         }
 
@@ -1121,8 +1137,8 @@
         // --- Event: Download Code ---
         downloadBtn.addEventListener('click', () => {
             const content = codeBlock.textContent;
-            const filename = currentExportTab === 'zh-TW' ? 'zh-TW.js' : 'en.js';
-            const blob = new Blob([content], { type: 'text/javascript;charset=utf-8;' });
+            const filename = currentExportTab === 'zh-TW' ? 'zh-TW.json' : 'en.json';
+            const blob = new Blob([content], { type: 'application/json;charset=utf-8;' });
 
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
@@ -1222,7 +1238,17 @@
                     const text = evt.target.result;
                     try {
                         let parsedObj = {};
-                        if (filename.includes('zh-tw') || filename === 'zhtw.js') {
+                        if (filename.endsWith('.json')) {
+                            parsedObj = JSON.parse(text);
+                            const flat = flattenObject(parsedObj);
+                            const isZh = filename.includes('zh');
+                            for (const [k, v] of Object.entries(flat)) {
+                                if (!currentData[k]) currentData[k] = { zh: '', en: '' };
+                                if (isZh) currentData[k].zh = v;
+                                else currentData[k].en = v;
+                            }
+                            loadedCount++;
+                        } else if (filename.includes('zh-tw') || filename === 'zhtw.js') {
                             parsedObj = parseModuleSource(text, 'zhTW');
                             const flat = flattenObject(parsedObj);
                             for (const [k, v] of Object.entries(flat)) {

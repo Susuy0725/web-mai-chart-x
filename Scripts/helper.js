@@ -2997,3 +2997,92 @@ export async function ensureJsMediaTags() {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js');
     return window.jsmediatags;
 }
+/**
+ * 禁用手機/瀏覽器的「滑動上一頁/下一頁」與「下拉重新整理」原生手勢
+ */
+export function disableNavigationGestures() {
+    if (typeof window === 'undefined') return;
+
+    // 1. 禁用邊緣滑動歷史導覽手勢 (iOS Safari / Android Chrome 側滑上一頁/下一頁)
+    window.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length > 0) {
+            const touchX = e.touches[0].clientX;
+            // 螢幕左邊緣 24px 或右邊緣 24px 內阻斷邊緣滑動手勢
+            if (touchX < 24 || touchX > window.innerWidth - 24) {
+                if (e.cancelable) {
+                    e.preventDefault();
+                }
+            }
+        }
+    }, { passive: false });
+
+    // 2. 禁用下拉重新整理 (Pull-to-refresh) 與非滾動區域滑動穿透
+    let touchStartY = 0;
+    window.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length === 1) {
+            touchStartY = e.touches[0].clientY;
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!e.cancelable || !e.touches) return;
+
+        // 多指觸控 (如雙指捏合 Pinch-to-zoom) 一律阻斷，防止頁面縮放
+        if (e.touches.length > 1) {
+            e.preventDefault();
+            return;
+        }
+
+        const currentY = e.touches[0].clientY;
+        const isPullingDown = currentY > touchStartY;
+
+        let el = e.target;
+        let canScrollDown = false;
+        while (el && el !== document.body && el !== document.documentElement) {
+            const style = window.getComputedStyle(el);
+            const overflowY = style.overflowY;
+            if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+                // 如果已經在最頂端還往下拉，阻斷它以避免觸發 pull-to-refresh
+                if (isPullingDown && el.scrollTop <= 0) {
+                    canScrollDown = false;
+                } else {
+                    canScrollDown = true;
+                }
+                break;
+            }
+            el = el.parentElement;
+        }
+
+        if (!canScrollDown && isPullingDown) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    // 3. 禁用 iOS Safari 專屬手勢縮放 (Pinch-to-zoom)
+    document.addEventListener('gesturestart', (e) => {
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('gesturechange', (e) => {
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('gestureend', (e) => {
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+
+    // 4. 禁用雙點放大 (Double-tap to zoom)
+    let lastTouchEndTime = 0;
+    document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        // 若在 300ms 內快速連續點擊兩次
+        if (now - lastTouchEndTime <= 300) {
+            const tag = e.target && e.target.tagName;
+            // 避免干擾一般的輸入框打字游標點擊
+            if (tag !== 'TEXTAREA' && tag !== 'INPUT') {
+                if (e.cancelable) {
+                    e.preventDefault();
+                }
+            }
+        }
+        lastTouchEndTime = now;
+    }, { passive: false });
+}

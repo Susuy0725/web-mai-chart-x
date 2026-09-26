@@ -1020,7 +1020,7 @@ export class SimaiRenderer {
         const timeText = `Time: ${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
 
         ctx.save();
-        ctx.font = '3px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
+        ctx.font = "3px mono";
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
@@ -1138,12 +1138,25 @@ export class SimaiRenderer {
         const mode = this.settings.middleDisplay;
         if (!mode) return;
 
+        if (!this.canvas || this.canvas.width <= 0 || this.canvas.height <= 0 || !this.scale || this.scale <= 0) {
+            return;
+        }
+
+        const p = Math.min(this.canvas.width, this.canvas.height) / scaleBase * this.scale;
+        if (p <= 0 || !isFinite(p)) return;
+
+        const boxWUnits = 46;
+        const boxHUnits = 26;
+        const pxW = Math.ceil(boxWUnits * p);
+        const pxH = Math.ceil(boxHUnits * p);
+        if (pxW <= 0 || pxH <= 0) return;
+
         const combo = this.playCombo;
         const scoreValue = (mode === 3)
             ? (this.playScoreMinus !== undefined ? this.playScoreMinus : 101)
             : (this.playScore ?? 0);
 
-        const cacheKey = mode === 1 ? `c_${combo}` : `s_${mode}_${scoreValue.toFixed(4)}`;
+        const cacheKey = `${mode === 1 ? `c_${combo}` : `s_${mode}_${scoreValue.toFixed(4)}`}_${pxW}x${pxH}`;
 
         if (this._lastMiddleCacheKey !== cacheKey || !this._middleDisplayCanvas) {
             this._lastMiddleCacheKey = cacheKey;
@@ -1152,12 +1165,6 @@ export class SimaiRenderer {
                 this._middleDisplayCanvas = document.createElement('canvas');
                 this._middleDisplayCtx = this._middleDisplayCanvas.getContext('2d');
             }
-
-            const p = Math.min(this.canvas.width, this.canvas.height) / scaleBase * this.scale;
-            const boxWUnits = 46;
-            const boxHUnits = 26;
-            const pxW = Math.ceil(boxWUnits * p);
-            const pxH = Math.ceil(boxHUnits * p);
 
             if (this._middleDisplayCanvas.width !== pxW || this._middleDisplayCanvas.height !== pxH) {
                 this._middleDisplayCanvas.width = pxW;
@@ -1175,9 +1182,13 @@ export class SimaiRenderer {
             this._middleBoxHUnits = boxHUnits;
         }
 
-        const hw = this._middleBoxWUnits / 2;
-        const hh = this._middleBoxHUnits / 2;
-        this.ctx.drawImage(this._middleDisplayCanvas, -hw, -hh, this._middleBoxWUnits, this._middleBoxHUnits);
+        if (!this._middleDisplayCanvas || this._middleDisplayCanvas.width === 0 || this._middleDisplayCanvas.height === 0) {
+            return;
+        }
+
+        const hw = (this._middleBoxWUnits || boxWUnits) / 2;
+        const hh = (this._middleBoxHUnits || boxHUnits) / 2;
+        this.ctx.drawImage(this._middleDisplayCanvas, -hw, -hh, this._middleBoxWUnits || boxWUnits, this._middleBoxHUnits || boxHUnits);
     }
 
     renderMiddleDisplayToContext(ctx) {

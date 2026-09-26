@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="Web mai Chart X 是一個開源、易用的 maimai 譜面線上編輯器，具有從譜面專案管理到輸出影片的完整功能。">
     <title>Web mai Chart X (Beta)</title>
     <link rel="canonical" href="https://susuy0725.github.io/web-mai-chart-x/">
@@ -56,13 +56,13 @@
     </noscript>
 
     <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_selector_tool,chevron_right,close,close_small,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning">
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_selector_tool,chevron_right,close,close_small,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning">
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_selector_tool,chevron_right,close,close_small,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_selector_tool,chevron_right,close,close_small,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning"
         media="print" onload="this.media='all'">
     <noscript>
         <link rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_selector_tool,chevron_right,close,close_small,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning">
+            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_selector_tool,chevron_right,close,close_small,drag_indicator,edit,find_replace,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,skip_previous,stop,swap_horiz,swap_vert,sync,undo,warning">
     </noscript>
 
     <!-- Stylesheets -->
@@ -137,7 +137,9 @@
             </div>
             <div id="showPlayControlsBtn" style="display: none;" role="button" tabindex="0" aria-label="展開播放控制列"
                 title="展開播放控制列">
-                ▲
+                <span class="material-symbols-outlined" translate="no">
+                    keyboard_arrow_up
+                </span>
             </div>
         </div>
         <div id="panelSplitter" title="拖曳調整面板比例" role="separator" aria-label="調整面板比例" tabindex="0" aria-valuenow="50"

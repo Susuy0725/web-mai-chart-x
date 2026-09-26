@@ -1,6 +1,6 @@
-import zhTW from '../locales/zh-TW.json';
-import en from '../locales/en.json';
-import ja from '../locales/ja.json';
+import zhTW from '../locales/zh-TW.js';
+import en from '../locales/en.js';
+import ja from '../locales/ja.js';
 
 const translations = {
     'zh-TW': zhTW,

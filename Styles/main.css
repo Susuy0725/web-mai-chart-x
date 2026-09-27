@@ -476,6 +476,51 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     align-items: center;
 }
 
+.utility-row {
+    display: contents;
+}
+
+@media (max-aspect-ratio: 1/1) {
+    :root {
+        --utility-rows: 2;
+    }
+
+    #topUtilityBtns {
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: stretch;
+        gap: 0;
+        padding: 5px;
+        overflow-x: hidden;
+    }
+
+    .utility-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+        height: 30px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        flex: 0 0 30px;
+    }
+
+    .utility-row::-webkit-scrollbar {
+        display: none;
+    }
+
+    .utility-row-1 {
+        border-bottom: 1px solid var(--button-ouline);
+        padding-bottom: 4px;
+    }
+
+    .utility-row-1 .utilitySeparator.utility-break {
+        display: none;
+    }
+}
+
 .utilityButton {
     display: flex;
     align-items: center;

@@ -2093,17 +2093,25 @@ function getUtilityRowHeight() {
     return Number.isFinite(val) && val > 0 ? val : 40;
 }
 
+function getExpectedUtilityRows() {
+    const val = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--utility-rows'));
+    return Number.isFinite(val) && val > 0 ? val : 1;
+}
+
 function calculateUtilityRows() {
     const rowHeight = getUtilityRowHeight();
-    if (!topUtilityBtnsEl || topUtilityBtnsEl.offsetHeight <= 0) return 1;
+    if (!topUtilityBtnsEl || topUtilityBtnsEl.offsetHeight <= 0) {
+        return getExpectedUtilityRows();
+    }
     return Math.max(1, Math.round(topUtilityBtnsEl.offsetHeight / rowHeight));
 }
 
 function updateUtilityHeight() {
     const rowHeight = getUtilityRowHeight();
     const rows = calculateUtilityRows();
+    const expectedRows = getExpectedUtilityRows();
 
-    if (rows > 1) {
+    if (rows > expectedRows) {
         document.documentElement.style.setProperty('--utility-rows', rows);
     } else {
         document.documentElement.style.removeProperty('--utility-rows');
@@ -2114,7 +2122,7 @@ function updateUtilityHeight() {
 }
 
 if (window.ResizeObserver && topUtilityBtnsEl) {
-    let lastObservedRows = 1;
+    let lastObservedRows = getExpectedUtilityRows();
     const utilityObserver = new ResizeObserver(() => {
         const isHidden = hideUtilityButton?.dataset.hidden === 'true';
 

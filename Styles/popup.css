@@ -167,7 +167,7 @@
 
 #hint-container {
     position: fixed;
-    top: 40px;
+    top: var(--utility-height, 40px);
     left: 0;
     padding: 10px;
     z-index: 10000;

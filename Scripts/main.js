@@ -2085,37 +2085,101 @@ setupZoomButton(previewZoomInButton, true);
 setupZoomButton(previewZoomOutButton, false);
 
 
+const topUtilityBtnsEl = document.getElementById('topUtilityBtns');
+const utilityContainerEl = document.getElementById('utilityContainer');
+
+let lastKnownUtilityHeight = parseFloat(
+    getComputedStyle(document.documentElement)
+        .getPropertyValue('--utility-height')
+) || 0;
+
+function updateUtilityHeight(measuredHeight = topUtilityBtnsEl?.offsetHeight) {
+    if (!measuredHeight || measuredHeight <= 0) {
+        return lastKnownUtilityHeight;
+    }
+
+    const height = Math.round(measuredHeight);
+
+    if (height !== lastKnownUtilityHeight) {
+        lastKnownUtilityHeight = height;
+        document.documentElement.style.setProperty(
+            '--utility-height',
+            `${height}px`
+        );
+    }
+
+    return height;
+}
+
+if (window.ResizeObserver && topUtilityBtnsEl) {
+    const utilityObserver = new ResizeObserver(() => {
+        const isHidden =
+            hideUtilityButton?.dataset.hidden === 'true';
+
+        if (!isHidden && topUtilityBtnsEl.style.display !== 'none') {
+            const height = Math.round(topUtilityBtnsEl.offsetHeight);
+
+            if (height > 0 && height !== lastKnownUtilityHeight) {
+                updateUtilityHeight(height);
+                resize();
+            }
+        }
+    });
+
+    utilityObserver.observe(topUtilityBtnsEl);
+}
+
+updateUtilityHeight();
+
 hideUtilityButton.addEventListener('click', () => {
-    const utilityBtns = document.getElementById('topUtilityBtns');
-    const utilityContainer = document.getElementById('utilityContainer');
+    const utilityBtns = topUtilityBtnsEl;
+    const utilityContainer = utilityContainerEl;
     const isHidden = hideUtilityButton.dataset.hidden === 'true';
+
     if (isHidden) {
         utilityBtns.style.display = 'flex';
+        utilityBtns.style.height = 'auto';
+
+        const targetHeight = updateUtilityHeight();
+
         utilityBtns.animate([
             { opacity: 0, height: '0px', padding: '0 5px' },
-            { opacity: 1, height: '40px', padding: '5px' }
-        ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
+            { opacity: 1, height: `${targetHeight}px`, padding: '5px' }
+        ], {
+            duration: 200,
+            easing: 'ease'
+        }).onfinish = () => {
+            utilityBtns.style.height = '';
+        };
 
-        }
         canvasContainer.classList.remove('expanded');
         editorContainer.classList.remove('expanded');
-        if (panelSplitter) panelSplitter.classList.remove('expanded');
+        panelSplitter?.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
+
     } else {
-        //utilityBtns.style.display = 'none';
+        const currentHeight = updateUtilityHeight();
+
         utilityBtns.animate([
-            { opacity: 1, height: '40px', padding: '5px' },
+            { opacity: 1, height: `${currentHeight}px`, padding: '5px' },
             { opacity: 0, height: '0px', padding: '0 5px' }
-        ], { duration: 200, fill: 'forwards', easing: 'ease' }).onfinish = () => {
+        ], {
+            duration: 200,
+            easing: 'ease'
+        }).onfinish = () => {
             utilityBtns.style.display = 'none';
-        }
+            utilityBtns.style.height = '';
+        };
+
         canvasContainer.classList.add('expanded');
         editorContainer.classList.add('expanded');
-        if (panelSplitter) panelSplitter.classList.add('expanded');
+        panelSplitter?.classList.add('expanded');
         utilityContainer.classList.add('expanded');
     }
+
     hideUtilityButton.innerText = isHidden ? '▲' : '▼';
     hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
+
     resize();
 });
 

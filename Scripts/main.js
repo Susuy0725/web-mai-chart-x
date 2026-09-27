@@ -2088,39 +2088,41 @@ setupZoomButton(previewZoomOutButton, false);
 const topUtilityBtnsEl = document.getElementById('topUtilityBtns');
 const utilityContainerEl = document.getElementById('utilityContainer');
 
-let lastKnownUtilityHeight = parseFloat(
-    getComputedStyle(document.documentElement)
-        .getPropertyValue('--utility-height')
-) || 0;
+function getUtilityRowHeight() {
+    const val = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--utility-row-height'));
+    return Number.isFinite(val) && val > 0 ? val : 40;
+}
 
-function updateUtilityHeight(measuredHeight = topUtilityBtnsEl?.offsetHeight) {
-    if (!measuredHeight || measuredHeight <= 0) {
-        return lastKnownUtilityHeight;
+function calculateUtilityRows() {
+    const rowHeight = getUtilityRowHeight();
+    if (!topUtilityBtnsEl || topUtilityBtnsEl.offsetHeight <= 0) return 1;
+    return Math.max(1, Math.round(topUtilityBtnsEl.offsetHeight / rowHeight));
+}
+
+function updateUtilityHeight() {
+    const rowHeight = getUtilityRowHeight();
+    const rows = calculateUtilityRows();
+
+    if (rows > 1) {
+        document.documentElement.style.setProperty('--utility-rows', rows);
+    } else {
+        document.documentElement.style.removeProperty('--utility-rows');
+        document.documentElement.style.removeProperty('--utility-height');
     }
 
-    const height = Math.round(measuredHeight);
-
-    if (height !== lastKnownUtilityHeight) {
-        lastKnownUtilityHeight = height;
-        document.documentElement.style.setProperty(
-            '--utility-height',
-            `${height}px`
-        );
-    }
-
-    return height;
+    return rows * rowHeight;
 }
 
 if (window.ResizeObserver && topUtilityBtnsEl) {
+    let lastObservedRows = 1;
     const utilityObserver = new ResizeObserver(() => {
-        const isHidden =
-            hideUtilityButton?.dataset.hidden === 'true';
+        const isHidden = hideUtilityButton?.dataset.hidden === 'true';
 
         if (!isHidden && topUtilityBtnsEl.style.display !== 'none') {
-            const height = Math.round(topUtilityBtnsEl.offsetHeight);
-
-            if (height > 0 && height !== lastKnownUtilityHeight) {
-                updateUtilityHeight(height);
+            const currentRows = calculateUtilityRows();
+            if (currentRows !== lastObservedRows) {
+                lastObservedRows = currentRows;
+                updateUtilityHeight();
                 resize();
             }
         }
@@ -2128,8 +2130,6 @@ if (window.ResizeObserver && topUtilityBtnsEl) {
 
     utilityObserver.observe(topUtilityBtnsEl);
 }
-
-updateUtilityHeight();
 
 hideUtilityButton.addEventListener('click', () => {
     const utilityBtns = topUtilityBtnsEl;
@@ -2143,8 +2143,8 @@ hideUtilityButton.addEventListener('click', () => {
         const targetHeight = updateUtilityHeight();
 
         utilityBtns.animate([
-            { opacity: 0, height: '0px', padding: '0 5px' },
-            { opacity: 1, height: `${targetHeight}px`, padding: '5px' }
+            { opacity: 0, height: '0px', minHeight: '0px', padding: '0 5px' },
+            { opacity: 1, height: `${targetHeight}px`, minHeight: '0px', padding: '5px' }
         ], {
             duration: 200,
             easing: 'ease'
@@ -2161,8 +2161,8 @@ hideUtilityButton.addEventListener('click', () => {
         const currentHeight = updateUtilityHeight();
 
         utilityBtns.animate([
-            { opacity: 1, height: `${currentHeight}px`, padding: '5px' },
-            { opacity: 0, height: '0px', padding: '0 5px' }
+            { opacity: 1, height: `${currentHeight}px`, minHeight: '0px', padding: '5px' },
+            { opacity: 0, height: '0px', minHeight: '0px', padding: '0 5px' }
         ], {
             duration: 200,
             easing: 'ease'

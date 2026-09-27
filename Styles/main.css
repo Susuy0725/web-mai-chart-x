@@ -1,6 +1,8 @@
 :root {
     --split-ratio: 0.5;
-    --utility-height: 100px;
+    --utility-row-height:40px;
+    --utility-rows: 1;
+    --utility-height: calc(var(--utility-row-height) * var(--utility-rows));
     --utility-hidden-height: 24px;
     --const-max-playControls-height: 150px;
     --const-collapsed-playControls-height: 90px;
@@ -413,7 +415,6 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     max-width: 200px;
     position: absolute;
     left: 50%;
-    bottom: 0;
     transform: translateX(-50%);
     height: var(--utility-hidden-height);
     color: white;
@@ -462,8 +463,8 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 #topUtilityBtns {
     background: var(--main-color);
     width: 100%;
-    min-height: 40px;
-    height: auto;
+    height: var(--utility-height);
+    min-height: 0;
     padding: 5px;
     display: flex;
     flex-direction: row;

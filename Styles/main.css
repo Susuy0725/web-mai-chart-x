@@ -1,6 +1,6 @@
 :root {
     --split-ratio: 0.5;
-    --utility-row-height:40px;
+    --utility-row-height: 40px;
     --utility-rows: 1;
     --utility-height: calc(var(--utility-row-height) * var(--utility-rows));
     --utility-hidden-height: 24px;
@@ -539,6 +539,9 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     cursor: pointer;
     overflow: hidden;
     transition: background 100ms ease;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .utilitySeparator {
@@ -770,15 +773,13 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 }
 
 .utilityDropdown {
-    position: static;
     display: flex;
     align-items: center;
     padding-bottom: 5px;
     margin-bottom: -5px;
 }
 
-.utilityDropdown.open .utilityDropdown-content,
-.utilityDropdown:hover .utilityDropdown-content {
+.utilityDropdown.open .utilityDropdown-content {
     opacity: 1;
     visibility: visible;
     transform: scaleY(1);
@@ -787,8 +788,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 
 .utilityDropdown-content {
     display: flex;
-    position: absolute;
-    top: var(--utility-height, 40px);
+    position: fixed;
     background-color: var(--main-color);
     min-width: 120px;
     box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
@@ -801,7 +801,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     opacity: 0;
     visibility: hidden;
     transform: scaleY(0);
-    transform-origin: top center;
+    transform-origin: top left;
     pointer-events: none;
     transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s;
 }

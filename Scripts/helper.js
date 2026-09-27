@@ -3004,23 +3004,24 @@ export function disableNavigationGestures() {
     if (typeof window === 'undefined') return;
 
     // 1. 禁用邊緣滑動歷史導覽手勢 (iOS Safari / Android Chrome 側滑上一頁/下一頁)
-    window.addEventListener('touchstart', (e) => {
-        if (e.touches && e.touches.length > 0) {
-            const touchX = e.touches[0].clientX;
-            // 螢幕左邊緣 24px 或右邊緣 24px 內阻斷邊緣滑動手勢
-            if (touchX < 24 || touchX > window.innerWidth - 24) {
-                if (e.cancelable) {
-                    e.preventDefault();
-                }
-            }
-        }
-    }, { passive: false });
-
-    // 2. 禁用下拉重新整理 (Pull-to-refresh) 與非滾動區域滑動穿透
+    let touchStartX = 0;
     let touchStartY = 0;
+    let isEdgeTouch = false;
+
     window.addEventListener('touchstart', (e) => {
         if (e.touches && e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
             touchStartY = e.touches[0].clientY;
+
+            // 判斷觸控起點是否在螢幕兩側邊緣 24px 內
+            isEdgeTouch = touchStartX < 24 || touchStartX > window.innerWidth - 24;
+
+            // 若點擊目標為按鈕或可互動元件，絕不在此階段阻止 touchstart，以保證正常觸發 click 事件
+            const isInteractive = e.target && e.target.closest('button, [role="button"], .utilityButton, input, select, textarea, a, label, #utilityContainer');
+            if (isInteractive) {
+                isEdgeTouch = false;
+                return;
+            }
         }
     }, { passive: true });
 
@@ -3034,6 +3035,18 @@ export function disableNavigationGestures() {
         }
 
         const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
+
+        // 邊緣滑動歷史導覽手勢阻斷 (側滑上一頁/下一頁)
+        if (isEdgeTouch) {
+            const diffX = Math.abs(currentX - touchStartX);
+            const diffY = Math.abs(currentY - touchStartY);
+            if (diffX > 5 && diffX > diffY) {
+                e.preventDefault();
+                return;
+            }
+        }
+
         const isPullingDown = currentY > touchStartY;
 
         let el = e.target;
@@ -3075,9 +3088,9 @@ export function disableNavigationGestures() {
         const now = Date.now();
         // 若在 300ms 內快速連續點擊兩次
         if (now - lastTouchEndTime <= 300) {
-            const tag = e.target && e.target.tagName;
-            // 避免干擾一般的輸入框打字游標點擊
-            if (tag !== 'TEXTAREA' && tag !== 'INPUT') {
+            // 若點擊目標為按鈕或可互動元件，允許高速連點，不阻斷 click 生成
+            const isInteractive = e.target && e.target.closest('button, [role="button"], .utilityButton, input, select, textarea, a, label, #utilityContainer');
+            if (!isInteractive) {
                 if (e.cancelable) {
                     e.preventDefault();
                 }

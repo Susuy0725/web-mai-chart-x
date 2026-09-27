@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="Web mai Chart X 是一個開源、易用的 maimai 譜面線上編輯器，具有從譜面專案管理到輸出影片的完整功能。">
     <title>Web mai Chart X (Beta)</title>
     <link rel="canonical" href="https://susuy0725.github.io/web-mai-chart-x/">
@@ -190,208 +191,217 @@
         <div id="utilityContainer">
             <div id="topUtilityBtns">
                 <div class="utility-row utility-row-1">
-                <div class="utilityButton " data-buttonAction="hideEditor" role="button" tabindex="0"
-                    aria-label="收合編輯器面板" title="收合編輯器">
-                    <span class="material-symbols-outlined" translate="no">
-                        right_panel_close
-                    </span>
-                </div>
-                <div class="utilityDropdown">
-                    <div class="utilityDropdown-btn utilityButton " role="button" tabindex="0" aria-label="主選單"
-                        title="主選單">
-                        <span class="material-symbols-outlined" translate="no">menu</span>
+                    <div class="utilityButton " data-buttonAction="hideEditor" role="button" tabindex="0"
+                        aria-label="收合編輯器面板" title="收合編輯器">
+                        <span class="material-symbols-outlined" translate="no">
+                            right_panel_close
+                        </span>
                     </div>
-                    <div class="utilityDropdown-content">
-                        <div class="utilityButton utilityMenuTitle" role="button" tabindex="0" aria-label="檔案選單">
-                            <span data-i18n="menu.file">檔案</span>
-                            <span class="utilityMenuArrow material-symbols-outlined" translate="no">
-                                chevron_right
-                            </span>
-                            <div class="utilitySubmenu">
-                                <div class="utilityButton" data-buttonAction="createNew" data-i18n="menu.fileNew"
-                                    role="button" tabindex="0" aria-label="新建專案">新建</div>
-                                <div class="utilityButton" data-buttonAction="projectManager"
-                                    data-i18n="menu.fileProjectManager" role="button" tabindex="0" aria-label="專案總管">
-                                    專案總管</div>
-                                <div class="utilityButton" data-buttonAction="readFolder"
-                                    data-i18n="menu.fileReadFolder" role="button" tabindex="0" aria-label="讀取資料夾">
-                                    讀取資料夾
-                                    <input type="file" webkitdirectory directory multiple aria-label="選擇譜面資料夾" />
+                    <div class="utilityDropdown">
+                        <div class="utilityDropdown-btn utilityButton " role="button" tabindex="0" aria-label="主選單"
+                            title="主選單">
+                            <span class="material-symbols-outlined" translate="no">menu</span>
+                        </div>
+                        <div class="utilityDropdown-content">
+                            <div class="utilityButton utilityMenuTitle" role="button" tabindex="0" aria-label="檔案選單">
+                                <span data-i18n="menu.file">檔案</span>
+                                <span class="utilityMenuArrow material-symbols-outlined" translate="no">
+                                    chevron_right
+                                </span>
+                                <div class="utilitySubmenu">
+                                    <div class="utilityButton" data-buttonAction="createNew" data-i18n="menu.fileNew"
+                                        role="button" tabindex="0" aria-label="新建專案">新建</div>
+                                    <div class="utilityButton" data-buttonAction="projectManager"
+                                        data-i18n="menu.fileProjectManager" role="button" tabindex="0"
+                                        aria-label="專案總管">
+                                        專案總管</div>
+                                    <div class="utilityButton" data-buttonAction="readFolder"
+                                        data-i18n="menu.fileReadFolder" role="button" tabindex="0" aria-label="讀取資料夾">
+                                        讀取資料夾
+                                        <input type="file" webkitdirectory directory multiple aria-label="選擇譜面資料夾" />
+                                    </div>
+                                    <div class="utilityButton" data-buttonAction="readZip" data-i18n="menu.fileReadZip"
+                                        role="button" tabindex="0" aria-label="讀取壓縮檔">讀取壓縮檔
+                                    </div>
+                                    <div class="utilityButton" data-buttonAction="download"
+                                        data-i18n="menu.fileDownload" role="button" tabindex="0" aria-label="下載檔案">下載
+                                    </div>
+                                    <hr>
+                                    <div class="utilityButton" data-buttonAction="addMusic"
+                                        data-i18n="menu.fileAddMusic" role="button" tabindex="0" aria-label="加入音樂">加入音樂
+                                    </div>
+                                    <div class="utilityButton" data-buttonAction="addVideo"
+                                        data-i18n="menu.fileAddVideo" role="button" tabindex="0" aria-label="加入影片">加入影片
+                                    </div>
+                                    <div class="utilityButton" data-buttonAction="importFromVideo"
+                                        data-i18n="menu.fileImportFromVideo" role="button" tabindex="0"
+                                        aria-label="從影片匯入">
+                                        從影片匯入</div>
+                                    <div class="utilityButton" data-buttonAction="readMaidata"
+                                        data-i18n="menu.fileReadMaidata" role="button" tabindex="0"
+                                        aria-label="讀取 maidata">
+                                        讀取maidata</div>
                                 </div>
-                                <div class="utilityButton" data-buttonAction="readZip" data-i18n="menu.fileReadZip"
-                                    role="button" tabindex="0" aria-label="讀取壓縮檔">讀取壓縮檔
-                                </div>
-                                <div class="utilityButton" data-buttonAction="download" data-i18n="menu.fileDownload"
-                                    role="button" tabindex="0" aria-label="下載檔案">下載
-                                </div>
-                                <hr>
-                                <div class="utilityButton" data-buttonAction="addMusic" data-i18n="menu.fileAddMusic"
-                                    role="button" tabindex="0" aria-label="加入音樂">加入音樂
-                                </div>
-                                <div class="utilityButton" data-buttonAction="addVideo" data-i18n="menu.fileAddVideo"
-                                    role="button" tabindex="0" aria-label="加入影片">加入影片
-                                </div>
-                                <div class="utilityButton" data-buttonAction="importFromVideo"
-                                    data-i18n="menu.fileImportFromVideo" role="button" tabindex="0" aria-label="從影片匯入">
-                                    從影片匯入</div>
-                                <div class="utilityButton" data-buttonAction="readMaidata"
-                                    data-i18n="menu.fileReadMaidata" role="button" tabindex="0" aria-label="讀取 maidata">
-                                    讀取maidata</div>
                             </div>
-                        </div>
-                        <div class="utilityButton utilityMenuTitle" role="button" tabindex="0" aria-label="功能工具選單">
-                            <span data-i18n="menu.tools">功能/工具</span>
-                            <span class="utilityMenuArrow material-symbols-outlined" translate="no">
-                                chevron_right
-                            </span>
-                            <div class="utilitySubmenu">
-                                <div class="utilityButton" data-buttonAction="getNowNoteIndex"
-                                    data-i18n="menu.toolsGetNowNoteIndex" role="button" tabindex="0"
-                                    aria-label="游標移至播放頭">游標移至播放頭</div>
-                                <div class="utilityButton" data-buttonAction="getCursorNoteIndex"
-                                    data-i18n="menu.toolsGetCursorNoteIndex" role="button" tabindex="0"
-                                    aria-label="播放頭移至游標">播放頭移至游標</div>
-                                <div class="utilityButton" data-buttonAction="recordVideo"
-                                    data-i18n="menu.toolsRecordVideo" role="button" tabindex="0" aria-label="錄製影片">錄製影片
+                            <div class="utilityButton utilityMenuTitle" role="button" tabindex="0" aria-label="功能工具選單">
+                                <span data-i18n="menu.tools">功能/工具</span>
+                                <span class="utilityMenuArrow material-symbols-outlined" translate="no">
+                                    chevron_right
+                                </span>
+                                <div class="utilitySubmenu">
+                                    <div class="utilityButton" data-buttonAction="getNowNoteIndex"
+                                        data-i18n="menu.toolsGetNowNoteIndex" role="button" tabindex="0"
+                                        aria-label="游標移至播放頭">游標移至播放頭</div>
+                                    <div class="utilityButton" data-buttonAction="getCursorNoteIndex"
+                                        data-i18n="menu.toolsGetCursorNoteIndex" role="button" tabindex="0"
+                                        aria-label="播放頭移至游標">播放頭移至游標</div>
+                                    <div class="utilityButton" data-buttonAction="recordVideo"
+                                        data-i18n="menu.toolsRecordVideo" role="button" tabindex="0" aria-label="錄製影片">
+                                        錄製影片
+                                    </div>
+                                    <div class="utilityButton" data-buttonAction="editMusic"
+                                        data-i18n="menu.toolsEditMusic" role="button" tabindex="0" aria-label="編輯音樂開頭">
+                                        編輯音樂開頭</div>
+                                    <div class="utilityButton" data-buttonAction="tapBpm" data-i18n="menu.toolsTapBpm"
+                                        role="button" tabindex="0" aria-label="Tap BPM">Tap BPM
+                                    </div>
+                                    <div class="utilityButton" data-buttonAction="quickGenerate"
+                                        data-i18n="menu.toolsQuickGenerate" role="button" tabindex="0"
+                                        aria-label="快速生成">
+                                        快速生成</div>
+                                    <div class="utilityButton" data-buttonAction="fetchFromMainote"
+                                        data-i18n="menu.toolsFetchFromMainote" role="button" tabindex="0"
+                                        aria-label="從 Mainote 抓取資料">從Mainote抓取資料</div>
+                                    <div class="utilityButton" data-buttonAction="popup" data-i18n="menu.toolsPopup"
+                                        role="button" tabindex="0" aria-label="預覽彈出">預覽彈出</div>
+                                    <div class="utilityButton" data-buttonAction="findReplace"
+                                        data-i18n="menu.toolsFindReplace" role="button" tabindex="0" aria-label="尋找與取代">
+                                        尋找與取代</div>
+                                    <div class="utilityButton" data-buttonAction="connectMajdataView"
+                                        data-i18n="menu.toolsConnectMajdataView" role="button" tabindex="0"
+                                        aria-label="連接 MajdataView">連接 MajdataView</div>
                                 </div>
-                                <div class="utilityButton" data-buttonAction="editMusic" data-i18n="menu.toolsEditMusic"
-                                    role="button" tabindex="0" aria-label="編輯音樂開頭">
-                                    編輯音樂開頭</div>
-                                <div class="utilityButton" data-buttonAction="tapBpm" data-i18n="menu.toolsTapBpm"
-                                    role="button" tabindex="0" aria-label="Tap BPM">Tap BPM
-                                </div>
-                                <div class="utilityButton" data-buttonAction="quickGenerate"
-                                    data-i18n="menu.toolsQuickGenerate" role="button" tabindex="0" aria-label="快速生成">
-                                    快速生成</div>
-                                <div class="utilityButton" data-buttonAction="fetchFromMainote"
-                                    data-i18n="menu.toolsFetchFromMainote" role="button" tabindex="0"
-                                    aria-label="從 Mainote 抓取資料">從Mainote抓取資料</div>
-                                <div class="utilityButton" data-buttonAction="popup" data-i18n="menu.toolsPopup"
-                                    role="button" tabindex="0" aria-label="預覽彈出">預覽彈出</div>
-                                <div class="utilityButton" data-buttonAction="findReplace"
-                                    data-i18n="menu.toolsFindReplace" role="button" tabindex="0" aria-label="尋找與取代">
-                                    尋找與取代</div>
-                                <div class="utilityButton" data-buttonAction="connectMajdataView"
-                                    data-i18n="menu.toolsConnectMajdataView" role="button" tabindex="0"
-                                    aria-label="連接 MajdataView">連接 MajdataView</div>
                             </div>
+                            <div class="utilityButton" data-buttonAction="manageResources"
+                                data-i18n="menu.manageResources" role="button" tabindex="0" aria-label="資源管理">資源管理
+                            </div>
+                            <div class="utilityButton" data-buttonAction="chartInfo" data-i18n="menu.chartInfo"
+                                role="button" tabindex="0" aria-label="譜面資訊">譜面資訊</div>
+                            <div class="utilityButton" data-buttonAction="settings" data-i18n="menu.settings"
+                                role="button" tabindex="0" aria-label="設定">設定</div>
                         </div>
-                        <div class="utilityButton" data-buttonAction="manageResources" data-i18n="menu.manageResources"
-                            role="button" tabindex="0" aria-label="資源管理">資源管理
-                        </div>
-                        <div class="utilityButton" data-buttonAction="chartInfo" data-i18n="menu.chartInfo"
-                            role="button" tabindex="0" aria-label="譜面資訊">譜面資訊</div>
-                        <div class="utilityButton" data-buttonAction="settings" data-i18n="menu.settings" role="button"
-                            tabindex="0" aria-label="設定">設定</div>
                     </div>
-                </div>
 
-                <div class="utilityDropdown">
-                    <div class="utilityDropdown-btn utilityButton " role="button" tabindex="0" aria-label="編輯操作選單"
-                        title="編輯選單">
-                        <span class="material-symbols-outlined" translate="no">edit</span>
+                    <div class="utilityDropdown">
+                        <div class="utilityDropdown-btn utilityButton " role="button" tabindex="0" aria-label="編輯操作選單"
+                            title="編輯選單">
+                            <span class="material-symbols-outlined" translate="no">edit</span>
+                        </div>
+                        <div class="utilityDropdown-content">
+                            <div class="utilityButton" data-buttonAction="undo" data-i18n="menu.editUndo" role="button"
+                                tabindex="0" aria-label="復原">復原</div>
+                            <div class="utilityButton" data-buttonAction="redo" data-i18n="menu.editRedo" role="button"
+                                tabindex="0" aria-label="重作">重作</div>
+                            <div class="utilityButton" data-buttonAction="rotateClockwise"
+                                data-i18n="menu.editRotateClockwise" role="button" tabindex="0" aria-label="順時針旋轉">
+                                順時針旋轉</div>
+                            <div class="utilityButton" data-buttonAction="rotateCounterClockwise"
+                                data-i18n="menu.editRotateCounterClockwise" role="button" tabindex="0"
+                                aria-label="逆時針旋轉">
+                                逆時針旋轉</div>
+                            <div class="utilityButton" data-buttonAction="rotate180" data-i18n="menu.editRotate180"
+                                role="button" tabindex="0" aria-label="180度旋轉">180度旋轉</div>
+                            <div class="utilityButton" data-buttonAction="flipVertical"
+                                data-i18n="menu.editFlipVertical" role="button" tabindex="0" aria-label="上下反轉">上下反轉
+                            </div>
+                            <div class="utilityButton" data-buttonAction="flipHorizontal"
+                                data-i18n="menu.editFlipHorizontal" role="button" tabindex="0" aria-label="左右反轉">
+                                左右反轉</div>
+                            <div class="utilityButton" data-buttonAction="findReplace" data-i18n="menu.toolsFindReplace"
+                                role="button" tabindex="0" aria-label="尋找與取代">尋找與取代
+                            </div>
+                            <div class="utilityButton" data-buttonAction="toggleBk" data-i18n="menu.toolsToggleBk"
+                                role="button" tabindex="0" aria-label="切換或加入 Break">切換/加入 Break
+                            </div>
+                            <div class="utilityButton" data-buttonAction="toggleEx" data-i18n="menu.toolsToggleEx"
+                                role="button" tabindex="0" aria-label="切換或加入 EX">切換/加入 EX
+                            </div>
+                        </div>
+                        <div class="utilityButton" data-buttonAction="fullscreen" role="button" tabindex="0"
+                            aria-label="全螢幕切換" title="全螢幕">
+                            <span class="material-symbols-outlined" translate="no">
+                                fullscreen
+                            </span>
+                        </div>
+                        <div class="utilityButton " data-buttonAction="help" role="button" tabindex="0"
+                            aria-label="說明文件" title="說明">
+                            <span class="material-symbols-outlined" translate="no">
+                                help
+                            </span>
+                        </div>
                     </div>
-                    <div class="utilityDropdown-content">
-                        <div class="utilityButton" data-buttonAction="undo" data-i18n="menu.editUndo" role="button"
-                            tabindex="0" aria-label="復原">復原</div>
-                        <div class="utilityButton" data-buttonAction="redo" data-i18n="menu.editRedo" role="button"
-                            tabindex="0" aria-label="重作">重作</div>
-                        <div class="utilityButton" data-buttonAction="rotateClockwise"
-                            data-i18n="menu.editRotateClockwise" role="button" tabindex="0" aria-label="順時針旋轉">
-                            順時針旋轉</div>
-                        <div class="utilityButton" data-buttonAction="rotateCounterClockwise"
-                            data-i18n="menu.editRotateCounterClockwise" role="button" tabindex="0" aria-label="逆時針旋轉">
-                            逆時針旋轉</div>
-                        <div class="utilityButton" data-buttonAction="rotate180" data-i18n="menu.editRotate180"
-                            role="button" tabindex="0" aria-label="180度旋轉">180度旋轉</div>
-                        <div class="utilityButton" data-buttonAction="flipVertical" data-i18n="menu.editFlipVertical"
-                            role="button" tabindex="0" aria-label="上下反轉">上下反轉
-                        </div>
-                        <div class="utilityButton" data-buttonAction="flipHorizontal"
-                            data-i18n="menu.editFlipHorizontal" role="button" tabindex="0" aria-label="左右反轉">
-                            左右反轉</div>
-                        <div class="utilityButton" data-buttonAction="findReplace" data-i18n="menu.toolsFindReplace"
-                            role="button" tabindex="0" aria-label="尋找與取代">尋找與取代
-                        </div>
-                        <div class="utilityButton" data-buttonAction="toggleBk" data-i18n="menu.toolsToggleBk"
-                            role="button" tabindex="0" aria-label="切換或加入 Break">切換/加入 Break
-                        </div>
-                        <div class="utilityButton" data-buttonAction="toggleEx" data-i18n="menu.toolsToggleEx"
-                            role="button" tabindex="0" aria-label="切換或加入 EX">切換/加入 EX
-                        </div>
-                    </div>
-                </div>
-                <div class="utilitySeparator utility-break"></div>
+                    <div class="utilitySeparator utility-break"></div>
                 </div>
                 <div class="utility-row utility-row-2">
-                <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
-                    <input type="number" step="0.01" value="0" name="d" aria-label="譜面偏移秒數">
-                </div>
-                <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty"
-                    data-i18n="menu.changeDifficulty">難度切換
-                    <select name="d" aria-label="切換譜面難度">
-                        <option value="7">ORIGINAL</option>
-                        <option value="6">Re:MASTER</option>
-                        <option value="5" selected>MASTER</option>
-                        <option value="4">EXPERT</option>
-                        <option value="3">ADVANCED</option>
-                        <option value="2">BASIC</option>
-                        <option value="1">EASY</option>
-                    </select>
-                </div>
-                <div class="utilitySeparator"></div>
-                <div class="utilityButton " data-buttonAction="playbackSpeedMinus" role="button" tabindex="0"
-                    aria-label="降低播放速度">-
-                </div>
-                <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed" data-i18n="menu.playbackSpeed">
-                    播放速度
-                    <input type="number" step="0.25" value="1" name="d" min="0.25" max="2" aria-label="播放速度倍率">
-                </div>
-                <div class="utilityButton " data-buttonAction="playbackSpeedAdd" role="button" tabindex="0"
-                    aria-label="提高播放速度">+
-                </div>
-                <div class="utilitySeparator"></div>
-                <div class="utilityButton noFixedsize" data-buttonAction="timebase" data-i18n="menu.timeSignature">拍號
-                    <input type="number" step="1" value="4" name="tb1" aria-label="拍號分子">/ <input type="number" step="1"
-                        value="4" name="tb2" aria-label="拍號分母">
-                </div>
-                <div class="utilityButton noFixedsize" data-buttonAction="gridDivision" data-i18n="menu.gridDivision"
-                    style="display: none;">切分
-                    <select name="gridDivision" aria-label="格線切分">
-                        <option value="4">1/4</option>
-                        <option value="8">1/8</option>
-                        <option value="12">1/12</option>
-                        <option value="16">1/16</option>
-                        <option value="24">1/24</option>
-                        <option value="32">1/32</option>
-                        <option value="48">1/48</option>
-                        <option value="64">1/64</option>
-                        <option value="custom" data-i18n="menu.gridDivisionCustom">自訂...</option>
-                    </select>
-                </div>
-                <div class="utilityButton noFixedsize" data-buttonAction="visualToolMode"
-                    data-i18n="menu.visualToolMode" style="display: none;">模式
-                    <select name="visualToolMode" aria-label="視覺工具模式">
-                        <option value="edit" data-i18n="menu.visualToolModeEdit">編輯 ✏️</option>
-                        <option value="select" data-i18n="menu.visualToolModeSelect">選擇 ↖️</option>
-                    </select>
-                </div>
-                <div class="utilityButton noFixedsize" data-buttonAction="readyBeat" data-i18n="menu.readyBeat">
-                    預備拍<input type="checkbox" name="d" aria-label="啟用預備拍"><span></span>
-                </div>
-                <div class="utilitySeparator"></div>
-                <div class="utilityButton" data-buttonAction="fullscreen" role="button" tabindex="0" aria-label="全螢幕切換"
-                    title="全螢幕">
-                    <span class="material-symbols-outlined" translate="no">
-                        fullscreen
-                    </span>
-                </div>
-                <div class="utilityButton " data-buttonAction="help" role="button" tabindex="0" aria-label="說明文件"
-                    title="說明">
-                    <span class="material-symbols-outlined" translate="no">
-                        help
-                    </span>
-                </div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
+                        <input type="number" step="0.01" value="0" name="d" aria-label="譜面偏移秒數">
+                    </div>
+                    <div class="utilitySeparator"></div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty"
+                        data-i18n="menu.changeDifficulty">難度切換
+                        <select name="d" aria-label="切換譜面難度">
+                            <option value="7">ORIGINAL</option>
+                            <option value="6">Re:MASTER</option>
+                            <option value="5" selected>MASTER</option>
+                            <option value="4">EXPERT</option>
+                            <option value="3">ADVANCED</option>
+                            <option value="2">BASIC</option>
+                            <option value="1">EASY</option>
+                        </select>
+                    </div>
+                    <div class="utilitySeparator"></div>
+                    <div class="utilityButton " data-buttonAction="playbackSpeedMinus" role="button" tabindex="0"
+                        aria-label="降低播放速度">-
+                    </div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed"
+                        data-i18n="menu.playbackSpeed">
+                        播放速度
+                        <input type="number" step="0.25" value="1" name="d" min="0.25" max="2" aria-label="播放速度倍率">
+                    </div>
+                    <div class="utilityButton " data-buttonAction="playbackSpeedAdd" role="button" tabindex="0"
+                        aria-label="提高播放速度">+
+                    </div>
+                    <div class="utilitySeparator"></div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="timebase" data-i18n="menu.timeSignature">
+                        拍號
+                        <input type="number" step="1" value="4" name="tb1" aria-label="拍號分子">/ <input type="number"
+                            step="1" value="4" name="tb2" aria-label="拍號分母">
+                    </div>
+                    <div class="utilitySeparator"></div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="gridDivision"
+                        data-i18n="menu.gridDivision" style="display: none;">切分
+                        <select name="gridDivision" aria-label="格線切分">
+                            <option value="4">1/4</option>
+                            <option value="8">1/8</option>
+                            <option value="12">1/12</option>
+                            <option value="16">1/16</option>
+                            <option value="24">1/24</option>
+                            <option value="32">1/32</option>
+                            <option value="48">1/48</option>
+                            <option value="64">1/64</option>
+                            <option value="custom" data-i18n="menu.gridDivisionCustom">自訂...</option>
+                        </select>
+                    </div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="visualToolMode"
+                        data-i18n="menu.visualToolMode" style="display: none;">模式
+                        <select name="visualToolMode" aria-label="視覺工具模式">
+                            <option value="edit" data-i18n="menu.visualToolModeEdit">編輯</option>
+                            <option value="select" data-i18n="menu.visualToolModeSelect">選擇</option>
+                        </select>
+                    </div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="readyBeat" data-i18n="menu.readyBeat">
+                        預備拍<input type="checkbox" name="d" aria-label="啟用預備拍">
+                    </div>
                 </div>
             </div>
             <div class="closeBtn" data-hidden="false" role="button" tabindex="0" aria-label="收合工具列" title="收合工具列">▲

@@ -2191,20 +2191,38 @@ hideUtilityButton.addEventListener('click', () => {
     resize();
 });
 
-const utilityDropdown = document.querySelector('.utilityDropdown');
-const utilityDropdownBtn = document.querySelector('.utilityDropdown-btn');
-if (utilityDropdown && utilityDropdownBtn) {
+const utilityDropdowns = document.querySelectorAll('.utilityDropdown');
+
+function positionDropdownContent(dropdown) {
+    const btn = dropdown.querySelector('.utilityDropdown-btn');
+    const content = dropdown.querySelector('.utilityDropdown-content');
+    if (!btn || !content) return;
+
+    const btnRect = btn.getBoundingClientRect();
+    content.style.top = `${btnRect.bottom}px`;
+    content.style.left = `${btnRect.left}px`;
+}
+
+utilityDropdowns.forEach((utilityDropdown) => {
+    const utilityDropdownBtn = utilityDropdown.querySelector('.utilityDropdown-btn');
+    if (!utilityDropdownBtn) return;
+
     utilityDropdownBtn.addEventListener('click', (event) => {
         event.stopPropagation();
-        utilityDropdown.classList.toggle('open');
-    });
-
-    document.addEventListener('click', (event) => {
-        if (!utilityDropdown.contains(event.target)) {
-            utilityDropdown.classList.remove('open');
+        const isOpen = utilityDropdown.classList.contains('open');
+        // 關閉所有其他 dropdown
+        utilityDropdowns.forEach(d => d.classList.remove('open'));
+        if (!isOpen) {
+            utilityDropdown.classList.add('open');
+            positionDropdownContent(utilityDropdown);
         }
     });
-}
+});
+
+document.addEventListener('click', () => {
+    utilityDropdowns.forEach(d => d.classList.remove('open'));
+});
+
 
 quickGenerateButton.addEventListener('click', () => {
     popupWindow({

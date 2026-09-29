@@ -2193,6 +2193,13 @@ hideUtilityButton.addEventListener('click', () => {
 
 const utilityDropdowns = document.querySelectorAll('.utilityDropdown');
 
+function closeAllDropdowns() {
+    utilityDropdowns.forEach((d) => {
+        d.classList.remove('open');
+        d.querySelectorAll('.utilityMenuTitle.open').forEach(menu => menu.classList.remove('open'));
+    });
+}
+
 function positionDropdownContent(dropdown) {
     const btn = dropdown.querySelector('.utilityDropdown-btn');
     const content = dropdown.querySelector('.utilityDropdown-content');
@@ -2210,17 +2217,43 @@ utilityDropdowns.forEach((utilityDropdown) => {
     utilityDropdownBtn.addEventListener('click', (event) => {
         event.stopPropagation();
         const isOpen = utilityDropdown.classList.contains('open');
-        // 關閉所有其他 dropdown
-        utilityDropdowns.forEach(d => d.classList.remove('open'));
+        // 關閉所有其他 dropdown 及子選單
+        closeAllDropdowns();
         if (!isOpen) {
             utilityDropdown.classList.add('open');
             positionDropdownContent(utilityDropdown);
         }
     });
+
+    const menuTitles = utilityDropdown.querySelectorAll('.utilityMenuTitle');
+    menuTitles.forEach((menuTitle) => {
+        menuTitle.addEventListener('click', (event) => {
+            // 若點擊的是子選單內的按鈕，不在此攔截，讓按鈕動作與關閉邏輯處理
+            if (event.target.closest('.utilitySubmenu .utilityButton')) {
+                return;
+            }
+            event.stopPropagation();
+            const isOpen = menuTitle.classList.contains('open');
+            menuTitles.forEach(m => m.classList.remove('open'));
+            if (!isOpen) {
+                menuTitle.classList.add('open');
+            }
+        });
+    });
+
+    const submenus = utilityDropdown.querySelectorAll('.utilitySubmenu');
+    submenus.forEach((submenu) => {
+        submenu.addEventListener('click', (event) => {
+            // 若點擊子選單非按鈕區域（如分隔線或空白），避免冒泡導致選單關閉
+            if (!event.target.closest('.utilityButton')) {
+                event.stopPropagation();
+            }
+        });
+    });
 });
 
 document.addEventListener('click', () => {
-    utilityDropdowns.forEach(d => d.classList.remove('open'));
+    closeAllDropdowns();
 });
 
 

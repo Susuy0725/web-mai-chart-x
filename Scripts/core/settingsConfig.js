@@ -37,7 +37,7 @@ export const defaultSettings = {
     majdataWsUrl: 'ws://127.0.0.1:8083/majdata',
     autoConnectMajdataView: false,
     showUI: false,
-    enableQuickPanel: false,
+    enableQuickPanel: true,
     fancyTouchEffect: false,
     // Sound & Playback
     notPlayHoldEnd: false,

@@ -884,16 +884,23 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     position: fixed;
     transform-origin: center center;
     transform: translate(-50%, -50%);
+    width: 140px;
+    height: 140px;
     aspect-ratio: 1/1;
     display: none;
     z-index: 1500;
-
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 8px;
+    pointer-events: none;
+    box-sizing: border-box;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 2px solid var(--button-ouline);
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: var(--button-ouline);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65);
 }
 
-#center,
+/* 8 個扇形按鈕切片 (45 度扇形錐體) */
 #select-up,
 #select-down,
 #select-left,
@@ -902,59 +909,130 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 #select-up-right,
 #select-down-left,
 #select-down-right {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    text-align: center;
-    border: 2px solid #ffffffaa;
-    color: #ffffffaa;
-    border-radius: 4px;
-    transition: all 0.15s ease-out;
     background-color: var(--main-color);
-    isolation: isolate;
+    color: rgba(255, 255, 255, 0.85);
+    user-select: none;
+    box-sizing: border-box;
+    transform-origin: 50% 50%;
+    clip-path: polygon(50% 50%, 29.6% 0%, 70.4% 0%);
+    transition: background-color 0.12s ease-out, color 0.12s ease-out;
 }
 
-#select-up-left {
-    grid-area: 1 / 1 / 2 / 2;
-}
-
+/* 8 個方向扇區旋轉角 */
 #select-up {
-    grid-area: 1 / 2 / 2 / 3;
+    transform: rotate(0deg);
 }
 
 #select-up-right {
-    grid-area: 1 / 3 / 2 / 4;
-}
-
-#select-left {
-    grid-area: 2 / 1 / 3 / 2;
-}
-
-#center {
-    grid-area: 2 / 2 / 3 / 3;
-    border-radius: 50%;
-    width: 50%;
-    height: 50%;
-    margin: auto;
+    transform: rotate(45deg);
 }
 
 #select-right {
-    grid-area: 2 / 3 / 3 / 4;
-}
-
-#select-down-left {
-    grid-area: 3 / 1 / 4 / 2;
-}
-
-#select-down {
-    grid-area: 3 / 2 / 4 / 3;
+    transform: rotate(90deg);
 }
 
 #select-down-right {
-    grid-area: 3 / 3 / 4 / 4;
+    transform: rotate(135deg);
 }
 
-.quick-panel[data-active-dir="middle"] #center,
+#select-down {
+    transform: rotate(180deg);
+}
+
+#select-down-left {
+    transform: rotate(225deg);
+}
+
+#select-left {
+    transform: rotate(270deg);
+}
+
+#select-up-left {
+    transform: rotate(315deg);
+}
+
+/* 扇區圖示位置與反向旋轉以保持正向 */
+#select-up span,
+#select-down span,
+#select-left span,
+#select-right span,
+#select-up-left span,
+#select-up-right span,
+#select-down-left span,
+#select-down-right span {
+    margin-top: 13px;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.12s ease-out, color 0.12s ease-out;
+}
+
+#select-up span {
+    transform: rotate(0deg);
+}
+
+#select-up-right span {
+    transform: rotate(-45deg);
+}
+
+#select-right span {
+    transform: rotate(-90deg);
+}
+
+#select-down-right span {
+    transform: rotate(-135deg);
+}
+
+#select-down span {
+    transform: rotate(-180deg);
+}
+
+#select-down-left span {
+    transform: rotate(-225deg);
+}
+
+#select-left span {
+    transform: rotate(-270deg);
+}
+
+#select-up-left span {
+    transform: rotate(-315deg);
+}
+
+/* 中心取消 / 死區圓形 */
+#center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background-color: var(--main-color);
+    border: 2px solid var(--button-ouline);
+    z-index: 5;
+    box-sizing: border-box;
+    transition: background-color 0.12s ease-out, border-color 0.12s ease-out, scale 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+
+/* 選中高亮反饋 */
+.quick-panel[data-active-dir="middle"] #center {
+    border-color: #ffffff;
+    background-color: var(--accent-color, #4a90e2);
+    scale: 1.1;
+    box-shadow: 0 0 14px var(--accent-color, rgba(74, 144, 226, 0.6));
+}
+
 .quick-panel[data-active-dir="up"] #select-up,
 .quick-panel[data-active-dir="down"] #select-down,
 .quick-panel[data-active-dir="left"] #select-left,
@@ -963,22 +1041,77 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 .quick-panel[data-active-dir="up-right"] #select-up-right,
 .quick-panel[data-active-dir="down-left"] #select-down-left,
 .quick-panel[data-active-dir="down-right"] #select-down-right {
-    border-color: #ffffff;
-    background-color: #ffffff;
+    background-color: var(--accent-color, #4a90e2);
     color: #ffffff;
-    transform: scale(1.1);
+    z-index: 3;
 }
 
-.quick-panel[data-active-dir="up"] #select-up span,
-.quick-panel[data-active-dir="down"] #select-down span,
-.quick-panel[data-active-dir="left"] #select-left span,
-.quick-panel[data-active-dir="right"] #select-right span,
-.quick-panel[data-active-dir="up-left"] #select-up-left span,
-.quick-panel[data-active-dir="up-right"] #select-up-right span,
-.quick-panel[data-active-dir="down-left"] #select-down-left span,
+.quick-panel[data-active-dir="up"] #select-up span {
+    transform: rotate(0deg) scale(1.15);
+}
+
+.quick-panel[data-active-dir="up-right"] #select-up-right span {
+    transform: rotate(-45deg) scale(1.15);
+}
+
+.quick-panel[data-active-dir="right"] #select-right span {
+    transform: rotate(-90deg) scale(1.15);
+}
+
 .quick-panel[data-active-dir="down-right"] #select-down-right span {
-    color: #000000;
-    mix-blend-mode: destination-out;
+    transform: rotate(-135deg) scale(1.15);
+}
+
+.quick-panel[data-active-dir="down"] #select-down span {
+    transform: rotate(-180deg) scale(1.15);
+}
+
+.quick-panel[data-active-dir="down-left"] #select-down-left span {
+    transform: rotate(-225deg) scale(1.15);
+}
+
+.quick-panel[data-active-dir="left"] #select-left span {
+    transform: rotate(-270deg) scale(1.15);
+}
+
+.quick-panel[data-active-dir="up-left"] #select-up-left span {
+    transform: rotate(-315deg) scale(1.15);
+}
+
+/* 快速面板底部功能名稱標籤 */
+.quick-panel-label {
+    position: fixed;
+    transform-origin: center top;
+    transform: translate(-50%, 0);
+    z-index: 1510;
+    pointer-events: none;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #ffffff;
+    background: rgba(18, 18, 24, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--button-ouline);
+    border-radius: 20px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+    transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    box-sizing: border-box;
+}
+
+.quick-panel-label[data-dir="middle"] {
+    color: rgba(255, 255, 255, 0.6);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.quick-panel-label:not([data-dir="middle"]) {
+    color: #ffffff;
+    border: 2px solid var(--accent-color, #4a90e2);
 }
 
 /* 尋找與取代浮動視窗樣式 */

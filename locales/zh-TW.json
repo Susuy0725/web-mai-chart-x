@@ -106,11 +106,23 @@
     "renderComplete": "逐幀渲染完成，檔案已下載",
     "renderFailed": "渲染失敗：{error}",
     "moveMouseToOpen": "移動你的滑鼠來存取快捷面板!",
+    "quickPanelDisabled": "快速面板未啟用，請至設定中開啟！",
     "swUpdating": "正在下載離線更新...",
     "swUpdated": "版本更新已就緒！",
     "swUpdateDetail": "快取已更新，請重新整理以套用最新版本",
     "swReloadNow": "立即重新整理",
     "swDismiss": "稍後"
+  },
+  "quickPanel": {
+    "middle": "取消",
+    "up": "上下反轉",
+    "down": "左右反轉",
+    "left": "逆時針旋轉",
+    "right": "順時針旋轉",
+    "up-left": "180度旋轉",
+    "up-right": "重作",
+    "down-left": "跳轉至游標音符",
+    "down-right": "復原"
   },
   "settings": {
     "title": "設定",

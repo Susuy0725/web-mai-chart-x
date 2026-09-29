@@ -106,11 +106,23 @@
     "renderComplete": "フレームレンダリングが完了しました。ファイルをダウンロードしました。",
     "renderFailed": "レンダリング失敗: {error}",
     "moveMouseToOpen": "マウスを動かしてクイックパネルにアクセスします！",
+    "quickPanelDisabled": "クイックパネルが無効です。設定で有効にしてください！",
     "swUpdating": "オフライン更新をダウンロード中...",
     "swUpdated": "アップデートの準備が完了しました！",
     "swUpdateDetail": "キャッシュが更新されました。再読み込みして適用してください。",
     "swReloadNow": "今すぐ再読み込み",
     "swDismiss": "後で"
+  },
+  "quickPanel": {
+    "middle": "キャンセル",
+    "up": "上下反転",
+    "down": "左右反転",
+    "left": "反時計回りに回転",
+    "right": "時計回りに回転",
+    "up-left": "180度回転",
+    "up-right": "やり直し",
+    "down-left": "カーソル位置へ移動",
+    "down-right": "元に戻す"
   },
   "settings": {
     "title": "設定",

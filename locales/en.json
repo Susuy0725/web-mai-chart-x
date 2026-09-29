@@ -106,11 +106,23 @@
     "renderComplete": "Frame-by-frame rendering complete. File downloaded.",
     "renderFailed": "Rendering failed: {error}",
     "moveMouseToOpen": "Move your mouse to access quick panel!",
+    "quickPanelDisabled": "Quick panel is disabled. Please enable it in Settings!",
     "swUpdating": "Downloading offline update...",
     "swUpdated": "Update ready!",
     "swUpdateDetail": "Cache updated. Please reload to apply latest version.",
     "swReloadNow": "Reload Now",
     "swDismiss": "Dismiss"
+  },
+  "quickPanel": {
+    "middle": "Cancel",
+    "up": "Flip Vertical",
+    "down": "Flip Horizontal",
+    "left": "Rotate Counter-Clockwise",
+    "right": "Rotate Clockwise",
+    "up-left": "Rotate 180°",
+    "up-right": "Redo",
+    "down-left": "Jump to Cursor Note",
+    "down-right": "Undo"
   },
   "settings": {
     "title": "Settings",

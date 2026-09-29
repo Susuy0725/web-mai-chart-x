@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.09.29 (1)]
+
+### Changed
+- 調整快速面板的佈局。
+- 新增快速面板的文字說明。
+
 ## [2026.09.28 (1)]
 
 ### Changed

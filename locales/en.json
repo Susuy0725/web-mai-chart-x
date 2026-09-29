@@ -51,7 +51,10 @@
     "gridDivisionCustom": "Custom...",
     "visualToolMode": "Tool",
     "visualToolModeEdit": "Edit ✏️",
-    "visualToolModeSelect": "Select ↖️"
+    "visualToolModeSelect": "Select ↖️",
+    "help": "Help",
+    "helpBasic": "Basic Operations",
+    "helpShortcuts": "Hotkeys"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."

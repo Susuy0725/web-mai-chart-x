@@ -154,7 +154,8 @@ const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
 const playbackReset = getButton("playbackSpeed", "utility");
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
-const helpButton = getButton("help", "utility");
+const helpBasicButton = getButton("helpBasic", "utility");
+const helpShortcutsButton = getButton("helpShortcuts", "utility");
 const fullscreenButton = getButton("fullscreen", "utility");
 const findReplaceButton = getButton("findReplace", "utility");
 const toggleBkButton = getButton("toggleBk", "utility");
@@ -1649,9 +1650,17 @@ redoButton.addEventListener('click', () => {
 // 初始化按鈕禁用狀態
 updateUndoRedoUI();
 
-helpButton.addEventListener('click', () => {
-    openHelpModal();
-});
+if (helpBasicButton) {
+    helpBasicButton.addEventListener('click', () => {
+        openHelpModal('basic');
+    });
+}
+
+if (helpShortcutsButton) {
+    helpShortcutsButton.addEventListener('click', () => {
+        openHelpModal('shortcuts');
+    });
+}
 
 function getGridSlots(maxTime) {
     const slots = [];
@@ -2207,7 +2216,12 @@ function positionDropdownContent(dropdown) {
 
     const btnRect = btn.getBoundingClientRect();
     content.style.top = `${btnRect.bottom}px`;
-    content.style.left = `${btnRect.left}px`;
+    let left = btnRect.left;
+    const contentWidth = content.offsetWidth || 120;
+    if (left + contentWidth > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - contentWidth - 8);
+    }
+    content.style.left = `${left}px`;
 }
 
 utilityDropdowns.forEach((utilityDropdown) => {

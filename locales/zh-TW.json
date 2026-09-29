@@ -51,7 +51,10 @@
     "gridDivisionCustom": "自訂...",
     "visualToolMode": "模式",
     "visualToolModeEdit": "編輯 ✏️",
-    "visualToolModeSelect": "選擇 ↖️"
+    "visualToolModeSelect": "選擇 ↖️",
+    "help": "說明",
+    "helpBasic": "基礎操作",
+    "helpShortcuts": "快速鍵"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."

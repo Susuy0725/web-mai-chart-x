@@ -51,7 +51,10 @@
     "gridDivisionCustom": "カスタム...",
     "visualToolMode": "モード",
     "visualToolModeEdit": "編集 ✏️",
-    "visualToolModeSelect": "選択 ↖️"
+    "visualToolModeSelect": "選択 ↖️",
+    "help": "ヘルプ",
+    "helpBasic": "基本操作",
+    "helpShortcuts": "ショートカット"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."

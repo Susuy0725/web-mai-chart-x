@@ -49,6 +49,9 @@ export function openAboutModal() {
         text-decoration: none;
         font-size: 13px;
         font-weight: 500;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
         transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
       }
       .about-link-btn:hover {
@@ -64,6 +67,11 @@ export function openAboutModal() {
         height: 18px;
         display: block;
         object-fit: contain;
+        pointer-events: none;
+        user-select: none;
+      }
+      .about-link-btn span {
+        pointer-events: none;
       }
       .about-section {
         display: flex;
@@ -88,11 +96,11 @@ export function openAboutModal() {
       </div>
       <div class="about-links">
         <a href="https://github.com/Susuy0725/web-mai-chart-x" target="_blank" rel="noopener noreferrer" class="about-link-btn" title="GitHub">
-          <img src="assets/GitHub_Invertocat_White.svg" alt="GitHub" class="about-link-icon" />
+          <img src="assets/GitHub_Invertocat_White.svg" alt="GitHub" class="about-link-icon" draggable="false" />
           <span>GitHub</span>
         </a>
         <a href="https://discord.gg/vX7XcG7bMy" target="_blank" rel="noopener noreferrer" class="about-link-btn" title="Discord">
-          <img src="assets/Discord-Symbol-White.svg" alt="Discord" class="about-link-icon" />
+          <img src="assets/Discord-Symbol-White.svg" alt="Discord" class="about-link-icon" draggable="false" />
           <span>Discord</span>
         </a>
       </div>
@@ -110,6 +118,20 @@ export function openAboutModal() {
         title: t('popup.about.title'),
         customContent,
         width: 440,
-        buttons: []
+        buttons: [],
+        onOpen: (ctx) => {
+            const links = ctx.elements?.customContent?.querySelectorAll('.about-link-btn');
+            if (links) {
+                links.forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const url = link.getAttribute('href');
+                        if (url) {
+                            window.open(url, '_blank', 'noopener,noreferrer');
+                        }
+                    });
+                });
+            }
+        }
     });
 }

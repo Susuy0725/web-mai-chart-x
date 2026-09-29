@@ -7,6 +7,7 @@ import { SecondaryWindowManager } from './features/secondaryWindow.js';
 import { initFileHandlers } from './features/fileHandler.js';
 import { initQuickPanel } from './features/quickPanel.js';
 import { openHelpModal } from './modals/helpModal.js';
+import { openAboutModal } from './modals/aboutModal.js';
 import { openChartInfoModal } from './modals/chartInfoModal.js';
 import { openResourceManager } from './modals/resourceManagerModal.js';
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from './indexDB.js';
@@ -156,6 +157,7 @@ const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const helpBasicButton = getButton("helpBasic", "utility");
 const helpShortcutsButton = getButton("helpShortcuts", "utility");
+const aboutButton = getButton("about", "utility");
 const fullscreenButton = getButton("fullscreen", "utility");
 const findReplaceButton = getButton("findReplace", "utility");
 const toggleBkButton = getButton("toggleBk", "utility");
@@ -1659,6 +1661,12 @@ if (helpBasicButton) {
 if (helpShortcutsButton) {
     helpShortcutsButton.addEventListener('click', () => {
         openHelpModal('shortcuts');
+    });
+}
+
+if (aboutButton) {
+    aboutButton.addEventListener('click', () => {
+        openAboutModal();
     });
 }
 

@@ -54,7 +54,8 @@
     "visualToolModeSelect": "Select ↖️",
     "help": "Help",
     "helpBasic": "Basic Operations",
-    "helpShortcuts": "Hotkeys"
+    "helpShortcuts": "Hotkeys",
+    "about": "About"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."
@@ -384,6 +385,14 @@
         "<b>Slow Down Playback</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>.",
         "<b>Scale Rate</b>: <span class=\"code-highlight\">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity."
       ]
+    },
+    "about": {
+      "title": "About Web mai Chart X",
+      "desc": "An Easy-to-Use web-based maimai chart tool.",
+      "licenseTitle": "License",
+      "licenseDesc": "This project is open-sourced under the GNU General Public License v3.0 (GPL-3.0).",
+      "thanksTitle": "Acknowledgements",
+      "thanksDesc": "Assets and judgement logic are derived from open-source projects: Jian04/MajdataViewAlpha, LingFeng-bbben/MajdataView, TeamMajdata/MajdataPlay and re-poem/MajdataViewX."
     }
   },
   "rpc": {

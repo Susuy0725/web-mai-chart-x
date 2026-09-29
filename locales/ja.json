@@ -54,7 +54,8 @@
     "visualToolModeSelect": "選択 ↖️",
     "help": "ヘルプ",
     "helpBasic": "基本操作",
-    "helpShortcuts": "ショートカット"
+    "helpShortcuts": "ショートカット",
+    "about": "このアプリについて"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."
@@ -385,6 +386,14 @@
         "<b>再生速度を下げる</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>。",
         "<b>スクロール速度変更</b>: <span class=\"code-highlight\">Ctrl</span> + マウスホイールでタイムラインの流速をズームします。"
       ]
+    },
+    "about": {
+      "title": "Web mai Chart X について",
+      "desc": "使いやすいWebベースのmaimai譜面作成ツール。",
+      "licenseTitle": "ライセンス",
+      "licenseDesc": "このプロジェクトは GNU General Public License v3.0 (GPL-3.0) のもとでオープンソースとして公開されています。",
+      "thanksTitle": "謝辭",
+      "thanksDesc": "素材や判定ロジックはオープンソースコミュニティの貢献によるものです：Jian04/MajdataViewAlpha、LingFeng-bbben/MajdataView、TeamMajdata/MajdataPlay、re-poem/MajdataViewX。"
     }
   },
   "rpc": {

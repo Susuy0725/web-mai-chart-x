@@ -49,8 +49,6 @@ export function openHelpModal(type = 'basic') {
         customContent,
         width: 480,
         height: "80%",
-        buttons: [
-            { text: t('popup.close'), hideOnClick: true }
-        ]
+        buttons: []
     });
 }

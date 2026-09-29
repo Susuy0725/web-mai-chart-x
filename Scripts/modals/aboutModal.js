@@ -110,8 +110,6 @@ export function openAboutModal() {
         title: t('popup.about.title'),
         customContent,
         width: 440,
-        buttons: [
-            { text: t('popup.close'), hideOnClick: true }
-        ]
+        buttons: []
     });
 }

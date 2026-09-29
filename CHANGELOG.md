@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.09.30 (1)]
+ ### Fixed
+ - 修正點擊二級菜單無法順利展開的問題
+ - 修正功能按鍵的排版偏移
+
+ ### Changed
+ - 變更幫助按鈕的行為，從分頁模式變為下拉式選單
+ 
+ ### Added
+ - 新增關於頁面及變更日誌展示
+
+
 ## [2026.09.29 (1)]
 
 ### Changed

@@ -285,9 +285,5 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
             }
         ]
     });
-
-    if (popupCtx?.elements?.body) {
-        popupCtx.elements.body.style.overflowY = 'hidden';
-    }
 }
 

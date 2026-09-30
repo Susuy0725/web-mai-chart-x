@@ -42,6 +42,8 @@ const defaultSettings = {
     splitRatio: 0.5, // 左右面板分割比例
     slideIllegalRed: false,
     showUI: false,
+    simplayPerfect: true,
+    randomOffset: 0,
     // Sound & Playback
     notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
@@ -2151,7 +2153,9 @@ function draw() {
             renderer,
             playing,
             timeControlSliding,
-            onHit: triggerManualHit
+            onHit: triggerManualHit,
+            forcePerfect: settings.simplayPerfect ?? true,
+            randomOffset: (Math.random() - 0.5) * settings.randomOffset * 2,
         });
         activeSensors = new Set(simulatedPlayController.activeSensors);
         for (const s of manualInputSensors) {
@@ -3016,6 +3020,18 @@ function openSettings() {
                         settings.autoPlay = val;
                         simulatedPlayController.reset();
                         updateAutoPlayUI();
+                    }
+                },
+                {
+                    id: 'simplayPerfect', type: 'checkbox', label: 'Auto Play 強制完美', def: defaultSettings.simplayPerfect,
+                    apply: (val) => {
+                        settings.simplayPerfect = val;
+                    }
+                },
+                {
+                    id: 'randomOffset', type: 'range', label: 'Auto Play 判定偏移', def: defaultSettings.randomOffset, min: 0, max: 0.75, step: 0.01,
+                    apply: (val) => {
+                        settings.randomOffset = val;
                     }
                 },
                 {

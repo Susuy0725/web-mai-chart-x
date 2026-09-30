@@ -1,14 +1,21 @@
 import { projectList, projectCreate, projectDelete, projectRename, idbGetProject } from '../indexDB.js';
 import { popupWindow, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
+import { buildDriveTab } from './driveManager.js';
+import { getDriveMeta, setDriveMeta, checkFileStillValid } from '../services/driveSync.js';
+import { ensureSignedIn } from '../services/driveAuth.js';
+import { uploadFile } from '../services/driveApi.js';
+import { createTransferProgress } from '../services/transferProgress.js';
+import { buildProjectZip } from '../features/fileHandler.js';
 
 /**
  * 開啟專案總管 UI
  * @param {Object} options
  * @param {Function} options.getCurrentProjectId
  * @param {Function} options.loadProject
+ * @param {Function} [options.getFileHandlerCtx]
  */
-export function openProjectManager({ getCurrentProjectId, loadProject }) {
+export function openProjectManager({ getCurrentProjectId, loadProject, getFileHandlerCtx }) {
     const defaultCoverUrl = 'Skin/no_image.png';
 
     const formatLastEdit = (timestamp) => {
@@ -163,6 +170,30 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
                 coverContainer.appendChild(badge);
             }
 
+            // 雲端同步徽章標籤
+            const driveMeta = await getDriveMeta(proj.id);
+            if (driveMeta?.driveFileId) {
+                const cloudBadge = document.createElement('div');
+                cloudBadge.title = `已關聯雲端檔案：${driveMeta.driveName || '專案.wmcx.zip'}`;
+                cloudBadge.style.cssText = `
+                    position: absolute;
+                    top: 6px;
+                    left: 6px;
+                    background: rgba(27, 94, 32, 0.88);
+                    color: #a5d6a7;
+                    font-size: 10px;
+                    font-weight: 700;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 3px;
+                `;
+                cloudBadge.innerHTML = '<span class="material-symbols-outlined" style="font-size:12px;line-height:1;" translate="no">cloud_done</span><span>已同步</span>';
+                coverContainer.appendChild(cloudBadge);
+            }
+
             card.appendChild(coverContainer);
 
             // 下方資訊區
@@ -214,6 +245,83 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
                 margin-top: 4px;
             `;
 
+            // 上傳／同步至雲端按鈕
+            const uploadTooltip = driveMeta?.driveFileId
+                ? '同步上傳至 Google 雲端硬碟（更新複寫）'
+                : '首次上傳至 Google 雲端硬碟並建立關聯';
+            const uploadColor = driveMeta?.driveFileId ? '#66bb6a' : '#4a90e2';
+
+            const uploadBtn = makeIconButton('cloud_upload', uploadTooltip, async () => {
+                if (typeof getFileHandlerCtx !== 'function') {
+                    simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+                    return;
+                }
+
+                const { el: progressEl, controller: prog } = createTransferProgress({
+                    preparingText: '正在連接 Google 帳號與檢查雲端狀態...',
+                    processingText: '正在打包本地專案檔案...',
+                    completedText: '雲端上傳完成',
+                });
+
+                card.appendChild(progressEl);
+                const allButtons = card.querySelectorAll('button');
+                allButtons.forEach(b => b.disabled = true);
+
+                try {
+                    prog.preparing();
+                    const token = await ensureSignedIn();
+
+                    let targetFileId = driveMeta?.driveFileId || null;
+                    if (targetFileId) {
+                        const isValid = await checkFileStillValid(targetFileId, token);
+                        if (!isValid) {
+                            targetFileId = null;
+                        }
+                    }
+
+                    prog.processing('正在打包專案為 .wmcx.zip...');
+                    const fhCtx = getFileHandlerCtx();
+
+                    const curId = typeof getCurrentProjectId === 'function' ? getCurrentProjectId() : null;
+                    if (curId !== proj.id && typeof loadProject === 'function') {
+                        await loadProject(proj.id);
+                    }
+
+                    const zipBlob = await buildProjectZip(fhCtx);
+
+                    const baseName = proj.name || '未命名專案';
+                    const uploadFileName = baseName.endsWith('.wmcx.zip') ? baseName : `${baseName}.wmcx.zip`;
+
+                    const uploadRes = await uploadFile({
+                        blob: zipBlob,
+                        name: uploadFileName,
+                        token,
+                        fileId: targetFileId,
+                        onProgress: ({ loaded, total }) => {
+                            prog.transferring({ loaded, total, direction: 'upload' });
+                        },
+                    });
+
+                    await setDriveMeta(proj.id, {
+                        driveFileId: uploadRes.id,
+                        driveName: uploadRes.name || uploadFileName,
+                    });
+
+                    prog.completed('專案已成功同步至 Google 雲端硬碟');
+                    simpleToast({ content: `已成功上傳專案：${proj.name || '未命名'}`, type: 'success', timeout: 2000 });
+
+                    setTimeout(() => {
+                        progressEl.remove();
+                        buildList(container);
+                    }, 1200);
+                } catch (err) {
+                    prog.error(err.message || '上傳失敗');
+                    allButtons.forEach(b => b.disabled = false);
+                    console.error('[ProjectManager] 上傳失敗:', err);
+                }
+            }, uploadColor);
+            btnRow.appendChild(uploadBtn);
+
             // 開啟按鈕（非當前專案時顯示）
             if (!isCurrent) {
                 const openBtn = makeIconButton('file_open', '開啟專案', async () => {
@@ -255,14 +363,69 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
         }
     };
 
-    const container = document.createElement('div');
-    container.className = 'project-manager-grid popup-list';
+    const mainWrapper = document.createElement('div');
+    mainWrapper.className = 'pm-main-container';
 
-    buildList(container);
+    // 頂部分頁切換列
+    const tabBar = document.createElement('div');
+    tabBar.className = 'pm-tab-bar';
+
+    const localTabBtn = document.createElement('button');
+    localTabBtn.type = 'button';
+    localTabBtn.className = 'pm-tab-btn pm-tab-btn--active';
+    localTabBtn.textContent = '本地專案';
+
+    const driveTabBtn = document.createElement('button');
+    driveTabBtn.type = 'button';
+    driveTabBtn.className = 'pm-tab-btn';
+    driveTabBtn.textContent = '雲端專案 (Google Drive)';
+
+    tabBar.append(localTabBtn, driveTabBtn);
+
+    // 本地專案容器（完全保留原有邏輯）
+    const localContainer = document.createElement('div');
+    localContainer.className = 'project-manager-grid popup-list';
+    buildList(localContainer);
+
+    // 雲端專案容器
+    const driveContainer = document.createElement('div');
+    driveContainer.className = 'pm-tab-content pm-tab-content--drive';
+    driveContainer.style.display = 'none';
+
+    if (typeof getFileHandlerCtx === 'function') {
+        const driveTab = buildDriveTab({
+            loadProject,
+            getCurrentProjectId,
+            getFileHandlerCtx,
+        });
+        driveContainer.appendChild(driveTab);
+    } else {
+        const notice = document.createElement('div');
+        notice.style.cssText = 'color:#888;padding:24px;text-align:center;font-size:13px;';
+        notice.textContent = '尚未提供檔案處理器 Context';
+        driveContainer.appendChild(notice);
+    }
+
+    // 分頁切換監聽
+    localTabBtn.onclick = () => {
+        localTabBtn.classList.add('pm-tab-btn--active');
+        driveTabBtn.classList.remove('pm-tab-btn--active');
+        localContainer.style.display = '';
+        driveContainer.style.display = 'none';
+    };
+
+    driveTabBtn.onclick = () => {
+        driveTabBtn.classList.add('pm-tab-btn--active');
+        localTabBtn.classList.remove('pm-tab-btn--active');
+        localContainer.style.display = 'none';
+        driveContainer.style.display = 'block';
+    };
+
+    mainWrapper.append(tabBar, localContainer, driveContainer);
 
     const popupCtx = popupWindow({
         title: "專案總管",
-        customContent: container,
+        customContent: mainWrapper,
         width: 760,
         maxWidth: 840,
         buttons: [
@@ -276,7 +439,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
                         const proj = await loadProject(newId);
                         simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
                     }
-                    buildList(container);
+                    buildList(localContainer);
                 }
             },
             {

@@ -505,3 +505,56 @@ export function initFileHandlers(ctx) {
         });
     }
 }
+
+/**
+ * 將當前專案打包為 .wmcx.zip Blob（與現有下載按鈕的 packZip 打包邏輯完全一致）
+ * 回傳 Blob，不觸發瀏覽器下載
+ * 供 Google Drive 上傳流程調用
+ *
+ * @param {Object} ctx - 上下文物件，包含 getMaidata, audioManager, getBackgroundImage, getBackgroundVideo
+ * @param {Function} [onProgress] - JSZip generateAsync 進度回呼 ({ percent: number }) => void
+ * @returns {Promise<Blob>}
+ */
+export async function buildProjectZip(ctx, onProgress) {
+    const {
+        getMaidata,
+        audioManager,
+        getBackgroundImage,
+        getBackgroundVideo,
+    } = ctx;
+
+    await ensureJSZip();
+    const zip = new window.JSZip();
+    const curMaidata = typeof getMaidata === 'function' ? getMaidata() : ctx.maidata;
+
+    zip.file("maidata.txt", typeof getSimaiDataString === 'function' ? getSimaiDataString(curMaidata) : "");
+
+    const backgroundImage = typeof getBackgroundImage === 'function' ? getBackgroundImage() : ctx.backgroundImage;
+    if (backgroundImage) {
+        const bgExt = backgroundImage.name?.split('.').pop() || 'png';
+        zip.file(`bg.${bgExt}`, backgroundImage);
+    }
+
+    if (audioManager && audioManager.haveBGM()) {
+        const bgm = audioManager.bgmFile;
+        const bgmExt = bgm?.name?.split('.').pop() || 'mp3';
+        if (bgm instanceof Blob) {
+            zip.file(`track.${bgmExt}`, bgm);
+        } else if (typeof bgm === 'string') {
+            try {
+                const resp = await fetch(bgm);
+                zip.file(`track.${bgmExt}`, await resp.blob());
+            } catch (e) {
+                console.error("[buildProjectZip] 音樂檔案讀取失敗:", e);
+            }
+        }
+    }
+
+    const backgroundVideo = typeof getBackgroundVideo === 'function' ? getBackgroundVideo() : ctx.backgroundVideo;
+    if (backgroundVideo) {
+        const videoExt = backgroundVideo.name?.split('.').pop() || 'mp4';
+        zip.file(`pv.${videoExt}`, backgroundVideo);
+    }
+
+    return await zip.generateAsync({ type: "blob" }, onProgress);
+}

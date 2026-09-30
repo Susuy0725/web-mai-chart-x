@@ -2969,13 +2969,35 @@ async function loadProject(projectId) {
 /**
  * 開啟專案總管 UI
  */
-// 綁定專案總管按鈕
 const projectManagerButton = getButton("projectManager", "utility");
 if (projectManagerButton) {
     projectManagerButton.addEventListener('click', () => {
         openProjectManager({
             getCurrentProjectId: () => currentProjectId,
             loadProject,
+            getFileHandlerCtx: () => ({
+                audioManager,
+                getMaidata: () => maidata,
+                setMaidata: (val) => { maidata = val; },
+                maidataProcess,
+                setDataEmpty,
+                draw,
+                resize,
+                setEndtime,
+                getEndTime: () => endTime,
+                getCurrentProjectId: () => currentProjectId,
+                setCurrentProjectId: (val) => { currentProjectId = val; },
+                getBackgroundImage: () => backgroundImage,
+                setBackgroundImage: (val) => { backgroundImage = val; },
+                editorBackgroundImage,
+                getBackgroundVideo: () => backgroundVideo,
+                setBackgroundVideo: (val) => { backgroundVideo = val; },
+                editorBackgroundVideo,
+                getSettings: () => settings,
+                settings,
+                applyMovieBrightness,
+                projSet
+            }),
         });
     });
 }

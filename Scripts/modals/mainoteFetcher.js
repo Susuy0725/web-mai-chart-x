@@ -80,26 +80,30 @@ export async function openMainoteFetcher({
     const client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
 
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;width:100%;min-width:250px;';
+    container.className = 'popup-form-container';
 
     const createInput = (label, placeholder = '') => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
-        row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
+        row.className = 'popup-field';
+        const lbl = document.createElement('label');
+        lbl.className = 'popup-field-label';
+        lbl.textContent = label;
         const input = document.createElement('input');
         input.type = 'text';
         input.placeholder = placeholder;
-        input.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;';
-        row.appendChild(input);
+        input.className = 'popup-input';
+        row.append(lbl, input);
         return { row, input };
     };
 
     const createSelect = (label, options) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
-        row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
+        row.className = 'popup-field';
+        const lbl = document.createElement('label');
+        lbl.className = 'popup-field-label';
+        lbl.textContent = label;
         const select = document.createElement('select');
-        select.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;cursor:pointer;';
+        select.className = 'popup-select';
 
         options.forEach(opt => {
             const el = document.createElement('option');
@@ -108,7 +112,7 @@ export async function openMainoteFetcher({
             select.appendChild(el);
         });
 
-        row.appendChild(select);
+        row.append(lbl, select);
         return { row, select };
     };
 
@@ -181,9 +185,8 @@ export async function openMainoteFetcher({
 
     const searchBtn = document.createElement('button');
     searchBtn.textContent = t('popup.fetchMainote.btnSearch');
-    searchBtn.style.cssText = 'padding:10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:8px;transition:background 0.2s;';
-    searchBtn.onmouseover = () => searchBtn.style.background = '#0052a3';
-    searchBtn.onmouseout = () => searchBtn.style.background = '#0066cc';
+    searchBtn.className = 'popup-btn popup-btn-primary';
+    searchBtn.style.marginTop = '8px';
 
     searchBtn.addEventListener('click', async () => {
         searchBtn.disabled = true;
@@ -245,7 +248,7 @@ export async function openMainoteFetcher({
         const songGroups = Array.from(songGroupsMap.values());
 
         const resultContainer = document.createElement('div');
-        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding-right:4px;';
+        resultContainer.className = 'popup-search-results';
 
         let resultPopupCtx = null;
 
@@ -391,13 +394,14 @@ export async function openMainoteFetcher({
 
         songGroups.forEach((group) => {
             const card = document.createElement('div');
-            card.style.cssText = 'display:flex;flex-direction:column;gap:6px;background:#26262a;border:1px solid #3d3d45;border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color 0.15s, background 0.15s;';
+            card.className = 'popup-song-card';
 
             const header = document.createElement('div');
-            header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+            header.className = 'popup-card-header';
 
             const titleEl = document.createElement('div');
-            titleEl.style.cssText = 'font-weight:600;font-size:14px;color:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+            titleEl.className = 'popup-card-title';
+            titleEl.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
 
             const titleText = document.createElement('span');
             titleText.textContent = group.title;
@@ -406,13 +410,14 @@ export async function openMainoteFetcher({
             if (group.chartType) {
                 const typeTag = document.createElement('span');
                 typeTag.textContent = group.chartType;
+                typeTag.className = 'popup-card-type-badge';
                 const isDx = group.chartType === 'DX';
-                typeTag.style.cssText = `font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:${isDx ? '#ff4081' : '#00bcd4'};color:#fff;`;
+                typeTag.style.background = isDx ? '#ec4899' : '#06b6d4';
                 titleEl.appendChild(typeTag);
             }
 
             const metaEl = document.createElement('div');
-            metaEl.style.cssText = 'font-size:11px;color:#888;white-space:nowrap;';
+            metaEl.style.cssText = 'font-size:11px;color:var(--popup-text-muted);white-space:nowrap;';
             const metaParts = [];
             if (group.song.version) metaParts.push(group.song.version);
             if (group.song.artist) metaParts.push(group.song.artist);
@@ -427,7 +432,7 @@ export async function openMainoteFetcher({
             });
 
             const badgesRow = document.createElement('div');
-            badgesRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
+            badgesRow.className = 'popup-card-badges-row';
 
             sortedCharts.forEach((chart) => {
                 const diffKey = (chart.difficulty || '').toUpperCase();

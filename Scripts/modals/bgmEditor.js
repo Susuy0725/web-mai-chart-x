@@ -239,53 +239,53 @@ export function openBgmEditor({
         <!-- 第一排: BPM 敲擊與第一拍偏移 -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
             <!-- BPM 區塊 -->
-            <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px;">
-                <span style="font-weight:bold; color:#00a2ff; font-size:12px;">BPM & Tap Estimator</span>
+            <div class="popup-card" style="gap:6px;">
+                <span style="font-weight:600; color:var(--popup-accent); font-size:12px;">BPM & Tap Estimator</span>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="number" id="editBpmInput" value="${clockBpm}" style="width:70px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
-                    <button id="editTapBpmBtn" type="button" style="padding:6px 14px; background:#0055ff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px; user-select:none; transition:background 0.2s;">Tap</button>
-                    <button id="editTapResetBtn" type="button" style="padding:6px 8px; background:#333; color:#ccc; border:1px solid #444; border-radius:4px; cursor:pointer; font-size:11px;">${t('popup.tapBpm.btnReset')}</button>
+                    <input type="number" id="editBpmInput" value="${clockBpm}" class="popup-input" style="width:75px; text-align:center; font-weight:bold;">
+                    <button id="editTapBpmBtn" type="button" class="popup-btn popup-btn-primary">Tap</button>
+                    <button id="editTapResetBtn" type="button" class="popup-btn popup-btn-secondary popup-btn-sm">${t('popup.tapBpm.btnReset')}</button>
                 </div>
-                <span id="editTapBpmStatus" style="font-size:11px; color:#888;">${t('popup.tapBpm.msgNotStarted')}</span>
+                <span id="editTapBpmStatus" style="font-size:11px; color:var(--popup-text-muted);">${t('popup.tapBpm.msgNotStarted')}</span>
             </div>
 
             <!-- 第一拍偏移區塊 -->
-            <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px; justify-content:space-between;">
+            <div class="popup-card" style="gap:6px; justify-content:space-between;">
                 <div>
-                    <span style="font-weight:bold; color:#00a2ff; font-size:12px;">${t('popup.editMusic.firstBeatOffset')}</span>
+                    <span style="font-weight:600; color:var(--popup-accent); font-size:12px;">${t('popup.editMusic.firstBeatOffset')}</span>
                     <div style="display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
-                        <input type="number" id="editOffsetInput" value="${initialMusicDelay.toFixed(2)}" step="0.01" style="width:85px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
-                        <span style="color:#aaa; font-size:12px; margin-right:4px;">s</span>
-                        <button id="shiftDecBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#ff4d4d; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">-1 拍</button>
-                        <button id="shiftIncBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#22c55e; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">+1 拍</button>
+                        <input type="number" id="editOffsetInput" value="${initialMusicDelay.toFixed(2)}" step="0.01" class="popup-input" style="width:85px; text-align:center; font-weight:bold;">
+                        <span style="color:var(--popup-text-muted); font-size:12px; margin-right:4px;">s</span>
+                        <button id="shiftDecBeatBtn" type="button" class="popup-btn popup-btn-danger popup-btn-sm">-1 拍</button>
+                        <button id="shiftIncBeatBtn" type="button" class="popup-btn popup-btn-success popup-btn-sm">+1 拍</button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 第二排: Waveform Zoom & BGM Vol -->
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; background:#1a1a1a; padding:12px; border-radius:6px; border:1px solid #333;">
+        <div class="popup-card" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
             <div style="display:flex; flex-direction:column; gap:6px; justify-content:center;">
-                <span style="font-weight:bold; color:#00a2ff; font-size:12px;">Zoom Waveform</span>
+                <span style="font-weight:600; color:var(--popup-accent); font-size:12px;">Zoom Waveform</span>
                 <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
-                    <button id="zoomOutBtn" type="button" style="width:30px; height:30px; background:#333; color:#fff; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; user-select:none;">-</button>
+                    <button id="zoomOutBtn" type="button" class="popup-btn popup-btn-secondary popup-btn-sm" style="width:30px; height:30px; padding:0;">-</button>
                     <input type="range" id="editZoomSlider" min="1" max="20" step="0.5" value="1" style="flex:1; cursor:pointer; margin:0; height:6px;">
-                    <button id="zoomInBtn" type="button" style="width:30px; height:30px; background:#333; color:#fff; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; user-select:none;">+</button>
-                    <span id="zoomValLabel" style="font-size:11px; color:#ccc; min-width:32px; text-align:right; font-weight:bold;">1.0x</span>
+                    <button id="zoomInBtn" type="button" class="popup-btn popup-btn-secondary popup-btn-sm" style="width:30px; height:30px; padding:0;">+</button>
+                    <span id="zoomValLabel" style="font-size:11px; color:var(--popup-text-sub); min-width:32px; text-align:right; font-weight:bold;">1.0x</span>
                 </div>
             </div>
 
             <div style="display:flex; flex-direction:column; gap:8px; justify-content:center;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-weight:bold; color:#aaa; font-size:12px;">BGM Volume</span>
-                    <input type="number" id="editBgmVolumeInput" value="0.75" min="0" max="1" step="0.05" style="width:65px; background:#111; color:#fff; border:1px solid #444; padding:5px 8px; border-radius:4px; text-align:center; font-size:13px; font-weight:bold;">
+                    <span style="font-weight:600; color:var(--popup-text-sub); font-size:12px;">BGM Volume</span>
+                    <input type="number" id="editBgmVolumeInput" value="0.75" min="0" max="1" step="0.05" class="popup-input" style="width:70px; text-align:center; font-weight:bold;">
                 </div>
             </div>
         </div>
 
         <!-- 第三排: 節拍器預覽與精準 Shift 偏移 -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
-            <button id="playClockBtn" type="button" style="width:100%; height:44px; background:#222; color:#00a2ff; border:1px solid #00a2ff; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s;">
+            <button id="playClockBtn" type="button" class="popup-btn popup-btn-secondary" style="width:100%; height:42px; color:var(--popup-accent); border-color:var(--popup-accent); font-weight:600; font-size:13px;">
                 <span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.previewMetronome')}
             </button>
         </div>
@@ -315,15 +315,15 @@ export function openBgmEditor({
 
     const alignHeader = document.createElement('div');
     alignHeader.className = 'popup-align-header';
-    alignHeader.innerHTML = `<span>${t('popup.editMusic.alignmentTitle')}</span><span id="currentBeatsSpan" style="color:#aaa;"></span>`;
+    alignHeader.innerHTML = `<span>${t('popup.editMusic.alignmentTitle')}</span><span id="currentBeatsSpan" style="color:var(--popup-text-muted);"></span>`;
 
     const alignBody = document.createElement('div');
     alignBody.className = 'popup-align-body';
     alignBody.innerHTML = `
         <span>${t('popup.editMusic.alignmentPrefix')}</span>
-        <input type="number" id="alignBeatsInput" value="4" style="width:55px; background:#111; color:#fff; border:1px solid #444; padding:5px; border-radius:4px; text-align:center; font-weight:bold; font-size:12px;">
+        <input type="number" id="alignBeatsInput" value="4" class="popup-input" style="width:55px; text-align:center; font-weight:bold; padding:4px;">
         <span>${t('popup.editMusic.alignmentSuffix')}</span>
-        <button id="alignBeatsBtn" type="button" style="padding:6px 14px; background:#006400; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">${t('popup.editMusic.alignmentBtn')}</button>
+        <button id="alignBeatsBtn" type="button" class="popup-btn popup-btn-success popup-btn-sm">${t('popup.editMusic.alignmentBtn')}</button>
     `;
 
     const alignFooter = document.createElement('div');

@@ -1,0 +1,103 @@
+/* ==========================================================================
+   譜面資訊彈窗樣式 (Chart Info Popup)
+   ========================================================================== */
+.chart-info-container {
+    display: flex;
+    gap: 16px;
+    font-size: 14px;
+}
+
+.chart-info-btn {
+    padding: 8px 12px;
+    background: #202020;
+    color: #ffffff;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    width: 100%;
+    transition: background 0.2s, border-color 0.2s, filter 0.2s;
+}
+
+.chart-info-btn:hover {
+    background: #2a2a2a;
+    border-color: var(--accent-color);
+}
+
+.chart-info-btn:active {
+    filter: brightness(0.9);
+}
+
+.chart-info-img-container {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.chart-info-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+}
+
+.chart-info-img-wrapper {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid #333333;
+    border-radius: 8px;
+    cursor: pointer;
+    position: relative;
+    background: #000000;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.chart-info-img-wrapper:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 4px rgba(68, 153, 238, 0.2);
+}
+
+.chart-info-overlay {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    font-size: 11px;
+    text-align: center;
+    padding: 5px 0;
+    backdrop-filter: blur(2px);
+    transition: background 0.2s;
+}
+
+.chart-info-img-wrapper:hover .chart-info-overlay {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.chart-info-diff-container {
+    width: 60%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+@media (max-width: 640px) {
+    .chart-info-container {
+        flex-direction: column;
+        gap: 14px;
+        align-items: center;
+    }
+
+    .chart-info-img-container,
+    .chart-info-diff-container {
+        width: 100% !important;
+    }
+
+    .chart-info-img-wrapper {
+        max-width: 200px;
+    }
+}

@@ -31,48 +31,8 @@ export async function openRecordVideoModal({
         return;
     }
 
-    // 注入雙向滑桿與自訂面板所需的專用 CSS（如果還沒注入過的話）
-    if (!document.getElementById('dual-range-style')) {
-        const style = document.createElement('style');
-        style.id = 'dual-range-style';
-        style.textContent = `
-            .dual-range-slider {
-                position: relative;
-                height: 24px;
-                margin: 8px 0 4px 0;
-            }
-            .dual-range-slider input[type=range] {
-                position: absolute;
-                width: 100%;
-                background: none;
-                pointer-events: none;
-                -webkit-appearance: none;
-                top: 50%;
-                transform: translateY(-50%);
-                margin: 0;
-            }
-            /* 讓滑桿本體穿透，只有按鈕可以點擊 */
-            .dual-range-slider input[type=range]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                pointer-events: auto;
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                background: #4a90e2;
-                cursor: pointer;
-                border: 2px solid #fff;
-                box-shadow: 0 0 5px rgba(0,0,0,0.5);
-                transition: transform 0.1s;
-            }
-            .dual-range-slider input[type=range]::-webkit-slider-thumb:active {
-                transform: scale(1.2);
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
     const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:8px;font-size:13px;';
+    container.className = 'popup-form-container';
 
     const inputRefs = {};
     const endTime = typeof getEndTime === 'function' ? getEndTime() : 0;
@@ -94,11 +54,11 @@ export async function openRecordVideoModal({
 
     // 灰色底軌
     const baseTrack = document.createElement('div');
-    baseTrack.style.cssText = 'position:absolute;top:50%;left:0;width:100%;height:6px;background:#333;transform:translateY(-50%);border-radius:3px;';
+    baseTrack.style.cssText = 'position:absolute;top:50%;left:0;width:100%;height:6px;background:var(--popup-surface-active);transform:translateY(-50%);border-radius:3px;';
 
     // 藍色進度條（代表被選中的範圍）
     const highlightTrack = document.createElement('div');
-    highlightTrack.style.cssText = 'position:absolute;top:50%;height:6px;background:#4a90e2;transform:translateY(-50%);border-radius:3px;';
+    highlightTrack.style.cssText = 'position:absolute;top:50%;height:6px;background:var(--popup-accent);transform:translateY(-50%);border-radius:3px;box-shadow:0 0 8px var(--popup-accent-glow);';
 
     const startInput = document.createElement('input');
     startInput.type = 'range'; startInput.min = '0'; startInput.max = String(maxDuration); startInput.step = '0.01'; startInput.value = '0';

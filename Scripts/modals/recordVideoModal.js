@@ -287,10 +287,16 @@ export async function openRecordVideoModal({
         if (resField.input.value === 'custom') {
             const w = parseInt(inputRefs.custom_w?.value || 1080, 10);
             const h = parseInt(inputRefs.custom_h?.value || 720, 10);
-            return [Math.max(100, isNaN(w) ? 1080 : w), Math.max(100, isNaN(h) ? 720 : h)];
+            return [
+                Math.max(2, Math.round((Math.max(100, isNaN(w) ? 1080 : w)) / 2) * 2),
+                Math.max(2, Math.round((Math.max(100, isNaN(h) ? 720 : h)) / 2) * 2)
+            ];
         }
         const parts = resField.input.value.split('x').map(Number);
-        return [parts[0] || 1280, parts[1] || 720];
+        return [
+            Math.max(2, Math.round((parts[0] || 1280) / 2) * 2),
+            Math.max(2, Math.round((parts[1] || 720) / 2) * 2)
+        ];
     };
 
     // ==========================================
@@ -702,6 +708,10 @@ export async function openRecordVideoModal({
                     } else {
                         [widthVal, heightVal] = resField.input.value.split('x').map(Number);
                     }
+
+                    // 強制確保輸出尺寸為正偶數 (AVC/H.264 與 WebCodecs 編碼器規範)
+                    widthVal = Math.max(2, Math.round((Number(widthVal) || 1080) / 2) * 2);
+                    heightVal = Math.max(2, Math.round((Number(heightVal) || 720) / 2) * 2);
 
                     let fpsVal;
                     if (fpsField.input.value === 'custom') {

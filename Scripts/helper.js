@@ -2021,10 +2021,56 @@ export async function videoRender(audioManager, canvas, renderer, {
     try {
         if (popup.isClosed) return;
 
+        if (renderer) {
+            renderer._isRenderingVideo = true;
+        }
+
+        // 強制確保寬高為偶數 (AVC/H.264 編碼器嚴格要求，避免奇數尺寸拋錯)
+        const targetW = Math.max(2, Math.round((Number(width) || 1080) / 2) * 2);
+        const targetH = Math.max(2, Math.round((Number(height) || 720) / 2) * 2);
+
         const off = document.createElement('canvas');
+        off.width = targetW;
+        off.height = targetH;
         const offCtx = off.getContext('2d');
-        renderer.setContext(offCtx);
-        renderer.resize(width, height, 1, true);
+
+        // 鎖定 off 畫布尺寸，避免外部事件或意外 resize 竄改寬高
+        try {
+            const fixedW = targetW;
+            const fixedH = targetH;
+            Object.defineProperty(off, 'width', {
+                get: () => fixedW,
+                set: () => { },
+                configurable: true
+            });
+            Object.defineProperty(off, 'height', {
+                get: () => fixedH,
+                set: () => { },
+                configurable: true
+            });
+        } catch (_) { }
+
+        // 建立獨立的匯出渲染器實例，徹底隔離主畫面的 window resize 與 drawFrame 迴圈
+        let exportRenderer;
+        let isUsingCustomRenderer = false;
+        try {
+            if (renderer && renderer.constructor) {
+                exportRenderer = new renderer.constructor(off, settings);
+                if (renderer.images) exportRenderer.setImages(renderer.images);
+                if (renderer._tintCache) exportRenderer._tintCache = renderer._tintCache;
+                if (renderer.scale) exportRenderer.scale = renderer.scale;
+                isUsingCustomRenderer = true;
+            }
+        } catch (e) {
+            console.warn('建立獨立匯出渲染器失敗，回退至主渲染器', e);
+        }
+
+        if (!isUsingCustomRenderer) {
+            exportRenderer = renderer;
+            renderer._isRenderingVideo = true;
+            renderer.setContext(offCtx);
+        }
+        exportRenderer.resize(targetW, targetH, 1, true);
 
         const target = new BufferTarget();
         const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
@@ -2479,7 +2525,9 @@ export async function videoRender(audioManager, canvas, renderer, {
             await audioSource.add(slicedAudio);
         }
 
-        renderer.setContext(offCtx);
+        if (!isUsingCustomRenderer) {
+            renderer.setContext(offCtx);
+        }
 
         const seekVideoTo = (video, time) => {
             if (!video) return Promise.resolve();
@@ -2522,7 +2570,9 @@ export async function videoRender(audioManager, canvas, renderer, {
         for (let i = 0; i < frameCount; i++) {
             if (popup.isClosed) {
                 console.log('逐幀渲染已取消');
-                try { renderer.setContext(currentContext); } catch (e) { }
+                if (!isUsingCustomRenderer) {
+                    try { renderer._isRenderingVideo = false; renderer.setContext(currentContext); } catch (e) { }
+                }
                 return;
             }
 
@@ -2538,7 +2588,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                 noteQuantity,
                 nowIndex: updatedNowIndex
             } = simaiLogicControler.get({
-                renderer,
+                renderer: exportRenderer,
                 globalTime: globalT,
                 realTime: t,
                 musicDelay,
@@ -2561,7 +2611,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                 offCtx.setTransform(1, 0, 0, 1, 0, 0);
                 offCtx.fillStyle = settings.backgroundColor || '#000';
                 offCtx.fillRect(0, 0, off.width, off.height);
-                const rs = renderer.scale || scale;
+                const rs = exportRenderer.scale || scale;
 
                 const boxSize = Math.min(off.width, off.height);
                 const boxX = Math.round((off.width - boxSize) / 2);
@@ -2639,8 +2689,8 @@ export async function videoRender(audioManager, canvas, renderer, {
                 }
 
                 if (outlineImage) {
-                    const p = Math.min(width, height) / scaleBase * rs;
-                    offCtx.setTransform(p, 0, 0, p, width / 2, height / 2);
+                    const p = Math.min(targetW, targetH) / scaleBase * rs;
+                    offCtx.setTransform(p, 0, 0, p, targetW / 2, targetH / 2);
                     offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
                 }
             } finally {
@@ -2655,7 +2705,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                 offCtx.filter = 'none';
             }
 
-            renderer.drawFrame({
+            exportRenderer.drawFrame({
                 globalTime: globalT,
                 buckets,
                 dt: step,
@@ -2677,7 +2727,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                         offCtx.filter = `brightness(${overallBrightness})`;
                     }
                 } catch (e) { }
-                renderer.drawLoadingIntro({
+                exportRenderer.drawLoadingIntro({
                     t: i * step,
                     duration: introDuration,
                     backgroundImage: editorBackgroundImage,
@@ -2691,7 +2741,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                         offCtx.filter = `brightness(${overallBrightness})`;
                     }
                 } catch (e) { }
-                drawAllPerfectOverlay(offCtx, apT, width, height);
+                drawAllPerfectOverlay(offCtx, apT, targetW, targetH);
                 offCtx.filter = 'none';
             }
 
@@ -2731,10 +2781,6 @@ export async function videoRender(audioManager, canvas, renderer, {
 
         simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
 
-        renderer.setContext(currentContext);
-        if (currentContext.canvas) {
-            renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true);
-        }
         popup.setProgress(100);
         popup.setContent('完成');
 
@@ -2745,12 +2791,6 @@ export async function videoRender(audioManager, canvas, renderer, {
         console.error('逐幀渲染失敗', err);
         simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
         try { popup.setContent('錯誤：' + String(err)); } catch (e) { }
-        try {
-            renderer.setContext(currentContext);
-            if (currentContext.canvas) {
-                renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true);
-            }
-        } catch (e) { }
     } finally {
         if (exportVideo && exportVideo.parentNode) {
             exportVideo.parentNode.removeChild(exportVideo);
@@ -2782,7 +2822,13 @@ export async function videoRender(audioManager, canvas, renderer, {
                 console.error("Error cancelling output:", e);
             }
         }
-        try { renderer.setContext(currentContext); } catch (e) { }
+        if (renderer) {
+            renderer._isRenderingVideo = false;
+            try { renderer.setContext(currentContext); } catch (e) { }
+            if (currentContext && currentContext.canvas) {
+                try { renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true); } catch (e) { }
+            }
+        }
     }
 }
 

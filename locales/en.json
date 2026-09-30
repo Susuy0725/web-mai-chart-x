@@ -152,6 +152,7 @@
       "showSensor": "Show Sensors",
       "showSensorTextWhenPaused": "Show Sensor Text when Paused",
       "hideBackgroundWhenPaused": "Hide BG when Paused",
+      "disableVideo": "Disable Background Video",
       "rotateStars": "Rotating Stars",
       "slideArrowHideBySensor": "Hide Slide Arrows by Sensor",
       "hideOutline": "Hide Judgment Ring",

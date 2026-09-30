@@ -130,7 +130,19 @@ export const settingsConfig = [
                 id: 'hideBackgroundWhenPaused',
                 type: 'checkbox',
                 label: 'settings.items.hideBackgroundWhenPaused',
-                def: defaultSettings.hideBackgroundWhenPaused
+                def: defaultSettings.hideBackgroundWhenPaused,
+                apply: () => {
+                    window.updateVideoBackgroundDisplay?.();
+                }
+            },
+            {
+                id: 'disableVideo',
+                type: 'checkbox',
+                label: 'settings.items.disableVideo',
+                def: defaultSettings.disableVideo || false,
+                apply: () => {
+                    window.updateVideoBackgroundDisplay?.();
+                }
             },
             {
                 id: 'rotateStars',
@@ -158,7 +170,10 @@ export const settingsConfig = [
                 id: 'showCoverWhenPaused',
                 type: 'checkbox',
                 label: 'settings.items.showCoverWhenPaused',
-                def: defaultSettings.showCoverWhenPaused || false
+                def: defaultSettings.showCoverWhenPaused || false,
+                apply: () => {
+                    window.updateVideoBackgroundDisplay?.();
+                }
             },
             {
                 id: 'drawHitEffect',

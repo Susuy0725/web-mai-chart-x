@@ -152,6 +152,7 @@
       "showSensor": "顯示感應器",
       "showSensorTextWhenPaused": "暫停時顯示感應器文字",
       "hideBackgroundWhenPaused": "暫停時隱藏背景",
+      "disableVideo": "禁用背景影片",
       "rotateStars": "星星旋轉",
       "slideArrowHideBySensor": "滑星依感應器消失",
       "hideOutline": "隱藏判定圈",

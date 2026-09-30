@@ -3,6 +3,7 @@
     --playControls-height: var(--playControls-height-max);
     --timeline-color: #c22;
     --timeline-color-background: #111;
+    --accent-color: #777;
 }
 
 @font-face {
@@ -580,11 +581,35 @@ body {
     color: #fff;
 }
 
-.sensor-chip.ring-A { background: rgba(255, 82, 82, 0.25); color: #ff8a80; border: 1px solid rgba(255, 82, 82, 0.4); }
-.sensor-chip.ring-B { background: rgba(255, 215, 64, 0.25); color: #ffe57f; border: 1px solid rgba(255, 215, 64, 0.4); }
-.sensor-chip.ring-C { background: rgba(234, 128, 252, 0.25); color: #ea80fc; border: 1px solid rgba(234, 128, 252, 0.4); }
-.sensor-chip.ring-D { background: rgba(68, 138, 255, 0.25); color: #82b1ff; border: 1px solid rgba(68, 138, 255, 0.4); }
-.sensor-chip.ring-E { background: rgba(0, 230, 118, 0.25); color: #b9f6ca; border: 1px solid rgba(0, 230, 118, 0.4); }
+.sensor-chip.ring-A {
+    background: rgba(255, 82, 82, 0.25);
+    color: #ff8a80;
+    border: 1px solid rgba(255, 82, 82, 0.4);
+}
+
+.sensor-chip.ring-B {
+    background: rgba(255, 215, 64, 0.25);
+    color: #ffe57f;
+    border: 1px solid rgba(255, 215, 64, 0.4);
+}
+
+.sensor-chip.ring-C {
+    background: rgba(234, 128, 252, 0.25);
+    color: #ea80fc;
+    border: 1px solid rgba(234, 128, 252, 0.4);
+}
+
+.sensor-chip.ring-D {
+    background: rgba(68, 138, 255, 0.25);
+    color: #82b1ff;
+    border: 1px solid rgba(68, 138, 255, 0.4);
+}
+
+.sensor-chip.ring-E {
+    background: rgba(0, 230, 118, 0.25);
+    color: #b9f6ca;
+    border: 1px solid rgba(0, 230, 118, 0.4);
+}
 
 .sensor-chip.active {
     background: rgba(255, 64, 129, 0.35);

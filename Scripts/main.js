@@ -2517,7 +2517,16 @@ function resize(force = false) {
             }
         }
     } else if (canvasContainer && renderer) {
-        renderer.resize(canvasContainer.clientWidth, canvasContainer.clientHeight, dpr, force);
+        if (!renderer._isRenderingVideo && renderer.canvas === canvas) {
+            renderer.resize(canvasContainer.clientWidth, canvasContainer.clientHeight, dpr, force);
+        } else if (canvas) {
+            const w = Math.round(canvasContainer.clientWidth * dpr);
+            const h = Math.round(canvasContainer.clientHeight * dpr);
+            if (canvas.width !== w || canvas.height !== h) {
+                canvas.width = w;
+                canvas.height = h;
+            }
+        }
     }
 
     if (editorContainer && visualEditorRenderer) {
@@ -2767,19 +2776,21 @@ function draw(dt = 0) {
         });
         drawMainCanvasOpenedInExternalWindow();
     } else if (!noRender) {
-        // 正常狀態：主視窗繪製遊戲圓盤
-        renderer.drawFrame({
-            globalTime,
-            buckets,
-            dt,
-            showSensor: settings.showSensor,
-            showSensorText: (settings.showSensorTextWhenPaused && !playing),
-            playCombo,
-            playScore,
-            noteQuantity,
-            playScoreRes,
-            nowIndex,
-        });
+        // 正常狀態：主視窗繪製遊戲圓盤 (若正在匯出影片則跳過對錄製畫布的干擾)
+        if (!renderer._isRenderingVideo) {
+            renderer.drawFrame({
+                globalTime,
+                buckets,
+                dt,
+                showSensor: settings.showSensor,
+                showSensorText: (settings.showSensorTextWhenPaused && !playing),
+                playCombo,
+                playScore,
+                noteQuantity,
+                playScoreRes,
+                nowIndex,
+            });
+        }
     }
 
     if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {

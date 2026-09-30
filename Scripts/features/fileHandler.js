@@ -125,6 +125,190 @@ export async function handleFolderInput(files, ctx) {
 }
 
 /**
+ * 檢查當前是否已有譜面內容或音樂
+ * @param {Object} ctx
+ * @returns {boolean}
+ */
+export function checkMaidataContext(ctx) {
+    if (ctx?.audioManager?.haveBGM && ctx.audioManager.haveBGM()) return true;
+    const maidata = typeof ctx?.getMaidata === 'function' ? ctx.getMaidata() : null;
+    if (maidata) {
+        for (let i = 1; i <= 7; i++) {
+            if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * 觸發匯入資料夾流程（支援覆蓋既有或建立新專案）
+ * @param {Object} ctx
+ * @param {Object} [options]
+ * @param {Function} [options.onComplete]
+ */
+export function triggerImportFolder(ctx, { onComplete } = {}) {
+    const {
+        setCurrentProjectId,
+        getCurrentProjectId,
+        setDataEmpty,
+        getEndTime,
+        setEndtime,
+        draw,
+        getMaidata
+    } = ctx;
+
+    const executeImport = (mode) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.webkitdirectory = true;
+        input.setAttribute('directory', '');
+        input.multiple = true;
+        input.onchange = async (event) => {
+            const files = event.target.files;
+            if (!files || files.length === 0) {
+                console.warn("未選擇任何檔案");
+                return;
+            }
+
+            if (mode === 'new') {
+                const newId = await projectCreate(t('popup.projectManager.untitled'));
+                setCurrentProjectId(newId);
+                localStorage.setItem('simai_lastProjectId', newId);
+                console.log(`[Project] 已建立新專案: ${newId}`);
+            }
+
+            setDataEmpty();
+            await handleFolderInput(files, ctx);
+            setEndtime(getEndTime());
+            draw();
+
+            const maidata = getMaidata();
+            const curId = getCurrentProjectId();
+            if (maidata?.title && curId) {
+                projectUpdateName(curId, maidata.title).catch(() => { });
+            }
+            simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
+            if (typeof onComplete === 'function') {
+                onComplete();
+            }
+        };
+        input.click();
+    };
+
+    if (checkMaidataContext(ctx)) {
+        popupWindow({
+            title: t('popup.loadConfirm.titleFolder'),
+            content: t('popup.loadConfirm.content'),
+            buttons: [
+                {
+                    text: t('popup.loadConfirm.overwrite'),
+                    onClick: (pCtx) => {
+                        pCtx.close();
+                        executeImport('overwrite');
+                    }
+                },
+                {
+                    text: t('popup.loadConfirm.newProject'),
+                    onClick: (pCtx) => {
+                        pCtx.close();
+                        executeImport('new');
+                    }
+                },
+                { text: t('popup.cancel'), hideOnClick: true }
+            ]
+        });
+    } else {
+        executeImport('overwrite');
+    }
+}
+
+/**
+ * 觸發匯入壓縮檔流程（支援覆蓋既有或建立新專案）
+ * @param {Object} ctx
+ * @param {Object} [options]
+ * @param {Function} [options.onComplete]
+ */
+export function triggerImportZip(ctx, { onComplete } = {}) {
+    const {
+        setCurrentProjectId,
+        getCurrentProjectId,
+        setDataEmpty,
+        getEndTime,
+        setEndtime,
+        draw,
+        resize,
+        getMaidata
+    } = ctx;
+
+    const executeImport = (mode) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.zip';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                await ensureJSZip();
+                const reader = new FileReader();
+                reader.onload = async (re) => {
+                    if (mode === 'new') {
+                        const newId = await projectCreate(t('popup.projectManager.untitled'));
+                        setCurrentProjectId(newId);
+                        localStorage.setItem('simai_lastProjectId', newId);
+                        console.log(`[Project] 已建立新專案: ${newId}`);
+                    }
+                    setDataEmpty();
+                    window.JSZip.loadAsync(file).then(async (zip) => {
+                        await handleFolderInput(zip.files, ctx);
+                        setEndtime(getEndTime());
+                        draw();
+                        const maidata = getMaidata();
+                        const curId = getCurrentProjectId();
+                        if (maidata?.title && curId) {
+                            projectUpdateName(curId, maidata.title).catch(() => { });
+                        }
+                        simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
+                        if (typeof onComplete === 'function') {
+                            onComplete();
+                        }
+                    });
+                    resize();
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        };
+        input.click();
+    };
+
+    if (checkMaidataContext(ctx)) {
+        popupWindow({
+            title: t('popup.loadConfirm.titleZip'),
+            content: t('popup.loadConfirm.content'),
+            buttons: [
+                {
+                    text: t('popup.loadConfirm.overwrite'),
+                    onClick: (pCtx) => {
+                        pCtx.close();
+                        executeImport('overwrite');
+                    }
+                },
+                {
+                    text: t('popup.loadConfirm.newProject'),
+                    onClick: (pCtx) => {
+                        pCtx.close();
+                        executeImport('new');
+                    }
+                },
+                { text: t('popup.cancel'), hideOnClick: true }
+            ]
+        });
+    } else {
+        executeImport('overwrite');
+    }
+}
+
+/**
  * 初始化所有檔案操作按鈕監聽器
  */
 export function initFileHandlers(ctx) {
@@ -157,91 +341,11 @@ export function initFileHandlers(ctx) {
     } = ctx;
     const projSet = typeof ctx.projSet === 'function' ? ctx.projSet : () => Promise.resolve();
 
-    let _pendingFolderFiles = null;
-
-    const checkMaidataContext = () => {
-        if (audioManager.haveBGM()) return true;
-        const maidata = getMaidata();
-        if (maidata) {
-            for (let i = 1; i <= 7; i++) {
-                if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
-
     if (folderInput) {
         folderInput.addEventListener('click', (e) => {
             e.stopPropagation();
-            const input = folderInput.children[0];
-            if (checkMaidataContext()) {
-                _pendingFolderFiles = null;
-                popupWindow({
-                    title: t('popup.loadConfirm.titleFolder'),
-                    content: t('popup.loadConfirm.content'),
-                    buttons: [
-                        {
-                            text: t('popup.loadConfirm.overwrite'),
-                            onClick: (pCtx) => {
-                                pCtx.close();
-                                _pendingFolderFiles = 'overwrite';
-                                input.value = '';
-                                input.click();
-                            }
-                        },
-                        {
-                            text: t('popup.loadConfirm.newProject'),
-                            onClick: (pCtx) => {
-                                pCtx.close();
-                                _pendingFolderFiles = 'new';
-                                input.value = '';
-                                input.click();
-                            }
-                        },
-                        { text: t('popup.cancel'), hideOnClick: true }
-                    ]
-                });
-            } else {
-                _pendingFolderFiles = 'overwrite';
-                input.value = '';
-                input.click();
-            }
+            triggerImportFolder(ctx);
         });
-
-        if (folderInput.children[0]) {
-            folderInput.children[0].addEventListener('click', (e) => e.stopPropagation());
-            folderInput.children[0].onchange = async (event) => {
-                const files = event.target.files;
-                if (!files || files.length === 0) {
-                    console.warn("未選擇任何檔案");
-                    return;
-                }
-
-                const mode = _pendingFolderFiles || 'overwrite';
-                _pendingFolderFiles = null;
-
-                if (mode === 'new') {
-                    const newId = await projectCreate(t('popup.projectManager.untitled'));
-                    setCurrentProjectId(newId);
-                    localStorage.setItem('simai_lastProjectId', newId);
-                    console.log(`[Project] 已建立新專案: ${newId}`);
-                }
-
-                setDataEmpty();
-                await handleFolderInput(files, ctx);
-                setEndtime(getEndTime());
-                draw();
-
-                const maidata = getMaidata();
-                const curId = getCurrentProjectId();
-                if (maidata?.title && curId) {
-                    projectUpdateName(curId, maidata.title).catch(() => { });
-                }
-                simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-            };
-        }
     }
 
     if (readMaidataButton) {
@@ -265,68 +369,9 @@ export function initFileHandlers(ctx) {
     }
 
     if (readZipButton) {
-        readZipButton.addEventListener('click', () => {
-            const triggerZipInput = (mode) => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.zip';
-                input.onchange = async (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        await ensureJSZip();
-                        const reader = new FileReader();
-                        reader.onload = async (re) => {
-                            if (mode === 'new') {
-                                const newId = await projectCreate(t('popup.projectManager.untitled'));
-                                setCurrentProjectId(newId);
-                                localStorage.setItem('simai_lastProjectId', newId);
-                                console.log(`[Project] 已建立新專案: ${newId}`);
-                            }
-                            setDataEmpty();
-                            window.JSZip.loadAsync(file).then(async (zip) => {
-                                await handleFolderInput(zip.files, ctx);
-                                setEndtime(getEndTime());
-                                draw();
-                                const maidata = getMaidata();
-                                const curId = getCurrentProjectId();
-                                if (maidata?.title && curId) {
-                                    projectUpdateName(curId, maidata.title).catch(() => { });
-                                }
-                                simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-                            });
-                            resize();
-                        };
-                        reader.readAsArrayBuffer(file);
-                    }
-                };
-                input.click();
-            };
-
-            if (checkMaidataContext()) {
-                popupWindow({
-                    title: t('popup.loadConfirm.titleZip'),
-                    content: t('popup.loadConfirm.content'),
-                    buttons: [
-                        {
-                            text: t('popup.loadConfirm.overwrite'),
-                            onClick: (pCtx) => {
-                                pCtx.close();
-                                triggerZipInput('overwrite');
-                            }
-                        },
-                        {
-                            text: t('popup.loadConfirm.newProject'),
-                            onClick: (pCtx) => {
-                                pCtx.close();
-                                triggerZipInput('new');
-                            }
-                        },
-                        { text: t('popup.cancel'), hideOnClick: true }
-                    ]
-                });
-            } else {
-                triggerZipInput('overwrite');
-            }
+        readZipButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerImportZip(ctx);
         });
     }
 

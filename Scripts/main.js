@@ -103,11 +103,9 @@ const addMusicButton = getButton("addMusic", "utility");
 const addVideoButton = getButton("addVideo", "utility");
 const importFromVideoButton = getButton("importFromVideo", "utility");
 const readMaidataButton = getButton("readMaidata", "utility");
-const readZipButton = getButton("readZip", "utility");
 const chartInfoButton = getButton("chartInfo", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
-const folderInput = getButton("readFolder", "utility");
 const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
 const switchBoxRadios = document.querySelectorAll('input[name="switchBoxMode"]');
 const setSwitchBoxDisplayModeUI = (mode) => {
@@ -685,13 +683,6 @@ fetchFromMainoteButton.addEventListener('click', () => {
         },
         projSet,
     });
-});
-
-createNewButton.addEventListener('click', async () => {
-    if (!confirm(t('popup.createNewProject.confirm'))) return;
-    const newId = await projectCreate(t('popup.projectManager.untitled'));
-    loadProject(newId);
-    simpleToast({ content: t('toast.projectCreated'), type: 'success', timeout: 1200 });
 });
 
 const getres = ((simaiDataValue) => {
@@ -1559,9 +1550,7 @@ function maidataProcess(e) {
 }
 
 initFileHandlers({
-    folderInput,
     readMaidataButton,
-    readZipButton,
     addMusicButton,
     addVideoButton,
     importFromVideoButton,

@@ -6,7 +6,7 @@ import { getDriveMeta, setDriveMeta, checkFileStillValid } from '../services/dri
 import { ensureSignedIn } from '../services/driveAuth.js';
 import { uploadFile } from '../services/driveApi.js';
 import { createTransferProgress } from '../services/transferProgress.js';
-import { buildProjectZipById } from '../features/fileHandler.js';
+import { buildProjectZipById, triggerImportFolder, triggerImportZip } from '../features/fileHandler.js';
 
 /**
  * 開啟專案總管 UI
@@ -430,7 +430,31 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         maxWidth: 840,
         buttons: [
             {
-                text: "新建空白專案",
+                text: t('popup.projectManager.importFolder') || '匯入資料夾',
+                onClick: () => {
+                    if (typeof getFileHandlerCtx !== 'function') {
+                        simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+                        return;
+                    }
+                    triggerImportFolder(getFileHandlerCtx(), {
+                        onComplete: () => buildList(localContainer)
+                    });
+                }
+            },
+            {
+                text: t('popup.projectManager.importZip') || '匯入壓縮檔',
+                onClick: () => {
+                    if (typeof getFileHandlerCtx !== 'function') {
+                        simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+                        return;
+                    }
+                    triggerImportZip(getFileHandlerCtx(), {
+                        onComplete: () => buildList(localContainer)
+                    });
+                }
+            },
+            {
+                text: t('popup.projectManager.newBlankProject') || "新建空白專案",
                 onClick: async () => {
                     const name = prompt('請輸入專案名稱：', '未命名專案');
                     if (name === null) return;
@@ -441,10 +465,6 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                     }
                     buildList(localContainer);
                 }
-            },
-            {
-                text: t('popup.close'),
-                hideOnClick: true,
             }
         ]
     });

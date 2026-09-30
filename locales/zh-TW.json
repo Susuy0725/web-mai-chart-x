@@ -318,6 +318,9 @@
       "deleteBtn": "刪除",
       "exportBtn": "匯出",
       "importBtn": "匯入專案",
+      "importFolder": "匯入資料夾",
+      "importZip": "匯入壓縮檔",
+      "newBlankProject": "新建專案",
       "loadBtn": "載入",
       "emptyList": "無專案，請先建立新專案",
       "confirmDelete": "確定要刪除專案「{name}」嗎？此操作無法復原！"

@@ -317,6 +317,9 @@
       "deleteBtn": "Delete",
       "exportBtn": "Export",
       "importBtn": "Import Project",
+      "importFolder": "Import Folder",
+      "importZip": "Import Zip",
+      "newBlankProject": "New Project",
       "loadBtn": "Load",
       "emptyList": "No projects found. Please create a new one.",
       "confirmDelete": "Are you sure you want to delete project \"{name}\"? This action cannot be undone!"

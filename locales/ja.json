@@ -319,6 +319,9 @@
       "deleteBtn": "削除",
       "exportBtn": "エクスポート",
       "importBtn": "プロジェクトをインポート",
+      "importFolder": "フォルダをインポート",
+      "importZip": "Zipをインポート",
+      "newBlankProject": "新規プロジェクト",
       "loadBtn": "読み込み",
       "emptyList": "プロジェクトが見つかりません。新しく作成してください。",
       "confirmDelete": "プロジェクト \"{name}\" を削除してもよろしいですか？この操作は取り消せません！"

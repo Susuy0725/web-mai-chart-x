@@ -21,7 +21,7 @@ export class SimulatedPlayController {
         return queue;
     }
 
-    update({ globalTime, notes = [], renderer, playing, timeControlSliding, onHit = null }) {
+    update({ globalTime, notes = [], renderer, playing, timeControlSliding, onHit = null, forcePerfect = true, randomOffset = 0 }) {
         this.activeSensors.clear();
         if (!playing || timeControlSliding) return;
 
@@ -40,7 +40,7 @@ export class SimulatedPlayController {
                     this.activeSensors.add(sensorId);
                 }
                 if (!note.triggered && noteT <= 0 && -noteT <= this._simulatTouchDuration && onHit) {
-                    onHit(sensorId, 0);
+                    onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
                 }
             }
 
@@ -55,7 +55,7 @@ export class SimulatedPlayController {
                     this.activeSensors.add(sensorId);
                 }
                 if (!note.triggered && noteT <= 0 && -noteT <= Math.max(note.holdDuration, this._simulatTouchDuration) && onHit) {
-                    onHit(sensorId, 0);
+                    onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
                 }
             }
 
@@ -71,7 +71,7 @@ export class SimulatedPlayController {
                 if (isHeadPart && noteT <= 0 && (slideT < 0 || -noteT <= this._simulatTouchDuration)) {
                     this.activeSensors.add('A' + note.pos);
                     if (!note.triggered && -noteT <= this._simulatTouchDuration && onHit) {
-                        onHit('A' + note.pos, 0);
+                        onHit('A' + note.pos, forcePerfect ? 0 : -noteT + randomOffset);
                     }
                 }
 

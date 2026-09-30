@@ -152,6 +152,7 @@
       "showSensor": "センサーを表示",
       "showSensorTextWhenPaused": "一時停止時にセンサーテキストを表示",
       "hideBackgroundWhenPaused": "一時停止時に背景を非表示",
+      "disableVideo": "背景動画を無効化",
       "rotateStars": "スターの回転",
       "slideArrowHideBySensor": "センサーによるスライド矢印消去",
       "hideOutline": "判定リングを非表示",

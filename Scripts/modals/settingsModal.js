@@ -243,7 +243,10 @@ export function openSettingsModal({
             if (item.type === 'checkbox') {
                 el = createCheckbox(currentVal, `settings-${item.id}`);
                 el.addEventListener('change', (e) => {
-                    try { targetRef[targetKey] = e.target.checked; } catch (err) { }
+                    try {
+                        targetRef[targetKey] = e.target.checked;
+                        if (item.apply) item.apply(e.target.checked);
+                    } catch (err) { }
                 });
                 el.addEventListener('click', (e) => e.stopPropagation());
             }

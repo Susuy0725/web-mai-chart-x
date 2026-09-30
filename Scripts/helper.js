@@ -341,10 +341,13 @@ export const touchRefPos = {
 };
 export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
     const a = (i - 1.5) * Math.PI / 4;
+    const rot = a + Math.PI / 2;
     return {
         x: Math.cos(a) * innerCirleBase,
         y: Math.sin(a) * innerCirleBase,
-        rot: a + Math.PI / 2
+        rot,
+        cosRot: Math.cos(rot),
+        sinRot: Math.sin(rot)
     };
 });
 export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {

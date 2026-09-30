@@ -1371,7 +1371,7 @@ export class SimaiRenderer {
                 const posInfo = noteRefPos[s.pos - 1];
 
                 const t1 = 1 - this.timeFunction((noteT + s.holdDuration) * speed);
-                const displayT = Math.max(md, t);
+                const displayT = Math.min(1, Math.max(md, t));
                 const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
                 const size = baseSize * currentScale;
                 const sizeOffset = t < md ? 0 :
@@ -1510,7 +1510,7 @@ export class SimaiRenderer {
         }
     }
 
-    drawTap(s, forceStar = false) {
+    /*drawTap(s, forceStar = false) {
         const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine, hispeed } = s;
         const isStar = forceStar || !!s.isStar;
         const noteT = noteTime - this.globalTime;
@@ -1594,7 +1594,7 @@ export class SimaiRenderer {
         const endimg = this.getHoldEndImage(isMine, isBreak, isDouble);
 
         const t1 = 1 - this.timeFunction((noteT + holdDuration) * speedMult);
-        const displayT = Math.max(md, t);
+        const displayT = Math.min(1, Math.max(md, t));
         const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
         const sizeOffset = t < md ? 0 :
@@ -1638,7 +1638,7 @@ export class SimaiRenderer {
             if (isOn) this.simpleHoldEffect(noteT);
             this.ctx.setTransform(baseTransform);
         }
-    }
+    }*/
 
     getTouchHanabi(s) {
         const { time: noteTime, pos, touchPos, holdDuration } = s;

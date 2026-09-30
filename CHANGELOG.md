@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.09.30 (∞)]
+### Fixed
+ - 清掉一大坨我們拉的屎
+
+
+## [2026.09.30 (4)]
+### Change
+ - 更新了大量的UI
+
 ## [2026.09.30 (3)]
 
 ### Added

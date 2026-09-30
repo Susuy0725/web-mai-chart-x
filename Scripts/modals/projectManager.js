@@ -288,7 +288,6 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
                     const name = prompt('請輸入專案名稱：', '未命名專案');
                     if (name === null) return;
                     const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
-                    const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
                     if (typeof loadProject === 'function') {
                         const proj = await loadProject(newId);
                         simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });

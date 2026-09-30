@@ -834,11 +834,13 @@ export class SimaiRenderer {
                 ctx.globalAlpha = 1 - p;
                 ctx.scale(p * 0.3 + 1, p * 0.3 + 1);
             });
-            const levelColor = levelColors[chartInfo.difficulty ?? 5] || "#A356E9";
+            const diffVal = chartInfo.difficulty ?? chartInfo.diff ?? 5;
+            const levelColor = levelColors[diffVal] || "#A356E9";
             const levelColorDark = darkenHexColor(levelColor, 40);
-            const lvText = chartInfo.lv.replaceAll('+', '');
-            const isPlus = chartInfo.lv.includes('+');
-            const difficultyText = levels[chartInfo.difficulty];
+            const rawLv = String(chartInfo.lv ?? '');
+            const lvText = rawLv.replaceAll('+', '');
+            const isPlus = rawLv.includes('+');
+            const difficultyText = levels[diffVal] || 'MASTER';
             ctx.strokeStyle = levelColorDark;
             ctx.lineWidth = 0.25;
             ctx.stroke(cardPath);
@@ -867,15 +869,15 @@ export class SimaiRenderer {
 
             ctx.font = "1.9px title";
             ctx.textAlign = "center";
-            ctx.fillText(chartInfo.title, 0, 11);
+            ctx.fillText(chartInfo.title ?? '', 0, 11);
             ctx.font = '1.8px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-            ctx.fillText(chartInfo.artist, 0, 14.8);
+            ctx.fillText(chartInfo.artist ?? '', 0, 14.8);
             ctx.fillStyle = "#093F80";
             ctx.textAlign = "left";
             ctx.font = "1.2px title";
             ctx.fillText("NOTES DESIGNER", -17, 23.5);
             ctx.font = '1.8px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-            ctx.fillText(chartInfo.des, -17, 25.5);
+            ctx.fillText(chartInfo.des ?? chartInfo.designer ?? '', -17, 25.5);
             ctx.font = "bold 2.5px title";
             ctx.textAlign = "center";
             ctx.fillText("CUSTOM", -9, -32);

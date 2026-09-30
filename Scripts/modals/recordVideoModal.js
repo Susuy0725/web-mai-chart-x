@@ -120,7 +120,7 @@ export async function openRecordVideoModal({
 
     const previewTitle = document.createElement('span');
     previewTitle.style.cssText = 'font-size:12px;font-weight:600;color:var(--popup-text, #fff);display:flex;align-items:center;gap:6px;';
-    previewTitle.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--popup-accent, #4a90e2)"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg> ${t('popup.recordVideo.previewTitle')}`;
+    previewTitle.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;color:var(--popup-accent, #4a90e2);" translate="no">videocam</span> ${t('popup.recordVideo.previewTitle')}`;
 
     const previewHeaderRight = document.createElement('div');
     previewHeaderRight.style.cssText = 'display:flex;align-items:center;gap:6px;';
@@ -132,7 +132,7 @@ export async function openRecordVideoModal({
     headerSettingsBtn.type = 'button';
     headerSettingsBtn.title = t('menu.settings') || '設定';
     headerSettingsBtn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 6px;font-size:11px;color:#ccc;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;transition:all 0.2s;';
-    headerSettingsBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span>${t('menu.settings') || '設定'}</span>`;
+    headerSettingsBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px;" translate="no">settings</span><span>${t('menu.settings') || '設定'}</span>`;
     headerSettingsBtn.addEventListener('mouseenter', () => {
         headerSettingsBtn.style.background = 'rgba(255,255,255,0.16)';
         headerSettingsBtn.style.color = '#fff';
@@ -160,7 +160,7 @@ export async function openRecordVideoModal({
         btn.type = 'button';
         btn.innerHTML = html;
         btn.title = title;
-        btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:26px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#eee;cursor:pointer;font-size:11px;transition:background 0.2s;flex-shrink:0;';
+        btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#eee;cursor:pointer;transition:all 0.2s;flex-shrink:0;';
         btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(255,255,255,0.16)');
         btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(255,255,255,0.08)');
         btn.addEventListener('click', onClick);
@@ -171,7 +171,7 @@ export async function openRecordVideoModal({
     let previewPlayRafId = null;
     let lastPlayTimestamp = 0;
 
-    const playPauseBtn = createSmallBtn('▶', t('popup.recordVideo.playPreview'), () => {
+    const playPauseBtn = createSmallBtn('<span class="material-symbols-outlined" style="font-size:18px;" translate="no">play_arrow</span>', t('popup.recordVideo.playPreview'), () => {
         if (isPreviewPlaying) {
             stopPreviewPlay();
         } else {
@@ -179,11 +179,11 @@ export async function openRecordVideoModal({
         }
     });
 
-    const jumpStartBtn = createSmallBtn('⏮', t('popup.recordVideo.jumpStart'), () => {
+    const jumpStartBtn = createSmallBtn('<span class="material-symbols-outlined" style="font-size:18px;" translate="no">skip_previous</span>', t('popup.recordVideo.jumpStart'), () => {
         setPreviewCurrentTime(Number(startInput.value));
     });
 
-    const jumpEndBtn = createSmallBtn('⏭', t('popup.recordVideo.jumpEnd'), () => {
+    const jumpEndBtn = createSmallBtn('<span class="material-symbols-outlined" style="font-size:18px;" translate="no">skip_next</span>', t('popup.recordVideo.jumpEnd'), () => {
         setPreviewCurrentTime(Number(endInput.value));
     });
 
@@ -472,7 +472,7 @@ export async function openRecordVideoModal({
     const startPreviewPlay = () => {
         if (isPreviewPlaying) return;
         isPreviewPlaying = true;
-        playPauseBtn.innerHTML = '⏸';
+        playPauseBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;" translate="no">pause</span>';
         playPauseBtn.title = t('popup.recordVideo.pausePreview');
         lastPlayTimestamp = performance.now();
 
@@ -495,7 +495,7 @@ export async function openRecordVideoModal({
 
     const stopPreviewPlay = () => {
         isPreviewPlaying = false;
-        playPauseBtn.innerHTML = '▶';
+        playPauseBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;" translate="no">play_arrow</span>';
         playPauseBtn.title = t('popup.recordVideo.playPreview');
         if (previewPlayRafId) {
             cancelAnimationFrame(previewPlayRafId);
@@ -717,6 +717,8 @@ export async function openRecordVideoModal({
                     const renderer = typeof getRenderer === 'function' ? getRenderer() : null;
                     const nowDifficulty = typeof getNowDifficulty === 'function' ? getNowDifficulty() : 5;
 
+                    pwCtx.close();
+
                     videoRender(audioManager, canvas, renderer, {
                         start: startVal,
                         end: endVal,
@@ -739,8 +741,11 @@ export async function openRecordVideoModal({
                         chartInfo: {
                             title: maidata.title ?? '',
                             artist: maidata.artist ?? '',
-                            designer: maidata.des ?? '',
+                            designer: maidata[`des_${nowDifficulty}`] || maidata.des || '',
+                            des: maidata[`des_${nowDifficulty}`] || maidata.des || '',
+                            difficulty: nowDifficulty,
                             diff: nowDifficulty,
+                            lv: String(maidata[`lv_${nowDifficulty}`] || ''),
                         },
                     });
                 }

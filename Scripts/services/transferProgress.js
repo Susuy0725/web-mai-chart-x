@@ -10,11 +10,16 @@
 // - completed: 整個操作完成
 // - error: 操作失敗
 
+import { t } from '../i18n.js';
+
 export function createTransferProgress({
-    preparingText = '準備中...',
-    processingText = '正在處理...',
-    completedText = '操作完成',
+    preparingText,
+    processingText,
+    completedText,
 } = {}) {
+    const defaultPreparing = preparingText || t('popup.drive.preparingUpload');
+    const defaultProcessing = processingText || t('popup.drive.packaging');
+    const defaultCompleted = completedText || t('popup.drive.uploadSuccess');
     const wrapper = document.createElement('div');
     wrapper.className = 'tp-wrapper';
 
@@ -83,7 +88,7 @@ export function createTransferProgress({
                 break;
 
             case 'preparing':
-                statusText.textContent = opts.message || preparingText;
+                statusText.textContent = opts.message || defaultPreparing;
                 bytesText.textContent = '';
                 _setIcon('sync');
                 _setBarIndeterminate();
@@ -92,7 +97,7 @@ export function createTransferProgress({
             case 'transferring': {
                 const { loaded = 0, total = null, direction = 'download' } = opts;
                 const isUpload = direction === 'upload';
-                const label = isUpload ? '上傳中' : '下載中';
+                const label = isUpload ? t('popup.drive.uploading') : t('popup.drive.downloading');
                 statusText.textContent = label;
                 _setIcon(isUpload ? 'cloud_upload' : 'cloud_download');
 
@@ -101,29 +106,29 @@ export function createTransferProgress({
                     bytesText.textContent = `${_formatBytes(loaded)} / ${_formatBytes(total)} (${pct}%)`;
                     _setBarDeterminate(pct);
                 } else {
-                    bytesText.textContent = `已傳輸 ${_formatBytes(loaded)}`;
+                    bytesText.textContent = t('popup.drive.transferred', { size: _formatBytes(loaded) });
                     _setBarIndeterminate();
                 }
                 break;
             }
 
             case 'processing':
-                statusText.textContent = opts.message || processingText;
+                statusText.textContent = opts.message || defaultProcessing;
                 bytesText.textContent = '';
                 _setIcon('sync');
                 _setBarIndeterminate();
                 break;
 
             case 'completed':
-                statusText.textContent = opts.message || completedText;
+                statusText.textContent = opts.message || defaultCompleted;
                 bytesText.textContent = '';
                 _setIcon('check_circle');
                 _setBarDeterminate(100);
                 break;
 
             case 'error': {
-                const message = opts.message || '操作發生錯誤';
-                statusText.textContent = '操作失敗';
+                const message = opts.message || t('popup.drive.operationFailed');
+                statusText.textContent = t('popup.drive.operationFailed');
                 bytesText.textContent = '';
                 _setIcon('error');
                 _setBarDeterminate(0);

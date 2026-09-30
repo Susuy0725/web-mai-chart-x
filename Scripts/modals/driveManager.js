@@ -4,13 +4,14 @@
 
 import { simpleToast } from '../helper.js';
 import { projectCreate, projectList, projectUpdateName } from '../indexDB.js';
-import { handleFolderInput, buildProjectZip } from '../features/fileHandler.js';
+import { handleFolderInput, buildProjectZipById, saveProjectZipToIDB } from '../features/fileHandler.js';
 import { ensureJSZip } from '../helper.js';
+import { t } from '../i18n.js';
 import {
     isSignedIn, signIn, signOut, getUserInfo, onAuthChanged, ensureSignedIn
 } from '../services/driveAuth.js';
-import { listWmcxFiles, downloadFile, uploadFile } from '../services/driveApi.js';
-import { getDriveMeta, setDriveMeta, checkFileStillValid } from '../services/driveSync.js';
+import { listWmcxFiles, downloadFile, uploadFile, trashFile } from '../services/driveApi.js';
+import { getDriveMeta, setDriveMeta, checkFileStillValid, clearDriveMeta } from '../services/driveSync.js';
 import { createTransferProgress } from '../services/transferProgress.js';
 
 /**
@@ -20,15 +21,99 @@ import { createTransferProgress } from '../services/transferProgress.js';
  * @param {Function} ctx.loadProject
  * @param {Function} ctx.getCurrentProjectId
  * @param {Function} ctx.getFileHandlerCtx
+ * @param {Function} [ctx.refreshLocalList]
  * @returns {HTMLElement}
  */
 export function buildDriveTab(ctx) {
-    const { loadProject, getCurrentProjectId, getFileHandlerCtx } = ctx;
+    const { loadProject, getCurrentProjectId, getFileHandlerCtx, refreshLocalList } = ctx;
 
     const root = document.createElement('div');
     root.className = 'drive-tab-root';
 
-    // ── 1. 未登入視圖 ──────────────────────────────────────────
+    // ── 1. 頂部常駐帳號橫條 ──────────────────────────────────────
+    const accountBar = document.createElement('div');
+    accountBar.className = 'drive-account-bar';
+
+    // 左側頭像（已登入彩色頭像）
+    const accountAvatar = document.createElement('img');
+    accountAvatar.className = 'drive-account-avatar';
+    accountAvatar.alt = 'Avatar';
+    accountAvatar.style.display = 'none';
+
+    // 左側頭像（未登入灰色頭像佔位）
+    const accountPlaceholder = document.createElement('div');
+    accountPlaceholder.className = 'drive-account-avatar-placeholder';
+    const placeholderIcon = document.createElement('span');
+    placeholderIcon.className = 'material-symbols-outlined';
+    placeholderIcon.setAttribute('translate', 'no');
+    placeholderIcon.style.fontSize = '20px';
+    placeholderIcon.textContent = 'account_circle';
+    accountPlaceholder.appendChild(placeholderIcon);
+
+    // 帳號名稱 / 未登入文字
+    const accountName = document.createElement('span');
+    accountName.className = 'drive-account-name';
+
+    // 右側動作按鈕容器
+    const accountActions = document.createElement('div');
+    accountActions.className = 'drive-account-actions';
+
+    // (A) 未登入時的 Google 圓角矩形登入按鈕
+    const googleSignInBtn = document.createElement('button');
+    googleSignInBtn.type = 'button';
+    googleSignInBtn.className = 'g-signin-btn';
+    googleSignInBtn.innerHTML = `
+        <div class="g-signin-icon">
+            <svg viewBox="0 0 18 18" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
+            </svg>
+        </div>
+        <span class="g-signin-text">${t('popup.drive.signInWithGoogle')}</span>
+    `;
+    googleSignInBtn.onclick = async () => {
+        try {
+            googleSignInBtn.disabled = true;
+            googleSignInBtn.querySelector('.g-signin-text').textContent = t('popup.drive.signingIn');
+            const res = await signIn();
+            if (res?.token) {
+                renderState();
+            }
+        } catch (e) {
+            googleSignInBtn.disabled = false;
+            googleSignInBtn.querySelector('.g-signin-text').textContent = t('popup.drive.signInWithGoogle');
+            simpleToast({ content: t('popup.drive.toastSignInFailed', { msg: e.message }), type: 'error', timeout: 3000 });
+        }
+    };
+
+    // (B) 已登入時的重新整理按鈕
+    const refreshBtn = document.createElement('button');
+    refreshBtn.type = 'button';
+    refreshBtn.className = 'drive-refresh-btn';
+    refreshBtn.title = t('popup.drive.refreshBtn');
+    const refreshIcon = document.createElement('span');
+    refreshIcon.className = 'material-symbols-outlined';
+    refreshIcon.setAttribute('translate', 'no');
+    refreshIcon.textContent = 'sync';
+    refreshBtn.appendChild(refreshIcon);
+    refreshBtn.onclick = () => loadDriveFiles();
+
+    // (C) 已登入時的登出按鈕
+    const signOutBtn = document.createElement('button');
+    signOutBtn.type = 'button';
+    signOutBtn.className = 'drive-signout-btn';
+    signOutBtn.textContent = t('popup.drive.signOutBtn');
+    signOutBtn.onclick = () => {
+        signOut();
+        renderState();
+    };
+
+    accountBar.append(accountAvatar, accountPlaceholder, accountName, accountActions);
+
+    // ── 2. 下方內容區域 ──────────────────────────────────────────
+    // 未登入時下方引導視圖
     const notSignedInPanel = document.createElement('div');
     notSignedInPanel.className = 'drive-not-signed-in';
 
@@ -39,106 +124,66 @@ export function buildDriveTab(ctx) {
 
     const notSignedInTitle = document.createElement('div');
     notSignedInTitle.className = 'drive-not-signed-in-title';
-    notSignedInTitle.textContent = '連接 Google 雲端硬碟';
+    notSignedInTitle.textContent = t('popup.drive.signInTitle');
 
     const notSignedInSub = document.createElement('div');
     notSignedInSub.className = 'drive-not-signed-in-sub';
-    notSignedInSub.textContent = '登入後可瀏覽與同步 .wmcx.zip 雲端專案。未登入時不會影響任何本地功能。';
+    notSignedInSub.textContent = t('popup.drive.signInGuide');
 
-    const signInBtn = document.createElement('button');
-    signInBtn.type = 'button';
-    signInBtn.className = 'drive-signin-btn';
-    signInBtn.textContent = '登入 Google 帳號';
-    signInBtn.onclick = async () => {
-        try {
-            signInBtn.disabled = true;
-            signInBtn.textContent = '登入中...';
-            await signIn();
-            renderState();
-        } catch (e) {
-            signInBtn.disabled = false;
-            signInBtn.textContent = '登入 Google 帳號';
-            simpleToast({ content: `登入失敗: ${e.message}`, type: 'error', timeout: 3000 });
-        }
-    };
+    notSignedInPanel.append(cloudIcon, notSignedInTitle, notSignedInSub);
 
-    notSignedInPanel.append(cloudIcon, notSignedInTitle, notSignedInSub, signInBtn);
-
-    // ── 2. 已登入視圖 ──────────────────────────────────────────
-    const signedInPanel = document.createElement('div');
-    signedInPanel.className = 'drive-signed-in';
-    signedInPanel.style.display = 'none';
-
-    // 帳號列
-    const accountBar = document.createElement('div');
-    accountBar.className = 'drive-account-bar';
-
-    const accountAvatar = document.createElement('img');
-    accountAvatar.className = 'drive-account-avatar';
-    accountAvatar.alt = 'Avatar';
-    accountAvatar.style.display = 'none';
-
-    const accountName = document.createElement('span');
-    accountName.className = 'drive-account-name';
-
-    const refreshBtn = document.createElement('button');
-    refreshBtn.type = 'button';
-    refreshBtn.className = 'drive-refresh-btn';
-    refreshBtn.title = '重新整理雲端專案清單';
-    const refreshIcon = document.createElement('span');
-    refreshIcon.className = 'material-symbols-outlined';
-    refreshIcon.setAttribute('translate', 'no');
-    refreshIcon.textContent = 'sync';
-    refreshBtn.appendChild(refreshIcon);
-    refreshBtn.onclick = () => loadDriveFiles();
-
-    const signOutBtn = document.createElement('button');
-    signOutBtn.type = 'button';
-    signOutBtn.className = 'drive-signout-btn';
-    signOutBtn.textContent = '登出';
-    signOutBtn.onclick = () => {
-        signOut();
-        renderState();
-    };
-
-    accountBar.append(accountAvatar, accountName, refreshBtn, signOutBtn);
-
-    // 雲端專案格狀容器
+    // 已登入時專案網格容器
     const fileGrid = document.createElement('div');
     fileGrid.className = 'project-manager-grid drive-file-grid';
 
-    signedInPanel.append(accountBar, fileGrid);
+    root.append(accountBar, notSignedInPanel, fileGrid);
 
-    root.append(notSignedInPanel, signedInPanel);
-
-    // ── 狀態切換 ──────────────────────────────────────────────
+    // ── 狀態切換（同步執行） ───────────────────────────────────
     function renderState() {
+        accountActions.innerHTML = '';
+
         if (isSignedIn()) {
-            notSignedInPanel.style.display = 'none';
-            signedInPanel.style.display = 'flex';
+            // 已登入呈現
+            accountPlaceholder.style.display = 'none';
             const user = getUserInfo();
             if (user?.picture) {
                 accountAvatar.src = user.picture;
                 accountAvatar.style.display = 'block';
             } else {
                 accountAvatar.style.display = 'none';
+                accountPlaceholder.style.display = 'flex';
             }
-            accountName.textContent = user?.name || user?.email || '已登入 Google';
+            accountName.textContent = user?.name || user?.email || 'Google User';
+
+            accountActions.append(refreshBtn, signOutBtn);
+
+            notSignedInPanel.style.display = 'none';
+            fileGrid.style.display = '';
             loadDriveFiles();
         } else {
+            // 未登入呈現
+            accountAvatar.style.display = 'none';
+            accountPlaceholder.style.display = 'flex';
+            accountName.textContent = t('popup.drive.notSignedIn');
+
+            googleSignInBtn.disabled = false;
+            const textSpan = googleSignInBtn.querySelector('.g-signin-text');
+            if (textSpan) textSpan.textContent = t('popup.drive.signInWithGoogle');
+            accountActions.appendChild(googleSignInBtn);
+
             notSignedInPanel.style.display = 'flex';
-            signedInPanel.style.display = 'none';
-            signInBtn.disabled = false;
-            signInBtn.textContent = '登入 Google 帳號';
+            fileGrid.style.display = 'none';
         }
     }
+
+    renderState();
 
     // ── 讀取雲端專案清單 ───────────────────────────────────────
     async function loadDriveFiles() {
         fileGrid.innerHTML = '';
         const loadingEl = document.createElement('div');
         loadingEl.className = 'drive-loading';
-        loadingEl.textContent = '正在讀取雲端專案...';
+        loadingEl.textContent = t('popup.drive.loading');
         fileGrid.appendChild(loadingEl);
 
         try {
@@ -159,7 +204,7 @@ export function buildDriveTab(ctx) {
             if (files.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'drive-empty-msg';
-                empty.textContent = '雲端硬碟中尚無 .wmcx.zip 專案檔案';
+                empty.textContent = t('popup.drive.empty');
                 fileGrid.appendChild(empty);
                 return;
             }
@@ -173,7 +218,7 @@ export function buildDriveTab(ctx) {
             fileGrid.innerHTML = '';
             const errEl = document.createElement('div');
             errEl.className = 'drive-error-msg';
-            errEl.textContent = `載入雲端清單失敗: ${e.message}`;
+            errEl.textContent = t('popup.drive.loadFailed', { msg: e.message });
             fileGrid.appendChild(errEl);
         }
     }
@@ -198,7 +243,7 @@ export function buildDriveTab(ctx) {
         // 徽章標籤
         const badge = document.createElement('div');
         badge.className = isLinked ? 'drive-badge drive-badge--synced' : 'drive-badge drive-badge--cloud';
-        badge.textContent = isLinked ? '已同步本地' : '尚未建立本地關聯';
+        badge.textContent = isLinked ? t('popup.drive.badgeSynced') : t('popup.drive.badgeCloudOnly');
         iconArea.appendChild(badge);
 
         // 資訊區塊
@@ -207,7 +252,7 @@ export function buildDriveTab(ctx) {
 
         const nameEl = document.createElement('div');
         nameEl.className = 'drive-file-card-name';
-        nameEl.textContent = file.name || '未命名專案.wmcx.zip';
+        nameEl.textContent = file.name || `${t('popup.projectManager.untitled')}.wmcx.zip`;
         nameEl.title = file.name || '';
 
         const metaRow = document.createElement('div');
@@ -219,7 +264,7 @@ export function buildDriveTab(ctx) {
             const pad = n => String(n).padStart(2, '0');
             dateEl.textContent = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         } else {
-            dateEl.textContent = '未知時間';
+            dateEl.textContent = '--';
         }
 
         const sizeEl = document.createElement('span');
@@ -239,13 +284,13 @@ export function buildDriveTab(ctx) {
         const downloadBtn = document.createElement('button');
         downloadBtn.type = 'button';
         downloadBtn.className = 'drive-file-btn drive-file-btn--download';
-        downloadBtn.title = '從雲端下載並建立本地專案';
+        downloadBtn.title = isLinked ? t('popup.drive.downloadOverwriteBtn') : t('popup.drive.downloadBtn');
         const dlIcon = document.createElement('span');
         dlIcon.className = 'material-symbols-outlined';
         dlIcon.setAttribute('translate', 'no');
         dlIcon.textContent = 'cloud_download';
         downloadBtn.appendChild(dlIcon);
-        downloadBtn.onclick = () => handleDownloadImport(file, token, card);
+        downloadBtn.onclick = () => handleDownloadImport(file, token, card, linkedLocalId);
         btnRow.appendChild(downloadBtn);
 
         // 若已關聯本地專案，顯示上傳回雲端按鈕
@@ -253,7 +298,7 @@ export function buildDriveTab(ctx) {
             const uploadBtn = document.createElement('button');
             uploadBtn.type = 'button';
             uploadBtn.className = 'drive-file-btn drive-file-btn--upload';
-            uploadBtn.title = '將本地專案上傳並複寫雲端檔案';
+            uploadBtn.title = t('popup.drive.uploadBtn');
             const ulIcon = document.createElement('span');
             ulIcon.className = 'material-symbols-outlined';
             ulIcon.setAttribute('translate', 'no');
@@ -263,16 +308,59 @@ export function buildDriveTab(ctx) {
             btnRow.appendChild(uploadBtn);
         }
 
+        // 移至雲端垃圾桶按鈕
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'drive-file-btn drive-file-btn--delete';
+        deleteBtn.title = t('popup.drive.deleteBtn');
+        const delIcon = document.createElement('span');
+        delIcon.className = 'material-symbols-outlined';
+        delIcon.setAttribute('translate', 'no');
+        delIcon.textContent = 'delete';
+        deleteBtn.appendChild(delIcon);
+
+        deleteBtn.onclick = async () => {
+            const fileName = file.name || t('popup.projectManager.untitled');
+            if (!confirm(t('popup.drive.confirmDelete', { name: fileName }))) {
+                return;
+            }
+
+            deleteBtn.disabled = true;
+            try {
+                await trashFile(file.id, token);
+
+                // 若有本地專案已關聯該雲端檔案，自動清除該關聯
+                if (linkedLocalId) {
+                    await clearDriveMeta(linkedLocalId);
+                }
+
+                simpleToast({ content: t('popup.drive.toastTrashSuccess', { name: fileName }), type: 'success', timeout: 2000 });
+                loadDriveFiles();
+            } catch (err) {
+                deleteBtn.disabled = false;
+                simpleToast({ content: t('popup.drive.toastDeleteFailed', { msg: err.message }), type: 'error', timeout: 3000 });
+                console.error('[DriveManager] 移至垃圾桶失敗:', err);
+            }
+        };
+        btnRow.appendChild(deleteBtn);
+
         card.append(iconArea, body, btnRow);
         return card;
     }
 
     // ── 下載並匯入業務流程 ────────────────────────────────────
-    async function handleDownloadImport(file, token, card) {
+    async function handleDownloadImport(file, token, card, linkedLocalId = null) {
+        if (linkedLocalId) {
+            const fileName = file.name || t('popup.projectManager.untitled');
+            if (!confirm(t('popup.drive.confirmDownloadOverwrite', { name: fileName }))) {
+                return;
+            }
+        }
+
         const { el: progressEl, controller: prog } = createTransferProgress({
-            preparingText: '準備下載雲端檔案...',
-            processingText: '正在匯入專案與解析資料...',
-            completedText: '匯入完成',
+            preparingText: t('popup.drive.preparingDownload'),
+            processingText: t('popup.drive.importing'),
+            completedText: t('popup.drive.downloadSuccess'),
         });
 
         card.appendChild(progressEl);
@@ -286,45 +374,37 @@ export function buildDriveTab(ctx) {
                 prog.transferring({ loaded, total, direction: 'download' });
             });
 
-            // 進入既有解壓匯入（轉為 processing 狀態）
-            prog.processing();
+            // 進入背景解壓與 IndexedDB 寫入（轉為 processing 狀態）
+            prog.processing(t('popup.drive.importing'));
 
-            const fhCtx = getFileHandlerCtx();
-            const projectName = file.name.replace(/\.wmcx\.zip$/i, '').trim() || '未命名專案';
-
-            // 建立新專案以確保安全，不任意破壞現有專案
-            const newId = await projectCreate(projectName);
-            fhCtx.setCurrentProjectId(newId);
-            localStorage.setItem('simai_lastProjectId', newId);
-
-            fhCtx.setDataEmpty();
-
-            // 呼叫既有解壓與匯入邏輯
-            await ensureJSZip();
-            const zip = await window.JSZip.loadAsync(blob);
-            await handleFolderInput(zip.files, fhCtx);
-            fhCtx.setEndtime(fhCtx.getEndTime());
-            fhCtx.draw();
-
-            // 同步專案名稱
-            const md = fhCtx.getMaidata();
-            if (md?.title && newId) {
-                await projectUpdateName(newId, md.title).catch(() => {});
-            }
+            // 若有已關聯之本地專案 ID，則直接覆寫該專案；否則建立新專案
+            const { projectId: finalId, projectName: finalName } = await saveProjectZipToIDB(blob, file.name, linkedLocalId);
 
             // 儲存本地專案與雲端檔案的關聯
-            await setDriveMeta(newId, {
+            await setDriveMeta(finalId, {
                 driveFileId: file.id,
                 driveName: file.name,
             });
 
-            // 切換並載入新專案
-            if (typeof loadProject === 'function') {
-                await loadProject(newId);
+            // 若覆寫的恰好是當前主畫面開啟的專案，重新載入主畫面資料保持一致
+            if (linkedLocalId && typeof getCurrentProjectId === 'function' && typeof loadProject === 'function') {
+                if (linkedLocalId === getCurrentProjectId()) {
+                    await loadProject(linkedLocalId).catch(() => {});
+                }
             }
 
-            prog.completed('專案下載並匯入成功');
-            simpleToast({ content: `已成功匯入雲端專案：${file.name}`, type: 'success', timeout: 2000 });
+            prog.completed(t('popup.drive.downloadSuccess'));
+            const toastMsg = linkedLocalId
+                ? t('popup.drive.toastDownloadOverwriteSuccess', { name: finalName || file.name })
+                : t('popup.drive.toastImportSuccess', { name: finalName || file.name });
+            simpleToast({ content: toastMsg, type: 'success', timeout: 2000 });
+
+            // 若有傳入本地專案列表重整回呼，立即重新整理本地專案清單
+            if (typeof refreshLocalList === 'function') {
+                try {
+                    refreshLocalList();
+                } catch (_) {}
+            }
 
             setTimeout(() => {
                 progressEl.remove();
@@ -333,7 +413,7 @@ export function buildDriveTab(ctx) {
             }, 1200);
 
         } catch (e) {
-            prog.error(e.message || '下載匯入失敗');
+            prog.error(e.message || t('popup.drive.operationFailed'));
             card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = false);
             console.error('[DriveManager] 下載匯入失敗:', e);
         }
@@ -342,9 +422,9 @@ export function buildDriveTab(ctx) {
     // ── 上傳同步業務流程 ──────────────────────────────────────
     async function handleUploadSync(localProjectId, file, token, card) {
         const { el: progressEl, controller: prog } = createTransferProgress({
-            preparingText: '正在檢查雲端檔案狀態...',
-            processingText: '正在打包本地專案檔案...',
-            completedText: '雲端同步完成',
+            preparingText: t('popup.drive.preparingUpload'),
+            processingText: t('popup.drive.packaging'),
+            completedText: t('popup.drive.uploadSuccess'),
         });
 
         card.appendChild(progressEl);
@@ -356,19 +436,12 @@ export function buildDriveTab(ctx) {
             // 檢查雲端檔案是否仍有效
             const isFileValid = await checkFileStillValid(file.id, token);
             if (!isFileValid) {
-                throw new Error('雲端檔案不存在或權限不足，無法複寫更新');
+                throw new Error(t('popup.drive.loadFailed', { msg: 'File invalid or not found' }));
             }
 
-            // 打包本地專案
-            prog.processing('正在打包專案為 .wmcx.zip...');
-            const fhCtx = getFileHandlerCtx();
-
-            const curId = getCurrentProjectId();
-            if (curId !== localProjectId && typeof loadProject === 'function') {
-                await loadProject(localProjectId);
-            }
-
-            const zipBlob = await buildProjectZip(fhCtx);
+            // 打包本地專案（直接由 IndexedDB 打包，無需切換或開啟專案）
+            prog.processing(t('popup.drive.packaging'));
+            const zipBlob = await buildProjectZipById(localProjectId);
 
             // 上傳（真實 XHR 傳輸進度）
             await uploadFile({
@@ -387,8 +460,8 @@ export function buildDriveTab(ctx) {
                 driveName: file.name,
             });
 
-            prog.completed('專案已成功同步至雲端硬碟');
-            simpleToast({ content: `已成功同步更新：${file.name}`, type: 'success', timeout: 2000 });
+            prog.completed(t('popup.drive.uploadSuccess'));
+            simpleToast({ content: t('popup.drive.toastUploadSuccess', { name: file.name }), type: 'success', timeout: 2000 });
 
             setTimeout(() => {
                 progressEl.remove();
@@ -397,7 +470,7 @@ export function buildDriveTab(ctx) {
             }, 1200);
 
         } catch (e) {
-            prog.error(e.message || '上傳同步失敗');
+            prog.error(e.message || t('popup.drive.operationFailed'));
             card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = false);
             console.error('[DriveManager] 上傳失敗:', e);
         }

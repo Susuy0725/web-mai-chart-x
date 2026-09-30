@@ -6,7 +6,7 @@ import { getDriveMeta, setDriveMeta, checkFileStillValid } from '../services/dri
 import { ensureSignedIn } from '../services/driveAuth.js';
 import { uploadFile } from '../services/driveApi.js';
 import { createTransferProgress } from '../services/transferProgress.js';
-import { buildProjectZip } from '../features/fileHandler.js';
+import { buildProjectZipById } from '../features/fileHandler.js';
 
 /**
  * 開啟專案總管 UI
@@ -92,6 +92,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
             const card = document.createElement('div');
             card.style.cssText = `
+                position: relative;
                 background: #1e1e1e;
                 border: 1px solid ${isCurrent ? '#4a90e2' : '#333333'};
                 border-radius: 8px;
@@ -105,7 +106,19 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 min-width: 0;
                 user-select: none;
                 -webkit-user-select: none;
+                cursor: ${isCurrent ? 'default' : 'pointer'};
             `;
+
+            if (!isCurrent) {
+                card.onclick = async (e) => {
+                    if (e.target.closest('button')) return;
+                    if (typeof loadProject === 'function') {
+                        const loaded = await loadProject(proj.id);
+                        simpleToast({ content: `已切換至專案：${loaded?.name || proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
+                    }
+                    buildList(container);
+                };
+            }
 
             // 1:1 正方形封面圖區
             const coverContainer = document.createElement('div');
@@ -190,7 +203,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                     align-items: center;
                     gap: 3px;
                 `;
-                cloudBadge.innerHTML = '<span class="material-symbols-outlined" style="font-size:12px;line-height:1;" translate="no">cloud_done</span><span>已同步</span>';
+                cloudBadge.innerHTML = `<span class="material-symbols-outlined" style="font-size:12px;line-height:1;" translate="no">cloud_done</span><span>${t('popup.drive.badgeLocalSynced')}</span>`;
                 coverContainer.appendChild(cloudBadge);
             }
 
@@ -247,8 +260,8 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
             // 上傳／同步至雲端按鈕
             const uploadTooltip = driveMeta?.driveFileId
-                ? '同步上傳至 Google 雲端硬碟（更新複寫）'
-                : '首次上傳至 Google 雲端硬碟並建立關聯';
+                ? t('popup.drive.uploadBtn')
+                : t('popup.drive.uploadInitialBtn');
             const uploadColor = driveMeta?.driveFileId ? '#66bb6a' : '#4a90e2';
 
             const uploadBtn = makeIconButton('cloud_upload', uploadTooltip, async () => {
@@ -258,9 +271,9 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 }
 
                 const { el: progressEl, controller: prog } = createTransferProgress({
-                    preparingText: '正在連接 Google 帳號與檢查雲端狀態...',
-                    processingText: '正在打包本地專案檔案...',
-                    completedText: '雲端上傳完成',
+                    preparingText: t('popup.drive.preparingUpload'),
+                    processingText: t('popup.drive.packaging'),
+                    completedText: t('popup.drive.uploadSuccess'),
                 });
 
                 card.appendChild(progressEl);
@@ -279,17 +292,10 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         }
                     }
 
-                    prog.processing('正在打包專案為 .wmcx.zip...');
-                    const fhCtx = getFileHandlerCtx();
+                    prog.processing(t('popup.drive.packaging'));
+                    const zipBlob = await buildProjectZipById(proj.id);
 
-                    const curId = typeof getCurrentProjectId === 'function' ? getCurrentProjectId() : null;
-                    if (curId !== proj.id && typeof loadProject === 'function') {
-                        await loadProject(proj.id);
-                    }
-
-                    const zipBlob = await buildProjectZip(fhCtx);
-
-                    const baseName = proj.name || '未命名專案';
+                    const baseName = proj.name || t('popup.projectManager.untitled');
                     const uploadFileName = baseName.endsWith('.wmcx.zip') ? baseName : `${baseName}.wmcx.zip`;
 
                     const uploadRes = await uploadFile({
@@ -307,32 +313,25 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         driveName: uploadRes.name || uploadFileName,
                     });
 
-                    prog.completed('專案已成功同步至 Google 雲端硬碟');
-                    simpleToast({ content: `已成功上傳專案：${proj.name || '未命名'}`, type: 'success', timeout: 2000 });
+                    prog.completed(t('popup.drive.uploadSuccess'));
+                    simpleToast({
+                        content: t('popup.drive.toastUploadSuccess', { name: proj.name || t('popup.projectManager.untitled') }),
+                        type: 'success',
+                        timeout: 2000
+                    });
 
                     setTimeout(() => {
                         progressEl.remove();
                         buildList(container);
                     }, 1200);
                 } catch (err) {
-                    prog.error(err.message || '上傳失敗');
+                    prog.error(err.message || t('popup.drive.operationFailed'));
                     allButtons.forEach(b => b.disabled = false);
                     console.error('[ProjectManager] 上傳失敗:', err);
                 }
             }, uploadColor);
             btnRow.appendChild(uploadBtn);
 
-            // 開啟按鈕（非當前專案時顯示）
-            if (!isCurrent) {
-                const openBtn = makeIconButton('file_open', '開啟專案', async () => {
-                    if (typeof loadProject === 'function') {
-                        const loaded = await loadProject(proj.id);
-                        simpleToast({ content: `已切換至專案：${loaded?.name || proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
-                    }
-                    buildList(container);
-                }, '#4a90e2');
-                btnRow.appendChild(openBtn);
-            }
 
             // 重新命名按鈕
             const renameBtn = makeIconButton('edit', '重新命名', async () => {
@@ -373,12 +372,12 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
     const localTabBtn = document.createElement('button');
     localTabBtn.type = 'button';
     localTabBtn.className = 'pm-tab-btn pm-tab-btn--active';
-    localTabBtn.textContent = '本地專案';
+    localTabBtn.textContent = t('popup.drive.localTab');
 
     const driveTabBtn = document.createElement('button');
     driveTabBtn.type = 'button';
     driveTabBtn.className = 'pm-tab-btn';
-    driveTabBtn.textContent = '雲端專案 (Google Drive)';
+    driveTabBtn.textContent = t('popup.drive.driveTab');
 
     tabBar.append(localTabBtn, driveTabBtn);
 
@@ -397,6 +396,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             loadProject,
             getCurrentProjectId,
             getFileHandlerCtx,
+            refreshLocalList: () => buildList(localContainer),
         });
         driveContainer.appendChild(driveTab);
     } else {

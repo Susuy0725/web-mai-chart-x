@@ -1,15 +1,75 @@
 // Scripts/services/driveAuth.js
-// 使用 Google Identity Services (GIS) Token Client
-// Access token 僅存於記憶體，絕不寫入 localStorage / IndexedDB / URL。
+// Google Drive OAuth 2.0 授權管理模組
+//
+// 設計原則：
+// 1. 跨平台行為 100% 一致：僅在使用者主動點擊按鈕時觸發 Google 授權彈窗 (prompt: 'select_account')。
+// 2. 移除所有脆弱的背景靜默續期與非互動授權，徹底避免彈窗攔截器與 COOP 衝突。
+// 3. Access Token 與 User Info 暫存於 sessionStorage（同分頁重新整理維持登入，關閉分頁或瀏覽器後自動銷毀）。
+// 4. 使用 Drive about API 驗證 Token 並取得帳號名稱與頭像，完全符合 drive.file 與 drive.install scope。
 
 const CLIENT_ID = '1075237013882-bbdr5s31phsu77afii792iqc8t8bfvua.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install';
+
+const SESSION_TOKEN_KEY = 'wmcx_drive_token';
+const SESSION_EXPIRY_KEY = 'wmcx_drive_expiry';
+const SESSION_USER_KEY = 'wmcx_drive_user';
 
 let _accessToken = null;
 let _tokenExpiry = 0;
 let _userInfo = null;
 let _authListeners = [];
 let _tokenClient = null;
+
+/**
+ * 從 sessionStorage 同步還原 Token（頁面載入或重新整理時執行，0 延遲純同步）
+ */
+function _restoreSession() {
+    try {
+        const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
+        const expiryStr = sessionStorage.getItem(SESSION_EXPIRY_KEY);
+        const userStr = sessionStorage.getItem(SESSION_USER_KEY);
+
+        if (token && expiryStr) {
+            const expiry = parseInt(expiryStr, 10);
+            if (Date.now() < expiry - 60_000) {
+                _accessToken = token;
+                _tokenExpiry = expiry;
+                _userInfo = userStr ? JSON.parse(userStr) : null;
+                return true;
+            }
+        }
+    } catch (_) {}
+
+    _clearSession();
+    return false;
+}
+
+/**
+ * 儲存 Token 與使用者資訊至 sessionStorage
+ */
+function _saveSession(token, expiry, user) {
+    try {
+        sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+        sessionStorage.setItem(SESSION_EXPIRY_KEY, String(expiry));
+        if (user) {
+            sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+        }
+    } catch (_) {}
+}
+
+/**
+ * 清除 sessionStorage 暫存
+ */
+function _clearSession() {
+    _accessToken = null;
+    _tokenExpiry = 0;
+    _userInfo = null;
+    try {
+        sessionStorage.removeItem(SESSION_TOKEN_KEY);
+        sessionStorage.removeItem(SESSION_EXPIRY_KEY);
+        sessionStorage.removeItem(SESSION_USER_KEY);
+    } catch (_) {}
+}
 
 /**
  * 動態確保 Google Identity Services (GIS) SDK 載入
@@ -44,11 +104,17 @@ function ensureGisScript() {
     });
 }
 
+/**
+ * 廣播授權狀態變更給所有監聽者
+ */
 function _notifyListeners() {
-    const state = { isSignedIn: isSignedIn(), user: _userInfo };
+    const payload = {
+        isSignedIn: isSignedIn(),
+        user: _userInfo,
+    };
     _authListeners.forEach(fn => {
         try {
-            fn(state);
+            fn(payload);
         } catch (e) {
             console.error('[DriveAuth] 狀態監聽器執行錯誤:', e);
         }
@@ -56,20 +122,22 @@ function _notifyListeners() {
 }
 
 /**
- * 取得使用者基本資訊
+ * 使用 Drive about API 驗證 Token 是否真正有效，並取得使用者基本資訊
  */
-async function _fetchUserInfo(token) {
-    const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+async function _verifyDriveTokenAndFetchUser(token) {
+    const resp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
         headers: { 'Authorization': `Bearer ${token}` }
     });
+
     if (!resp.ok) {
-        throw new Error('無法取得 Google 帳號資訊');
+        throw new Error(`Drive 權限驗證失敗: HTTP ${resp.status}`);
     }
+
     const data = await resp.json();
     return {
-        email: data.email || '',
-        name: data.name || data.email || 'Google 使用者',
-        picture: data.picture || null,
+        email: data.user?.emailAddress || '',
+        name: data.user?.displayName || data.user?.emailAddress || 'Google 使用者',
+        picture: data.user?.photoLink || null,
     };
 }
 
@@ -89,14 +157,22 @@ export function getAccessToken() {
 }
 
 /**
- * 取得目前登入之使用者資訊
+ * 清除當前記憶體與 sessionStorage 中的 Token（供 401 攔截器使用）
+ */
+export function clearCurrentToken() {
+    _clearSession();
+    _notifyListeners();
+}
+
+/**
+ * 取得目前登入的使用者資訊
  */
 export function getUserInfo() {
     return _userInfo;
 }
 
 /**
- * 透過 Google Identity Services 觸發授權彈窗
+ * 使用者主動點擊「使用 Google 登入」（使用者手勢觸發，各平台表現一致）
  */
 export async function signIn() {
     const oauth2 = await ensureGisScript();
@@ -109,7 +185,12 @@ export async function signIn() {
                 prompt: 'select_account',
                 callback: async (tokenResponse) => {
                     if (tokenResponse.error) {
-                        reject(new Error(`Google 授權失敗: ${tokenResponse.error_description || tokenResponse.error}`));
+                        const isCancelled = tokenResponse.error === 'popup_closed' || tokenResponse.error === 'user_cancelled';
+                        const err = new Error(isCancelled ? '使用者已取消授權' : `Google 授權失敗: ${tokenResponse.error_description || tokenResponse.error}`);
+                        if (!isCancelled) {
+                            console.warn('[DriveAuth] 授權回傳錯誤:', tokenResponse.error);
+                        }
+                        reject(err);
                         return;
                     }
 
@@ -118,21 +199,35 @@ export async function signIn() {
                         return;
                     }
 
-                    _accessToken = tokenResponse.access_token;
-                    const expiresIn = parseInt(tokenResponse.expires_in, 10) || 3599;
-                    _tokenExpiry = Date.now() + expiresIn * 1000;
+                    console.debug('[DriveAuth] Token received', {
+                        hasToken: Boolean(tokenResponse.access_token),
+                        expiresIn: tokenResponse.expires_in,
+                        tokenType: tokenResponse.token_type,
+                        scope: tokenResponse.scope,
+                    });
 
                     try {
-                        _userInfo = await _fetchUserInfo(_accessToken);
-                    } catch (_) {
-                        _userInfo = { email: '', name: 'Google 使用者', picture: null };
-                    }
+                        const verifiedUser = await _verifyDriveTokenAndFetchUser(tokenResponse.access_token);
+                        const expiresIn = parseInt(tokenResponse.expires_in, 10) || 3599;
+                        const expiry = Date.now() + expiresIn * 1000;
 
-                    _notifyListeners();
-                    resolve({ token: _accessToken, user: _userInfo });
+                        _accessToken = tokenResponse.access_token;
+                        _tokenExpiry = expiry;
+                        _userInfo = verifiedUser;
+
+                        _saveSession(_accessToken, _tokenExpiry, _userInfo);
+                        _notifyListeners();
+                        resolve({ token: _accessToken, user: _userInfo });
+                    } catch (verifyErr) {
+                        console.error('[DriveAuth] Drive 驗證失敗:', verifyErr.message);
+                        _clearSession();
+                        _notifyListeners();
+                        reject(verifyErr);
+                    }
                 },
                 error_callback: (err) => {
-                    reject(new Error(`授權彈窗錯誤: ${err.message || '彈窗關閉或被阻擋'}`));
+                    console.warn('[DriveAuth] GIS 彈窗錯誤:', err);
+                    reject(new Error(err?.message || '授權彈窗無法開啟'));
                 }
             });
 
@@ -144,20 +239,18 @@ export async function signIn() {
 }
 
 /**
- * 登出 Google 帳號（清除記憶體 Token 與使用者狀態）
+ * 登出 Google 帳號
  */
 export function signOut() {
     if (_accessToken && window.google?.accounts?.oauth2?.revoke) {
         try {
             window.google.accounts.oauth2.revoke(_accessToken, () => {
-                console.log('[DriveAuth] 已註銷 Access Token');
+                console.debug('[DriveAuth] 已註銷 Access Token');
             });
         } catch (_) {}
     }
 
-    _accessToken = null;
-    _tokenExpiry = 0;
-    _userInfo = null;
+    _clearSession();
     _notifyListeners();
 }
 
@@ -179,3 +272,6 @@ export async function ensureSignedIn() {
     const { token } = await signIn();
     return token;
 }
+
+// 模組載入時立即從 sessionStorage 同步還原（0 毫秒，保證同分頁重新整理登入不中斷）
+_restoreSession();

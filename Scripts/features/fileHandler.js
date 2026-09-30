@@ -1,6 +1,6 @@
-import { ensureJSZip, popupWindow, simpleToast, getSimaiDataString } from '../helper.js';
+import { ensureJSZip, popupWindow, simpleToast, getSimaiDataString, parseMaidata } from '../helper.js';
 import { t } from '../i18n.js';
-import { projectCreate, projectUpdateName } from '../indexDB.js';
+import { projectCreate, projectUpdateName, projectTouch, idbGetProject, idbSetProject } from '../indexDB.js';
 
 /**
  * 處理資料夾/多檔案或 Zip 解壓後的檔案清單
@@ -557,4 +557,155 @@ export async function buildProjectZip(ctx, onProgress) {
     }
 
     return await zip.generateAsync({ type: "blob" }, onProgress);
+}
+
+/**
+ * 直接依據專案 ID 從 IndexedDB 讀取素材資料並打包為 .wmcx.zip Blob
+ * 完全無需開啟或切換專案，不打擾主畫面渲染與音訊播放
+ *
+ * @param {string} projectId - 專案 ID
+ * @param {Function} [onProgress] - JSZip generateAsync 進度回呼 ({ percent: number }) => void
+ * @returns {Promise<Blob>}
+ */
+export async function buildProjectZipById(projectId, onProgress) {
+    if (!projectId) {
+        throw new Error('未指定專案 ID，無法進行打包');
+    }
+
+    await ensureJSZip();
+    const zip = new window.JSZip();
+
+    const [
+        maidata,
+        bgm,
+        backgroundImage,
+        backgroundVideo
+    ] = await Promise.all([
+        idbGetProject(projectId, 'maidata'),
+        idbGetProject(projectId, 'resource_bgm'),
+        idbGetProject(projectId, 'background_image'),
+        idbGetProject(projectId, 'background_video')
+    ]);
+
+    zip.file("maidata.txt", typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : "");
+
+    if (backgroundImage instanceof Blob) {
+        const bgExt = backgroundImage.name?.split('.').pop() || 'png';
+        zip.file(`bg.${bgExt}`, backgroundImage);
+    }
+
+    if (bgm instanceof Blob) {
+        const bgmExt = bgm.name?.split('.').pop() || 'mp3';
+        zip.file(`track.${bgmExt}`, bgm);
+    } else if (typeof bgm === 'string') {
+        try {
+            const resp = await fetch(bgm);
+            const blob = await resp.blob();
+            zip.file('track.mp3', blob);
+        } catch (e) {
+            console.warn('[buildProjectZipById] BGM fetch 失敗:', e);
+        }
+    }
+
+    if (backgroundVideo instanceof Blob) {
+        const videoExt = backgroundVideo.name?.split('.').pop() || 'mp4';
+        zip.file(`pv.${videoExt}`, backgroundVideo);
+    }
+
+    return await zip.generateAsync({ type: "blob" }, onProgress);
+}
+
+/**
+ * 直接將 .wmcx.zip Blob 在背景解壓並存入 IndexedDB
+ * 完全不打擾主畫面、不清空當前編輯器、不切換專案
+ *
+ * @param {Blob} zipBlob - 下載的 .wmcx.zip Blob
+ * @param {string} [defaultName='未命名專案'] - 專案預設名稱
+ * @param {string|null} [targetProjectId=null] - 若指定則直接覆寫既有專案，否則建立新專案
+ * @returns {Promise<{ projectId: string, projectName: string }>}
+ */
+export async function saveProjectZipToIDB(zipBlob, defaultName = '未命名專案', targetProjectId = null) {
+    await ensureJSZip();
+    const zip = await window.JSZip.loadAsync(zipBlob);
+
+    let projectName = defaultName.replace(/\.wmcx\.zip$/i, '').trim() || '未命名專案';
+    let finalProjectId = targetProjectId;
+
+    if (!finalProjectId) {
+        finalProjectId = await projectCreate(projectName);
+    } else {
+        await projectTouch(finalProjectId).catch(() => {});
+    }
+
+    let parsedMaidata = null;
+    let bgmBlob = null;
+    let bgImageBlob = null;
+    let bgVideoBlob = null;
+
+    for (const relativePath in zip.files) {
+        if (!Object.prototype.hasOwnProperty.call(zip.files, relativePath)) continue;
+        const entry = zip.files[relativePath];
+        if (entry.dir) continue;
+
+        const baseName = relativePath.replace(/\\/g, '/').split('/').pop();
+        const lowerName = baseName.toLowerCase();
+        const ext = (baseName.split('.').pop() || '').toLowerCase();
+
+        const isVideo = ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
+        const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+
+        if (lowerName.startsWith('maidata.')) {
+            try {
+                const text = await entry.async('string');
+                parsedMaidata = parseMaidata(text);
+                if (parsedMaidata?.title && parsedMaidata.title.trim()) {
+                    projectName = parsedMaidata.title.trim();
+                    await projectUpdateName(finalProjectId, projectName).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('[saveProjectZipToIDB] 解析 maidata.txt 失敗:', e);
+            }
+        } else if (lowerName.startsWith('track.')) {
+            try {
+                bgmBlob = await entry.async('blob');
+            } catch (e) {
+                console.warn('[saveProjectZipToIDB] 讀取音訊檔失敗:', e);
+            }
+        } else if (lowerName.startsWith('bg.')) {
+            if (isImage) {
+                try {
+                    bgImageBlob = await entry.async('blob');
+                } catch (_) {}
+            } else if (isVideo) {
+                try {
+                    bgVideoBlob = await entry.async('blob');
+                } catch (_) {}
+            }
+        } else if (lowerName.startsWith('pv.')) {
+            if (isVideo) {
+                try {
+                    bgVideoBlob = await entry.async('blob');
+                } catch (_) {}
+            }
+        }
+    }
+
+    const savePromises = [];
+    if (parsedMaidata) {
+        savePromises.push(idbSetProject(finalProjectId, 'maidata', parsedMaidata));
+        savePromises.push(idbSetProject(finalProjectId, 'now_difficulty', 5));
+    }
+    if (bgmBlob) {
+        savePromises.push(idbSetProject(finalProjectId, 'resource_bgm', bgmBlob));
+    }
+    if (bgImageBlob) {
+        savePromises.push(idbSetProject(finalProjectId, 'background_image', bgImageBlob));
+    }
+    if (bgVideoBlob) {
+        savePromises.push(idbSetProject(finalProjectId, 'background_video', bgVideoBlob));
+    }
+
+    await Promise.all(savePromises);
+
+    return { projectId: finalProjectId, projectName };
 }

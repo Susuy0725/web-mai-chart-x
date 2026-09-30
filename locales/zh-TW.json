@@ -366,7 +366,8 @@
       "toastUploadSuccess": "已上傳專案：{name}",
       "toastTrashSuccess": "已移至垃圾桶：{name}",
       "toastSignInFailed": "登入失敗: {msg}",
-      "toastDeleteFailed": "刪除失敗: {msg}"
+      "toastDeleteFailed": "刪除失敗: {msg}",
+      "unpacking": "正在解壓縮..."
     },
     "driveOpen": {
       "title": "開啟 Google 雲端硬碟專案",

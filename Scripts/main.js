@@ -29,6 +29,7 @@ import { majdataWs } from './majdataWs.js';
 import { openBgmEditor, openTapBpm } from './modals/bgmEditor.js';
 import { openMainoteFetcher } from './modals/mainoteFetcher.js';
 import { openProjectManager } from './modals/projectManager.js';
+import { checkAndHandleDriveOpenWith } from './services/driveOpenWith.js';
 import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
@@ -3076,7 +3077,12 @@ function _init() {
         setImages: (val) => { images = val; },
         setRenderer: (val) => { renderer = val; },
         setVisualEditorRenderer: (val) => { visualEditorRenderer = val; },
-        setPreviewRender: (val) => { previewRender = val; }
+        setPreviewRender: (val) => { previewRender = val; },
+        onInitFinished: () => {
+            checkAndHandleDriveOpenWith({
+                loadProject
+            });
+        }
     });
 }
 

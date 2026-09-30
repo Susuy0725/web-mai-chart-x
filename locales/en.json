@@ -367,6 +367,17 @@
       "toastSignInFailed": "Sign in failed: {msg}",
       "toastDeleteFailed": "Delete failed: {msg}"
     },
+    "driveOpen": {
+      "title": "Open Google Drive Project",
+      "needAuth": "Detected a request to open a project from Google Drive.\nPlease sign in to your Google Account to access this file.",
+      "signInBtn": "Sign in with Google",
+      "cancelBtn": "Cancel",
+      "authCancelled": "Google sign-in cancelled; cannot open cloud file.",
+      "overwritePrompt": "A local linked project \"{name}\" already exists. Would you like to overwrite it?",
+      "overwriteBtn": "Overwrite Local Project",
+      "newProjectBtn": "Save as New Project",
+      "toastOpenSuccess": "Successfully loaded cloud project: {name}"
+    },
     "recordVideo": {
       "title": "Record Video",
       "custom": "Custom...",

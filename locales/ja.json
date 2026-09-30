@@ -369,6 +369,17 @@
       "toastSignInFailed": "ログイン失敗: {msg}",
       "toastDeleteFailed": "削除失敗: {msg}"
     },
+    "driveOpen": {
+      "title": "Google ドライブから開く",
+      "needAuth": "Google ドライブからのプロジェクト起動リクエストを検出しました。\nファイルを取得するには Google アカウントにログインしてください。",
+      "signInBtn": "Google でログイン",
+      "cancelBtn": "キャンセル",
+      "authCancelled": "Google ログインがキャンセルされたため、クラウドファイルを開けません。",
+      "overwritePrompt": "ローカルに既に関連付けられたプロジェクト「{name}」が存在します。上書きしますか？",
+      "overwriteBtn": "ローカルプロジェクトを上書き",
+      "newProjectBtn": "新規プロジェクトとして保存",
+      "toastOpenSuccess": "クラウドプロジェクトを読み込みました：{name}"
+    },
     "recordVideo": {
       "title": "動画を録画",
       "custom": "カスタム...",

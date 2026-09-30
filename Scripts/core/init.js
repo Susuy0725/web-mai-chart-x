@@ -221,6 +221,13 @@ async function finalizeInit(ctx, settings, popupCtx, step) {
     popupCtx.close();
     ctx.setIsInitComplete(true);
     ctx.updateDiscordRPC(ctx.getMaidata(), ctx.getNowDifficulty());
+    if (typeof ctx.onInitFinished === 'function') {
+        try {
+            ctx.onInitFinished();
+        } catch (e) {
+            console.error('[init] onInitFinished 執行失敗:', e);
+        }
+    }
 }
 
 /**

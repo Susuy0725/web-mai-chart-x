@@ -2,7 +2,7 @@
 // 負責管理本地專案與 Google Drive 雲端檔案之關聯 (drive_meta)
 // 使用現有 IndexedDB 專案命名空間 (idbGetProject / idbSetProject)，不另立新資料庫。
 
-import { idbGetProject, idbSetProject } from '../indexDB.js';
+import { idbGetProject, idbSetProject, projectList } from '../indexDB.js';
 import { getFileMeta } from './driveApi.js';
 
 const DRIVE_META_KEY = 'drive_meta';
@@ -65,3 +65,25 @@ export async function checkFileStillValid(driveFileId, token) {
         return false;
     }
 }
+
+/**
+ * 依 Google Drive 檔案 ID 尋找已關聯的本地專案
+ * @param {string} driveFileId
+ * @returns {Promise<{ project: Object, meta: Object }|null>}
+ */
+export async function findProjectByDriveFileId(driveFileId) {
+    if (!driveFileId) return null;
+    try {
+        const list = await projectList();
+        for (const proj of list) {
+            const meta = await getDriveMeta(proj.id);
+            if (meta?.driveFileId === driveFileId) {
+                return { project: proj, meta };
+            }
+        }
+    } catch (e) {
+        console.warn('[DriveSync] 搜尋關聯專案失敗:', e);
+    }
+    return null;
+}
+

@@ -256,23 +256,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
     };
 
     const container = document.createElement('div');
-    container.style.cssText = `
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        align-items: start;
-        grid-auto-rows: max-content;
-        gap: 10px;
-        height: 310px;
-        min-height: 310px;
-        max-height: 310px;
-        overflow-y: auto;
-        overscroll-behavior: none;
-        box-sizing: border-box;
-        scrollbar-width: thin;
-        scrollbar-color: #555 transparent;
-        user-select: none;
-        -webkit-user-select: none;
-    `;
+    container.className = 'project-manager-grid popup-list';
 
     buildList(container);
 

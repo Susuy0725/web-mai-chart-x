@@ -1479,4 +1479,39 @@
         height: 100% !important;
         flex: 1 1 auto;
     }
+
+    .project-manager-grid {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+        grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)) !important;
+        padding: 0 !important;
+    }
+}
+
+/* 專案總管選擇區樣式 (一般視窗與全螢幕頁面適配) */
+.project-manager-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    align-items: start;
+    grid-auto-rows: max-content;
+    gap: 10px;
+    height: 310px;
+    min-height: 310px;
+    max-height: 310px;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #555 transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.popup-window.popup-page .project-manager-grid {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 1 1 auto;
 }

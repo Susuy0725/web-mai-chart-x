@@ -873,6 +873,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     white-space: nowrap;
 }
 
+.utilityDropdown-content hr,
 .utilitySubmenu hr {
     width: 90%;
     margin: 0;

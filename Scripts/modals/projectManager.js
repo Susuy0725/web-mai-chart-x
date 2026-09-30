@@ -4,6 +4,9 @@ import { t } from '../i18n.js';
 
 /**
  * 開啟專案總管 UI
+ * @param {Object} options
+ * @param {Function} options.getCurrentProjectId
+ * @param {Function} options.loadProject
  */
 export function openProjectManager({ getCurrentProjectId, loadProject }) {
     const defaultCoverUrl = 'Skin/no_image.png';
@@ -284,6 +287,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject }) {
                 onClick: async () => {
                     const name = prompt('請輸入專案名稱：', '未命名專案');
                     if (name === null) return;
+                    const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
                     const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
                     if (typeof loadProject === 'function') {
                         const proj = await loadProject(newId);

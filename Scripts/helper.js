@@ -558,6 +558,8 @@ export function popupWindow({
     height = undefined,
     maxHeight = "100dvh",
     unclosable = false,
+    isPage = undefined,
+    mode = undefined,
     onOpen,
     onClose,
     closeWhen,
@@ -566,6 +568,12 @@ export function popupWindow({
     const popupWidth = typeof width === 'number' ? `${width}px` : width;
     const popupHeight = height ? (typeof height === 'number' ? `${height}px` : height) : 'auto';
     const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : '100vh';
+
+    // 判定是否為頁面模式 (Page Route) 或 對話框模式 (Dialog)
+    // 預設規則：有 customContent 且非手動指定則為 Page，純文字提示 (只有 content) 預設為 Dialog
+    const isPageRoute = (isPage !== undefined)
+        ? Boolean(isPage)
+        : (mode === 'page' ? true : (mode === 'dialog' ? false : Boolean(customContent)));
 
     const applyContent = (container, value) => {
         container.innerHTML = '';
@@ -610,21 +618,47 @@ export function popupWindow({
 
     // 1. 建立背景 (Backdrop)
     const backdrop = document.createElement('div');
-    backdrop.className = 'popup-backdrop';
+    backdrop.className = isPageRoute ? 'popup-backdrop popup-backdrop-page' : 'popup-backdrop popup-backdrop-dialog';
 
     // 2. 建立彈窗主體 (Popup)
     const popup = document.createElement('div');
-    popup.className = 'popup-window';
+    popup.className = isPageRoute ? 'popup-window popup-page' : 'popup-window popup-dialog';
     popup.style.maxWidth = maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%';
     popup.style.width = title ? popupWidth : 'fit-content';
     popup.style.height = popupHeight;
     popup.style.maxHeight = popupMaxHeight;
 
-    // 3. 內部組件
+    // 3. 建立頂部導覽列 (Header / AppBar)
+    const headerElem = document.createElement('div');
+    headerElem.className = 'popup-header';
+    if (!title) headerElem.classList.add('no-title');
+
+    let closeBtn = null;
+    if (!unclosable) {
+        backdrop.onclick = (e) => e.target === backdrop && closePopup();
+        closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'popup-close-btn';
+        closeBtn.setAttribute('aria-label', isPageRoute ? 'Back' : 'Close');
+        closeBtn.innerHTML = isPageRoute
+            ? `
+                <span class="material-symbols-outlined popup-icon-close" translate="no">close_small</span>
+                <span class="material-symbols-outlined popup-icon-back" translate="no">arrow_back</span>
+              `
+            : `<span class="material-symbols-outlined popup-icon-close" translate="no">close_small</span>`;
+        closeBtn.onclick = () => closePopup();
+        headerElem.appendChild(closeBtn);
+    }
+
     const titleElem = document.createElement('h2');
     titleElem.className = 'popup-title';
     if (!title) titleElem.style.display = 'none';
     titleElem.innerText = title;
+    headerElem.appendChild(titleElem);
+
+    if (!title && unclosable) {
+        headerElem.style.display = 'none';
+    }
 
     const progressContainer = document.createElement('div');
     progressContainer.className = 'popup-progress-container';
@@ -651,19 +685,43 @@ export function popupWindow({
     // --- 功能函式 ---
 
     let closed = false;
+    const isMobileBreakpoint = () => window.innerWidth <= 440;
+
     const closePopup = () => {
         if (closed) return;
         closed = true;
         ctx.isClosed = true;
         backdrop.style.pointerEvents = 'none';
         backdrop.style.opacity = '0';
-        popup.animate([
-            { transform: 'rotateX(0deg)', opacity: 1 },
-            { transform: 'rotateX(30deg)', opacity: 0 }
-        ], { duration: 200, easing: 'ease-in' }).onfinish = () => {
-            backdrop.remove();
-            if (typeof onClose === 'function') onClose();
-        };
+
+        if (isMobileBreakpoint() && isPageRoute) {
+            // 移動端全螢幕 Page Route: 向右滑出
+            popup.animate([
+                { transform: 'translateX(0)', opacity: 1 },
+                { transform: 'translateX(100%)', opacity: 0.8 }
+            ], { duration: 240, easing: 'cubic-bezier(0.3, 0, 0.8, 0.15)' }).onfinish = () => {
+                backdrop.remove();
+                if (typeof onClose === 'function') onClose();
+            };
+        } else if (!isPageRoute) {
+            // Dialog 模式: 縮放淡出
+            popup.animate([
+                { transform: 'scale(1)', opacity: 1 },
+                { transform: 'scale(0.88)', opacity: 0 }
+            ], { duration: 150, easing: 'ease-in' }).onfinish = () => {
+                backdrop.remove();
+                if (typeof onClose === 'function') onClose();
+            };
+        } else {
+            // 桌面端 Page 彈窗: 3D 旋轉淡出
+            popup.animate([
+                { transform: 'rotateX(0deg)', opacity: 1 },
+                { transform: 'rotateX(30deg)', opacity: 0 }
+            ], { duration: 200, easing: 'ease-in' }).onfinish = () => {
+                backdrop.remove();
+                if (typeof onClose === 'function') onClose();
+            };
+        }
     };
 
     const setContent = (value) => {
@@ -696,9 +754,13 @@ export function popupWindow({
             progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
         },
         isClosed: false,
+        isPage: isPageRoute,
         elements: {
             backdrop,
             popup,
+            header: headerElem,
+            title: titleElem,
+            closeButton: closeBtn,
             body: bodyElem,
             content: contentElem,
             customContent: customContentElem,
@@ -710,6 +772,7 @@ export function popupWindow({
     const setButtons = (newBtns = []) => {
         btnContainer.innerHTML = '';
         btnContainer.style.display = newBtns.length ? 'flex' : 'none';
+        btnContainer.classList.toggle('popup-buttons-vertical', newBtns.length >= 3);
         newBtns.forEach(btn => {
             btnContainer.appendChild(createBtn(btn, ctx));
         });
@@ -717,16 +780,7 @@ export function popupWindow({
 
     // --- 初始化組合 ---
 
-    if (!unclosable) {
-        backdrop.onclick = (e) => e.target === backdrop && closePopup();
-        const closeX = document.createElement('div');
-        closeX.className = 'popup-close-btn';
-        closeX.innerHTML = '<span class="material-symbols-outlined" translate="no">close_small</span>';
-        closeX.onclick = closePopup;
-        popup.appendChild(closeX);
-    }
-
-    popup.append(titleElem, progressContainer, bodyElem, btnContainer);
+    popup.append(headerElem, progressContainer, bodyElem, btnContainer);
 
     if (customContent) {
         setCustomContent(customContent);
@@ -738,10 +792,25 @@ export function popupWindow({
     // 啟動動畫
     requestAnimationFrame(() => {
         backdrop.style.opacity = '1';
-        popup.animate([
-            { transform: 'rotateX(30deg) scaleY(0.75) scaleX(0.8)', opacity: 0 },
-            { transform: 'rotateX(0deg) scaleY(1) scaleX(1)', opacity: 1 }
-        ], { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+        if (isMobileBreakpoint() && isPageRoute) {
+            // 移動端全螢幕 Page: 自右側滑入
+            popup.animate([
+                { transform: 'translateX(100%)' },
+                { transform: 'translateX(0)' }
+            ], { duration: 280, easing: 'cubic-bezier(0.05, 0.7, 0.1, 1.0)' });
+        } else if (!isPageRoute) {
+            // Dialog 模式: 縮放彈入
+            popup.animate([
+                { transform: 'scale(0.85)', opacity: 0 },
+                { transform: 'scale(1)', opacity: 1 }
+            ], { duration: 180, easing: 'cubic-bezier(0.12, 0.8, 0.32, 1)' });
+        } else {
+            // 桌面端 Page: 3D 浮起彈入
+            popup.animate([
+                { transform: 'rotateX(30deg) scaleY(0.75) scaleX(0.8)', opacity: 0 },
+                { transform: 'rotateX(0deg) scaleY(1) scaleX(1)', opacity: 1 }
+            ], { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+        }
     });
 
     // 執行回調

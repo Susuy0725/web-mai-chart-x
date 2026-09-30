@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.09.30 (2)]
+
+### Changed
+- 變更彈窗在手機上的佈局
+
+
 ## [2026.09.30 (1)]
  ### Fixed
  - 修正點擊二級菜單無法順利展開的問題

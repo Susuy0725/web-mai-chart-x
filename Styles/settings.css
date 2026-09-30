@@ -5,60 +5,82 @@
 /* --- 全域設定彈窗主容器 (Setting Popup Container) --- */
 .popup-setting-container {
     display: flex;
-    gap: 20px;
+    gap: 14px;
     font-size: 14px;
     height: 420px;
+    max-height: 75vh;
 }
 
 /* 左側導覽列 (Tabs Sidebar) */
 .popup-setting-sidebar {
     display: flex;
     flex-direction: column;
-    width: 80px;
-    border-right: 1px solid #444444;
-    gap: 5px;
-    padding-right: 10px;
+    width: 74px;
+    border-right: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+    gap: 6px;
+    padding-right: 8px;
     flex-shrink: 0;
 }
 
 .popup-setting-tab {
-    padding: 10px 8px;
+    padding: 8px 8px;
     cursor: pointer;
-    border-left: 4px solid transparent;
-    color: #888888;
+    border-left: 3px solid transparent;
+    color: var(--popup-text-muted, #888888);
     transition: all 0.2s ease;
-    font-size: 15px;
-    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--popup-radius-sm, 4px);
     user-select: none;
+    text-align: left;
 }
 
 .popup-setting-tab:hover {
-    color: #cccccc;
+    color: var(--popup-text-main, #ffffff);
     background: rgba(255, 255, 255, 0.04);
 }
 
 .popup-setting-tab.active {
-    border-left-color: var(--accent-color);
+    border-left-color: var(--accent-color, #49e);
     color: #ffffff;
-    font-weight: bold;
-    background: rgba(255, 255, 255, 0.06);
+    font-weight: 700;
+    background: var(--popup-surface-active, rgba(255, 255, 255, 0.08));
 }
 
 /* 右側內容區 (Content Area) */
 .popup-setting-content {
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 10px;
+    padding-right: 4px;
     display: flex;
     flex-direction: column;
-    margin-top: 10px;
+    margin-top: 0;
     width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.popup-setting-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.popup-setting-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.popup-setting-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+.popup-setting-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 .popup-setting-section {
     display: none;
     flex-direction: column;
-    gap: var(--window-padding, 10px);
+    gap: 8px;
 }
 
 .popup-setting-section.active {
@@ -70,9 +92,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 15px;
-    margin-bottom: 4px;
-    min-height: 30px;
+    gap: 10px;
+    margin-bottom: 2px;
+    min-height: 32px;
 }
 
 .popup-setting-row-object {
@@ -84,21 +106,37 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
     cursor: pointer;
-    color: #dddddd;
-    font-size: 15px;
+    color: var(--popup-text-main, #f0f0f0);
+    font-size: 14px;
 }
 
 .popup-setting-text {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--popup-text-main, #f0f0f0);
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.popup-setting-object-header span:not(.popup-setting-arrow-icon) {
+    min-width: 0;
+    color: var(--popup-text-main, #f0f0f0);
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
 }
 
 .popup-setting-label {
-    flex: 1;
-    color: #dddddd;
-    font-size: 15px;
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--popup-text-main, #f0f0f0);
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
 }
 
 /* 子屬性折疊選單 (Object Accordion Container) */
@@ -122,7 +160,7 @@
 .popup-setting-arrow-icon {
     transition: transform 0.2s ease;
     transform: rotate(0deg);
-    font-size: 12px;
+    font-size: 10px;
 }
 
 .popup-setting-arrow-icon.expanded {
@@ -146,9 +184,9 @@
 .popup-setting-wrapper>[type="range"],
 .popup-setting-wrapper>.custom-slider-container,
 .custom-slider-container {
-    width: 140px;
-    min-width: 140px;
-    flex: 0 0 140px;
+    width: 120px;
+    min-width: 100px;
+    flex: 0 0 120px;
 }
 
 /* --- 自訂核取方塊 (Custom Styled Checkbox) --- */
@@ -160,8 +198,8 @@
     flex: 0 0 20px;
     margin: 0;
     cursor: pointer;
-    background-color: #1e1e1e;
-    border: 2px solid #444444;
+    background-color: var(--popup-surface, #1e1e1e);
+    border: 2px solid var(--popup-border-light, #444444);
     border-radius: 6px;
     display: inline-flex;
     align-items: center;
@@ -176,8 +214,8 @@
 }
 
 .popup-setting-checkbox:hover {
-    border-color: #666666;
-    background-color: #262626;
+    border-color: #777777;
+    background-color: var(--popup-surface-hover, #262626);
 }
 
 .popup-setting-checkbox:active {
@@ -185,7 +223,7 @@
 }
 
 .popup-setting-checkbox:focus-visible {
-    box-shadow: 0 0 0 3px rgba(68, 153, 238, 0.35);
+    box-shadow: 0 0 0 3px var(--popup-accent-glow, rgba(68, 153, 238, 0.35));
 }
 
 .popup-setting-checkbox:checked {
@@ -203,21 +241,23 @@
 
 /* --- 下拉選單、按鈕、輸入框 (Dropdown, Buttons, Inputs) --- */
 .popup-setting-dropdown {
-    padding: 6px 10px;
-    border: 1px solid #555555;
-    border-radius: 4px;
-    background: #222222;
-    color: #ffffff;
-    font-size: 14px;
+    padding: 5px 8px;
+    border: 1px solid var(--popup-border-light, #555555);
+    border-radius: 6px;
+    background: var(--popup-surface, #222222);
+    color: var(--popup-text-main, #ffffff);
+    font-size: 13px;
     cursor: pointer;
     outline: none;
     box-sizing: border-box;
+    max-width: 135px;
     transition: border-color 0.2s, background-color 0.2s;
 }
 
 .popup-setting-dropdown:hover,
 .popup-setting-dropdown:focus {
     border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.25));
 }
 
 .popup-setting-dropdown option {
@@ -226,124 +266,87 @@
 }
 
 .popup-setting-element {
-    padding: 6px 14px;
-    background: #333333;
-    color: #ffffff;
-    border: 1px solid #555555;
-    border-radius: 4px;
+    padding: 5px 12px;
+    background: var(--popup-surface, #333333);
+    color: var(--popup-text-main, #ffffff);
+    border: 1px solid var(--popup-border-light, #555555);
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     transition: background 0.2s, border-color 0.2s;
     white-space: nowrap;
 }
 
 .popup-setting-element:hover {
-    background: #3e3e3e;
+    background: var(--popup-surface-hover, #3e3e3e);
     border-color: var(--accent-color);
 }
 
 .popup-setting-input {
-    width: 100px;
-    flex: 0 0 auto;
-    padding: 6px 8px;
-    border: 1px solid #555555;
-    border-radius: 4px;
-    background: #222222;
-    color: #ffffff;
-    font-size: 14px;
+    width: 76px;
+    flex: 0 0 76px;
+    padding: 5px 8px;
+    border: none;
+    border-radius: 6px;
+    background: var(--popup-surface, #222222);
+    color: var(--popup-text-main, #ffffff);
+    font-size: 13px;
     text-align: left;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
     box-sizing: border-box;
     outline: none;
 }
 
 .popup-setting-input:focus {
-    border-color: var(--accent-color);
+    box-shadow: 0 0 0 1.5px var(--accent-color);
 }
 
-/* ==========================================================================
-   譜面資訊彈窗樣式 (Chart Info Popup)
-   ========================================================================== */
-.chart-info-container {
-    display: flex;
-    gap: 16px;
-    font-size: 14px;
-}
+/* --- 響應式佈局：當彈窗寬度縮小時 (Responsive Fullscreen / Narrow Mode) --- */
+@media (max-width: 440px) {
+    .popup-setting-container {
+        gap: 8px;
+        height: 100% !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+        overflow-x: hidden;
+    }
 
-.chart-info-btn {
-    padding: 8px 12px;
-    background: #202020;
-    color: #ffffff;
-    border: 1px solid #404040;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    width: 100%;
-    transition: background 0.2s, border-color 0.2s, filter 0.2s;
-}
+    .popup-setting-content {
+        flex: 1 1 auto;
+        height: 100%;
+        overflow-x: hidden;
+    }
 
-.chart-info-btn:hover {
-    background: #2a2a2a;
-    border-color: var(--accent-color);
-}
+    .popup-setting-sidebar {
+        width: 60px;
+        padding-right: 4px;
+    }
 
-.chart-info-btn:active {
-    filter: brightness(0.9);
-}
+    .popup-setting-row {
+        gap: 4px;
+        min-height: 36px;
+    }
 
-.chart-info-img-container {
-    width: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-}
+    .popup-setting-input {
+        width: 100%;
+        height: 80%;
+    }
 
-.chart-info-img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain;
-}
+    .popup-setting-dropdown {
+        max-width: 105px;
+        padding: 3px 5px;
+        font-size: 12px;
+    }
 
-.chart-info-img-wrapper {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    overflow: hidden;
-    border: 1px solid #333333;
-    border-radius: 8px;
-    cursor: pointer;
-    position: relative;
-    background: #000000;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
+    .popup-setting-wrapper>[type="range"],
+    .popup-setting-wrapper>.custom-slider-container,
+    .custom-slider-container {
+        width: 90px;
+        min-width: 85px;
+        flex: 0 0 90px;
+    }
 
-.chart-info-img-wrapper:hover {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 8px rgba(68, 153, 238, 0.2);
-}
-
-.chart-info-overlay {
-    position: absolute;
-    bottom: 0;
-    width: 100%;
-    background: rgba(0, 0, 0, 0.65);
-    color: #ffffff;
-    font-size: 11px;
-    text-align: center;
-    padding: 5px 0;
-    backdrop-filter: blur(2px);
-    transition: background 0.2s;
-}
-
-.chart-info-img-wrapper:hover .chart-info-overlay {
-    background: rgba(0, 0, 0, 0.8);
-}
-
-.chart-info-diff-container {
-    width: 60%;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    .popup-setting-section {
+        gap: 12px;
+    }
 }

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## [2026.09.30 (5)]
+
+### Changed
+ - 優化渲染器
+
+### Added
+ - 加入禁用背景影片
+
+
 ## [2026.09.30 (3)]
 
 ### Added

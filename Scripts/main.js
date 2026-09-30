@@ -2075,7 +2075,7 @@ function applyHighlight(text) {
 const slideInputDebounce = debounce(() => {
     timeControlSliding = false;
     // 嘗試將背景影片定位到播放時間並播放；若尚未載入則在可播放時再嘗試
-    if (editorBackgroundVideo && editorBackgroundVideo.src) {
+    if (!settings.disableVideo && editorBackgroundVideo && editorBackgroundVideo.src) {
         const setTimeAndTryPlay = () => {
             try {
                 editorBackgroundVideo.currentTime = realTime;
@@ -2113,7 +2113,7 @@ const slideInputDebounce = debounce(() => {
 }, 300);
 
 const videoSeekDebounce = debounce((time) => {
-    if (editorBackgroundVideo && editorBackgroundVideo.readyState >= 1) {
+    if (!settings.disableVideo && editorBackgroundVideo && editorBackgroundVideo.readyState >= 1) {
         if (Math.abs(editorBackgroundVideo.currentTime - time) > 0.05) {
             try { editorBackgroundVideo.currentTime = time; } catch (_) { }
         }
@@ -2131,22 +2131,49 @@ if (keepRenderingWhilePause) requestAnimationFrame(update);
 function updatePauseBackgroundDisplay() {
     const hideBg = !!settings.hideBackgroundWhenPaused;
     const showCover = !!settings.showCoverWhenPaused;
+    const videoDisabled = !!settings.disableVideo;
 
-    const hasVideo = !!(backgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1);
+    const hasVideo = !videoDisabled && !!(backgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1);
     const hasImage = !!(backgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
 
     if (hideBg) {
         // [v] 暫停時隱藏背景 -> 以隱藏為優先
         editorBackgroundImage.style.display = 'none';
         editorBackgroundVideo.style.display = 'none';
-    } else if (showCover) {
-        // [ ] 隱藏 + [v] 顯示封面圖 -> 優先顯示封面圖
+    } else if (showCover || videoDisabled) {
+        // [ ] 隱藏 + [v] 顯示封面圖 或 禁用背景影片 -> 優先顯示封面圖
         editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
         editorBackgroundVideo.style.display = 'none';
     } else {
         // [ ] 隱藏 + [ ] 顯示封面圖 -> 顯示影片，無影片直接全部隱藏
         editorBackgroundImage.style.display = 'none';
         editorBackgroundVideo.style.display = hasVideo ? 'block' : 'none';
+    }
+}
+
+function updateVideoBackgroundDisplay() {
+    const isPlaying = playButton.dataset.playing === 'true';
+    if (settings.disableVideo) {
+        editorBackgroundVideo.pause();
+        editorBackgroundVideo.style.display = 'none';
+        const hasImage = !!(backgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
+        const hideBg = !isPlaying && !!settings.hideBackgroundWhenPaused;
+        editorBackgroundImage.style.display = (hasImage && !hideBg) ? 'block' : 'none';
+    } else {
+        if (isPlaying) {
+            const hasVideo = !!(backgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1);
+            const hasImage = !!(backgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
+            editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
+            if (hasVideo) {
+                editorBackgroundVideo.style.display = 'block';
+                try { editorBackgroundVideo.currentTime = realTime; } catch (_) { }
+                editorBackgroundVideo.play().catch(() => { });
+            } else {
+                editorBackgroundVideo.style.display = 'none';
+            }
+        } else {
+            updatePauseBackgroundDisplay();
+        }
     }
 }
 
@@ -2209,12 +2236,19 @@ playButton.addEventListener('click', () => {
         draw(); // 立即更新畫布，反映暫停狀態
     } else {
         lastStartTime = realTime; // 記錄開始播放的時間點
-        editorBackgroundImage.style.display = (editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none';
-        editorBackgroundVideo.style.display =
-            ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
-        editorBackgroundVideo.currentTime = realTime;
-        if (editorBackgroundVideo.paused && editorBackgroundVideo.readyState >= 1) {
-            editorBackgroundVideo.play().catch(() => { });
+        const videoDisabled = !!settings.disableVideo;
+        const hasImage = !!(editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
+        editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
+        if (!videoDisabled) {
+            editorBackgroundVideo.style.display =
+                ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
+            editorBackgroundVideo.currentTime = realTime;
+            if (editorBackgroundVideo.paused && editorBackgroundVideo.readyState >= 1) {
+                editorBackgroundVideo.play().catch(() => { });
+            }
+        } else {
+            editorBackgroundVideo.pause();
+            editorBackgroundVideo.style.display = 'none';
         }
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
@@ -2460,7 +2494,7 @@ function update(timestamp) {
         }
 
         // 背景影片同步邏輯（每秒檢查一次）
-        if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
+        if (!settings.disableVideo && (bgmUpdateTimer === null || bgmUpdateTimer >= 1)) {
             if (editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 2) {
                 const nowSec = performance.now() / 1000;
                 const diff = Math.abs(editorBackgroundVideo.currentTime - realTime);
@@ -2911,12 +2945,11 @@ async function loadProjectData(step) {
     if (bg) {
         backgroundImage = bg;
         editorBackgroundImage.src = URL.createObjectURL(bg);
-        editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
     } else {
         backgroundImage = null;
         editorBackgroundImage.src = "";
-        editorBackgroundImage.style.display = 'none';
     }
+    updatePauseBackgroundDisplay();
     applyMovieBrightness(settings.moviebrightness);
 
     if (savedBgm) {
@@ -3046,6 +3079,8 @@ window.addEventListener('click', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
 window.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
 window.applyMovieBrightness = applyMovieBrightness;
+window.updateVideoBackgroundDisplay = updateVideoBackgroundDisplay;
+window.updatePauseBackgroundDisplay = updatePauseBackgroundDisplay;
 window.applySplitRatio = applySplitRatio;
 window.snapRestoreCanvas = snapRestoreCanvas;
 window.setEditorCss = setEditorCss;

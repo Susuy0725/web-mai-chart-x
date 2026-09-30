@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.09.30 (3)]
+
+### Added
+ - 加入影片預覽、亮度、設定調整
+
 ## [2026.09.30 (2)]
 
 ### Changed

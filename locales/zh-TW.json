@@ -338,7 +338,17 @@
       "includeAudio": "包含音訊:",
       "includeSfx": "包含打擊音效:",
       "includeIntro": "譜面載入動畫:",
-      "includeAllPerfect": "影片結尾顯示 ALL PERFECT:"
+      "includeAllPerfect": "影片結尾顯示 ALL PERFECT:",
+      "brightnessSection": "畫面明暗度調整",
+      "overallBrightness": "整體影片亮度",
+      "movieBrightness": "背景影片亮度",
+      "noteBrightness": "音符亮度",
+      "previewTitle": "渲染視圖預覽",
+      "previewTimeline": "預覽時間軸:",
+      "jumpStart": "跳至起點",
+      "jumpEnd": "跳至終點",
+      "playPreview": "播放預覽",
+      "pausePreview": "暫停預覽"
     },
     "quickGenerate": {
       "title": "快速生成",

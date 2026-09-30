@@ -1,4 +1,5 @@
-import { ensureMediabunny, simpleToast, popupWindow, createLabeledInput1, videoRender } from '../helper.js';
+import { ensureMediabunny, simpleToast, popupWindow, createLabeledInput1, videoRender, SimaiLogicControler, getButton } from '../helper.js';
+import { SimaiRenderer } from '../renderer.js';
 import { t } from '../i18n.js';
 
 /**
@@ -31,6 +32,11 @@ export async function openRecordVideoModal({
         return;
     }
 
+    // 若主畫面正在播放，先暫停避免干擾
+    if (playButton && playButton.dataset.playing === 'true') {
+        playButton.click();
+    }
+
     const container = document.createElement('div');
     container.className = 'popup-form-container';
 
@@ -38,10 +44,163 @@ export async function openRecordVideoModal({
     const endTime = typeof getEndTime === 'function' ? getEndTime() : 0;
     const musicDelay = typeof getMusicDelay === 'function' ? getMusicDelay() : 0;
     const settings = typeof getSettings === 'function' ? getSettings() : {};
-    const maxDuration = Number((endTime + musicDelay).toFixed(2)); // 總曲長
+    const maxDuration = Math.max(0.1, Number((endTime + musicDelay).toFixed(2))); // 總曲長
+    const mainRenderer = typeof getRenderer === 'function' ? getRenderer() : null;
+    const notes = typeof getNotes === 'function' ? getNotes() : [];
+    const playScoreRes = typeof getPlayScoreRes === 'function' ? getPlayScoreRes() : { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
+    const maidata = typeof getMaidata === 'function' ? getMaidata() : {};
+
+    // 格式化時間 (分:秒.毫秒)
+    const formatTime = (sec) => {
+        const s = Math.max(0, Number(sec) || 0);
+        const m = Math.floor(s / 60);
+        const rem = (s % 60).toFixed(2).padStart(5, '0');
+        return `${String(m).padStart(2, '0')}:${rem}`;
+    };
 
     // ==========================================
-    // 1. 核心：建立【雙向時間範圍選取器】组件
+    // 1. 核心：建立【渲染視圖預覽】與獨立渲染器
+    // ==========================================
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.className = 'render-preview-canvas';
+    previewCanvas.style.cssText = 'width:100%;height:100%;display:block;object-fit:contain;';
+
+    const previewCtx = previewCanvas.getContext('2d');
+    const previewRenderer = new SimaiRenderer(previewCanvas, settings);
+    if (mainRenderer) {
+        if (mainRenderer.images) previewRenderer.setImages(mainRenderer.images);
+        if (mainRenderer._tintCache) previewRenderer._tintCache = mainRenderer._tintCache;
+        if (mainRenderer.scale) previewRenderer.scale = mainRenderer.scale;
+    }
+    const previewLogicControler = new SimaiLogicControler();
+
+    // 預載入外框圖片
+    let outlineImage = null;
+    (async () => {
+        try {
+            const response = await fetch('./Skin/outline.png');
+            if (response.ok) {
+                const blob = await response.blob();
+                try {
+                    if (window.createImageBitmap) outlineImage = await createImageBitmap(blob);
+                } catch (e) { }
+                if (!outlineImage) {
+                    outlineImage = await new Promise((res, rej) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
+                        img.onerror = rej;
+                        img.src = URL.createObjectURL(blob);
+                    });
+                }
+                requestPreviewUpdate();
+            }
+        } catch (e) {
+            console.warn('載入外框圖片失敗 (預覽將省略外框)', e);
+        }
+    })();
+
+    // 開啟全域設定 (點擊 topUtility 中的 settings 按鈕)
+    const openSettings = () => {
+        const btn = getButton('settings', 'utility');
+        if (btn) {
+            btn.click();
+        } else {
+            console.warn('未找到設定按鈕 (utilityButton settings)');
+        }
+    };
+
+    // 預覽卡片介面
+    const previewCard = document.createElement('div');
+    previewCard.className = 'render-preview-card';
+    previewCard.style.cssText = 'display:flex;flex-direction:column;gap:8px;background:var(--popup-surface-active, rgba(255,255,255,0.04));border:1px solid var(--popup-border, rgba(255,255,255,0.1));border-radius:8px;padding:10px;margin-bottom:6px;';
+
+    const previewHeader = document.createElement('div');
+    previewHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+
+    const previewTitle = document.createElement('span');
+    previewTitle.style.cssText = 'font-size:12px;font-weight:600;color:var(--popup-text, #fff);display:flex;align-items:center;gap:6px;';
+    previewTitle.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--popup-accent, #4a90e2)"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg> ${t('popup.recordVideo.previewTitle')}`;
+
+    const previewHeaderRight = document.createElement('div');
+    previewHeaderRight.style.cssText = 'display:flex;align-items:center;gap:6px;';
+
+    const previewTimeBadge = document.createElement('span');
+    previewTimeBadge.style.cssText = 'font-size:11px;font-family:monospace;font-weight:600;color:var(--popup-accent, #4a90e2);background:rgba(74, 144, 226, 0.12);padding:2px 6px;border-radius:4px;border:1px solid rgba(74, 144, 226, 0.25);';
+
+    const headerSettingsBtn = document.createElement('button');
+    headerSettingsBtn.type = 'button';
+    headerSettingsBtn.title = t('menu.settings') || '設定';
+    headerSettingsBtn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 6px;font-size:11px;color:#ccc;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;transition:all 0.2s;';
+    headerSettingsBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span>${t('menu.settings') || '設定'}</span>`;
+    headerSettingsBtn.addEventListener('mouseenter', () => {
+        headerSettingsBtn.style.background = 'rgba(255,255,255,0.16)';
+        headerSettingsBtn.style.color = '#fff';
+    });
+    headerSettingsBtn.addEventListener('mouseleave', () => {
+        headerSettingsBtn.style.background = 'rgba(255,255,255,0.08)';
+        headerSettingsBtn.style.color = '#ccc';
+    });
+    headerSettingsBtn.addEventListener('click', openSettings);
+
+    previewHeaderRight.append(previewTimeBadge, headerSettingsBtn);
+    previewHeader.append(previewTitle, previewHeaderRight);
+
+    const previewViewport = document.createElement('div');
+    previewViewport.className = 'render-preview-viewport';
+    previewViewport.style.cssText = 'width:100%;max-height:240px;background:#050508;border-radius:6px;overflow:hidden;position:relative;box-shadow:0 4px 16px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.08);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;';
+    previewViewport.appendChild(previewCanvas);
+
+    // 時間軸與控制項
+    const previewControls = document.createElement('div');
+    previewControls.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:2px;';
+
+    const createSmallBtn = (html, title, onClick) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerHTML = html;
+        btn.title = title;
+        btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:26px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#eee;cursor:pointer;font-size:11px;transition:background 0.2s;flex-shrink:0;';
+        btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(255,255,255,0.16)');
+        btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(255,255,255,0.08)');
+        btn.addEventListener('click', onClick);
+        return btn;
+    };
+
+    let isPreviewPlaying = false;
+    let previewPlayRafId = null;
+    let lastPlayTimestamp = 0;
+
+    const playPauseBtn = createSmallBtn('▶', t('popup.recordVideo.playPreview'), () => {
+        if (isPreviewPlaying) {
+            stopPreviewPlay();
+        } else {
+            startPreviewPlay();
+        }
+    });
+
+    const jumpStartBtn = createSmallBtn('⏮', t('popup.recordVideo.jumpStart'), () => {
+        setPreviewCurrentTime(Number(startInput.value));
+    });
+
+    const jumpEndBtn = createSmallBtn('⏭', t('popup.recordVideo.jumpEnd'), () => {
+        setPreviewCurrentTime(Number(endInput.value));
+    });
+
+    const timelineSlider = document.createElement('input');
+    timelineSlider.type = 'range';
+    timelineSlider.min = '0';
+    timelineSlider.max = String(maxDuration);
+    timelineSlider.step = '0.01';
+    timelineSlider.value = '0';
+    timelineSlider.className = 'custom-slider';
+    timelineSlider.style.cssText = 'flex:1;cursor:pointer;accent-color:var(--popup-accent, #4a90e2);height:6px;';
+
+    previewControls.append(jumpStartBtn, playPauseBtn, jumpEndBtn, timelineSlider);
+    previewCard.append(previewHeader, previewViewport, previewControls);
+
+    // ==========================================
+    // 2. 核心：建立【雙向時間範圍選取器】组件
     // ==========================================
     const timeWrapper = document.createElement('div');
     timeWrapper.style.cssText = 'display:flex;flex-direction:column;margin-bottom:6px;';
@@ -90,7 +249,7 @@ export async function openRecordVideoModal({
     updateDualSlider(); // 初始渲染
 
     // ==========================================
-    // 2. 解析度選單 + 自訂欄位
+    // 3. 解析度選單 + 自訂欄位
     // ==========================================
     const resField = createLabeledInput1({
         value: '1280x720',
@@ -119,10 +278,23 @@ export async function openRecordVideoModal({
 
     resField.input.addEventListener('change', (e) => {
         customResContainer.style.display = e.target.value === 'custom' ? 'flex' : 'none';
+        requestPreviewUpdate();
     });
+    customWidth.input?.addEventListener('input', () => requestPreviewUpdate());
+    customHeight.input?.addEventListener('input', () => requestPreviewUpdate());
+
+    const getTargetResolution = () => {
+        if (resField.input.value === 'custom') {
+            const w = parseInt(inputRefs.custom_w?.value || 1080, 10);
+            const h = parseInt(inputRefs.custom_h?.value || 720, 10);
+            return [Math.max(100, isNaN(w) ? 1080 : w), Math.max(100, isNaN(h) ? 720 : h)];
+        }
+        const parts = resField.input.value.split('x').map(Number);
+        return [parts[0] || 1280, parts[1] || 720];
+    };
 
     // ==========================================
-    // 3. FPS 選單 + 自訂欄位
+    // 4. FPS 選單 + 自訂欄位
     // ==========================================
     const fpsField = createLabeledInput1({
         value: '30',
@@ -148,10 +320,74 @@ export async function openRecordVideoModal({
     });
 
     // ==========================================
-    // 4. 音量與音訊控制項
+    // 5. 音量與音訊控制項
     // ==========================================
     const bgmVolField = createLabeledInput1({ value: settings.musicVolume ?? 0.8, labelText: t('popup.recordVideo.bgmVolume'), type: 'number', assign: 'record_bgm_vol', ref: inputRefs });
     const sfxVolField = createLabeledInput1({ value: settings.SfxVolume ?? 1, labelText: t('popup.recordVideo.sfxVolume'), type: 'number', assign: 'record_sfx_vol', ref: inputRefs });
+
+    // ==========================================
+    // 6. 畫面與明暗度控制滑桿 (整體影片 / 音符)
+    // ==========================================
+    const brightSectionTitle = document.createElement('div');
+    brightSectionTitle.style.cssText = 'font-size:12px;font-weight:600;color:var(--popup-text-sub, #aaa);margin:10px 0 6px 0;border-top:1px solid var(--popup-border, rgba(255,255,255,0.08));padding-top:8px;';
+    brightSectionTitle.textContent = t('popup.recordVideo.brightnessSection');
+
+    const createBrightnessSlider = ({ labelText, min = 0, max = 150, step = 1, defaultValue = 100 }) => {
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex;flex-direction:column;margin-bottom:8px;';
+
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--popup-text-sub, #aaa);margin-bottom:3px;user-select:none;';
+
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = labelText;
+
+        const valSpan = document.createElement('span');
+        valSpan.style.cssText = 'font-weight:600;color:var(--popup-accent, #4a90e2);font-family:monospace;font-size:12px;';
+
+        label.append(titleSpan, valSpan);
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = String(min);
+        input.max = String(max);
+        input.step = String(step);
+        input.value = String(defaultValue);
+        input.className = 'custom-slider';
+        input.style.cssText = 'width:100%;cursor:pointer;accent-color:var(--popup-accent, #4a90e2);margin:2px 0;';
+
+        const updateVal = (val) => {
+            valSpan.textContent = `${val}%`;
+        };
+
+        input.addEventListener('input', (e) => {
+            updateVal(e.target.value);
+            requestPreviewUpdate();
+        });
+
+        updateVal(defaultValue);
+        wrapper.append(label, input);
+
+        return {
+            wrapper,
+            input,
+            get value() { return Number(input.value); }
+        };
+    };
+
+    const overallBrightSlider = createBrightnessSlider({
+        labelText: t('popup.recordVideo.overallBrightness'),
+        min: 0,
+        max: 150,
+        defaultValue: 100
+    });
+
+    const noteBrightSlider = createBrightnessSlider({
+        labelText: t('popup.recordVideo.noteBrightness'),
+        min: 0,
+        max: 150,
+        defaultValue: 100
+    });
 
     const createCustomSwitch = (labelText, defaultChecked) => {
         const labelWrapper = document.createElement('label');
@@ -201,27 +437,261 @@ export async function openRecordVideoModal({
     const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
     const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
     const introSwitch = createCustomSwitch(t('popup.recordVideo.includeIntro'), true);
-    const allPerfectSwitch = createCustomSwitch(t('popup.recordVideo.includeAllPerfect'), false);
 
+    // ==========================================
+    // 7. 預覽渲染排程與控制器邏輯
+    // ==========================================
+    let currentPreviewTime = 0;
+    const setPreviewCurrentTime = (time, syncSlider = true) => {
+        currentPreviewTime = Math.max(0, Math.min(maxDuration, Number(time) || 0));
+        if (syncSlider) {
+            timelineSlider.value = String(currentPreviewTime);
+        }
+        previewTimeBadge.textContent = `${formatTime(currentPreviewTime)} / ${formatTime(maxDuration)}`;
+        updateVideoTime(currentPreviewTime);
+        requestPreviewUpdate();
+    };
+
+    let videoSeekTimer = null;
+    const updateVideoTime = (time) => {
+        if (editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1) {
+            clearTimeout(videoSeekTimer);
+            videoSeekTimer = setTimeout(() => {
+                try {
+                    editorBackgroundVideo.currentTime = Math.max(0, Math.min((editorBackgroundVideo.duration || 0) - 0.001, time));
+                } catch (e) { }
+            }, 25);
+        }
+    };
+
+    const onVideoSeeked = () => {
+        requestPreviewUpdate();
+    };
+    editorBackgroundVideo?.addEventListener('seeked', onVideoSeeked);
+
+    const startPreviewPlay = () => {
+        if (isPreviewPlaying) return;
+        isPreviewPlaying = true;
+        playPauseBtn.innerHTML = '⏸';
+        playPauseBtn.title = t('popup.recordVideo.pausePreview');
+        lastPlayTimestamp = performance.now();
+
+        const playLoop = (now) => {
+            if (!isPreviewPlaying) return;
+            const delta = (now - lastPlayTimestamp) / 1000;
+            lastPlayTimestamp = now;
+
+            let nextTime = currentPreviewTime + delta;
+            const recordEnd = Number(endInput.value) || maxDuration;
+            if (nextTime >= recordEnd || nextTime >= maxDuration) {
+                const recordStart = Number(startInput.value) || 0;
+                nextTime = recordStart;
+            }
+            setPreviewCurrentTime(nextTime, true);
+            previewPlayRafId = requestAnimationFrame(playLoop);
+        };
+        previewPlayRafId = requestAnimationFrame(playLoop);
+    };
+
+    const stopPreviewPlay = () => {
+        isPreviewPlaying = false;
+        playPauseBtn.innerHTML = '▶';
+        playPauseBtn.title = t('popup.recordVideo.playPreview');
+        if (previewPlayRafId) {
+            cancelAnimationFrame(previewPlayRafId);
+            previewPlayRafId = null;
+        }
+    };
+
+    timelineSlider.addEventListener('input', (e) => {
+        stopPreviewPlay();
+        setPreviewCurrentTime(Number(e.target.value), false);
+    });
+
+    let previewUpdateRaf = null;
+    const requestPreviewUpdate = () => {
+        if (previewUpdateRaf) return;
+        previewUpdateRaf = requestAnimationFrame(() => {
+            previewUpdateRaf = null;
+            renderPreviewFrame();
+        });
+    };
+
+    const renderPreviewFrame = () => {
+        const [targetW, targetH] = getTargetResolution();
+
+        // 動態設定預覽視窗比例
+        previewViewport.style.aspectRatio = `${targetW} / ${targetH}`;
+
+        const maxDim = 640;
+        let pWidth, pHeight;
+        if (targetW >= targetH) {
+            pWidth = maxDim;
+            pHeight = Math.max(100, Math.round(maxDim * (targetH / targetW)));
+        } else {
+            pHeight = maxDim;
+            pWidth = Math.max(100, Math.round(maxDim * (targetW / targetH)));
+        }
+
+        if (previewCanvas.width !== pWidth || previewCanvas.height !== pHeight) {
+            previewCanvas.width = pWidth;
+            previewCanvas.height = pHeight;
+        }
+        previewRenderer.resize(pWidth, pHeight, 1, true);
+
+        previewCtx.save();
+        previewCtx.setTransform(1, 0, 0, 1, 0, 0);
+        previewCtx.fillStyle = settings.backgroundColor || '#000000';
+        previewCtx.fillRect(0, 0, pWidth, pHeight);
+
+        const overallBrightness = overallBrightSlider.value / 100;
+        const noteBrightness = noteBrightSlider.value / 100;
+        const baseMovieBrightness = Math.max(0, 1 + 0.1875 * (settings.moviebrightness ?? -3));
+        const finalBgBrightness = Math.max(0, baseMovieBrightness * overallBrightness);
+        const finalNoteBrightness = Math.max(0, noteBrightness * overallBrightness);
+
+        const rs = previewRenderer.scale || 0.98;
+        const boxSize = Math.min(pWidth, pHeight);
+        const boxX = Math.round((pWidth - boxSize) / 2);
+        const boxY = Math.round((pHeight - boxSize) / 2);
+        const boxW = boxSize, boxH = boxSize;
+
+        const drawContain = (srcW, srcH, drawFn) => {
+            if (!srcW || !srcH) return drawFn(0, 0, srcW, srcH, boxX, boxY, boxW, boxH);
+            const scale = Math.min(boxW / srcW, boxH / srcH) * rs;
+            const dw = Math.round(srcW * scale);
+            const dh = Math.round(srcH * scale);
+            const dx = Math.round(boxX + (boxW - dw) / 2);
+            const dy = Math.round(boxY + (boxH - dh) / 2);
+            return drawFn(0, 0, srcW, srcH, dx, dy, dw, dh);
+        };
+
+        let bgDrawn = false;
+        if (editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.videoWidth > 0) {
+            try {
+                previewCtx.filter = `brightness(${finalBgBrightness})`;
+                const vw = editorBackgroundVideo.videoWidth || boxW;
+                const vh = editorBackgroundVideo.videoHeight || boxH;
+                drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => {
+                    previewCtx.drawImage(editorBackgroundVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh);
+                });
+                previewCtx.filter = 'none';
+                bgDrawn = true;
+            } catch (e) { }
+        }
+
+        if (!bgDrawn && editorBackgroundImage && editorBackgroundImage.src && editorBackgroundImage.complete) {
+            try {
+                previewCtx.filter = `brightness(${finalBgBrightness})`;
+                const iw = editorBackgroundImage.naturalWidth || editorBackgroundImage.width || boxW;
+                const ih = editorBackgroundImage.naturalHeight || editorBackgroundImage.height || boxH;
+                drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => {
+                    previewCtx.drawImage(editorBackgroundImage, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh);
+                });
+                previewCtx.filter = 'none';
+            } catch (e) { }
+        }
+
+        if (outlineImage) {
+            const p = Math.min(pWidth, pHeight) / 100 * rs;
+            previewCtx.setTransform(p, 0, 0, p, pWidth / 2, pHeight / 2);
+            previewCtx.drawImage(outlineImage, 100 * -0.5 * 0.9, 100 * -0.5 * 0.9, 100 * 0.9, 100 * 0.9);
+        }
+        previewCtx.restore();
+
+        const globalT = currentPreviewTime - (musicDelay || 0);
+        const {
+            buckets,
+            playCombo,
+            playScore,
+            noteQuantity,
+            nowIndex
+        } = previewLogicControler.get({
+            renderer: previewRenderer,
+            globalTime: globalT,
+            realTime: currentPreviewTime,
+            musicDelay,
+            playing: false,
+            timeControlSliding: true,
+            readyBeat: false,
+            playedClock: [],
+            settings,
+            visualHeight: 0,
+            notes,
+            decodedTags: [],
+            playScoreRes,
+            nowIndex: 0,
+            skipAudioQueue: true,
+        });
+
+        try {
+            if (finalNoteBrightness !== 1.0) {
+                previewCtx.filter = `brightness(${finalNoteBrightness})`;
+            }
+        } catch (e) {
+            previewCtx.filter = 'none';
+        }
+
+        previewRenderer.drawFrame({
+            globalTime: globalT,
+            buckets,
+            dt: 1 / 60,
+            showSensor: settings.showSensor,
+            showSensorText: false,
+            playCombo,
+            playScore,
+            nowIndex,
+            skipClear: true,
+            noteQuantity,
+            playScoreRes,
+        });
+        previewCtx.filter = 'none';
+    };
+
+    // 初始化預覽時間為開始時間並觸發繪製
+    setPreviewCurrentTime(Number(startInput.value) || 0);
+
+    // ==========================================
+    // 8. 組裝彈窗容器
+    // ==========================================
     container.append(
+        previewCard,
         timeWrapper,
         resField.wrapper,
         fpsField.wrapper,
         bgmVolField.wrapper,
         sfxVolField.wrapper,
+        brightSectionTitle,
+        overallBrightSlider.wrapper,
+        noteBrightSlider.wrapper,
         audioSwitch.wrapper,
         sfxSwitch.wrapper,
-        introSwitch.wrapper,
+        introSwitch.wrapper
     );
+
+    const onContainerEnter = () => {
+        requestPreviewUpdate();
+    };
+    container.addEventListener('pointerenter', onContainerEnter);
 
     popupWindow({
         title: t('popup.recordVideo.title'),
         customContent: container,
-        width: '420px',
+        width: '440px',
+        onClose: () => {
+            stopPreviewPlay();
+            if (previewUpdateRaf) cancelAnimationFrame(previewUpdateRaf);
+            container.removeEventListener('pointerenter', onContainerEnter);
+            if (editorBackgroundVideo) {
+                editorBackgroundVideo.removeEventListener('seeked', onVideoSeeked);
+            }
+        },
         buttons: [
             {
                 text: t('popup.start'),
                 onClick: async (pwCtx) => {
+                    stopPreviewPlay();
+
                     const startVal = Number(startInput.value);
                     const endVal = Number(endInput.value);
 
@@ -244,12 +714,7 @@ export async function openRecordVideoModal({
                     const sfxVolValNum = Number(inputRefs.record_sfx_vol?.value || 1);
                     const bgmLoaded = !!audioManager?.bgmBuffer;
 
-                    if (playButton && playButton.dataset.playing === 'true') playButton.click();
-
                     const renderer = typeof getRenderer === 'function' ? getRenderer() : null;
-                    const notes = typeof getNotes === 'function' ? getNotes() : [];
-                    const playScoreRes = typeof getPlayScoreRes === 'function' ? getPlayScoreRes() : {};
-                    const maidata = typeof getMaidata === 'function' ? getMaidata() : {};
                     const nowDifficulty = typeof getNowDifficulty === 'function' ? getNowDifficulty() : 5;
 
                     videoRender(audioManager, canvas, renderer, {
@@ -260,10 +725,12 @@ export async function openRecordVideoModal({
                         height: heightVal,
                         bgmVolume: bgmVolValNum,
                         sfxVolume: sfxVolValNum,
+                        overallBrightness: overallBrightSlider.value / 100,
+                        noteBrightness: noteBrightSlider.value / 100,
                         includeBgm: audioSwitch.checked && bgmLoaded,
                         includeSfx: sfxSwitch.checked,
                         includeIntro: introSwitch.checked,
-                        includeAllPerfect: allPerfectSwitch.checked,
+                        includeAllPerfect: false,
                         musicDelay,
                         editorBackgroundImage,
                         editorBackgroundVideo,
@@ -271,18 +738,26 @@ export async function openRecordVideoModal({
                         playScoreRes,
                         chartInfo: {
                             title: maidata.title ?? '',
-                            artist: maidata.artist ?? '-',
-                            des: maidata["des_" + nowDifficulty] ?? '-',
-                            lv: maidata["lv_" + nowDifficulty] ?? '0',
-                            difficulty: nowDifficulty,
-                            bpm: maidata.wholebpm ?? 0,
+                            artist: maidata.artist ?? '',
+                            designer: maidata.des ?? '',
+                            diff: nowDifficulty,
                         },
                     });
-
-                    pwCtx.close();
-                },
+                }
             },
-            { text: t('popup.cancel'), hideOnClick: true }
+            {
+                text: t('menu.settings') || '設定',
+                onClick: () => {
+                    openSettings();
+                }
+            },
+            {
+                text: t('popup.cancel'),
+                hideOnClick: true,
+                onClick: () => {
+                    stopPreviewPlay();
+                }
+            }
         ]
     });
 }

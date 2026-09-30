@@ -336,7 +336,17 @@
       "includeAudio": "Include Audio:",
       "includeSfx": "Include Sound Effects:",
       "includeIntro": "Chart Loading Intro:",
-      "includeAllPerfect": "Show ALL PERFECT at End:"
+      "includeAllPerfect": "Show ALL PERFECT at End:",
+      "brightnessSection": "Brightness Adjustments",
+      "overallBrightness": "Overall Video Brightness",
+      "movieBrightness": "BG Video Brightness",
+      "noteBrightness": "Notes Brightness",
+      "previewTitle": "Render View Preview",
+      "previewTimeline": "Preview Timeline:",
+      "jumpStart": "Jump to Start",
+      "jumpEnd": "Jump to End",
+      "playPreview": "Play Preview",
+      "pausePreview": "Pause Preview"
     },
     "quickGenerate": {
       "title": "Quick Generate",

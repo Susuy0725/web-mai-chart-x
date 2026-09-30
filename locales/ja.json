@@ -337,7 +337,17 @@
       "includeAudio": "オーディオを含める:",
       "includeSfx": "効果音を含める:",
       "includeIntro": "譜面ロードアニメーション:",
-      "includeAllPerfect": "動画の最後にALL PERFECTを表示:"
+      "includeAllPerfect": "動画の最後にALL PERFECTを表示:",
+      "brightnessSection": "画面の明るさ調整",
+      "overallBrightness": "動画全体の明るさ",
+      "movieBrightness": "背景動画の明るさ",
+      "noteBrightness": "ノーツの明るさ",
+      "previewTitle": "レンダリングプレビュー",
+      "previewTimeline": "プレビュータイムライン:",
+      "jumpStart": "開始位置へ",
+      "jumpEnd": "終了位置へ",
+      "playPreview": "プレビュー再生",
+      "pausePreview": "プレビュー一時停止"
     },
     "quickGenerate": {
       "title": "クイック生成",

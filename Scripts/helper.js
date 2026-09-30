@@ -1946,11 +1946,21 @@ export async function videoRender(audioManager, canvas, renderer, {
     notes = [],
     playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
     chartInfo = {},
+    overallBrightness = 1.0,
+    movieBrightness = null,
+    noteBrightness = 1.0,
 } = {}) {
     if (!window.Mediabunny) {
         await ensureMediabunny();
     }
     const settings = renderer.settings || window.settings || {};
+
+    // 計算背景與音符的最終亮度係數
+    const baseMovieBrightness = movieBrightness !== null && movieBrightness !== undefined
+        ? Number(movieBrightness)
+        : Math.max(0, 1 + 0.1875 * (settings.moviebrightness ?? -3));
+    const finalBgBrightness = Math.max(0, baseMovieBrightness * overallBrightness);
+    const finalNoteBrightness = Math.max(0, (noteBrightness ?? 1.0) * overallBrightness);
     const {
         Output,
         BufferTarget,
@@ -2594,7 +2604,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                         }
 
                         if (currentCanvasFrame && currentCanvasFrame.canvas) {
-                            try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                            try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (e) { offCtx.filter = 'none'; }
                             const vw = currentCanvasFrame.canvas.width;
                             const vh = currentCanvasFrame.canvas.height;
                             drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) =>
@@ -2611,7 +2621,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                 if (!drawBGDone && exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
                     const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
                     await seekVideoTo(exportVideo, bgTarget);
-                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (e) { offCtx.filter = 'none'; }
                     const vw = exportVideo.videoWidth || exportVideo.width || boxW;
                     const vh = exportVideo.videoHeight || exportVideo.height || boxH;
                     drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(exportVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh));
@@ -2623,7 +2633,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                     const img = editorBackgroundImage;
                     const iw = img.naturalWidth || img.width || boxW;
                     const ih = img.naturalHeight || img.height || boxH;
-                    try { offCtx.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`; } catch (e) { offCtx.filter = 'none'; }
+                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (e) { offCtx.filter = 'none'; }
                     drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(img, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh));
                     offCtx.filter = 'none';
                 }
@@ -2635,6 +2645,14 @@ export async function videoRender(audioManager, canvas, renderer, {
                 }
             } finally {
                 offCtx.restore();
+            }
+
+            try {
+                if (finalNoteBrightness !== 1.0) {
+                    offCtx.filter = `brightness(${finalNoteBrightness})`;
+                }
+            } catch (e) {
+                offCtx.filter = 'none';
             }
 
             renderer.drawFrame({
@@ -2651,16 +2669,30 @@ export async function videoRender(audioManager, canvas, renderer, {
                 playScoreRes,
             });
 
+            offCtx.filter = 'none';
+
             if (isIntroFrame) {
+                try {
+                    if (overallBrightness !== 1.0) {
+                        offCtx.filter = `brightness(${overallBrightness})`;
+                    }
+                } catch (e) { }
                 renderer.drawLoadingIntro({
                     t: i * step,
                     duration: introDuration,
                     backgroundImage: editorBackgroundImage,
                     chartInfo,
                 });
+                offCtx.filter = 'none';
             } else if (includeAllPerfect && t >= end - 2.5) {
                 const apT = (t - (end - 2.5)) / 2.5;
+                try {
+                    if (overallBrightness !== 1.0) {
+                        offCtx.filter = `brightness(${overallBrightness})`;
+                    }
+                } catch (e) { }
                 drawAllPerfectOverlay(offCtx, apT, width, height);
+                offCtx.filter = 'none';
             }
 
             const tsRelative = i * step;

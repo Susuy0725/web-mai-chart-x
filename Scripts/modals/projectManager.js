@@ -388,7 +388,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
     // 雲端專案容器
     const driveContainer = document.createElement('div');
-    driveContainer.className = 'pm-tab-content pm-tab-content--drive';
+    driveContainer.className = 'pm-tab-content pm-tab-content--drive popup-list';
     driveContainer.style.display = 'none';
 
     if (typeof getFileHandlerCtx === 'function') {
@@ -418,7 +418,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         driveTabBtn.classList.add('pm-tab-btn--active');
         localTabBtn.classList.remove('pm-tab-btn--active');
         localContainer.style.display = 'none';
-        driveContainer.style.display = 'block';
+        driveContainer.style.display = 'flex';
     };
 
     mainWrapper.append(tabBar, localContainer, driveContainer);

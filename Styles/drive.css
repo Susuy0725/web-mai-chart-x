@@ -10,6 +10,7 @@
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
+    flex: 1 1 auto;
 }
 
 .pm-tab-bar {
@@ -519,4 +520,40 @@
     max-width: 90%;
     word-break: break-word;
     margin-top: 2px;
+}
+
+/* ── 全螢幕模式 (Mobile / Page Route <= 440px) 響應式適配 ─────────── */
+@media (max-width: 440px) {
+    .pm-main-container {
+        flex: 1 1 auto;
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+
+    .pm-tab-content--drive {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+    }
+
+    .drive-tab-root {
+        height: 100% !important;
+        min-height: 0 !important;
+        flex: 1 1 auto;
+    }
+
+    .drive-tab-root .drive-file-grid {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+        overflow-y: auto !important;
+    }
+
+    .drive-tab-root .drive-not-signed-in {
+        height: 100% !important;
+        min-height: 0 !important;
+        flex: 1 1 auto;
+    }
 }

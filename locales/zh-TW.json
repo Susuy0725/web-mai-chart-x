@@ -56,7 +56,8 @@
     "helpBasic": "基礎操作",
     "helpShortcuts": "快速鍵",
     "changelog": "變更日誌",
-    "about": "關於"
+    "about": "關於",
+    "gotoPlay": "開啟Play"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."

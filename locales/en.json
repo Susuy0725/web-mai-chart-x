@@ -56,7 +56,8 @@
     "helpBasic": "Basic Operations",
     "helpShortcuts": "Hotkeys",
     "changelog": "Changelog",
-    "about": "About"
+    "about": "About",
+    "gotoPlay": "Open Play"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."
@@ -244,7 +245,8 @@
       "alignmentCurrent": "Current: ~{beats} beats",
       "alignmentPrefix": "Align first beat to beat",
       "alignmentBtn": "Add Silence",
-      "alignmentDesc": "Inserts silence at the beginning of the audio so that the duration from start to the first beat is exactly the specified number of beats."
+      "alignmentDesc": "Inserts silence at the beginning of the audio so that the duration from start to the first beat is exactly the specified number of beats.",
+      "alignmentSuffix": ""
     },
     "tapBpm": {
       "title": "Tap BPM",

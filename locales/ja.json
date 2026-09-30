@@ -56,7 +56,8 @@
     "helpBasic": "基本操作",
     "helpShortcuts": "ショートカット",
     "changelog": "更新履歴",
-    "about": "このアプリについて"
+    "about": "このアプリについて",
+    "gotoPlay": "Playを起動する"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."
@@ -171,7 +172,9 @@
       "lang": "言語",
       "lowRes": "低解像度モード (1x 解像度に制限して軽量化)",
       "majdataWsUrl": "MajdataView WebSocket URL",
-      "autoConnectMajdataView": "起動時に MajdataView に自動接続"
+      "autoConnectMajdataView": "起動時に MajdataView に自動接続",
+      "drawHanabiEffect": "花火のエフェクトのレンダリング",
+      "drawHitEffect": "ヒットエフェクトをレンダリングする"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -396,7 +399,8 @@
         "<b>再生速度を上げる</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">P</span>。",
         "<b>再生速度を下げる</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>。",
         "<b>スクロール速度変更</b>: <span class=\"code-highlight\">Ctrl</span> + マウスホイールでタイムラインの流速をズームします。"
-      ]
+      ],
+      "shortcutItems[7]": "<b>クイック パネル</b>: 設定を開いた後、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を押して、実行したい機能にマウスを移動し、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を放します。"
     },
     "about": {
       "title": "Web mai Chart X について",

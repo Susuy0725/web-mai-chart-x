@@ -114,9 +114,13 @@ export async function checkAndHandleDriveOpenWith({ loadProject }) {
 
         // 3. 取得雲端檔案資訊
         let fileName = 'cloud_project.wmcx.zip';
+        let isCanEdit = true;
         try {
             const meta = await getFileMeta(fileId, token);
             if (meta?.name) fileName = meta.name;
+            if (meta?.capabilities && meta.capabilities.canEdit === false) {
+                isCanEdit = false;
+            }
         } catch (e) {
             console.warn('[DriveOpenWith] 取得檔案中繼資料失敗，使用預設檔名:', e);
         }
@@ -193,7 +197,8 @@ export async function checkAndHandleDriveOpenWith({ loadProject }) {
         // 7. 更新本地關聯
         await setDriveMeta(finalProjectId, {
             driveFileId: fileId,
-            driveName: fileName
+            driveName: fileName,
+            canEdit: isCanEdit
         });
 
         prog.completed(t('popup.drive.downloadSuccess'));

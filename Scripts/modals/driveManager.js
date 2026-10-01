@@ -8,7 +8,7 @@ import { handleFolderInput, buildProjectZipById, saveProjectZipToIDB } from '../
 import { ensureJSZip } from '../helper.js';
 import { t } from '../i18n.js';
 import {
-    isSignedIn, signIn, signOut, getUserInfo, onAuthChanged, ensureSignedIn
+    isSignedIn, signIn, signOut, getUserInfo, onAuthChanged, ensureSignedIn, getAccessToken
 } from '../services/driveAuth.js';
 import { listWmcxFiles, downloadFile, uploadFile, trashFile } from '../services/driveApi.js';
 import { getDriveMeta, setDriveMeta, checkFileStillValid, clearDriveMeta } from '../services/driveSync.js';
@@ -153,6 +153,7 @@ async function executeDownloadImport(file, token, linkedLocalId, ctx) {
         await setDriveMeta(finalId, {
             driveFileId: file.id,
             driveName: file.name,
+            canEdit: file.capabilities ? file.capabilities.canEdit !== false : true,
         });
 
         // 若覆寫的恰好是當前主畫面開啟的專案，重新載入主畫面資料保持一致
@@ -330,7 +331,63 @@ export function buildDriveTab(ctx) {
         }
     };
 
-    // (B) 已登入時的重新整理按鈕
+    // (B-1) 專案範圍篩選下拉選單 (全部/我的/與我共享)
+    const filterSelect = document.createElement('select');
+    filterSelect.className = 'drive-filter-select';
+    filterSelect.title = '篩選專案範圍';
+
+    const optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = t('popup.drive.filterAll') || '全部專案';
+
+    const optMine = document.createElement('option');
+    optMine.value = 'mine';
+    optMine.textContent = t('popup.drive.filterMine') || '我的專案';
+
+    const optShared = document.createElement('option');
+    optShared.value = 'shared';
+    optShared.textContent = t('popup.drive.filterShared') || '與我共享';
+
+    filterSelect.append(optAll, optMine, optShared);
+    filterSelect.value = 'all';
+
+    let currentFilter = 'all';
+    let cachedFiles = [];
+    let cachedDriveIdToLocalId = new Map();
+    let cachedToken = null;
+
+    filterSelect.onchange = () => {
+        currentFilter = filterSelect.value;
+        renderFilteredFiles();
+    };
+
+    function renderFilteredFiles() {
+        fileGrid.innerHTML = '';
+        let displayFiles = cachedFiles;
+        if (currentFilter === 'mine') {
+            displayFiles = cachedFiles.filter(f => f.ownedByMe === true);
+        } else if (currentFilter === 'shared') {
+            displayFiles = cachedFiles.filter(f => f.ownedByMe === false);
+        }
+
+        if (displayFiles.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'drive-empty-msg';
+            empty.textContent = t('popup.drive.empty');
+            fileGrid.appendChild(empty);
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        for (const file of displayFiles) {
+            const linkedLocalId = cachedDriveIdToLocalId.get(file.id) || null;
+            const card = buildFileCard(file, linkedLocalId, cachedToken);
+            fragment.appendChild(card);
+        }
+        fileGrid.appendChild(fragment);
+    }
+
+    // (B-2) 已登入時的重新整理按鈕
     const refreshBtn = document.createElement('button');
     refreshBtn.type = 'button';
     refreshBtn.className = 'drive-refresh-btn';
@@ -397,7 +454,7 @@ export function buildDriveTab(ctx) {
             }
             accountName.textContent = user?.name || user?.email || 'Google User';
 
-            accountActions.append(refreshBtn, signOutBtn);
+            accountActions.append(filterSelect, refreshBtn, signOutBtn);
 
             notSignedInPanel.style.display = 'none';
             fileGrid.style.display = '';
@@ -421,7 +478,13 @@ export function buildDriveTab(ctx) {
     renderState();
 
     // ── 讀取雲端專案清單 ───────────────────────────────────────
+    let driveLoadVersion = 0;
     async function loadDriveFiles() {
+        if (!isSignedIn()) return;
+        const token = getAccessToken();
+        if (!token) return;
+
+        const thisVersion = ++driveLoadVersion;
         fileGrid.innerHTML = '';
         const loadingEl = document.createElement('div');
         loadingEl.className = 'drive-loading';
@@ -429,9 +492,10 @@ export function buildDriveTab(ctx) {
         fileGrid.appendChild(loadingEl);
 
         try {
-            const token = await ensureSignedIn();
             const files = await listWmcxFiles(token);
             const localProjects = await projectList();
+
+            if (thisVersion !== driveLoadVersion) return;
 
             // 建立本地已關聯之 Map (driveFileId -> projectId)
             const driveIdToLocalId = new Map();
@@ -442,21 +506,14 @@ export function buildDriveTab(ctx) {
                 }
             }
 
-            fileGrid.innerHTML = '';
-            if (files.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'drive-empty-msg';
-                empty.textContent = t('popup.drive.empty');
-                fileGrid.appendChild(empty);
-                return;
-            }
+            if (thisVersion !== driveLoadVersion) return;
 
-            for (const file of files) {
-                const linkedLocalId = driveIdToLocalId.get(file.id) || null;
-                const card = buildFileCard(file, linkedLocalId, token);
-                fileGrid.appendChild(card);
-            }
+            cachedFiles = files;
+            cachedDriveIdToLocalId = driveIdToLocalId;
+            cachedToken = token;
+            renderFilteredFiles();
         } catch (e) {
+            if (thisVersion !== driveLoadVersion) return;
             fileGrid.innerHTML = '';
             const errEl = document.createElement('div');
             errEl.className = 'drive-error-msg';
@@ -488,6 +545,17 @@ export function buildDriveTab(ctx) {
         badge.className = isLinked ? 'drive-badge drive-badge--synced' : 'drive-badge drive-badge--cloud';
         badge.textContent = isLinked ? t('popup.drive.badgeSynced') : t('popup.drive.badgeCloudOnly');
         iconArea.appendChild(badge);
+
+        const canEdit = file.capabilities ? file.capabilities.canEdit !== false : true;
+        const canTrash = file.capabilities ? file.capabilities.canTrash !== false : true;
+
+        if (!canEdit) {
+            const roBadge = document.createElement('div');
+            roBadge.className = 'drive-badge drive-badge--readonly';
+            roBadge.textContent = t('popup.drive.badgeReadOnly') || '唯讀';
+            roBadge.title = t('popup.drive.tooltipReadOnly') || '此專案為唯讀權限，不開放上傳複寫';
+            iconArea.appendChild(roBadge);
+        }
 
         // 資訊區塊
         const body = document.createElement('div');
@@ -545,8 +613,8 @@ export function buildDriveTab(ctx) {
         };
         btnRow.appendChild(downloadBtn);
 
-        // 若已關聯本地專案，顯示上傳回雲端按鈕
-        if (isLinked) {
+        // 若已關聯本地專案且擁有編輯權限，才顯示上傳回雲端按鈕
+        if (isLinked && canEdit) {
             const uploadBtn = document.createElement('button');
             uploadBtn.type = 'button';
             uploadBtn.className = 'drive-file-btn drive-file-btn--upload';
@@ -563,47 +631,49 @@ export function buildDriveTab(ctx) {
             btnRow.appendChild(uploadBtn);
         }
 
-        // 移至雲端垃圾桶按鈕
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'drive-file-btn drive-file-btn--delete';
-        deleteBtn.title = t('popup.drive.deleteBtn');
-        const delIcon = document.createElement('span');
-        delIcon.className = 'material-symbols-outlined';
-        delIcon.setAttribute('translate', 'no');
-        delIcon.textContent = 'delete';
-        deleteBtn.appendChild(delIcon);
+        // 移至雲端垃圾桶按鈕（僅在具備刪除權限時顯示）
+        if (canTrash) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'drive-file-btn drive-file-btn--delete';
+            deleteBtn.title = t('popup.drive.deleteBtn');
+            const delIcon = document.createElement('span');
+            delIcon.className = 'material-symbols-outlined';
+            delIcon.setAttribute('translate', 'no');
+            delIcon.textContent = 'delete';
+            deleteBtn.appendChild(delIcon);
 
-        deleteBtn.onclick = async () => {
-            if (activeDriveTransfers.has(file.id)) {
-                simpleToast({ content: '檔案正在傳輸處理中，無法刪除', type: 'error' });
-                return;
-            }
-
-            const fileName = file.name || t('popup.projectManager.untitled');
-            if (!confirm(t('popup.drive.confirmDelete', { name: fileName }))) {
-                return;
-            }
-
-            deleteBtn.disabled = true;
-            try {
-                await trashFile(file.id, token);
-
-                // 若有本地專案已關聯該雲端檔案，自動清除該關聯
-                if (linkedLocalId) {
-                    await clearDriveMeta(linkedLocalId);
+            deleteBtn.onclick = async () => {
+                if (activeDriveTransfers.has(file.id)) {
+                    simpleToast({ content: '檔案正在傳輸處理中，無法刪除', type: 'error' });
+                    return;
                 }
 
-                simpleToast({ content: t('popup.drive.toastTrashSuccess', { name: fileName }), type: 'success', timeout: 2000 });
-                broadcastDriveChanged();
-                broadcastProjectChanged();
-            } catch (err) {
-                deleteBtn.disabled = false;
-                simpleToast({ content: t('popup.drive.toastDeleteFailed', { msg: err.message }), type: 'error', timeout: 3000 });
-                console.error('[DriveManager] 移至垃圾桶失敗:', err);
-            }
-        };
-        btnRow.appendChild(deleteBtn);
+                const fileName = file.name || t('popup.projectManager.untitled');
+                if (!confirm(t('popup.drive.confirmDelete', { name: fileName }))) {
+                    return;
+                }
+
+                deleteBtn.disabled = true;
+                try {
+                    await trashFile(file.id, token);
+
+                    // 若有本地專案已關聯該雲端檔案，自動清除該關聯
+                    if (linkedLocalId) {
+                        await clearDriveMeta(linkedLocalId);
+                    }
+
+                    simpleToast({ content: t('popup.drive.toastTrashSuccess', { name: fileName }), type: 'success', timeout: 2000 });
+                    broadcastDriveChanged();
+                    broadcastProjectChanged();
+                } catch (err) {
+                    deleteBtn.disabled = false;
+                    simpleToast({ content: t('popup.drive.toastDeleteFailed', { msg: err.message }), type: 'error', timeout: 3000 });
+                    console.error('[DriveManager] 移至垃圾桶失敗:', err);
+                }
+            };
+            btnRow.appendChild(deleteBtn);
+        }
 
         card.append(iconArea, body, btnRow);
 
@@ -618,10 +688,12 @@ export function buildDriveTab(ctx) {
 
     // 訂閱全域雲端專案清單變更事件
     const handleDriveChanged = () => {
-        if (root.isConnected) {
-            loadDriveFiles();
-        } else {
+        if (!root.isConnected) {
             window.removeEventListener('wmc:drive-changed', handleDriveChanged);
+            return;
+        }
+        if (isSignedIn()) {
+            loadDriveFiles();
         }
     };
     window.addEventListener('wmc:drive-changed', handleDriveChanged);

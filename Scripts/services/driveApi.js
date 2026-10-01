@@ -139,7 +139,7 @@ export async function listWmcxFiles(token) {
     return _executeWithRetry(token, async (activeToken) => {
         const params = new URLSearchParams({
             q: WMCX_QUERY,
-            fields: 'files(id, name, size, modifiedTime)',
+            fields: 'files(id, name, size, modifiedTime, capabilities(canEdit, canTrash), ownedByMe)',
             orderBy: 'modifiedTime desc',
             pageSize: '100',
         });
@@ -158,12 +158,12 @@ export async function listWmcxFiles(token) {
  * 取得指定雲端檔案的元資料
  * @param {string} fileId
  * @param {string} token
- * @returns {Promise<{id: string, name: string, size: string, modifiedTime: string}|null>}
+ * @returns {Promise<{id: string, name: string, size: string, modifiedTime: string, capabilities?: {canEdit?: boolean, canTrash?: boolean}, ownedByMe?: boolean}|null>}
  */
 export async function getFileMeta(fileId, token) {
     return _executeWithRetry(token, async (activeToken) => {
         const params = new URLSearchParams({
-            fields: 'id, name, size, modifiedTime, trashed',
+            fields: 'id, name, size, modifiedTime, trashed, capabilities(canEdit, canTrash), ownedByMe',
         });
 
         const resp = await fetch(`${API_BASE}/files/${fileId}?${params.toString()}`, {

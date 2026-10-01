@@ -367,7 +367,12 @@
       "toastTrashSuccess": "已移至垃圾桶：{name}",
       "toastSignInFailed": "登入失敗: {msg}",
       "toastDeleteFailed": "刪除失敗: {msg}",
-      "unpacking": "正在解壓縮..."
+      "unpacking": "正在解壓縮...",
+      "filterAll": "全部專案",
+      "filterMine": "我的專案",
+      "filterShared": "與我共享",
+      "badgeReadOnly": "唯讀",
+      "tooltipReadOnly": "此專案為唯讀權限，不開放上傳複寫"
     },
     "driveOpen": {
       "title": "開啟 Google 雲端硬碟專案",

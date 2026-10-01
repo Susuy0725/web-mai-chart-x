@@ -14,17 +14,7 @@ import { buildProjectZipById, triggerImportFolder, triggerImportZip } from '../f
  */
 const activeUploads = new Map();
 
-/**
- * 專案清單刷新監聽器集合（支援外部刷新或視窗生命週期）
- */
-const listRefreshListeners = new Set();
-
 function triggerAllListRefresh() {
-    for (const refreshFn of Array.from(listRefreshListeners)) {
-        try {
-            refreshFn();
-        } catch (_) {}
-    }
     window.dispatchEvent(new CustomEvent('wmc:project-changed'));
     window.dispatchEvent(new CustomEvent('wmc:drive-changed'));
 }
@@ -259,9 +249,13 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         return btn;
     };
 
+    let activeRenderVersion = 0;
+
     const buildList = async (container) => {
-        container.innerHTML = '';
+        const thisRenderVersion = ++activeRenderVersion;
         const list = await projectList();
+
+        if (thisRenderVersion !== activeRenderVersion) return;
 
         if (list.length === 0) {
             const emptyEl = document.createElement('div');
@@ -273,6 +267,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 font-size: 13px;
             `;
             emptyEl.textContent = '尚無任何專案';
+            container.innerHTML = '';
             container.appendChild(emptyEl);
             return;
         }
@@ -281,8 +276,10 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
         const currentProjectId = typeof getCurrentProjectId === 'function' ? getCurrentProjectId() : null;
+        const fragment = document.createDocumentFragment();
 
         for (const proj of list) {
+            if (thisRenderVersion !== activeRenderVersion) return;
             const isCurrent = proj.id === currentProjectId;
 
             const card = document.createElement('div');
@@ -384,15 +381,20 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
             // 雲端同步徽章標籤
             const driveMeta = await getDriveMeta(proj.id);
+            if (thisRenderVersion !== activeRenderVersion) return;
+
             if (driveMeta?.driveFileId) {
+                const isReadOnly = driveMeta.canEdit === false;
                 const cloudBadge = document.createElement('div');
-                cloudBadge.title = `已關聯雲端檔案：${driveMeta.driveName || '專案.wmcx.zip'}`;
+                cloudBadge.title = isReadOnly
+                    ? `已關聯雲端檔案（唯讀）：${driveMeta.driveName || '專案.wmcx.zip'}`
+                    : `已關聯雲端檔案：${driveMeta.driveName || '專案.wmcx.zip'}`;
                 cloudBadge.style.cssText = `
                     position: absolute;
                     top: 6px;
                     left: 6px;
-                    background: rgba(27, 94, 32, 0.88);
-                    color: #a5d6a7;
+                    background: ${isReadOnly ? 'rgba(230, 81, 0, 0.9)' : 'rgba(27, 94, 32, 0.88)'};
+                    color: ${isReadOnly ? '#ffe0b2' : '#a5d6a7'};
                     font-size: 10px;
                     font-weight: 700;
                     padding: 2px 6px;
@@ -402,7 +404,11 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                     align-items: center;
                     gap: 3px;
                 `;
-                cloudBadge.innerHTML = `<span class="material-symbols-outlined" style="font-size:12px;line-height:1;" translate="no">cloud_done</span><span>${t('popup.drive.badgeLocalSynced')}</span>`;
+                const iconName = isReadOnly ? 'visibility' : 'cloud_done';
+                const badgeLabel = isReadOnly
+                    ? (t('popup.drive.badgeReadOnly') || '唯讀')
+                    : t('popup.drive.badgeLocalSynced');
+                cloudBadge.innerHTML = `<span class="material-symbols-outlined" style="font-size:12px;line-height:1;" translate="no">${iconName}</span><span>${badgeLabel}</span>`;
                 coverContainer.appendChild(cloudBadge);
             }
 
@@ -457,17 +463,20 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 margin-top: 4px;
             `;
 
-            // 上傳／同步至雲端按鈕
-            const uploadTooltip = driveMeta?.driveFileId
-                ? t('popup.drive.uploadBtn')
-                : t('popup.drive.uploadInitialBtn');
-            const uploadColor = driveMeta?.driveFileId ? '#66bb6a' : '#4a90e2';
+            // 上傳／同步至雲端按鈕（唯讀專案不開放上傳複寫）
+            const isReadOnly = driveMeta?.canEdit === false;
+            if (!isReadOnly) {
+                const uploadTooltip = driveMeta?.driveFileId
+                    ? t('popup.drive.uploadBtn')
+                    : t('popup.drive.uploadInitialBtn');
+                const uploadColor = driveMeta?.driveFileId ? '#66bb6a' : '#4a90e2';
 
-            const uploadBtn = makeIconButton('cloud_upload', uploadTooltip, async () => {
-                if (activeUploads.has(proj.id)) return;
-                startProjectUpload(proj, card, getFileHandlerCtx);
-            }, uploadColor);
-            btnRow.appendChild(uploadBtn);
+                const uploadBtn = makeIconButton('cloud_upload', uploadTooltip, async () => {
+                    if (activeUploads.has(proj.id)) return;
+                    startProjectUpload(proj, card, getFileHandlerCtx);
+                }, uploadColor);
+                btnRow.appendChild(uploadBtn);
+            }
 
             // 重新命名按鈕
             const renameBtn = makeIconButton('edit', '重新命名', async () => {
@@ -483,11 +492,43 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             // 刪除按鈕
             const deleteBtn = makeIconButton('delete', '刪除專案', async () => {
                 if (activeUploads.has(proj.id)) return;
+                const projTitle = proj.name || t('popup.projectManager.untitled');
+                if (!confirm(t('popup.projectManager.confirmDelete', { name: projTitle }))) return;
+
                 if (isCurrent) {
-                    alert('無法刪除目前正在使用的專案。\n請先切換到其他專案後再刪除。');
+                    const allProjects = await projectList();
+                    const remaining = allProjects
+                        .filter(p => p.id !== proj.id)
+                        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+                    if (remaining.length > 0) {
+                        const targetProj = remaining[0];
+                        if (typeof loadProject === 'function') {
+                            await loadProject(targetProj.id);
+                        }
+                        await projectDelete(proj.id);
+                        triggerAllListRefresh();
+                        simpleToast({
+                            content: `已刪除專案，並切換至「${targetProj.name || t('popup.projectManager.untitled')}」`,
+                            type: 'success',
+                            timeout: 1500
+                        });
+                    } else {
+                        const newId = await projectCreate(t('popup.projectManager.untitled'));
+                        if (typeof loadProject === 'function') {
+                            await loadProject(newId);
+                        }
+                        await projectDelete(proj.id);
+                        triggerAllListRefresh();
+                        simpleToast({
+                            content: '已刪除專案，並建立新空白專案',
+                            type: 'success',
+                            timeout: 1500
+                        });
+                    }
                     return;
                 }
-                if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
+
                 await projectDelete(proj.id);
                 triggerAllListRefresh();
                 simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
@@ -496,14 +537,19 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
             body.appendChild(btnRow);
             card.appendChild(body);
-            container.appendChild(card);
 
             // 若該專案正在上傳中，立即掛載進度浮層並自動同步真實進度
             if (activeUploads.has(proj.id)) {
                 const task = activeUploads.get(proj.id);
                 attachUploadProgressToCard(card, task);
             }
+
+            fragment.appendChild(card);
         }
+
+        if (thisRenderVersion !== activeRenderVersion) return;
+        container.innerHTML = '';
+        container.appendChild(fragment);
     };
 
     const mainWrapper = document.createElement('div');
@@ -530,16 +576,26 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
     localContainer.className = 'project-manager-grid popup-list';
     buildList(localContainer);
 
-    const refreshLocalList = () => {
-        if (localContainer.isConnected) {
-            buildList(localContainer);
-        } else {
-            listRefreshListeners.delete(refreshLocalList);
-            window.removeEventListener('wmc:project-changed', refreshLocalList);
+    let refreshPending = false;
+    const scheduleRefresh = () => {
+        if (!localContainer.isConnected) {
+            window.removeEventListener('wmc:project-changed', onProjectChanged);
+            return;
         }
+        if (refreshPending) return;
+        refreshPending = true;
+        queueMicrotask(() => {
+            refreshPending = false;
+            if (localContainer.isConnected) {
+                buildList(localContainer);
+            }
+        });
     };
-    listRefreshListeners.add(refreshLocalList);
-    window.addEventListener('wmc:project-changed', refreshLocalList);
+
+    const onProjectChanged = () => {
+        scheduleRefresh();
+    };
+    window.addEventListener('wmc:project-changed', onProjectChanged);
 
     // 雲端專案容器
     const driveContainer = document.createElement('div');
@@ -551,7 +607,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             loadProject,
             getCurrentProjectId,
             getFileHandlerCtx,
-            refreshLocalList: () => buildList(localContainer),
+            refreshLocalList: scheduleRefresh,
         });
         driveContainer.appendChild(driveTab);
     } else {
@@ -583,6 +639,9 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         customContent: mainWrapper,
         width: 760,
         maxWidth: 840,
+        onClose: () => {
+            window.removeEventListener('wmc:project-changed', onProjectChanged);
+        },
         buttons: [
             {
                 text: t('popup.projectManager.importFolder') || '匯入資料夾',
@@ -592,7 +651,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         return;
                     }
                     triggerImportFolder(getFileHandlerCtx(), {
-                        onComplete: () => buildList(localContainer)
+                        onComplete: () => triggerAllListRefresh()
                     });
                 }
             },
@@ -604,7 +663,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         return;
                     }
                     triggerImportZip(getFileHandlerCtx(), {
-                        onComplete: () => buildList(localContainer)
+                        onComplete: () => triggerAllListRefresh()
                     });
                 }
             },
@@ -618,7 +677,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         const proj = await loadProject(newId);
                         simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
                     }
-                    buildList(localContainer);
+                    triggerAllListRefresh();
                 }
             }
         ]

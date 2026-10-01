@@ -71,12 +71,20 @@ export async function handleFolderInput(files, ctx) {
             });
         }
         if (lowerName.startsWith('maidata.')) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                maidataProcess(e.target.result);
-                resize();
-            };
-            reader.readAsText(file);
+            await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        maidataProcess(e.target.result);
+                        resize();
+                    } catch (err) {
+                        console.error('解析 maidata 失敗:', err);
+                    }
+                    resolve();
+                };
+                reader.onerror = () => resolve();
+                reader.readAsText(file);
+            });
         }
         if (lowerName.startsWith('bg.')) {
             if (isVideo) {
@@ -186,8 +194,13 @@ export function triggerImportFolder(ctx, { onComplete } = {}) {
 
             const maidata = getMaidata();
             const curId = getCurrentProjectId();
-            if (maidata?.title && curId) {
-                projectUpdateName(curId, maidata.title).catch(() => { });
+            let folderName = '';
+            if (files[0]?.webkitRelativePath) {
+                folderName = files[0].webkitRelativePath.split('/')[0] || '';
+            }
+            const targetTitle = (maidata?.title && maidata.title.trim()) || folderName.trim() || t('popup.projectManager.untitled');
+            if (curId) {
+                await projectUpdateName(curId, targetTitle).catch(() => { });
             }
             simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
             if (typeof onComplete === 'function') {
@@ -265,8 +278,10 @@ export function triggerImportZip(ctx, { onComplete } = {}) {
                         draw();
                         const maidata = getMaidata();
                         const curId = getCurrentProjectId();
-                        if (maidata?.title && curId) {
-                            projectUpdateName(curId, maidata.title).catch(() => { });
+                        const zipName = file.name ? file.name.replace(/\.(wmcx\.)?zip$/i, '').trim() : '';
+                        const targetTitle = (maidata?.title && maidata.title.trim()) || zipName || t('popup.projectManager.untitled');
+                        if (curId) {
+                            await projectUpdateName(curId, targetTitle).catch(() => { });
                         }
                         simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
                         if (typeof onComplete === 'function') {

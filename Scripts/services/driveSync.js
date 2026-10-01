@@ -26,7 +26,7 @@ export async function getDriveMeta(projectId) {
  * @param {string} data.driveName
  * @returns {Promise<{driveFileId: string, driveName: string, syncedAt: number}>}
  */
-export async function setDriveMeta(projectId, { driveFileId, driveName }) {
+export async function setDriveMeta(projectId, { driveFileId, driveName, canEdit = true }) {
     if (!projectId || !driveFileId) {
         throw new Error('儲存關聯失敗: 專案 ID 與雲端檔案 ID 均為必填項目');
     }
@@ -34,6 +34,7 @@ export async function setDriveMeta(projectId, { driveFileId, driveName }) {
     const meta = {
         driveFileId,
         driveName: driveName || '專案.wmcx.zip',
+        canEdit: canEdit !== false,
         syncedAt: Date.now(),
     };
 

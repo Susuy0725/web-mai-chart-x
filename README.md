@@ -24,6 +24,10 @@
 
 [點我查看更新日誌](./CHANGELOG.md)
 
+### 🌐 Discord 伺服器
+
+https://discord.gg/vX7XcG7bMy
+
 ### 💖 銘謝
 
 本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
@@ -53,6 +57,10 @@ While perfecting the functions that a general editor should have, we also added 
 
 ### ✏️ Changelog
 [Click me to visit Changelog](./CHANGELOG.md) 
+
+### 🌐 Discord Server
+
+https://discord.gg/vX7XcG7bMy
 
 ### 💖 Acknowledgements
 

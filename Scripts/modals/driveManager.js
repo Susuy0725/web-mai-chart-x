@@ -15,6 +15,248 @@ import { getDriveMeta, setDriveMeta, checkFileStillValid, clearDriveMeta } from 
 import { createTransferProgress } from '../services/transferProgress.js';
 
 /**
+ * 模組層級管理所有進行中的雲端下載與同步任務
+ * key: fileId, value: DriveTransferTask
+ */
+const activeDriveTransfers = new Map();
+
+class DriveTransferTask {
+    constructor(fileId, type, file, meta = {}) {
+        this.fileId = fileId;
+        this.type = type; // 'download' | 'upload'
+        this.file = file;
+        this.meta = meta;
+        this.status = 'preparing';
+        this.statusOpts = {};
+        this.listeners = new Set();
+    }
+
+    notify(status, opts = {}) {
+        this.status = status;
+        this.statusOpts = opts;
+        for (const listener of this.listeners) {
+            try {
+                listener(status, opts);
+            } catch (e) {
+                console.error('[DriveTransferTask] listener error:', e);
+            }
+        }
+    }
+
+    subscribe(listener) {
+        this.listeners.add(listener);
+        try {
+            listener(this.status, this.statusOpts);
+        } catch (e) {
+            console.error('[DriveTransferTask] initial listener error:', e);
+        }
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+}
+
+function broadcastDriveChanged() {
+    window.dispatchEvent(new CustomEvent('wmc:drive-changed'));
+}
+
+function broadcastProjectChanged() {
+    window.dispatchEvent(new CustomEvent('wmc:project-changed'));
+}
+
+/**
+ * 將進度遮罩附加到卡片上，並即時訂閱真實進度
+ */
+function attachTransferProgressToDriveCard(card, task) {
+    card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = true);
+
+    const isDownload = task.type === 'download';
+    const { el: progressEl, controller: prog } = createTransferProgress({
+        preparingText: isDownload ? t('popup.drive.preparingDownload') : t('popup.drive.preparingUpload'),
+        processingText: isDownload ? t('popup.drive.importing') : t('popup.drive.packaging'),
+        completedText: isDownload ? t('popup.drive.downloadSuccess') : t('popup.drive.uploadSuccess'),
+    });
+
+    card.appendChild(progressEl);
+
+    let hasConnected = false;
+    let unsubscribe = null;
+
+    unsubscribe = task.subscribe((status, opts) => {
+        if (card.isConnected) {
+            hasConnected = true;
+        } else if (hasConnected) {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+            return;
+        }
+
+        switch (status) {
+            case 'idle':
+                prog.reset();
+                break;
+            case 'preparing':
+                prog.preparing(opts.message);
+                break;
+            case 'processing':
+                prog.processing(opts.message);
+                break;
+            case 'transferring':
+                prog.transferring(opts);
+                break;
+            case 'completed':
+                prog.completed(opts.message);
+                break;
+            case 'error':
+                prog.error(opts.message);
+                break;
+        }
+    });
+
+    return { progressEl, unsubscribe };
+}
+
+/**
+ * 背景下載與解壓匯入任務執行流程（不依賴彈窗生命週期）
+ */
+async function executeDownloadImport(file, token, linkedLocalId, ctx) {
+    if (activeDriveTransfers.has(file.id)) {
+        simpleToast({ content: '檔案正在下載處理中，請稍候', type: 'info' });
+        return;
+    }
+
+    const task = new DriveTransferTask(file.id, 'download', file, { linkedLocalId });
+    activeDriveTransfers.set(file.id, task);
+
+    // 若當前卡片在畫面上，立刻掛載
+    const currentCard = document.querySelector(`.drive-file-card[data-file-id="${file.id}"]`);
+    if (currentCard && currentCard.isConnected) {
+        attachTransferProgressToDriveCard(currentCard, task);
+    }
+
+    try {
+        task.notify('preparing', { message: t('popup.drive.preparingDownload') });
+
+        // 下載（真實傳輸進度）
+        const blob = await downloadFile(file.id, token, ({ loaded, total }) => {
+            task.notify('transferring', { loaded, total, direction: 'download' });
+        });
+
+        // 進入背景解壓與 IndexedDB 寫入（轉為 processing 狀態）
+        task.notify('processing', { message: t('popup.drive.importing') });
+
+        // 若有已關聯之本地專案 ID，則直接覆寫該專案；否則建立新專案
+        const { projectId: finalId, projectName: finalName } = await saveProjectZipToIDB(blob, file.name, linkedLocalId);
+
+        // 儲存本地專案與雲端檔案的關聯
+        await setDriveMeta(finalId, {
+            driveFileId: file.id,
+            driveName: file.name,
+        });
+
+        // 若覆寫的恰好是當前主畫面開啟的專案，重新載入主畫面資料保持一致
+        if (linkedLocalId && typeof ctx?.getCurrentProjectId === 'function' && typeof ctx?.loadProject === 'function') {
+            if (linkedLocalId === ctx.getCurrentProjectId()) {
+                await ctx.loadProject(linkedLocalId).catch(() => {});
+            }
+        }
+
+        task.notify('completed', { message: t('popup.drive.downloadSuccess') });
+        const toastMsg = linkedLocalId
+            ? t('popup.drive.toastDownloadOverwriteSuccess', { name: finalName || file.name })
+            : t('popup.drive.toastImportSuccess', { name: finalName || file.name });
+        simpleToast({ content: toastMsg, type: 'success', timeout: 2000 });
+
+        // 廣播通知本地專案清單與雲端專案清單更新
+        broadcastProjectChanged();
+        broadcastDriveChanged();
+
+        setTimeout(() => {
+            activeDriveTransfers.delete(file.id);
+            broadcastDriveChanged();
+        }, 1200);
+
+    } catch (e) {
+        task.notify('error', { message: e.message || t('popup.drive.operationFailed') });
+        console.error('[DriveManager] 下載匯入失敗:', e);
+        setTimeout(() => {
+            activeDriveTransfers.delete(file.id);
+            broadcastDriveChanged();
+        }, 3000);
+    }
+}
+
+/**
+ * 雲端分頁背景同步上傳任務執行流程
+ */
+async function executeUploadSync(localProjectId, file, token) {
+    if (activeDriveTransfers.has(file.id)) {
+        simpleToast({ content: '檔案正在處理中，請稍候', type: 'info' });
+        return;
+    }
+
+    const task = new DriveTransferTask(file.id, 'upload', file, { localProjectId });
+    activeDriveTransfers.set(file.id, task);
+
+    const currentCard = document.querySelector(`.drive-file-card[data-file-id="${file.id}"]`);
+    if (currentCard && currentCard.isConnected) {
+        attachTransferProgressToDriveCard(currentCard, task);
+    }
+
+    try {
+        task.notify('preparing', { message: t('popup.drive.preparingUpload') });
+
+        // 檢查雲端檔案是否仍有效
+        const isFileValid = await checkFileStillValid(file.id, token);
+        if (!isFileValid) {
+            throw new Error(t('popup.drive.loadFailed', { msg: 'File invalid or not found' }));
+        }
+
+        // 打包本地專案（直接由 IndexedDB 打包，無需切換或開啟專案）
+        task.notify('processing', { message: t('popup.drive.packaging') });
+        const zipBlob = await buildProjectZipById(localProjectId);
+
+        // 上傳（真實 XHR 傳輸進度）
+        task.notify('transferring', { loaded: 0, total: zipBlob.size, direction: 'upload' });
+        await uploadFile({
+            blob: zipBlob,
+            name: file.name,
+            token,
+            fileId: file.id,
+            onProgress: ({ loaded, total }) => {
+                task.notify('transferring', { loaded, total, direction: 'upload' });
+            },
+        });
+
+        // 上傳成功才更新本地雲端同步狀態
+        await setDriveMeta(localProjectId, {
+            driveFileId: file.id,
+            driveName: file.name,
+        });
+
+        task.notify('completed', { message: t('popup.drive.uploadSuccess') });
+        simpleToast({ content: t('popup.drive.toastUploadSuccess', { name: file.name }), type: 'success', timeout: 2000 });
+
+        broadcastProjectChanged();
+        broadcastDriveChanged();
+
+        setTimeout(() => {
+            activeDriveTransfers.delete(file.id);
+            broadcastDriveChanged();
+        }, 1200);
+
+    } catch (e) {
+        task.notify('error', { message: e.message || t('popup.drive.operationFailed') });
+        console.error('[DriveManager] 上傳失敗:', e);
+        setTimeout(() => {
+            activeDriveTransfers.delete(file.id);
+            broadcastDriveChanged();
+        }, 3000);
+    }
+}
+
+/**
  * 建立雲端分頁的主容器 DOM 與業務邏輯
  *
  * @param {Object} ctx
@@ -229,6 +471,7 @@ export function buildDriveTab(ctx) {
 
         const card = document.createElement('div');
         card.className = 'drive-file-card';
+        card.dataset.fileId = file.id;
         if (isLinked) card.classList.add('drive-file-card--linked');
 
         // 圖示區塊
@@ -290,7 +533,16 @@ export function buildDriveTab(ctx) {
         dlIcon.setAttribute('translate', 'no');
         dlIcon.textContent = 'cloud_download';
         downloadBtn.appendChild(dlIcon);
-        downloadBtn.onclick = () => handleDownloadImport(file, token, card, linkedLocalId);
+        downloadBtn.onclick = () => {
+            if (activeDriveTransfers.has(file.id)) return;
+            if (isLinked) {
+                const fileName = file.name || t('popup.projectManager.untitled');
+                if (!confirm(t('popup.drive.confirmDownloadOverwrite', { name: fileName }))) {
+                    return;
+                }
+            }
+            executeDownloadImport(file, token, linkedLocalId, ctx);
+        };
         btnRow.appendChild(downloadBtn);
 
         // 若已關聯本地專案，顯示上傳回雲端按鈕
@@ -304,7 +556,10 @@ export function buildDriveTab(ctx) {
             ulIcon.setAttribute('translate', 'no');
             ulIcon.textContent = 'cloud_upload';
             uploadBtn.appendChild(ulIcon);
-            uploadBtn.onclick = () => handleUploadSync(linkedLocalId, file, token, card);
+            uploadBtn.onclick = () => {
+                if (activeDriveTransfers.has(file.id)) return;
+                executeUploadSync(linkedLocalId, file, token);
+            };
             btnRow.appendChild(uploadBtn);
         }
 
@@ -320,6 +575,11 @@ export function buildDriveTab(ctx) {
         deleteBtn.appendChild(delIcon);
 
         deleteBtn.onclick = async () => {
+            if (activeDriveTransfers.has(file.id)) {
+                simpleToast({ content: '檔案正在傳輸處理中，無法刪除', type: 'error' });
+                return;
+            }
+
             const fileName = file.name || t('popup.projectManager.untitled');
             if (!confirm(t('popup.drive.confirmDelete', { name: fileName }))) {
                 return;
@@ -335,7 +595,8 @@ export function buildDriveTab(ctx) {
                 }
 
                 simpleToast({ content: t('popup.drive.toastTrashSuccess', { name: fileName }), type: 'success', timeout: 2000 });
-                loadDriveFiles();
+                broadcastDriveChanged();
+                broadcastProjectChanged();
             } catch (err) {
                 deleteBtn.disabled = false;
                 simpleToast({ content: t('popup.drive.toastDeleteFailed', { msg: err.message }), type: 'error', timeout: 3000 });
@@ -345,142 +606,32 @@ export function buildDriveTab(ctx) {
         btnRow.appendChild(deleteBtn);
 
         card.append(iconArea, body, btnRow);
+
+        // 若該檔案正在下載或同步中，立即掛載進度遮罩並接管真實進度！
+        if (activeDriveTransfers.has(file.id)) {
+            const task = activeDriveTransfers.get(file.id);
+            attachTransferProgressToDriveCard(card, task);
+        }
+
         return card;
     }
 
-    // ── 下載並匯入業務流程 ────────────────────────────────────
-    async function handleDownloadImport(file, token, card, linkedLocalId = null) {
-        if (linkedLocalId) {
-            const fileName = file.name || t('popup.projectManager.untitled');
-            if (!confirm(t('popup.drive.confirmDownloadOverwrite', { name: fileName }))) {
-                return;
-            }
+    // 訂閱全域雲端專案清單變更事件
+    const handleDriveChanged = () => {
+        if (root.isConnected) {
+            loadDriveFiles();
+        } else {
+            window.removeEventListener('wmc:drive-changed', handleDriveChanged);
         }
-
-        const { el: progressEl, controller: prog } = createTransferProgress({
-            preparingText: t('popup.drive.preparingDownload'),
-            processingText: t('popup.drive.importing'),
-            completedText: t('popup.drive.downloadSuccess'),
-        });
-
-        card.appendChild(progressEl);
-        card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = true);
-
-        try {
-            prog.preparing();
-
-            // 下載（真實傳輸進度）
-            const blob = await downloadFile(file.id, token, ({ loaded, total }) => {
-                prog.transferring({ loaded, total, direction: 'download' });
-            });
-
-            // 進入背景解壓與 IndexedDB 寫入（轉為 processing 狀態）
-            prog.processing(t('popup.drive.importing'));
-
-            // 若有已關聯之本地專案 ID，則直接覆寫該專案；否則建立新專案
-            const { projectId: finalId, projectName: finalName } = await saveProjectZipToIDB(blob, file.name, linkedLocalId);
-
-            // 儲存本地專案與雲端檔案的關聯
-            await setDriveMeta(finalId, {
-                driveFileId: file.id,
-                driveName: file.name,
-            });
-
-            // 若覆寫的恰好是當前主畫面開啟的專案，重新載入主畫面資料保持一致
-            if (linkedLocalId && typeof getCurrentProjectId === 'function' && typeof loadProject === 'function') {
-                if (linkedLocalId === getCurrentProjectId()) {
-                    await loadProject(linkedLocalId).catch(() => {});
-                }
-            }
-
-            prog.completed(t('popup.drive.downloadSuccess'));
-            const toastMsg = linkedLocalId
-                ? t('popup.drive.toastDownloadOverwriteSuccess', { name: finalName || file.name })
-                : t('popup.drive.toastImportSuccess', { name: finalName || file.name });
-            simpleToast({ content: toastMsg, type: 'success', timeout: 2000 });
-
-            // 若有傳入本地專案列表重整回呼，立即重新整理本地專案清單
-            if (typeof refreshLocalList === 'function') {
-                try {
-                    refreshLocalList();
-                } catch (_) {}
-            }
-
-            setTimeout(() => {
-                progressEl.remove();
-                loadDriveFiles();
-                card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = false);
-            }, 1200);
-
-        } catch (e) {
-            prog.error(e.message || t('popup.drive.operationFailed'));
-            card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = false);
-            console.error('[DriveManager] 下載匯入失敗:', e);
-        }
-    }
-
-    // ── 上傳同步業務流程 ──────────────────────────────────────
-    async function handleUploadSync(localProjectId, file, token, card) {
-        const { el: progressEl, controller: prog } = createTransferProgress({
-            preparingText: t('popup.drive.preparingUpload'),
-            processingText: t('popup.drive.packaging'),
-            completedText: t('popup.drive.uploadSuccess'),
-        });
-
-        card.appendChild(progressEl);
-        card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = true);
-
-        try {
-            prog.preparing();
-
-            // 檢查雲端檔案是否仍有效
-            const isFileValid = await checkFileStillValid(file.id, token);
-            if (!isFileValid) {
-                throw new Error(t('popup.drive.loadFailed', { msg: 'File invalid or not found' }));
-            }
-
-            // 打包本地專案（直接由 IndexedDB 打包，無需切換或開啟專案）
-            prog.processing(t('popup.drive.packaging'));
-            const zipBlob = await buildProjectZipById(localProjectId);
-
-            // 上傳（真實 XHR 傳輸進度）
-            await uploadFile({
-                blob: zipBlob,
-                name: file.name,
-                token,
-                fileId: file.id,
-                onProgress: ({ loaded, total }) => {
-                    prog.transferring({ loaded, total, direction: 'upload' });
-                },
-            });
-
-            // 上傳成功才更新本地雲端同步狀態
-            await setDriveMeta(localProjectId, {
-                driveFileId: file.id,
-                driveName: file.name,
-            });
-
-            prog.completed(t('popup.drive.uploadSuccess'));
-            simpleToast({ content: t('popup.drive.toastUploadSuccess', { name: file.name }), type: 'success', timeout: 2000 });
-
-            setTimeout(() => {
-                progressEl.remove();
-                loadDriveFiles();
-                card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = false);
-            }, 1200);
-
-        } catch (e) {
-            prog.error(e.message || t('popup.drive.operationFailed'));
-            card.querySelectorAll('.drive-file-btn').forEach(btn => btn.disabled = false);
-            console.error('[DriveManager] 上傳失敗:', e);
-        }
-    }
+    };
+    window.addEventListener('wmc:drive-changed', handleDriveChanged);
 
     // 訂閱授權狀態監聽
     const unbindAuth = onAuthChanged(() => renderState());
     const observer = new MutationObserver(() => {
         if (!document.contains(root)) {
             unbindAuth();
+            window.removeEventListener('wmc:drive-changed', handleDriveChanged);
             observer.disconnect();
         }
     });

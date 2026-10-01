@@ -9,6 +9,200 @@ import { createTransferProgress } from '../services/transferProgress.js';
 import { buildProjectZipById, triggerImportFolder, triggerImportZip } from '../features/fileHandler.js';
 
 /**
+ * 模組層級管理所有進行中的專案上傳工作
+ * key: projectId, value: UploadTask
+ */
+const activeUploads = new Map();
+
+/**
+ * 專案清單刷新監聽器集合（支援外部刷新或視窗生命週期）
+ */
+const listRefreshListeners = new Set();
+
+function triggerAllListRefresh() {
+    for (const refreshFn of Array.from(listRefreshListeners)) {
+        try {
+            refreshFn();
+        } catch (_) {}
+    }
+    window.dispatchEvent(new CustomEvent('wmc:project-changed'));
+    window.dispatchEvent(new CustomEvent('wmc:drive-changed'));
+}
+
+class UploadTask {
+    constructor(projectId, projectName) {
+        this.projectId = projectId;
+        this.projectName = projectName;
+        this.status = 'preparing';
+        this.statusOpts = {};
+        this.listeners = new Set();
+    }
+
+    notify(status, opts = {}) {
+        this.status = status;
+        this.statusOpts = opts;
+        for (const listener of this.listeners) {
+            try {
+                listener(status, opts);
+            } catch (e) {
+                console.error('[UploadTask] listener error:', e);
+            }
+        }
+    }
+
+    subscribe(listener) {
+        this.listeners.add(listener);
+        try {
+            listener(this.status, this.statusOpts);
+        } catch (e) {
+            console.error('[UploadTask] initial listener error:', e);
+        }
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+}
+
+/**
+ * 將上傳進度元件附加至卡片底部，並訂閱任務狀態
+ */
+function attachUploadProgressToCard(card, task) {
+    // 禁用卡片內所有按鈕，避免上傳期間誤操作
+    card.querySelectorAll('button').forEach(btn => btn.disabled = true);
+
+    const { el: progressEl, controller: prog } = createTransferProgress({
+        preparingText: t('popup.drive.preparingUpload'),
+        processingText: t('popup.drive.packaging'),
+        completedText: t('popup.drive.uploadSuccess'),
+    });
+
+    // 專用 class：精緻底部浮層，絕不遮蔽封面
+    progressEl.classList.add('tp-wrapper--card-bottom');
+    if (task.projectName) {
+        progressEl.title = task.projectName;
+    }
+    card.appendChild(progressEl);
+
+    let hasConnected = false;
+    let unsubscribe = null;
+
+    unsubscribe = task.subscribe((status, opts) => {
+        // 卡片已脫離 DOM 樹時自動取消訂閱
+        if (card.isConnected) {
+            hasConnected = true;
+        } else if (hasConnected) {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+            return;
+        }
+
+        switch (status) {
+            case 'idle':
+                prog.reset();
+                break;
+            case 'preparing':
+                prog.preparing(opts.message);
+                break;
+            case 'processing':
+                prog.processing(opts.message);
+                break;
+            case 'transferring':
+                prog.transferring(opts);
+                break;
+            case 'completed':
+                prog.completed(opts.message);
+                break;
+            case 'error':
+                prog.error(opts.message);
+                break;
+        }
+    });
+
+    return { progressEl, unsubscribe };
+}
+
+/**
+ * 執行專案上傳邏輯
+ */
+async function startProjectUpload(proj, card, getFileHandlerCtx) {
+    if (typeof getFileHandlerCtx !== 'function') {
+        simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+        return;
+    }
+
+    if (activeUploads.has(proj.id)) {
+        simpleToast({ content: '專案正在上傳中，請稍候', type: 'info' });
+        return;
+    }
+
+    const task = new UploadTask(proj.id, proj.name);
+    activeUploads.set(proj.id, task);
+
+    // 若當前卡片在畫面上，立刻附加進度
+    if (card && card.isConnected) {
+        attachUploadProgressToCard(card, task);
+    }
+
+    try {
+        task.notify('preparing', { message: t('popup.drive.preparingUpload') });
+        const token = await ensureSignedIn();
+
+        const driveMeta = await getDriveMeta(proj.id);
+        let targetFileId = driveMeta?.driveFileId || null;
+        if (targetFileId) {
+            const isValid = await checkFileStillValid(targetFileId, token);
+            if (!isValid) {
+                targetFileId = null;
+            }
+        }
+
+        task.notify('processing', { message: t('popup.drive.packaging') });
+        const zipBlob = await buildProjectZipById(proj.id);
+
+        const baseName = proj.name || t('popup.projectManager.untitled');
+        const uploadFileName = baseName.endsWith('.wmcx.zip') ? baseName : `${baseName}.wmcx.zip`;
+
+        task.notify('transferring', { loaded: 0, total: zipBlob.size, direction: 'upload' });
+
+        const uploadRes = await uploadFile({
+            blob: zipBlob,
+            name: uploadFileName,
+            token,
+            fileId: targetFileId,
+            onProgress: ({ loaded, total }) => {
+                task.notify('transferring', { loaded, total, direction: 'upload' });
+            },
+        });
+
+        await setDriveMeta(proj.id, {
+            driveFileId: uploadRes.id,
+            driveName: uploadRes.name || uploadFileName,
+        });
+
+        task.notify('completed', { message: t('popup.drive.uploadSuccess') });
+        simpleToast({
+            content: t('popup.drive.toastUploadSuccess', { name: proj.name || t('popup.projectManager.untitled') }),
+            type: 'success',
+            timeout: 2000
+        });
+
+        setTimeout(() => {
+            activeUploads.delete(proj.id);
+            triggerAllListRefresh();
+        }, 1200);
+
+    } catch (err) {
+        task.notify('error', { message: err.message || t('popup.drive.operationFailed') });
+        console.error('[ProjectManager] 上傳失敗:', err);
+        setTimeout(() => {
+            activeUploads.delete(proj.id);
+            triggerAllListRefresh();
+        }, 3000);
+    }
+}
+
+/**
  * 開啟專案總管 UI
  * @param {Object} options
  * @param {Function} options.getCurrentProjectId
@@ -17,6 +211,7 @@ import { buildProjectZipById, triggerImportFolder, triggerImportZip } from '../f
  */
 export function openProjectManager({ getCurrentProjectId, loadProject, getFileHandlerCtx }) {
     const defaultCoverUrl = 'Skin/no_image.png';
+    let projectManagerPopup;
 
     const formatLastEdit = (timestamp) => {
         if (!timestamp) return '未知時間';
@@ -109,14 +304,18 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 cursor: ${isCurrent ? 'default' : 'pointer'};
             `;
 
+            card.dataset.projectId = proj.id;
+
             if (!isCurrent) {
                 card.onclick = async (e) => {
                     if (e.target.closest('button')) return;
+                    if (activeUploads.has(proj.id)) return;
                     if (typeof loadProject === 'function') {
                         const loaded = await loadProject(proj.id);
                         simpleToast({ content: `已切換至專案：${loaded?.name || proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
                     }
-                    buildList(container);
+                    //buildList(container);
+                    projectManagerPopup.close();
                 };
             }
 
@@ -265,93 +464,32 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             const uploadColor = driveMeta?.driveFileId ? '#66bb6a' : '#4a90e2';
 
             const uploadBtn = makeIconButton('cloud_upload', uploadTooltip, async () => {
-                if (typeof getFileHandlerCtx !== 'function') {
-                    simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
-                    return;
-                }
-
-                const { el: progressEl, controller: prog } = createTransferProgress({
-                    preparingText: t('popup.drive.preparingUpload'),
-                    processingText: t('popup.drive.packaging'),
-                    completedText: t('popup.drive.uploadSuccess'),
-                });
-
-                card.appendChild(progressEl);
-                const allButtons = card.querySelectorAll('button');
-                allButtons.forEach(b => b.disabled = true);
-
-                try {
-                    prog.preparing();
-                    const token = await ensureSignedIn();
-
-                    let targetFileId = driveMeta?.driveFileId || null;
-                    if (targetFileId) {
-                        const isValid = await checkFileStillValid(targetFileId, token);
-                        if (!isValid) {
-                            targetFileId = null;
-                        }
-                    }
-
-                    prog.processing(t('popup.drive.packaging'));
-                    const zipBlob = await buildProjectZipById(proj.id);
-
-                    const baseName = proj.name || t('popup.projectManager.untitled');
-                    const uploadFileName = baseName.endsWith('.wmcx.zip') ? baseName : `${baseName}.wmcx.zip`;
-
-                    const uploadRes = await uploadFile({
-                        blob: zipBlob,
-                        name: uploadFileName,
-                        token,
-                        fileId: targetFileId,
-                        onProgress: ({ loaded, total }) => {
-                            prog.transferring({ loaded, total, direction: 'upload' });
-                        },
-                    });
-
-                    await setDriveMeta(proj.id, {
-                        driveFileId: uploadRes.id,
-                        driveName: uploadRes.name || uploadFileName,
-                    });
-
-                    prog.completed(t('popup.drive.uploadSuccess'));
-                    simpleToast({
-                        content: t('popup.drive.toastUploadSuccess', { name: proj.name || t('popup.projectManager.untitled') }),
-                        type: 'success',
-                        timeout: 2000
-                    });
-
-                    setTimeout(() => {
-                        progressEl.remove();
-                        buildList(container);
-                    }, 1200);
-                } catch (err) {
-                    prog.error(err.message || t('popup.drive.operationFailed'));
-                    allButtons.forEach(b => b.disabled = false);
-                    console.error('[ProjectManager] 上傳失敗:', err);
-                }
+                if (activeUploads.has(proj.id)) return;
+                startProjectUpload(proj, card, getFileHandlerCtx);
             }, uploadColor);
             btnRow.appendChild(uploadBtn);
 
-
             // 重新命名按鈕
             const renameBtn = makeIconButton('edit', '重新命名', async () => {
+                if (activeUploads.has(proj.id)) return;
                 const newName = prompt('請輸入新的專案名稱：', proj.name || '');
                 if (newName !== null && newName.trim() !== '') {
                     await projectRename(proj.id, newName.trim());
-                    buildList(container);
+                    triggerAllListRefresh();
                 }
             }, '#4a90e2');
             btnRow.appendChild(renameBtn);
 
             // 刪除按鈕
             const deleteBtn = makeIconButton('delete', '刪除專案', async () => {
+                if (activeUploads.has(proj.id)) return;
                 if (isCurrent) {
                     alert('無法刪除目前正在使用的專案。\n請先切換到其他專案後再刪除。');
                     return;
                 }
                 if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
                 await projectDelete(proj.id);
-                buildList(container);
+                triggerAllListRefresh();
                 simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
             }, '#ef5350');
             btnRow.appendChild(deleteBtn);
@@ -359,6 +497,12 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             body.appendChild(btnRow);
             card.appendChild(body);
             container.appendChild(card);
+
+            // 若該專案正在上傳中，立即掛載進度浮層並自動同步真實進度
+            if (activeUploads.has(proj.id)) {
+                const task = activeUploads.get(proj.id);
+                attachUploadProgressToCard(card, task);
+            }
         }
     };
 
@@ -385,6 +529,17 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
     const localContainer = document.createElement('div');
     localContainer.className = 'project-manager-grid popup-list';
     buildList(localContainer);
+
+    const refreshLocalList = () => {
+        if (localContainer.isConnected) {
+            buildList(localContainer);
+        } else {
+            listRefreshListeners.delete(refreshLocalList);
+            window.removeEventListener('wmc:project-changed', refreshLocalList);
+        }
+    };
+    listRefreshListeners.add(refreshLocalList);
+    window.addEventListener('wmc:project-changed', refreshLocalList);
 
     // 雲端專案容器
     const driveContainer = document.createElement('div');
@@ -423,7 +578,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
     mainWrapper.append(tabBar, localContainer, driveContainer);
 
-    const popupCtx = popupWindow({
+    projectManagerPopup = popupWindow({
         title: "專案總管",
         customContent: mainWrapper,
         width: 760,
@@ -468,5 +623,6 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             }
         ]
     });
+    return projectManagerPopup;
 }
 

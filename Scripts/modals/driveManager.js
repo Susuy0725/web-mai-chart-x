@@ -122,7 +122,7 @@ function attachTransferProgressToDriveCard(card, task) {
  */
 async function executeDownloadImport(file, token, linkedLocalId, ctx) {
     if (activeDriveTransfers.has(file.id)) {
-        simpleToast({ content: '檔案正在下載處理中，請稍候', type: 'info' });
+        simpleToast({ content: t('popup.drive.transferringDownloadWait'), type: 'info' });
         return;
     }
 
@@ -193,7 +193,7 @@ async function executeDownloadImport(file, token, linkedLocalId, ctx) {
  */
 async function executeUploadSync(localProjectId, file, token) {
     if (activeDriveTransfers.has(file.id)) {
-        simpleToast({ content: '檔案正在處理中，請稍候', type: 'info' });
+        simpleToast({ content: t('popup.drive.transferringWait'), type: 'info' });
         return;
     }
 
@@ -645,7 +645,7 @@ export function buildDriveTab(ctx) {
 
             deleteBtn.onclick = async () => {
                 if (activeDriveTransfers.has(file.id)) {
-                    simpleToast({ content: '檔案正在傳輸處理中，無法刪除', type: 'error' });
+                    simpleToast({ content: t('popup.drive.transferringCannotDelete'), type: 'error' });
                     return;
                 }
 

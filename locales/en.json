@@ -323,7 +323,14 @@
       "newBlankProject": "New Project",
       "loadBtn": "Load",
       "emptyList": "No projects found. Please create a new one.",
-      "confirmDelete": "Are you sure you want to delete project \"{name}\"? This action cannot be undone!"
+      "confirmDelete": "Are you sure you want to delete project \"{name}\"? This action cannot be undone!",
+      "newProjectPrompt": "Please enter a project name:",
+      "fileHandlerNotReady": "File handler is not ready",
+      "uploadingWait": "Project is uploading, please wait",
+      "toastDeleteAndSwitch": "Project deleted, switched to \"{name}\"",
+      "toastDeleteAndNew": "Project deleted, a new blank project was created",
+      "toastDeleted": "Project deleted",
+      "toastSwitched": "Switched to project: {name}"
     },
     "drive": {
       "localTab": "Local",
@@ -370,7 +377,10 @@
       "toastUploadSuccess": "Uploaded project: {name}",
       "toastTrashSuccess": "Moved to trash: {name}",
       "toastSignInFailed": "Sign in failed: {msg}",
-      "toastDeleteFailed": "Delete failed: {msg}"
+      "toastDeleteFailed": "Delete failed: {msg}",
+      "transferringDownloadWait": "File is downloading, please wait",
+      "transferringWait": "File is being processed, please wait",
+      "transferringCannotDelete": "Cannot delete while file is transferring"
     },
     "driveOpen": {
       "title": "Open Google Drive Project",

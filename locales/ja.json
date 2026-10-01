@@ -325,7 +325,14 @@
       "newBlankProject": "新規プロジェクト",
       "loadBtn": "読み込み",
       "emptyList": "プロジェクトが見つかりません。新しく作成してください。",
-      "confirmDelete": "プロジェクト \"{name}\" を削除してもよろしいですか？この操作は取り消せません！"
+      "confirmDelete": "プロジェクト \"{name}\" を削除してもよろしいですか？この操作は取り消せません！",
+      "newProjectPrompt": "プロジェクト名を入力してください：",
+      "fileHandlerNotReady": "ファイルハンドラーが準備できていません",
+      "uploadingWait": "アップロード中です。しばらくお待ちください",
+      "toastDeleteAndSwitch": "プロジェクトを削除し、「{name}」に切り替えました",
+      "toastDeleteAndNew": "プロジェクトを削除し、新規プロジェクトを作成しました",
+      "toastDeleted": "プロジェクトを削除しました",
+      "toastSwitched": "プロジェクトに切り替えました：{name}"
     },
     "drive": {
       "localTab": "ローカル",
@@ -372,7 +379,10 @@
       "toastUploadSuccess": "プロジェクトをアップロードしました: {name}",
       "toastTrashSuccess": "ゴミ箱に移動しました: {name}",
       "toastSignInFailed": "ログイン失敗: {msg}",
-      "toastDeleteFailed": "削除失敗: {msg}"
+      "toastDeleteFailed": "削除失敗: {msg}",
+      "transferringDownloadWait": "ダウンロード中です。しばらくお待ちください",
+      "transferringWait": "処理中です。しばらくお待ちください",
+      "transferringCannotDelete": "転送中のため削除できません"
     },
     "driveOpen": {
       "title": "Google ドライブから開く",

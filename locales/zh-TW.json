@@ -324,7 +324,14 @@
       "newBlankProject": "新建專案",
       "loadBtn": "載入",
       "emptyList": "無專案，請先建立新專案",
-      "confirmDelete": "確定要刪除專案「{name}」嗎？此操作無法復原！"
+      "confirmDelete": "確定要刪除專案「{name}」嗎？此操作無法復原！",
+      "newProjectPrompt": "請輸入專案名稱：",
+      "fileHandlerNotReady": "檔案處理器尚未準備完成",
+      "uploadingWait": "專案正在上傳中，請稍候",
+      "toastDeleteAndSwitch": "已刪除專案，並切換至「{name}」",
+      "toastDeleteAndNew": "已刪除專案，並建立新空白專案",
+      "toastDeleted": "已刪除專案",
+      "toastSwitched": "已切換至專案：{name}"
     },
     "drive": {
       "localTab": "本地專案",
@@ -372,7 +379,10 @@
       "filterMine": "我的專案",
       "filterShared": "與我共享",
       "badgeReadOnly": "唯讀",
-      "tooltipReadOnly": "此專案為唯讀權限，不開放上傳複寫"
+      "tooltipReadOnly": "此專案為唯讀權限，不開放上傳複寫",
+      "transferringDownloadWait": "檔案正在下載處理中，請稍候",
+      "transferringWait": "檔案正在處理中，請稍候",
+      "transferringCannotDelete": "檔案正在傳輸處理中，無法刪除"
     },
     "driveOpen": {
       "title": "開啟 Google 雲端硬碟專案",

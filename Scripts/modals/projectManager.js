@@ -117,12 +117,12 @@ function attachUploadProgressToCard(card, task) {
  */
 async function startProjectUpload(proj, card, getFileHandlerCtx) {
     if (typeof getFileHandlerCtx !== 'function') {
-        simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+        simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
         return;
     }
 
     if (activeUploads.has(proj.id)) {
-        simpleToast({ content: '專案正在上傳中，請稍候', type: 'info' });
+        simpleToast({ content: t('popup.projectManager.uploadingWait'), type: 'info' });
         return;
     }
 
@@ -309,7 +309,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                     if (activeUploads.has(proj.id)) return;
                     if (typeof loadProject === 'function') {
                         const loaded = await loadProject(proj.id);
-                        simpleToast({ content: `已切換至專案：${loaded?.name || proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
+                        simpleToast({ content: t('popup.projectManager.toastSwitched', { name: loaded?.name || proj?.name || t('popup.projectManager.untitled') }), type: 'success', timeout: 1500 });
                     }
                     //buildList(container);
                     projectManagerPopup.close();
@@ -509,7 +509,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         await projectDelete(proj.id);
                         triggerAllListRefresh();
                         simpleToast({
-                            content: `已刪除專案，並切換至「${targetProj.name || t('popup.projectManager.untitled')}」`,
+                            content: t('popup.projectManager.toastDeleteAndSwitch', { name: targetProj.name || t('popup.projectManager.untitled') }),
                             type: 'success',
                             timeout: 1500
                         });
@@ -521,7 +521,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         await projectDelete(proj.id);
                         triggerAllListRefresh();
                         simpleToast({
-                            content: '已刪除專案，並建立新空白專案',
+                            content: t('popup.projectManager.toastDeleteAndNew'),
                             type: 'success',
                             timeout: 1500
                         });
@@ -531,7 +531,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
                 await projectDelete(proj.id);
                 triggerAllListRefresh();
-                simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
+                simpleToast({ content: t('popup.projectManager.toastDeleted'), type: 'success', timeout: 1200 });
             }, '#ef5350');
             btnRow.appendChild(deleteBtn);
 
@@ -647,7 +647,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 text: t('popup.projectManager.importFolder') || '匯入資料夾',
                 onClick: () => {
                     if (typeof getFileHandlerCtx !== 'function') {
-                        simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+                        simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
                         return;
                     }
                     triggerImportFolder(getFileHandlerCtx(), {
@@ -659,7 +659,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 text: t('popup.projectManager.importZip') || '匯入壓縮檔',
                 onClick: () => {
                     if (typeof getFileHandlerCtx !== 'function') {
-                        simpleToast({ content: '檔案處理器尚未準備完成', type: 'error' });
+                        simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
                         return;
                     }
                     triggerImportZip(getFileHandlerCtx(), {
@@ -670,12 +670,12 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             {
                 text: t('popup.projectManager.newBlankProject') || "新建空白專案",
                 onClick: async () => {
-                    const name = prompt('請輸入專案名稱：', '未命名專案');
+                    const name = prompt(t('popup.projectManager.newProjectPrompt'), t('popup.projectManager.untitled'));
                     if (name === null) return;
                     const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
                     if (typeof loadProject === 'function') {
                         const proj = await loadProject(newId);
-                        simpleToast({ content: `已切換至專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
+                        simpleToast({ content: t('popup.projectManager.toastSwitched', { name: proj?.name || t('popup.projectManager.untitled') }), type: 'success', timeout: 1500 });
                     }
                     triggerAllListRefresh();
                 }

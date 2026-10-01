@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 
 
+## [2026.10.01 (1)]
+
+### Changed
+ - play 版面錯誤
+
+### Added
+ - Google Drive 雲端譜面同步
+ - projectManager 增加雲端與本地端譜面區分
+
 ## [2026.09.30 (5)]
 
 ### Changed

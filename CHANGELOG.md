@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.01 (2)]
+
+### Changed
+ - 優化Drive使用體驗
+
+### Fixed
+ - 修正專案發生變動時會導致專案總管卡片被重複繪製的問題
 
 ## [2026.10.01 (1)]
 

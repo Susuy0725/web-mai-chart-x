@@ -256,7 +256,7 @@
       "alignmentPrefix": "Align first beat to beat",
       "alignmentBtn": "Add Silence",
       "alignmentDesc": "Inserts silence at the beginning of the audio so that the duration from start to the first beat is exactly the specified number of beats.",
-      "alignmentSuffix": ""
+      "alignmentSuffix": "beat"
     },
     "tapBpm": {
       "title": "Tap BPM",

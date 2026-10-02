@@ -1,0 +1,20 @@
+{
+  "defaultLocale": "zh-TW",
+  "locales": [
+    {
+      "code": "zh-TW",
+      "name": "繁體中文",
+      "englishName": "Traditional Chinese"
+    },
+    {
+      "code": "en",
+      "name": "English",
+      "englishName": "English"
+    },
+    {
+      "code": "ja",
+      "name": "日本語",
+      "englishName": "Japanese"
+    }
+  ]
+}

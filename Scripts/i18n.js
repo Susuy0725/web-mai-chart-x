@@ -1,48 +1,116 @@
-async function loadLocale(lang) {
+let manifest = {
+    defaultLocale: 'zh-TW',
+    locales: [
+        { code: 'zh-TW', name: '繁體中文', englishName: 'Traditional Chinese' },
+        { code: 'en', name: 'English', englishName: 'English' },
+        { code: 'ja', name: '日本語', englishName: 'Japanese' }
+    ]
+};
+
+const translations = {};
+const listeners = [];
+
+async function fetchManifest() {
+    try {
+        const url = new URL('../locales/manifest.json', import.meta.url).href;
+        const res = await fetch(url);
+        if (res.ok) {
+            manifest = await res.json();
+        }
+    } catch (e) {
+        console.warn('Failed to load locales/manifest.json, fallback to static manifest', e);
+    }
+    return manifest;
+}
+
+export function getAvailableLanguages() {
+    return manifest.locales || [];
+}
+
+export function detectDefaultLanguage(availableLocales = manifest.locales, defaultLocale = manifest.defaultLocale || 'zh-TW') {
+    const userLangs = (typeof navigator !== 'undefined' && navigator.languages && navigator.languages.length > 0)
+        ? navigator.languages
+        : [(typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'zh-TW'];
+
+    const availableCodes = (availableLocales || []).map(l => l.code);
+
+    for (const uLang of userLangs) {
+        if (!uLang) continue;
+        const normalized = uLang.trim();
+
+        // 1. Exact BCP 47 match (case-insensitive)
+        const exactMatch = availableCodes.find(code => code.toLowerCase() === normalized.toLowerCase());
+        if (exactMatch) return exactMatch;
+
+        // 2. Prefix / Base language match (e.g. "zh-HK" -> "zh-TW", "en-US" -> "en")
+        const primarySubtag = normalized.split('-')[0].toLowerCase();
+        const prefixMatch = availableCodes.find(code => {
+            const codePrimary = code.split('-')[0].toLowerCase();
+            return codePrimary === primarySubtag;
+        });
+        if (prefixMatch) return prefixMatch;
+    }
+
+    return defaultLocale;
+}
+
+export async function loadLocale(lang) {
+    if (translations[lang]) {
+        return translations[lang];
+    }
     try {
         const url = new URL(`../locales/${lang}.json`, import.meta.url).href;
         const res = await fetch(url);
         if (!res.ok) {
             console.error(`Failed to load ${lang}.json: HTTP ${res.status}`);
-            return {};
+            return null;
         }
-        return await res.json();
+        const data = await res.json();
+        translations[lang] = data;
+        return data;
     } catch (e) {
         console.error(`Failed to fetch ${lang}.json:`, e);
-        return {};
+        return null;
     }
 }
 
-const [zhTW, en, ja] = await Promise.all([
-    loadLocale('zh-TW'),
-    loadLocale('en'),
-    loadLocale('ja'),
-]);
+// Initial initialization
+await fetchManifest();
 
-const translations = {
-    'zh-TW': zhTW,
-    'en': en,
-    'ja': ja,
-};
+const savedLang = typeof localStorage !== 'undefined' ? localStorage.getItem('simai_lang') : null;
+const defaultDetectedLang = detectDefaultLanguage(manifest.locales, manifest.defaultLocale || 'zh-TW');
 
-let currentLang = localStorage.getItem('simai_lang') || (navigator.language.startsWith('zh') ? 'zh-TW' : 'en');
-if (!translations[currentLang]) {
-    currentLang = 'zh-TW';
+let initialTargetLang = savedLang;
+if (!initialTargetLang || !manifest.locales.some(l => l.code === initialTargetLang)) {
+    initialTargetLang = defaultDetectedLang;
 }
 
-const listeners = [];
+const defaultLocaleCode = manifest.defaultLocale || 'zh-TW';
+
+// Pre-load default fallback locale and current target locale
+await Promise.all([
+    loadLocale(defaultLocaleCode),
+    loadLocale(initialTargetLang)
+]);
+
+let currentLang = initialTargetLang;
 
 export function getCurrentLang() {
     return currentLang;
 }
 
-export function setLang(lang) {
-    if (translations[lang]) {
-        currentLang = lang;
-        localStorage.setItem('simai_lang', lang);
-        applyI18nToDOM();
-        listeners.forEach(cb => cb(lang));
+export async function setLang(lang) {
+    if (!translations[lang]) {
+        const loaded = await loadLocale(lang);
+        if (!loaded) return false;
     }
+    currentLang = lang;
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('simai_lang', lang);
+    }
+    applyI18nToDOM();
+    listeners.forEach(cb => cb(lang));
+    return true;
 }
 
 export function onLanguageChange(callback) {
@@ -51,13 +119,15 @@ export function onLanguageChange(callback) {
 
 export function t(key, params = {}) {
     const keys = key.split('.');
+    const defaultCode = manifest.defaultLocale || 'zh-TW';
     let value = translations[currentLang];
+    
     for (const k of keys) {
         if (value && value[k] !== undefined) {
             value = value[k];
         } else {
-            // fallback to zh-TW
-            let fallbackValue = translations['zh-TW'];
+            // fallback to default locale
+            let fallbackValue = translations[defaultCode];
             for (const fk of keys) {
                 if (fallbackValue && fallbackValue[fk] !== undefined) {
                     fallbackValue = fallbackValue[fk];
@@ -101,15 +171,12 @@ export function applyI18nToDOM() {
             if (attr) {
                 el.setAttribute(attr, translation);
             } else {
-                // To avoid destroying material icons, find the text node and replace only that
-                // Or if it's a simple text element, set textContent
                 let textNode = Array.from(el.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
                 if (textNode) {
                     textNode.nodeValue = translation;
                 } else if (el.children.length === 0) {
                     el.textContent = translation;
                 } else {
-                    // if it has children and no text node, add a text node
                     el.appendChild(document.createTextNode(translation));
                 }
             }

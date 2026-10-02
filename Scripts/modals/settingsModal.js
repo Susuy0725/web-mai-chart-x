@@ -208,13 +208,14 @@ export function openSettingsModal({
         if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
     }
 
-    const createDropdown = (value, options = []) => {
+    const createDropdown = (value, rawOpts = []) => {
+        const options = typeof rawOpts === 'function' ? rawOpts() : rawOpts;
         const select = document.createElement('select');
         select.className = 'popup-setting-dropdown';
-        options.forEach(opt => {
+        (options || []).forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
-            o.textContent = opt.label.startsWith('settings.') ? t(opt.label) : opt.label;
+            o.textContent = typeof opt.label === 'string' && opt.label.startsWith('settings.') ? t(opt.label) : opt.label;
             if (opt.value == value) o.selected = true;
             select.appendChild(o);
         });

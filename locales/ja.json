@@ -1,4 +1,9 @@
 {
+  "_meta": {
+    "code": "ja",
+    "name": "日本語",
+    "englishName": "Japanese"
+  },
   "sw": {
     "update": "新バージョンが利用可能です！ページを更新して適用してください。"
   },

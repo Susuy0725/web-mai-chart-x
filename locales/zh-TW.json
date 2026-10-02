@@ -1,4 +1,9 @@
 {
+  "_meta": {
+    "code": "zh-TW",
+    "name": "繁體中文",
+    "englishName": "Traditional Chinese"
+  },
   "sw": {
     "update": "遊戲有新版本更新！請重新整理網頁套用。"
   },

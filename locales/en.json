@@ -1,4 +1,9 @@
 {
+  "_meta": {
+    "code": "en",
+    "name": "English",
+    "englishName": "English"
+  },
   "sw": {
     "update": "New version update available! Please refresh the page to apply."
   },

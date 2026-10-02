@@ -29,7 +29,6 @@ import { majdataWs } from './majdataWs.js';
 import { openBgmEditor, openTapBpm } from './modals/bgmEditor.js';
 import { openMainoteFetcher } from './modals/mainoteFetcher.js';
 import { openProjectManager } from './modals/projectManager.js';
-import { checkAndPromptMigration } from './modals/migrationModal.js';
 import { checkAndHandleDriveOpenWith } from './services/driveOpenWith.js';
 import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
@@ -3082,15 +3081,6 @@ function _init() {
         onInitFinished: () => {
             checkAndHandleDriveOpenWith({
                 loadProject
-            });
-            checkAndPromptMigration({
-                onMigrated: async () => {
-                    const list = await projectList();
-                    if (list.length > 0) {
-                        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-                        await loadProject(list[0].id);
-                    }
-                }
             });
         }
     });

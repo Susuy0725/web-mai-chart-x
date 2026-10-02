@@ -336,16 +336,6 @@
                 addLog(`遷移大功告成！已成功儲存 ${receivedCount} 個資料項`, 'success');
                 launchBtn.disabled = false;
 
-                // 標記遷移完成，並發送廣播通知其他分頁（如已開啟的編輯器主視窗）自動重新載入專案
-                try {
-                    localStorage.setItem('wmc_migration_dismissed', 'true');
-                    localStorage.setItem('wmc_migration_last_completed', Date.now().toString());
-                    const channel = new BroadcastChannel('wmc_channel');
-                    channel.postMessage({ type: 'wmc:project-changed', reason: 'migration_complete' });
-                } catch (e) {
-                    console.warn('廣播通知失敗:', e);
-                }
-
                 // 回報完成 ACK
                 if (senderSource && senderOrigin) {
                     senderSource.postMessage({

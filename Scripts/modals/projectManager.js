@@ -7,7 +7,6 @@ import { ensureSignedIn } from '../services/driveAuth.js';
 import { uploadFile } from '../services/driveApi.js';
 import { createTransferProgress } from '../services/transferProgress.js';
 import { buildProjectZipById, triggerImportFolder, triggerImportZip } from '../features/fileHandler.js';
-import { openMigrationModal } from './migrationModal.js';
 
 /**
  * 模組層級管理所有進行中的專案上傳工作
@@ -266,30 +265,8 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 color: #888;
                 padding: 40px 16px;
                 font-size: 13px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 12px;
             `;
-            emptyEl.innerHTML = `
-                <div style="font-size: 14px; font-weight: 500; color: #cbd5e1;">尚無任何專案</div>
-                <div style="font-size: 12px; color: #94a3b8;">找不到舊譜面？您在舊版網域 (susuy0725.github.io) 創作的譜面仍存留在瀏覽器中</div>
-                <button type="button" class="pm-empty-migrate-btn" style="
-                    background: rgba(0, 210, 255, 0.12);
-                    border: 1px solid rgba(0, 210, 255, 0.35);
-                    color: #00d2ff;
-                    padding: 6px 14px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 12px;
-                    font-weight: 600;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    transition: background 0.15s ease;
-                "><span class="material-symbols-outlined" style="font-size:16px;" translate="no">swap_horiz</span>從舊版網域遷移資料</button>
-            `;
-            emptyEl.querySelector('.pm-empty-migrate-btn').onclick = () => openMigrationModal({ manual: true });
+            emptyEl.textContent = '尚無任何專案';
             container.innerHTML = '';
             container.appendChild(emptyEl);
             return;
@@ -594,38 +571,6 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
     tabBar.append(localTabBtn, driveTabBtn);
 
-    // 舊網域遷移捷徑按鈕 (置於 Tab 右側)
-    const migrateShortcutBtn = document.createElement('button');
-    migrateShortcutBtn.type = 'button';
-    migrateShortcutBtn.className = 'pm-migrate-shortcut-btn';
-    migrateShortcutBtn.title = '從舊版網域 (susuy0725.github.io) 同步譜面資料';
-    migrateShortcutBtn.style.cssText = `
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(0, 210, 255, 0.08);
-        border: 1px solid rgba(0, 210, 255, 0.28);
-        color: #00d2ff;
-        padding: 4px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 500;
-        transition: background 0.15s ease, border-color 0.15s ease;
-    `;
-    migrateShortcutBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 15px;" translate="no">swap_horiz</span><span>舊網域遷移</span>';
-    migrateShortcutBtn.onmouseenter = () => {
-        migrateShortcutBtn.style.background = 'rgba(0, 210, 255, 0.18)';
-        migrateShortcutBtn.style.borderColor = 'rgba(0, 210, 255, 0.5)';
-    };
-    migrateShortcutBtn.onmouseleave = () => {
-        migrateShortcutBtn.style.background = 'rgba(0, 210, 255, 0.08)';
-        migrateShortcutBtn.style.borderColor = 'rgba(0, 210, 255, 0.28)';
-    };
-    migrateShortcutBtn.onclick = () => openMigrationModal({ manual: true });
-    tabBar.appendChild(migrateShortcutBtn);
-
     // 本地專案容器（完全保留原有邏輯）
     const localContainer = document.createElement('div');
     localContainer.className = 'project-manager-grid popup-list';
@@ -733,12 +678,6 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                         simpleToast({ content: t('popup.projectManager.toastSwitched', { name: proj?.name || t('popup.projectManager.untitled') }), type: 'success', timeout: 1500 });
                     }
                     triggerAllListRefresh();
-                }
-            },
-            {
-                text: "🔄 舊版網域遷移",
-                onClick: () => {
-                    openMigrationModal({ manual: true });
                 }
             }
         ]

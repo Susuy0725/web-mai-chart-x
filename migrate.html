@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web mai Chart X - 舊版資料跨網域遷移工具</title>
+    <link rel="icon" href="https://chart.tri-dent.cc/favicon.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #07090e;
+            --bg-surface: rgba(18, 24, 38, 0.75);
+            --bg-surface-elevated: rgba(26, 35, 54, 0.85);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(0, 210, 255, 0.4);
+            --accent-cyan: #00d2ff;
+            --accent-blue: #3a7bd5;
+            --accent-gradient: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+            --accent-gradient-hover: linear-gradient(135deg, #33dcff 0%, #4f8ee6 100%);
+            --accent-success: #00e676;
+            --accent-warning: #ffb300;
+            --accent-danger: #ff5252;
+            --text-main: #f0f6fc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 8px;
+            --shadow-glow: 0 12px 40px rgba(0, 210, 255, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 210, 255, 0.12) 0%, transparent 45%),
+                radial-gradient(circle at 85% 85%, rgba(58, 123, 213, 0.14) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(13, 20, 36, 0.6) 0%, transparent 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            overflow-x: hidden;
+        }
+
+        .wrapper {
+            width: 100%;
+            max-width: 860px;
+            margin: 0 auto;
+        }
+
+        /* 標題與橫幅 */
+        .hero-section {
+            text-align: center;
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            background: rgba(0, 210, 255, 0.1);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            margin-bottom: 16px;
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.15);
+        }
+
+        .badge-pill .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            box-shadow: 0 0 8px var(--accent-cyan);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        h1 {
+            font-size: 34px;
+            font-weight: 800;
+            letter-spacing: -0.8px;
+            margin-bottom: 12px;
+            background: linear-gradient(180deg, #ffffff 30%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-desc {
+            font-size: 15px;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* 主卡片面板 */
+        .card {
+            background: var(--bg-surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 30px;
+            margin-bottom: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+            transition: border-color 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-title-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--accent-cyan);
+        }
+
+        /* 網域設定條 */
+        .domain-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 16px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+
+        .domain-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .domain-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .domain-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            word-break: break-all;
+        }
+
+        .domain-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(0, 210, 255, 0.1);
+            color: var(--accent-cyan);
+        }
+
+        .domain-input {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: var(--radius-sm);
+            color: var(--text-main);
+            font-size: 14px;
+            padding: 6px 10px;
+            font-family: inherit;
+            outline: none;
+            width: 100%;
+            transition: all 0.2s ease;
+        }
+
+        .domain-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+        }
+
+        /* 專案掃描統計 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .stat-num {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        /* 專案清單列表 */
+        .project-list-container {
+            max-height: 260px;
+            overflow-y: auto;
+            border-radius: var(--radius-md);
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 8px;
+            margin-bottom: 24px;
+        }
+
+        .project-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+            margin-bottom: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .project-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .project-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .project-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .project-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(0, 210, 255, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-cyan);
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .project-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 3px;
+        }
+
+        .project-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 8px;
+        }
+
+        .badge-tag {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+        }
+
+        .badge-tag.has-bgm {
+            background: rgba(0, 230, 118, 0.15);
+            color: var(--accent-success);
+        }
+
+        /* 傳輸控制與進度條 */
+        .transfer-section {
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-md);
+            padding: 22px;
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .transfer-section.active {
+            display: block;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar-bg {
+            height: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-gradient);
+            border-radius: 5px;
+            transition: width 0.2s ease;
+        }
+
+        .status-msg {
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 操作按鈕組 */
+        .actions-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            justify-content: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: #ffffff;
+            box-shadow: var(--shadow-glow);
+            flex: 1 1 240px;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-gradient-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 16px 45px rgba(0, 210, 255, 0.35);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 檔案備份收合區 */
+        .backup-accordion {
+            margin-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .backup-title {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .backup-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 13px;
+            border-radius: var(--radius-sm);
+        }
+
+        /* 提示訊息彈窗 (Toast) */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .toast {
+            background: rgba(26, 35, 54, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius-md);
+            padding: 12px 18px;
+            color: var(--text-main);
+            font-size: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .toast.success { border-left: 4px solid var(--accent-success); }
+        .toast.warn { border-left: 4px solid var(--accent-warning); }
+        .toast.error { border-left: 4px solid var(--accent-danger); }
+
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        footer a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <header class="hero-section">
+            <div class="badge-pill">
+                <span class="pulse-dot"></span>
+                Web mai Chart X 跨網域資料遷移專用工具
+            </div>
+            <h1>舊站資料無痛轉移至新站</h1>
+            <p class="hero-desc">
+                由於瀏覽器安全機制（同源策略），站點換新網域後無法自動共用舊網域資料。此工具能讀取目前網域中的所有譜面專案、音訊與設定，並一鍵安全同步至新網域。
+            </p>
+        </header>
+
+        <main class="card">
+            <div class="card-title">
+                <div class="card-title-left">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+                    </svg>
+                    <span>網域傳輸配置</span>
+                </div>
+                <span id="scanStatusBadge" class="badge-tag">正在掃描資料庫...</span>
+            </div>
+
+            <!-- 網域比對與輸入 -->
+            <div class="domain-row">
+                <div class="domain-block">
+                    <span class="domain-label">目前舊資料網域 (來源)</span>
+                    <span class="domain-value" id="sourceDomainText">讀取中...</span>
+                </div>
+                <div class="domain-arrow">
+                    ➔
+                </div>
+                <div class="domain-block">
+                    <span class="domain-label">目標新網域 (接收端)</span>
+                    <input type="text" class="domain-input" id="targetDomainInput" value="https://chart.tri-dent.cc" placeholder="請輸入新網域完整網址">
+                </div>
+            </div>
+
+            <!-- 專案統計資訊 -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-label">偵測到專案總數</span>
+                    <span class="stat-num" id="statProjectCount">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">資料庫儲存項目數</span>
+                    <span class="stat-num" id="statItemCount">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">估算總體積大小</span>
+                    <span class="stat-num" id="statTotalSize">0 MB</span>
+                </div>
+            </div>
+
+            <!-- 專案清單預覽 -->
+            <div class="card-title">
+                <div class="card-title-left">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/>
+                    </svg>
+                    <span>待遷移專案預覽</span>
+                </div>
+                <span id="projectCountTag" class="badge-tag">0 個專案</span>
+            </div>
+
+            <div class="project-list-container" id="projectListContainer">
+                <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 14px;">
+                    正在掃描舊資料庫...
+                </div>
+            </div>
+
+            <!-- 傳輸中進度區域 -->
+            <div class="transfer-section" id="transferSection">
+                <div class="progress-header">
+                    <span id="transferTitle">正在同步至新網域...</span>
+                    <span id="transferPercent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="transferFill"></div>
+                </div>
+                <div class="status-msg">
+                    <span class="spinner" id="transferSpinner"></span>
+                    <span id="transferStatusDetail">正在建立跨視窗握手通道...</span>
+                </div>
+            </div>
+
+            <!-- 核心操作按鈕 -->
+            <div class="actions-grid">
+                <button class="btn btn-primary" id="startMigrateBtn" disabled>
+                    <svg style="width: 18px; height: 18px; fill: currentColor;" viewBox="0 0 24 24">
+                        <path d="M16.01 11H4v2h12.01v3L20 12l-3.99-4z"/>
+                    </svg>
+                    <span>一鍵直連遷移至新網域</span>
+                </button>
+            </div>
+
+            <!-- 離線備份與還原兜底方案 -->
+            <div class="backup-accordion">
+                <div class="backup-title">
+                    <span>備用兜底方案（若瀏覽器阻擋跨網域彈窗或網路受限）</span>
+                </div>
+                <div class="backup-buttons">
+                    <button class="btn btn-secondary btn-sm" id="exportBackupBtn">
+                        📦 匯出離線備份檔 (.json)
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="importBackupBtn">
+                        📥 從備份檔還原
+                    </button>
+                    <input type="file" id="backupFileInput" accept=".json,.wmcb" style="display: none;">
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            Web mai Chart X • 開源 maimai 譜面製作工具 • <a href="https://github.com/Susuy0725/web-mai-chart-x" target="_blank">GitHub Repository</a>
+        </footer>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script type="module">
+        const DB_NAME = 'SimaiEditorDB';
+        const STORE_NAME = 'editorState';
+
+        // UI 元素
+        const sourceDomainText = document.getElementById('sourceDomainText');
+        const targetDomainInput = document.getElementById('targetDomainInput');
+        const scanStatusBadge = document.getElementById('scanStatusBadge');
+        const statProjectCount = document.getElementById('statProjectCount');
+        const statItemCount = document.getElementById('statItemCount');
+        const statTotalSize = document.getElementById('statTotalSize');
+        const projectListContainer = document.getElementById('projectListContainer');
+        const projectCountTag = document.getElementById('projectCountTag');
+        const startMigrateBtn = document.getElementById('startMigrateBtn');
+        const transferSection = document.getElementById('transferSection');
+        const transferPercent = document.getElementById('transferPercent');
+        const transferFill = document.getElementById('transferFill');
+        const transferStatusDetail = document.getElementById('transferStatusDetail');
+        const exportBackupBtn = document.getElementById('exportBackupBtn');
+        const importBackupBtn = document.getElementById('importBackupBtn');
+        const backupFileInput = document.getElementById('backupFileInput');
+        const toastContainer = document.getElementById('toastContainer');
+
+        sourceDomainText.textContent = window.location.origin;
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // 1. IndexedDB 核心操作
+        function openSourceDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME);
+                    }
+                };
+            });
+        }
+
+        async function fetchAllDatabaseItems() {
+            const db = await openSourceDB();
+            return new Promise((resolve) => {
+                try {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const keysReq = store.getAllKeys();
+
+                    keysReq.onsuccess = () => {
+                        const keys = keysReq.result || [];
+                        const items = [];
+                        let loaded = 0;
+                        if (keys.length === 0) {
+                            resolve(items);
+                            return;
+                        }
+
+                        for (const k of keys) {
+                            const valReq = store.get(k);
+                            valReq.onsuccess = () => {
+                                items.push({ key: k, value: valReq.result });
+                                loaded++;
+                                if (loaded === keys.length) {
+                                    resolve(items);
+                                }
+                            };
+                            valReq.onerror = () => {
+                                loaded++;
+                                if (loaded === keys.length) resolve(items);
+                            };
+                        }
+                    };
+                    keysReq.onerror = () => resolve([]);
+                } catch (e) {
+                    console.warn("讀取資料庫失敗:", e);
+                    resolve([]);
+                }
+            });
+        }
+
+        // 2. 掃描與視覺渲染
+        let scannedItems = [];
+        let scannedProjects = [];
+
+        async function scanDatabase() {
+            try {
+                scannedItems = await fetchAllDatabaseItems();
+                statItemCount.textContent = scannedItems.length;
+
+                // 估算大小
+                let byteCount = 0;
+                for (const item of scannedItems) {
+                    if (item.value instanceof Blob) {
+                        byteCount += item.value.size;
+                    } else if (item.value instanceof ArrayBuffer) {
+                        byteCount += item.value.byteLength;
+                    } else if (typeof item.value === 'string') {
+                        byteCount += item.value.length * 2;
+                    } else if (item.value) {
+                        byteCount += JSON.stringify(item.value).length * 2;
+                    }
+                }
+                const mb = (byteCount / (1024 * 1024)).toFixed(1);
+                statTotalSize.textContent = `${mb} MB`;
+
+                // 解析專案
+                const projListItem = scannedItems.find(i => i.key === '__project_list__');
+                let list = projListItem && Array.isArray(projListItem.value) ? projListItem.value : [];
+
+                // 檢查是否含有舊版 legacy 未轉換資料
+                const hasLegacy = scannedItems.some(i => i.key.startsWith('simai_'));
+                if (list.length === 0 && hasLegacy) {
+                    list = [{
+                        id: 'legacy_default',
+                        name: '舊版未分組專案 (預設)',
+                        updatedAt: Date.now()
+                    }];
+                }
+
+                scannedProjects = list;
+                statProjectCount.textContent = list.length;
+                projectCountTag.textContent = `${list.length} 個專案`;
+
+                renderProjectList(list);
+
+                if (scannedItems.length > 0) {
+                    scanStatusBadge.textContent = '掃描完成，資料齊備';
+                    scanStatusBadge.style.color = 'var(--accent-success)';
+                    scanStatusBadge.style.background = 'rgba(0, 230, 118, 0.15)';
+                    startMigrateBtn.disabled = false;
+                } else {
+                    scanStatusBadge.textContent = '未偵測到任何舊資料';
+                    scanStatusBadge.style.color = 'var(--text-muted)';
+                    startMigrateBtn.disabled = true;
+                }
+            } catch (err) {
+                console.error("掃描過程發生異常:", err);
+                scanStatusBadge.textContent = '掃描出錯';
+                showToast("掃描資料庫失敗: " + err.message, "error");
+            }
+        }
+
+        function renderProjectList(projects) {
+            projectListContainer.innerHTML = '';
+            if (projects.length === 0) {
+                projectListContainer.innerHTML = `
+                    <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 14px;">
+                        此網域 (${window.location.origin}) 尚無儲存任何專案資料。
+                    </div>
+                `;
+                return;
+            }
+
+            for (const p of projects) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'project-item';
+
+                // 檢查該專案是否有音訊或背景
+                const hasBgm = scannedItems.some(i => i.key === `proj_${p.id}_resource_bgm` && i.value);
+                const hasBg = scannedItems.some(i => i.key === `proj_${p.id}_background_image` && i.value);
+
+                const dateStr = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '未知時間';
+
+                itemDiv.innerHTML = `
+                    <div class="project-info">
+                        <div class="project-icon">♪</div>
+                        <div>
+                            <div class="project-title">${escapeHtml(p.name || '未命名專案')}</div>
+                            <div class="project-meta">
+                                <span>最後修改: ${dateStr}</span>
+                                <span>ID: ${p.id}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        ${hasBgm ? '<span class="badge-tag has-bgm">音訊</span>' : ''}
+                        ${hasBg ? '<span class="badge-tag">背景</span>' : ''}
+                    </div>
+                `;
+                projectListContainer.appendChild(itemDiv);
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // 3. 跨網域 postMessage 一鍵直連遷移核心
+        startMigrateBtn.addEventListener('click', async () => {
+            const rawTargetDomain = targetDomainInput.value.trim().replace(/\/+$/, '');
+            if (!rawTargetDomain) {
+                showToast("請輸入目標新網域網址！", "error");
+                targetDomainInput.focus();
+                return;
+            }
+
+            let targetOrigin = '';
+            try {
+                const u = new URL(rawTargetDomain);
+                targetOrigin = u.origin;
+            } catch (e) {
+                showToast("無效的網址格式，請包含 https:// 或 http://", "error");
+                return;
+            }
+
+            // 啟動傳輸 UI
+            transferSection.classList.add('active');
+            startMigrateBtn.disabled = true;
+            transferPercent.textContent = '0%';
+            transferFill.style.width = '0%';
+            transferStatusDetail.textContent = `正在開啟新網域接收視窗 (${targetOrigin})...`;
+
+            const receiverUrl = `${rawTargetDomain}/migrate-receiver.html`;
+            // 開啟新視窗作為接收端
+            const receiverWin = window.open(receiverUrl, 'WMC_Migrate_Receiver', 'width=620,height=680');
+
+            if (!receiverWin) {
+                showToast("彈出視窗被瀏覽器阻擋！請允許快顯視窗或改用離線備份檔匯入。", "error");
+                transferStatusDetail.textContent = '彈出視窗開啟失敗（被瀏覽器攔截）';
+                startMigrateBtn.disabled = false;
+                return;
+            }
+
+            // 建立握手監聽
+            let isConnected = false;
+            let currentItemIndex = 0;
+            const total = scannedItems.length;
+
+            const onMessage = (event) => {
+                // 檢查來源網域是否相符
+                if (event.origin !== targetOrigin) return;
+                const data = event.data;
+                if (!data || typeof data !== 'object') return;
+
+                // 握手確認
+                if (data.type === 'WMC_MIGRATE_HANDSHAKE_ACK' || data.type === 'WMC_RECEIVER_READY') {
+                    if (!isConnected) {
+                        isConnected = true;
+                        transferStatusDetail.textContent = '連線成功，正在開始資料傳輸...';
+                        
+                        // 蒐集本網域之 localStorage 設定
+                        const localData = {};
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const k = localStorage.key(i);
+                            if (k && k.startsWith('simai_')) {
+                                localData[k] = localStorage.getItem(k);
+                            }
+                        }
+
+                        // 發送開始信號
+                        receiverWin.postMessage({
+                            type: 'WMC_MIGRATE_START',
+                            totalItems: total,
+                            projectCount: scannedProjects.length,
+                            localStorage: localData
+                        }, targetOrigin);
+
+                        // 發送第一項
+                        sendNextItem();
+                    }
+                    return;
+                }
+
+                // 單筆寫入完成 ACK，推進下一筆
+                if (data.type === 'WMC_MIGRATE_ITEM_ACK') {
+                    currentItemIndex++;
+                    const percent = Math.min(100, Math.round((currentItemIndex / Math.max(1, total)) * 100));
+                    transferFill.style.width = `${percent}%`;
+                    transferPercent.textContent = `${percent}%`;
+
+                    if (currentItemIndex < total) {
+                        sendNextItem();
+                    } else {
+                        // 全部發送完畢，送出結束信號
+                        transferStatusDetail.textContent = '資料已傳輸完畢，等待新網域完成最終寫入...';
+                        receiverWin.postMessage({
+                            type: 'WMC_MIGRATE_COMPLETE'
+                        }, targetOrigin);
+                    }
+                    return;
+                }
+
+                // 最終完成
+                if (data.type === 'WMC_MIGRATE_FINISH') {
+                    window.removeEventListener('message', onMessage);
+                    transferFill.style.width = '100%';
+                    transferPercent.textContent = '100%';
+                    document.getElementById('transferSpinner').style.display = 'none';
+                    transferStatusDetail.innerHTML = `<span style="color: var(--accent-success); font-weight: 600;">✓ 遷移成功！所有專案已保存至新網域 (${targetOrigin})</span>`;
+                    showToast("🎉 資料遷移全數成功完成！", "success");
+                    startMigrateBtn.innerHTML = '✓ 已完成遷移 (點此開啟新站)';
+                    startMigrateBtn.disabled = false;
+                    startMigrateBtn.onclick = () => {
+                        window.location.href = rawTargetDomain;
+                    };
+                }
+            };
+
+            window.addEventListener('message', onMessage);
+
+            function sendNextItem() {
+                if (currentItemIndex >= total) return;
+                const item = scannedItems[currentItemIndex];
+                transferStatusDetail.textContent = `正在傳輸 [${currentItemIndex + 1}/${total}]: ${item.key}...`;
+
+                receiverWin.postMessage({
+                    type: 'WMC_MIGRATE_ITEM',
+                    index: currentItemIndex,
+                    total: total,
+                    key: item.key,
+                    value: item.value
+                }, targetOrigin);
+            }
+
+            // 發起握手輪詢（每 500ms 重試直到新視窗載入就緒）
+            let attempts = 0;
+            const handshakeTimer = setInterval(() => {
+                if (isConnected || attempts > 30) {
+                    clearInterval(handshakeTimer);
+                    if (!isConnected) {
+                        transferStatusDetail.textContent = '連線超時：新網域頁面未及時回應，請檢查網址是否正確。';
+                        startMigrateBtn.disabled = false;
+                    }
+                    return;
+                }
+                attempts++;
+                receiverWin.postMessage({
+                    type: 'WMC_MIGRATE_HANDSHAKE',
+                    version: 1
+                }, targetOrigin);
+            }, 500);
+        });
+
+        // 4. 離線備份匯出與還原兜底
+        exportBackupBtn.addEventListener('click', async () => {
+            if (scannedItems.length === 0) {
+                showToast("資料庫中無任何資料可匯出！", "warn");
+                return;
+            }
+
+            showToast("正在封裝所有專案與媒體檔案...", "info");
+            exportBackupBtn.disabled = true;
+
+            try {
+                // 將 Blob 轉為 Base64 以供 JSON 序列化
+                const exportData = {
+                    version: 1,
+                    exportDate: new Date().toISOString(),
+                    sourceOrigin: window.location.origin,
+                    projects: scannedProjects,
+                    items: []
+                };
+
+                for (let i = 0; i < scannedItems.length; i++) {
+                    const it = scannedItems[i];
+                    if (it.value instanceof Blob) {
+                        const base64 = await blobToBase64(it.value);
+                        exportData.items.push({
+                            key: it.key,
+                            isBlob: true,
+                            mimeType: it.value.type,
+                            data: base64
+                        });
+                    } else if (it.value instanceof ArrayBuffer) {
+                        const base64 = arrayBufferToBase64(it.value);
+                        exportData.items.push({
+                            key: it.key,
+                            isArrayBuffer: true,
+                            data: base64
+                        });
+                    } else {
+                        exportData.items.push({
+                            key: it.key,
+                            data: it.value
+                        });
+                    }
+                }
+
+                const jsonStr = JSON.stringify(exportData);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `web-mai-chart-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showToast("備份檔已成功打包下載！", "success");
+            } catch (err) {
+                console.error("匯出失敗:", err);
+                showToast("備份匯出失敗: " + err.message, "error");
+            } finally {
+                exportBackupBtn.disabled = false;
+            }
+        });
+
+        importBackupBtn.addEventListener('click', () => {
+            backupFileInput.click();
+        });
+
+        backupFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            showToast("正在讀取並還原備份資料...", "info");
+            try {
+                const text = await file.text();
+                const parsed = JSON.parse(text);
+                if (!parsed.items || !Array.isArray(parsed.items)) {
+                    throw new Error("無效的備份檔案格式");
+                }
+
+                const db = await openSourceDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+
+                for (const it of parsed.items) {
+                    let val = it.data;
+                    if (it.isBlob) {
+                        val = base64ToBlob(it.data, it.mimeType);
+                    } else if (it.isArrayBuffer) {
+                        val = base64ToArrayBuffer(it.data);
+                    }
+                    store.put(val, it.key);
+                }
+
+                await new Promise((res, rej) => {
+                    tx.oncomplete = res;
+                    tx.onerror = () => rej(tx.error);
+                });
+
+                showToast("備份資料已成功寫入本網域！正在刷新統計...", "success");
+                await scanDatabase();
+            } catch (err) {
+                console.error("還原失敗:", err);
+                showToast("備份檔還原失敗: " + err.message, "error");
+            } finally {
+                backupFileInput.value = '';
+            }
+        });
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function base64ToBlob(dataUrl, mime = 'application/octet-stream') {
+            const byteString = atob(dataUrl.split(',')[1]);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mime });
+        }
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // 初始化掃描
+        scanDatabase();
+    </script>
+</body>
+
+</html>

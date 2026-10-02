@@ -22,7 +22,7 @@ import {
 } from './helper.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
-import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
+import { t, setLang, getCurrentLang, applyI18nToDOM, i18nReady } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
@@ -3025,7 +3025,8 @@ if (projectManagerButton) {
     });
 }
 
-function _init() {
+async function _init() {
+    await i18nReady;
     runInitModal({
         audioManager,
         loadAllImages,

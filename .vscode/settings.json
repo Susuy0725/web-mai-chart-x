@@ -12,5 +12,8 @@
     "i18n-ally.enabledParsers": [
         "json"
     ],
-    "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml"
+    "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml",
+    "i18n-ally.exclude": [
+    "**/manifest.json"
+  ]
 }

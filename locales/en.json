@@ -176,7 +176,7 @@
       "globalTimeline": "Show Global Timeline",
       "enableQuickPanel": "Enable Quick Panel",
       "lang": "Language",
-      "langAuto": "Auto (System Detected)",
+      "langAuto": "system language",
       "drawHitEffect": "Render Hit Effects",
       "drawHanabiEffect": "Render Hanabi Effects",
       "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",

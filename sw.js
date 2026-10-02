@@ -72,7 +72,7 @@ const ASSETS = [
     './Fonts/Inter.ttf',
     './Skin/outline.png',
     './Scripts/i18n.js',
-    './locales/manifest.json',
+    './config/manifest.json',
     './locales/en.json',
     './locales/ja.json',
     './locales/zh-TW.json',

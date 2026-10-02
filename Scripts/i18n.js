@@ -15,13 +15,13 @@ const AUTO_LANG = 'auto';
 
 async function fetchManifest() {
     try {
-        const url = new URL('../locales/manifest.json', import.meta.url).href;
+        const url = new URL('../config/manifest.json', import.meta.url).href;
         const res = await fetch(url);
         if (res.ok) {
             manifest = await res.json();
         }
     } catch (e) {
-        console.warn('Failed to load locales/manifest.json, fallback to static manifest', e);
+        console.warn('Failed to load config/manifest.json, fallback to static manifest', e);
     }
     return manifest;
 }

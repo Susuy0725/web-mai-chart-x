@@ -8,12 +8,8 @@
   "i18n-ally.sourceLanguage": "zh-TW",
   "i18n-ally.displayLanguage": "zh-TW",
   "i18n-ally.keystyle": "nested",
-  "i18n-ally.extract.keygenStrategy": "nested",
   "i18n-ally.ignoredLocales": [
     "manifest"
-  ],
-  "i18n-ally.enabledParsers": [
-    "json"
   ],
   "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml"
 }

@@ -4,16 +4,19 @@ class BananaEngine {
         this.gravity = 0.42;
         this.baseSize = 64;
 
-        // 預先配置固定記憶體，最多允許 5000 隻香蕉同時在線
         this.maxBananas = 5000;
         this.count = 0;
         this.DEG2RAD = Math.PI / 180;
 
-        // 每個香蕉佔用 7 個欄位: x, y, vx, vy, rotation, size, life
+        // 7 個欄位: x, y, vx, vy, rotation, size, life
         this.stride = 7;
         this.data = new Float32Array(this.maxBananas * this.stride);
 
-        // 建立離屏快取
+        // --- 空間網格（Spatial Grid）配置 ---
+        // 格子大小設為最大香蕉直徑略大一點（size 最大約 52，設 64 剛好）
+        this.cellSize = 64;
+        this.grid = new Map();
+
         this.spriteCanvas = document.createElement("canvas");
         this.spriteCanvas.width = this.baseSize;
         this.spriteCanvas.height = this.baseSize;
@@ -29,64 +32,170 @@ class BananaEngine {
     }
 
     spawn(x, y) {
-        // 如果超過最大上限，就不再產生，保護記憶體不越界
         if (this.count >= this.maxBananas) return;
 
         const offset = this.count * this.stride;
         const size = 20 + Math.random() * 32;
 
-        this.data[offset + 0] = x;                                // x
-        this.data[offset + 1] = y;                                // y
-        this.data[offset + 2] = (Math.random() - 0.5) * 30;       // vx
-        this.data[offset + 3] = Math.random() * -12;               // vy
-        this.data[offset + 4] = Math.random() * 360;              // rotation
-        this.data[offset + 5] = size;                             // size
-        this.data[offset + 6] = 100 + Math.random() * 150;                              // life
+        this.data[offset + 0] = x;
+        this.data[offset + 1] = y;
+        this.data[offset + 2] = (Math.random() - 0.5) * 30;
+        this.data[offset + 3] = Math.random() * -12;
+        this.data[offset + 4] = Math.random() * 360;
+        this.data[offset + 5] = size;
+        this.data[offset + 6] = 100 + Math.random() * 150;
 
         this.count++;
     }
 
+    // 處理香蕉與香蕉的彈性碰撞
+    resolveCollisions() {
+        const cellSize = this.cellSize;
+        const grid = this.grid;
+        grid.clear();
+
+        // 1. 將每隻香蕉註冊進網格
+        for (let i = 0; i < this.count; i++) {
+            const off = i * this.stride;
+            const cx = Math.floor(this.data[off + 0] / cellSize);
+            const cy = Math.floor(this.data[off + 1] / cellSize);
+            const key = `\({cx},\){cy}`;
+
+            let cell = grid.get(key);
+            if (!cell) {
+                cell = [];
+                grid.set(key, cell);
+            }
+            cell.push(i);
+        }
+
+        // 2. 檢測同格與相鄰格碰撞（只比對 4 個方向避免重複算兩次）
+        const neighborOffsets = [
+            [0, 0], [1, 0], [0, 1], [1, 1], [-1, 1]
+        ];
+
+        for (const [key, cell] of grid.entries()) {
+            const [cx, cy] = key.split(",").map(Number);
+
+            for (let n = 0; n < neighborOffsets.length; n++) {
+                const nx = cx + neighborOffsets[n][0];
+                const ny = cy + neighborOffsets[n][1];
+                const otherCell = grid.get(`\({nx},\){ny}`);
+                if (!otherCell) continue;
+
+                const isSameCell = (n === 0);
+
+                for (let a = 0; a < cell.length; a++) {
+                    const i = cell[a];
+                    const offA = i * this.stride;
+                    const rA = this.data[offA + 5] * 0.42; // 用半徑做近似圓
+
+                    // 若同一格就只跟後面的比，不同格就全比
+                    const startB = isSameCell ? a + 1 : 0;
+                    for (let b = startB; b < otherCell.length; b++) {
+                        const j = otherCell[b];
+                        const offB = j * this.stride;
+                        const rB = this.data[offB + 5] * 0.42;
+
+                        const dx = this.data[offB + 0] - this.data[offA + 0];
+                        const dy = this.data[offB + 1] - this.data[offA + 1];
+                        const distSq = dx * dx + dy * dy;
+                        const minDist = rA + rB;
+
+                        // 發生重疊碰撞
+                        if (distSq < minDist * minDist && distSq > 0.0001) {
+                            const dist = Math.sqrt(distSq);
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+
+                            // 分離兩者避免黏在一起（位置修正）
+                            const overlap = 0.5 * (minDist - dist);
+                            this.data[offA + 0] -= nx * overlap;
+                            this.data[offA + 1] -= ny * overlap;
+                            this.data[offB + 0] += nx * overlap;
+                            this.data[offB + 1] += ny * overlap;
+
+                            // 計算衝量（假設等質量，彈性係數 0.7）
+                            const kx = this.data[offA + 2] - this.data[offB + 2];
+                            const ky = this.data[offA + 3] - this.data[offB + 3];
+                            const p = 2 * (nx * kx + ny * ky) / 2; // (v1 - v2) · n
+
+                            // 只有互相靠近時才施加反作用力
+                            if (p > 0) {
+                                const restitution = 0.7;
+                                const impulse = p * (1 + restitution) * 0.5;
+
+                                this.data[offA + 2] -= impulse * nx;
+                                this.data[offA + 3] -= impulse * ny;
+                                this.data[offB + 2] += impulse * nx;
+                                this.data[offB + 3] += impulse * ny;
+
+                                // 互撞時稍微給點旋轉力矩
+                                this.data[offA + 4] += impulse * 2;
+                                this.data[offB + 4] -= impulse * 2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     update() {
         const h = this.canvas.height;
+        const w = this.canvas.width;
         let i = 0;
 
-        // 使用單個指標進行 In-place 覆寫，免去 filter 產生的陣列重組
         while (i < this.count) {
             const offset = i * this.stride;
 
             // 物理運動計算
-            this.data[offset + 0] += this.data[offset + 2]; // x += vx
-            this.data[offset + 1] += this.data[offset + 3]; // y += vy
-            this.data[offset + 3] += this.gravity;          // vy += gravity
-            this.data[offset + 4] += this.data[offset + 2] * 2; // rotation += vx * 2
-            this.data[offset + 6]--;                        // life--
+            this.data[offset + 0] += this.data[offset + 2];
+            this.data[offset + 1] += this.data[offset + 3];
+            this.data[offset + 3] += this.gravity;
+            this.data[offset + 4] += this.data[offset + 2] * 2;
+            this.data[offset + 6]--;
 
-            // 邊界彈跳
-            const ground = h - this.data[offset + 5] / 2;
+            const radius = this.data[offset + 5] * 0.4;
+
+            // 地面碰撞
+            const ground = h - radius;
             if (this.data[offset + 1] > ground) {
                 this.data[offset + 1] = ground;
-                this.data[offset + 3] *= -0.7; // vy
-                this.data[offset + 2] *= 0.9;  // vx
+                this.data[offset + 3] *= -0.7;
+                this.data[offset + 2] *= 0.9;
             }
 
-            // 如果生命結束，將最尾端的香蕉資料覆蓋到目前位置，並縮減總數
+            // 左右牆壁彈跳（加上去畫面更有活力）
+            if (this.data[offset + 0] < radius) {
+                this.data[offset + 0] = radius;
+                this.data[offset + 2] *= -0.7;
+            } else if (this.data[offset + 0] > w - radius) {
+                this.data[offset + 0] = w - radius;
+                this.data[offset + 2] *= -0.7;
+            }
+
+            // 生命週期結束處理
             if (this.data[offset + 6] <= 0) {
                 if (i !== this.count - 1) {
                     const lastOffset = (this.count - 1) * this.stride;
                     this.data.set(this.data.subarray(lastOffset, lastOffset + this.stride), offset);
                 }
                 this.count--;
-                // 注意：這裡不需要 i++，因為當前位置已經換成了新的未處理資料
             } else {
                 i++;
             }
+        }
+
+        // 執行香蕉間互相碰撞
+        if (this.count > 1) {
+            this.resolveCollisions();
         }
     }
 
     draw(ctx) {
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // 1. 渲染香蕉（移除 save/restore，改用直接矩陣覆寫）
         for (let i = 0; i < this.count; i++) {
             const offset = i * this.stride;
             const x = this.data[offset + 0];
@@ -95,25 +204,15 @@ class BananaEngine {
             const size = this.data[offset + 5];
             const life = this.data[offset + 6];
 
-            // 修正：確保透明度不會大於 1.0 (當生命值 > 100 時)
             ctx.globalAlpha = Math.min(1.0, life / 100);
             const r = rot * this.DEG2RAD;
             const cos = Math.cos(r);
             const sin = Math.sin(r);
 
-            ctx.setTransform(
-                cos,
-                sin,
-                -sin,
-                cos,
-                x,
-                y
-            );
-
+            ctx.setTransform(cos, sin, -sin, cos, x, y);
             ctx.drawImage(this.spriteCanvas, -size / 2, -size / 2, size, size);
         }
 
-        // 2. 還原全域矩陣並渲染 UI 計數器
         ctx.resetTransform();
         ctx.globalAlpha = 1.0;
 

@@ -1,14 +1,56 @@
 import { getSlideJudgeQueue } from './slidetables.js';
 
+/**
+ * 確保 note 的判定隊列 (judgeQueues) 已正確建立
+ * 與 main.js 統一結構，作為 Autoplay 與判定狀態機共通的單一資料來源
+ */
+function ensureSlideJudgeQueues(note, renderer) {
+    if (!note.judgeQueue && !note.judgeQueues) {
+        const baseQueue = getSlideJudgeQueue(note, renderer);
+        note.tableConst = baseQueue.tableConst ?? (note.tableConst || 0.18);
+        note._debugMeta = baseQueue._debugMeta || note._debugMeta;
+        if (baseQueue.isWifi && baseQueue.branches) {
+            note.isWifi = true;
+            note.judgeQueues = [
+                baseQueue.branches.left.map(a => a.clone()),
+                baseQueue.branches.center.map(a => a.clone()),
+                baseQueue.branches.right.map(a => a.clone())
+            ];
+            note.judgeQueue = note.judgeQueues[1];
+            note._totalAreasCount = 4;
+            note._fullJudgeQueue = baseQueue.branches.center.map(a => a.clone());
+            note._fullJudgeQueues = [
+                baseQueue.branches.left.map(a => a.clone()),
+                baseQueue.branches.center.map(a => a.clone()),
+                baseQueue.branches.right.map(a => a.clone())
+            ];
+        } else {
+            note.isWifi = false;
+            note.judgeQueue = baseQueue.map(a => a.clone());
+            note.judgeQueues = [note.judgeQueue];
+            note._totalAreasCount = note.judgeQueue.length;
+            note._fullJudgeQueue = baseQueue.map(a => a.clone());
+            note._fullJudgeQueues = [note._fullJudgeQueue];
+        }
+    } else if (!note._fullJudgeQueues) {
+        note._fullJudgeQueues = note.judgeQueues
+            ? note.judgeQueues.map(q => q.map(a => a.clone()))
+            : (note.judgeQueue ? [note.judgeQueue.map(a => a.clone())] : []);
+    }
+    return note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
+}
+
 export class SimulatedPlayController {
     constructor() {
         this.activeSensors = new Set();
+        this.slideQueue = [];
         this._slideAreasMap = new WeakMap();
         this._simulatTouchDuration = 0.06;
     }
 
     reset() {
         this.activeSensors.clear();
+        this.slideQueue = [];
         this._slideAreasMap = new WeakMap();
     }
 
@@ -23,12 +65,16 @@ export class SimulatedPlayController {
 
     update({ globalTime, notes = [], renderer, playing, timeControlSliding, onHit = null, forcePerfect = true, randomOffset = 0 }) {
         this.activeSensors.clear();
+        this.slideQueue.length = 0;
         if (!playing || timeControlSliding) return;
 
         for (let i = 0; i < notes.length; i++) {
             const note = notes[i];
             const noteT = note.time - globalTime;
             const noteType = note.type;
+
+            // 若音符還在判定視窗未來的時間之後，後續音符都在更遠未來，提前結束檢查
+            if (noteT > 0.5) break;
 
             const isHoldNote = (note.isHold || noteType === 'hold' || (note.holdDuration !== undefined && note.holdDuration > 0));
 
@@ -59,7 +105,7 @@ export class SimulatedPlayController {
                 }
             }
 
-            // 3. Slide：產生頭部點擊與劃軌 SlideArea 的感應器輸入
+            // 3. Slide：使用隊列方式逐步解決劃軌判定與感應區輸入
             if (noteType === 'slide') {
                 const slideDelay = note.slideDelay ?? 0;
                 const slideDuration = note.slideDuration ?? 0;
@@ -71,87 +117,78 @@ export class SimulatedPlayController {
                 if (isHeadPart && noteT <= 0 && (slideT < 0 || -noteT <= this._simulatTouchDuration)) {
                     this.activeSensors.add('A' + note.pos);
                     if (!note.triggered && -noteT <= this._simulatTouchDuration && onHit) {
+                        note.headTriggered = true;
                         onHit('A' + note.pos, forcePerfect ? 0 : -noteT + randomOffset);
                     }
                 }
 
-                // 劃軌感應模擬
+                // 劃軌判定感應模擬（隊列驅動解決）
                 if (!note.isMine && slideDuration > 0) {
-                    const queueData = this.getOrCreateSlideAreas(note, renderer);
-                    const tableConst = queueData.tableConst ?? note.tableConst ?? 0.18;
+                    // 若前段連鎖 Slide 尚未判定完成，等待前段隊列結算後再啟動
+                    if (note.prevSlide && !note.prevSlide.slideFinish) {
+                        continue;
+                    }
+
+                    const queues = ensureSlideJudgeQueues(note, renderer);
+                    const tableConst = note.tableConst ?? 0.18;
                     // 終點到達時刻：對齊基準判定時間 judgeTiming = startTiming + slideDuration * (1 - tableConst)
                     const arriveEndTime = Math.max(0.01, slideDuration * (1 - tableConst));
                     // 連鎖最後一段或獨立 slide 在摸到終點後停留 0.08 秒，非最後一段在交接時只保留 0.02 秒
                     const touchHoldEnd = (note.lastSlide || !note.nextSlide) ? 0.08 : 0.02;
 
+                    // 記錄至當前活耀的 Slide 隊列
                     if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
-                        if (queueData.isWifi && queueData.queues) {
-                            const progressRatio = Math.min(1, Math.max(0, slideT / arriveEndTime));
-                            for (let b = 0; b < queueData.queues.length; b++) {
-                                const branchQueue = queueData.queues[b];
-                                const totalAreas = branchQueue.length;
-                                if (totalAreas > 0) {
-                                    let curIdx = 0;
-                                    let floatIdx = 0;
-                                    if (totalAreas > 1) {
-                                        if (progressRatio >= 1.0 - 1e-5) {
-                                            curIdx = totalAreas - 1;
-                                            floatIdx = totalAreas - 1;
-                                        } else {
-                                            floatIdx = progressRatio * (totalAreas - 1) + 1e-6;
-                                            curIdx = Math.min(totalAreas - 2, Math.floor(floatIdx));
-                                        }
-                                    }
-                                    const currentArea = branchQueue[curIdx];
-                                    if (currentArea && currentArea.areas) {
-                                        for (let s = 0; s < currentArea.areas.length; s++) {
-                                            this.activeSensors.add(currentArea.areas[s]);
-                                        }
-                                    }
-                                    // 中間區域交接模擬：剛跨入下一區時保留上一區少許時間，保證劃過離開判定觸發
-                                    if (curIdx < totalAreas - 1 && curIdx > 0) {
-                                        const frac = floatIdx - curIdx;
-                                        if (frac < 0.25) {
-                                            const prevArea = branchQueue[curIdx - 1];
-                                            if (prevArea && prevArea.areas) {
-                                                for (let s = 0; s < prevArea.areas.length; s++) {
-                                                    this.activeSensors.add(prevArea.areas[s]);
-                                                }
-                                            }
+                        this.slideQueue.push(note);
+                    }
+
+                    if (slideT >= 0) {
+                        const totalCount = note._totalAreasCount || 1;
+
+                        if (totalCount <= 1) {
+                            // 單一感應區 Slide
+                            for (let b = 0; b < queues.length; b++) {
+                                const q = queues[b];
+                                if (q.length > 0) {
+                                    const area = q[0];
+                                    if (area && area.areas) {
+                                        for (let s = 0; s < area.areas.length; s++) {
+                                            this.activeSensors.add(area.areas[s]);
                                         }
                                     }
                                 }
                             }
                         } else {
-                            const areas = queueData;
-                            const totalAreas = areas.length;
+                            // 多步驟 Slide：以隊列依序出隊推進方式解決各步驟
+                            const stepDuration = arriveEndTime / (totalCount - 1);
+                            // 計算當前時刻應已完成的隊列步驟數 (保留最後一個步驟待到達時由狀態機結算)
+                            const targetCompletedSteps = Math.min(totalCount - 1, Math.floor(slideT / stepDuration));
 
-                            if (totalAreas > 0) {
-                                const progressRatio = Math.min(1, Math.max(0, slideT / arriveEndTime));
-                                let curIdx = 0;
-                                let floatIdx = 0;
-                                if (totalAreas > 1) {
-                                    if (progressRatio >= 1.0 - 1e-5) {
-                                        curIdx = totalAreas - 1;
-                                        floatIdx = totalAreas - 1;
-                                    } else {
-                                        floatIdx = progressRatio * (totalAreas - 1) + 1e-6;
-                                        curIdx = Math.min(totalAreas - 2, Math.floor(floatIdx));
+                            for (let b = 0; b < queues.length; b++) {
+                                const queue = queues[b];
+                                const currentCompleted = totalCount - queue.length;
+
+                                // 依隊列先進先出 (FIFO) 依序出隊已完成的步驟，避免跳幀遺漏感應區
+                                if (currentCompleted < targetCompletedSteps) {
+                                    const countToPop = Math.min(queue.length - 1, targetCompletedSteps - currentCompleted);
+                                    if (countToPop > 0) {
+                                        queue.splice(0, countToPop);
                                     }
                                 }
 
-                                const currentArea = areas[curIdx];
+                                // 取得當前隊列前端正在進行的步驟感應區
+                                const currentArea = queue[0];
                                 if (currentArea && currentArea.areas) {
                                     for (let s = 0; s < currentArea.areas.length; s++) {
                                         this.activeSensors.add(currentArea.areas[s]);
                                     }
                                 }
 
-                                // 中間區域交接模擬：剛跨入下一區時保留上一區少許時間，保證劃過離開判定觸發
-                                if (curIdx < totalAreas - 1 && curIdx > 0) {
-                                    const frac = floatIdx - curIdx;
-                                    if (frac < 0.25) {
-                                        const prevArea = areas[curIdx - 1];
+                                // 兩區交接模擬：剛跨入下一區時保留上一區少許時間，保證視覺感應過渡流暢
+                                const frac = (slideT / stepDuration) - targetCompletedSteps;
+                                if (frac < 0.25 && targetCompletedSteps > 0 && note._fullJudgeQueues) {
+                                    const fullQ = note._fullJudgeQueues[b] || note._fullJudgeQueue;
+                                    if (fullQ && fullQ[targetCompletedSteps - 1]) {
+                                        const prevArea = fullQ[targetCompletedSteps - 1];
                                         if (prevArea && prevArea.areas) {
                                             for (let s = 0; s < prevArea.areas.length; s++) {
                                                 this.activeSensors.add(prevArea.areas[s]);
@@ -159,6 +196,35 @@ export class SimulatedPlayController {
                                         }
                                     }
                                 }
+                            }
+
+                            // 實時依隊列完成進度更新 slideProgress
+                            const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
+                            const finishedCount = totalCount - queueRemaining;
+                            note.slideProgress = Math.min(1, Math.max(note.slideProgress || 0, finishedCount / totalCount));
+                        }
+
+                        // 到達終點且已判定完成時，在 touchHoldEnd 容錯窗口內持續維持終點感應高亮
+                        if (slideT >= arriveEndTime && slideT <= slideDuration + touchHoldEnd) {
+                            if (note._fullJudgeQueues) {
+                                for (let b = 0; b < note._fullJudgeQueues.length; b++) {
+                                    const fullQ = note._fullJudgeQueues[b];
+                                    if (fullQ && fullQ.length > 0) {
+                                        const lastArea = fullQ[fullQ.length - 1];
+                                        if (lastArea && lastArea.areas) {
+                                            for (let s = 0; s < lastArea.areas.length; s++) {
+                                                this.activeSensors.add(lastArea.areas[s]);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 若已超時仍未標記完成，強制清空隊列保證 main.js 結算
+                        if (slideT >= arriveEndTime + 0.05 && !note.slideFinish) {
+                            for (let b = 0; b < queues.length; b++) {
+                                queues[b].length = 0;
                             }
                         }
                     }
@@ -168,3 +234,4 @@ export class SimulatedPlayController {
         }
     }
 }
+

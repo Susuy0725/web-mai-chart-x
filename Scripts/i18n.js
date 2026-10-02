@@ -74,26 +74,33 @@ export async function loadLocale(lang) {
     }
 }
 
-// Initial initialization
-await fetchManifest();
-
+// Determine initial target language synchronously without blocking module import
 const savedLang = typeof localStorage !== 'undefined' ? localStorage.getItem('simai_lang') : null;
 const defaultDetectedLang = detectDefaultLanguage(manifest.locales, manifest.defaultLocale || 'zh-TW');
 
-let initialTargetLang = savedLang;
-if (!initialTargetLang || !manifest.locales.some(l => l.code === initialTargetLang)) {
-    initialTargetLang = defaultDetectedLang;
+let currentLang = savedLang;
+if (!currentLang || !manifest.locales.some(l => l.code === currentLang)) {
+    currentLang = defaultDetectedLang;
 }
 
-const defaultLocaleCode = manifest.defaultLocale || 'zh-TW';
+// Non-blocking initialization Promise
+export const i18nReady = (async () => {
+    await fetchManifest();
 
-// Pre-load default fallback locale and current target locale
-await Promise.all([
-    loadLocale(defaultLocaleCode),
-    loadLocale(initialTargetLang)
-]);
+    if (!manifest.locales.some(l => l.code === currentLang)) {
+        currentLang = detectDefaultLanguage(manifest.locales, manifest.defaultLocale || 'zh-TW');
+    }
 
-let currentLang = initialTargetLang;
+    const defaultLocaleCode = manifest.defaultLocale || 'zh-TW';
+
+    await Promise.all([
+        loadLocale(defaultLocaleCode),
+        loadLocale(currentLang)
+    ]);
+
+    applyI18nToDOM();
+    listeners.forEach(cb => cb(currentLang));
+})();
 
 export function getCurrentLang() {
     return currentLang;
@@ -153,6 +160,7 @@ export function t(key, params = {}) {
 }
 
 export function applyI18nToDOM() {
+    if (typeof document === 'undefined') return;
     const elements = document.querySelectorAll('[data-i18n]');
     elements.forEach(el => {
         const key = el.getAttribute('data-i18n');

@@ -1,11 +1,7 @@
 // Scripts/services/driveAuth.js
 // Google Drive OAuth 2.0 授權管理模組
-//
-// 設計原則：
-// 1. 跨平台行為 100% 一致：僅在使用者主動點擊按鈕時觸發 Google 授權彈窗 (prompt: 'select_account')。
-// 2. 移除所有脆弱的背景靜默續期與非互動授權，徹底避免彈窗攔截器與 COOP 衝突。
-// 3. Access Token 與 User Info 暫存於 sessionStorage（同分頁重新整理維持登入，關閉分頁或瀏覽器後自動銷毀）。
-// 4. 使用 Drive about API 驗證 Token 並取得帳號名稱與頭像，完全符合 drive.file 與 drive.install scope。
+
+import { t } from '../i18n.js';
 
 const CLIENT_ID = '1075237013882-bbdr5s31phsu77afii792iqc8t8bfvua.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install';
@@ -84,7 +80,7 @@ function ensureGisScript() {
         const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
         if (existingScript) {
             existingScript.addEventListener('load', () => resolve(window.google.accounts.oauth2));
-            existingScript.addEventListener('error', () => reject(new Error('Google 授權函式庫載入失敗')));
+            existingScript.addEventListener('error', () => reject(new Error(t('popup.drive.authScriptLoadFailed'))));
             return;
         }
 
@@ -96,10 +92,10 @@ function ensureGisScript() {
             if (window.google?.accounts?.oauth2) {
                 resolve(window.google.accounts.oauth2);
             } else {
-                reject(new Error('Google 授權物件初始化失敗'));
+                reject(new Error(t('popup.drive.authInitFailed')));
             }
         };
-        script.onerror = () => reject(new Error('無法連線至 Google 授權伺服器'));
+        script.onerror = () => reject(new Error(t('popup.drive.authConnectFailed')));
         document.head.appendChild(script);
     });
 }
@@ -186,7 +182,7 @@ export async function signIn() {
                 callback: async (tokenResponse) => {
                     if (tokenResponse.error) {
                         const isCancelled = tokenResponse.error === 'popup_closed' || tokenResponse.error === 'user_cancelled';
-                        const err = new Error(isCancelled ? '使用者已取消授權' : `Google 授權失敗: ${tokenResponse.error_description || tokenResponse.error}`);
+                        const err = new Error(isCancelled ? t('popup.drive.userCancelledAuth') : t('popup.drive.toastSignInFailed', { msg: tokenResponse.error_description || tokenResponse.error }));
                         if (!isCancelled) {
                             console.warn('[DriveAuth] 授權回傳錯誤:', tokenResponse.error);
                         }
@@ -195,7 +191,7 @@ export async function signIn() {
                     }
 
                     if (!tokenResponse.access_token) {
-                        reject(new Error('未收到有效的 Access Token'));
+                        reject(new Error(t('popup.drive.invalidAccessToken')));
                         return;
                     }
 

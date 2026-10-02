@@ -171,6 +171,8 @@
       "globalTimeline": "Show Global Timeline",
       "enableQuickPanel": "Enable Quick Panel",
       "lang": "Language",
+      "drawHitEffect": "Render Hit Effects",
+      "drawHanabiEffect": "Render Hanabi Effects",
       "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "Auto-connect to MajdataView"
@@ -222,7 +224,14 @@
       "confirmClearChart": "Are you sure you want to clear all chart data? Sound effects and image caches will be kept.",
       "clearAssetCache": "Clear Asset Cache",
       "confirmClearAsset": "Are you sure you want to clear all sound effects and image cache files? Chart data will be kept.",
-      "close": "Close"
+      "close": "Close",
+      "totalUsageLabel": "IndexedDB Total Usage",
+      "cachedItemsCount": "{count} cached items",
+      "emptyCache": "No cached items found",
+      "clearOptionsTitle": "Clear Cache Options",
+      "toastClearAll": "All IndexedDB data cleared",
+      "toastClearChart": "Cleared {count} chart cache items",
+      "toastClearAsset": "Cleared {count} asset cache items"
     },
     "editMusic": {
       "title": "Edit Music and First Beat Offset",
@@ -380,7 +389,18 @@
       "toastDeleteFailed": "Delete failed: {msg}",
       "transferringDownloadWait": "File is downloading, please wait",
       "transferringWait": "File is being processed, please wait",
-      "transferringCannotDelete": "Cannot delete while file is transferring"
+      "transferringCannotDelete": "Cannot delete while file is transferring",
+      "unpacking": "Unpacking...",
+      "reauthFailed": "Authorization expired and re-authentication failed: {msg}",
+      "apiOperationFailed": "Google Drive API operation failed: {msg}",
+      "uploadFailed": "Upload to cloud failed: {msg}",
+      "uploadNetworkError": "Network communication error during upload",
+      "uploadAborted": "Upload aborted",
+      "authScriptLoadFailed": "Failed to load Google Authorization library",
+      "authInitFailed": "Google Authorization initialization failed",
+      "authConnectFailed": "Unable to connect to Google Authorization service",
+      "userCancelledAuth": "User cancelled authorization",
+      "invalidAccessToken": "Invalid or missing Access Token"
     },
     "driveOpen": {
       "title": "Open Google Drive Project",
@@ -468,7 +488,8 @@
         "<b>Undo / Redo</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Z</span> / <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Y</span>.",
         "<b>Speed Up Playback</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">P</span>.",
         "<b>Slow Down Playback</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>.",
-        "<b>Scale Rate</b>: <span class=\"code-highlight\">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity."
+        "<b>Scale Rate</b>: <span class=\"code-highlight\">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity.",
+        "<b>Quick Panel</b>: After enabling in settings, hold <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>, move cursor to target action, and release."
       ]
     },
     "about": {

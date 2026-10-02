@@ -79,13 +79,13 @@ export async function openResourceManager() {
 
         const summaryLeft = document.createElement('div');
         summaryLeft.innerHTML = `
-            <span style="font-size: 11px; color: var(--popup-text-muted); display: block; font-weight: 500;">IndexedDB 總計使用量</span>
+            <span style="font-size: 11px; color: var(--popup-text-muted); display: block; font-weight: 500;">${t('popup.resource.totalUsageLabel')}</span>
             <span style="font-size: 18px; font-weight: 700; color: var(--popup-text-main); font-family: 'ShareTechMono', monospace;">${formatSize(totalSize)}</span>
         `;
 
         const summaryBadge = document.createElement('span');
         summaryBadge.className = 'popup-badge popup-badge-accent';
-        summaryBadge.textContent = `${items.length} 項快取資源`;
+        summaryBadge.textContent = t('popup.resource.cachedItemsCount', { count: items.length });
 
         summaryCard.append(summaryLeft, summaryBadge);
         container.appendChild(summaryCard);
@@ -95,7 +95,7 @@ export async function openResourceManager() {
         listWrapper.className = 'popup-list';
 
         if (items.length === 0) {
-            listWrapper.innerHTML = '<div style="color: var(--popup-text-muted); text-align: center; padding: 24px 0; font-size: 13px;">目前無快取項目</div>';
+            listWrapper.innerHTML = `<div style="color: var(--popup-text-muted); text-align: center; padding: 24px 0; font-size: 13px;">${t('popup.resource.emptyCache')}</div>`;
         } else {
             items.forEach(item => {
                 const row = document.createElement('div');
@@ -133,49 +133,49 @@ export async function openResourceManager() {
         maxWidth: 560,
         buttons: [
             {
-                text: "清理快取",
+                text: t('popup.resource.clearCache'),
                 onClick: () => {
                     popupWindow({
-                        title: "清理快取選項",
+                        title: t('popup.resource.clearOptionsTitle'),
                         width: 380,
                         buttons: [
                             {
-                                text: "清除所有資料",
+                                text: t('popup.resource.clearAll'),
                                 onClick: async (optCtx) => {
-                                    if (!confirm("確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！")) return;
+                                    if (!confirm(t('popup.resource.confirmClearAll'))) return;
                                     try {
                                         await clearStoreKeys();
                                         await renderContent(container);
                                         optCtx.close();
-                                        simpleToast({ content: "已清除 IndexedDB 中所有資料", type: "success" });
+                                        simpleToast({ content: t('popup.resource.toastClearAll'), type: "success" });
                                     } catch (e) {
                                         console.error("清除資料失敗:", e);
                                     }
                                 }
                             },
                             {
-                                text: "清除譜面暫存",
+                                text: t('popup.resource.clearChartCache'),
                                 onClick: async (optCtx) => {
-                                    if (!confirm("確定要清除所有譜面資料嗎？音效與圖片快取將會保留。")) return;
+                                    if (!confirm(t('popup.resource.confirmClearChart'))) return;
                                     try {
                                         const count = await clearStoreKeys(key => typeof key === 'string' && key.startsWith('simai_'));
                                         await renderContent(container);
                                         optCtx.close();
-                                        simpleToast({ content: `已清理 ${count} 項譜面快取`, type: "success" });
+                                        simpleToast({ content: t('popup.resource.toastClearChart', { count }), type: "success" });
                                     } catch (e) {
                                         console.error("清除譜面失敗:", e);
                                     }
                                 }
                             },
                             {
-                                text: "清除素材暫存",
+                                text: t('popup.resource.clearAssetCache'),
                                 onClick: async (optCtx) => {
-                                    if (!confirm("確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。")) return;
+                                    if (!confirm(t('popup.resource.confirmClearAsset'))) return;
                                     try {
                                         const count = await clearStoreKeys(key => typeof key === 'string' && (key.startsWith('sfx_cache_') || key.startsWith('img_cache_')));
                                         await renderContent(container);
                                         optCtx.close();
-                                        simpleToast({ content: `已清理 ${count} 項素材快取`, type: "success" });
+                                        simpleToast({ content: t('popup.resource.toastClearAsset', { count }), type: "success" });
                                     } catch (e) {
                                         console.error("清除素材失敗:", e);
                                     }

@@ -224,7 +224,14 @@
       "confirmClearChart": "確定要清除所有譜面資料嗎？音效與圖片快取將會保留。",
       "clearAssetCache": "清除素材暫存",
       "confirmClearAsset": "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。",
-      "close": "關閉"
+      "close": "關閉",
+      "totalUsageLabel": "IndexedDB 總計使用量",
+      "cachedItemsCount": "{count} 項快取資源",
+      "emptyCache": "目前無快取項目",
+      "clearOptionsTitle": "清理快取選項",
+      "toastClearAll": "已清除 IndexedDB 中所有資料",
+      "toastClearChart": "已清理 {count} 項譜面快取",
+      "toastClearAsset": "已清理 {count} 項素材快取"
     },
     "editMusic": {
       "title": "編輯音樂與第一拍 offset",
@@ -247,6 +254,7 @@
       "alignmentTitle": "首拍對齊 (Beat Alignment)",
       "alignmentCurrent": "目前約 {beats} 拍",
       "alignmentPrefix": "設定首拍為第",
+      "alignmentSuffix": "拍",
       "alignmentBtn": "執行補白",
       "alignmentDesc": "此操作會在音訊開頭插入空白，使音軌開頭到目前首拍偏移剛好為指定拍數的時間長度。"
     },
@@ -382,7 +390,17 @@
       "tooltipReadOnly": "此專案為唯讀權限，不開放上傳複寫",
       "transferringDownloadWait": "檔案正在下載處理中，請稍候",
       "transferringWait": "檔案正在處理中，請稍候",
-      "transferringCannotDelete": "檔案正在傳輸處理中，無法刪除"
+      "transferringCannotDelete": "檔案正在傳輸處理中，無法刪除",
+      "reauthFailed": "授權已過期且重新驗證失敗: {msg}",
+      "apiOperationFailed": "Google Drive API 操作失敗: {msg}",
+      "uploadFailed": "上傳至雲端失敗: {msg}",
+      "uploadNetworkError": "上傳時發生網路通訊錯誤",
+      "uploadAborted": "上傳已被中斷",
+      "authScriptLoadFailed": "Google 授權程式庫載入失敗",
+      "authInitFailed": "Google 授權初始化失敗",
+      "authConnectFailed": "無法連線至 Google 授權服務",
+      "userCancelledAuth": "使用者已取消授權",
+      "invalidAccessToken": "未取得有效的 Access Token"
     },
     "driveOpen": {
       "title": "開啟 Google 雲端硬碟專案",

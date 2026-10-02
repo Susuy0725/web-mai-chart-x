@@ -4,6 +4,7 @@
 // 內建 401 Unauthorized 攔截與單次重新授權重試保護機制。
 
 import { clearCurrentToken, ensureSignedIn } from './driveAuth.js';
+import { t } from '../i18n.js';
 
 const API_BASE = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
@@ -24,7 +25,7 @@ async function _checkResponse(resp, actionName = 'Drive API 操作') {
         detail = errorData?.error?.message || detail;
     } catch (_) {}
 
-    const err = new Error(`${actionName} 失敗: ${detail}`);
+    const err = new Error(t('popup.drive.apiOperationFailed', { msg: `${actionName}: ${detail}` }));
     err.status = resp.status;
     err.isUnauthorized = resp.status === 401;
     throw err;
@@ -49,7 +50,7 @@ async function _executeWithRetry(initialToken, fn) {
             try {
                 currentToken = await ensureSignedIn();
             } catch (reauthErr) {
-                throw new Error(`授權已過期且重新驗證失敗: ${reauthErr.message}`);
+                throw new Error(t('popup.drive.reauthFailed', { msg: reauthErr.message }));
             }
             return await fn(currentToken);
         }
@@ -317,15 +318,15 @@ export async function uploadFile({ blob, name, token, fileId = null, onProgress 
                         const errorObj = JSON.parse(xhr.responseText);
                         errorMsg = errorObj?.error?.message || errorMsg;
                     } catch (_) {}
-                    const err = new Error(`上傳至雲端失敗: ${errorMsg}`);
+                    const err = new Error(t('popup.drive.uploadFailed', { msg: errorMsg }));
                     err.status = xhr.status;
                     err.isUnauthorized = xhr.status === 401;
                     reject(err);
                 }
             };
 
-            xhr.onerror = () => reject(new Error('上傳時發生網路通訊錯誤'));
-            xhr.onabort = () => reject(new Error('上傳已被中斷'));
+            xhr.onerror = () => reject(new Error(t('popup.drive.uploadNetworkError')));
+            xhr.onabort = () => reject(new Error(t('popup.drive.uploadAborted')));
 
             xhr.send(requestBody);
         });

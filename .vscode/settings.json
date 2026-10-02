@@ -9,11 +9,15 @@
     "i18n-ally.displayLanguage": "zh-TW",
     "i18n-ally.keystyle": "nested",
     "i18n-ally.extract.keygenStrategy": "nested",
+    "i18n-ally.ignoredLocales": [
+        "manifest"
+    ],
+    "i18n-ally.exclude": [
+        "**/manifest.json",
+        "locales/manifest.json"
+    ],
     "i18n-ally.enabledParsers": [
         "json"
     ],
-    "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml",
-    "i18n-ally.exclude": [
-    "**/manifest.json"
-  ]
+    "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml"
 }

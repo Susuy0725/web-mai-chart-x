@@ -58,6 +58,7 @@ export const GRADE_DETUNE = {
 
 class AudioManager {
     constructor() {
+        this.GRADE_DETUNE = GRADE_DETUNE;
         this.globalGain = 0.65; // 全域預設音量
         this.bgmVolume = 0.8;    // BGM 預設音量
         this.sfxMasterVolume = 0.5; // 音效主音量

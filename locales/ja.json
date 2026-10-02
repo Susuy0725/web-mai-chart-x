@@ -480,7 +480,10 @@
       "licenseTitle": "ライセンス",
       "licenseDesc": "このプロジェクトは GNU General Public License v3.0 (GPL-3.0) のもとでオープンソースとして公開されています。",
       "thanksTitle": "謝辭",
-      "thanksDesc": "素材や判定ロジックはオープンソースコミュニティの貢献によるものです：Jian04/MajdataViewAlpha、LingFeng-bbben/MajdataView、TeamMajdata/MajdataPlay、re-poem/MajdataViewX。"
+      "thanksDesc": "素材や判定ロジックはオープンソースコミュニティの貢献によるものです：Jian04/MajdataViewAlpha、LingFeng-bbben/MajdataView、TeamMajdata/MajdataPlay、re-poem/MajdataViewX。",
+      "legalTitle": "規約とポリシー",
+      "privacyPolicy": "プライバシーポリシー",
+      "termsOfService": "利用規約"
     }
   },
   "rpc": {

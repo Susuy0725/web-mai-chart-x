@@ -480,7 +480,10 @@
       "licenseTitle": "授權條款",
       "licenseDesc": "本專案依據 GNU General Public License v3.0 (GPL-3.0) 條款開源。",
       "thanksTitle": "銘謝",
-      "thanksDesc": "素材資源與判定機制得益於開源社群無私分享：Jian04/MajdataViewAlpha、LingFeng-bbben/MajdataView、TeamMajdata/MajdataPlay 與 re-poem/MajdataViewX。"
+      "thanksDesc": "素材資源與判定機制得益於開源社群無私分享：Jian04/MajdataViewAlpha、LingFeng-bbben/MajdataView、TeamMajdata/MajdataPlay 與 re-poem/MajdataViewX。",
+      "legalTitle": "條款與政策",
+      "privacyPolicy": "隱私權政策",
+      "termsOfService": "服務條款"
     }
   },
   "rpc": {

@@ -477,7 +477,10 @@
       "licenseTitle": "License",
       "licenseDesc": "This project is open-sourced under the GNU General Public License v3.0 (GPL-3.0).",
       "thanksTitle": "Acknowledgements",
-      "thanksDesc": "Assets and judgement logic are derived from open-source projects: Jian04/MajdataViewAlpha, LingFeng-bbben/MajdataView, TeamMajdata/MajdataPlay and re-poem/MajdataViewX."
+      "thanksDesc": "Assets and judgement logic are derived from open-source projects: Jian04/MajdataViewAlpha, LingFeng-bbben/MajdataView, TeamMajdata/MajdataPlay and re-poem/MajdataViewX.",
+      "legalTitle": "Policies & Terms",
+      "privacyPolicy": "Privacy Policy",
+      "termsOfService": "Terms of Service"
     }
   },
   "rpc": {

@@ -29,6 +29,17 @@ export function openAboutModal() {
         <div class="about-section-title">${t('popup.about.thanksTitle')}</div>
         <div class="about-section-content">${t('popup.about.thanksDesc')}</div>
       </div>
+      <div class="about-section">
+        <div class="about-section-title">${t('popup.about.legalTitle')}</div>
+        <div class="about-legal-links">
+          <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="about-legal-link">
+            <span>${t('popup.about.privacyPolicy')}</span>
+          </a>
+          <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="about-legal-link">
+            <span>${t('popup.about.termsOfService')}</span>
+          </a>
+        </div>
+      </div>
     </div>`;
 
     popupWindow({
@@ -37,7 +48,7 @@ export function openAboutModal() {
         width: 440,
         buttons: [],
         onOpen: (ctx) => {
-            const links = ctx.elements?.customContent?.querySelectorAll('.about-link-btn');
+            const links = ctx.elements?.customContent?.querySelectorAll('.about-link-btn, .about-legal-link');
             if (links) {
                 links.forEach(link => {
                     link.addEventListener('click', (e) => {

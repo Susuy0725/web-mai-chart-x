@@ -1196,6 +1196,40 @@
     line-height: 1.5;
 }
 
+.about-legal-links {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+.about-legal-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--popup-surface);
+    border: 1px solid var(--popup-border-light);
+    border-radius: var(--popup-radius-md);
+    color: var(--popup-accent, #49e);
+    text-decoration: none;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.about-legal-link:hover {
+    background: var(--popup-surface-hover);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #ffffff;
+}
+
+.about-legal-link:active {
+    transform: scale(0.98);
+}
+
 /* --------------------------------------------------------------------------
    全螢幕行動端頁面模式 (Flutter-style Fullscreen Page Route)
    當螢幕寬度縮小至行動端 (<= 440px) 時，Page 類型 Popup 轉變為全螢幕新頁面，

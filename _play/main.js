@@ -8,6 +8,7 @@ import { getSlideJudgeQueue } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 
 disableNavigationGestures();
+audioManager.setPlayMode(true);
 const simulatedPlayController = new SimulatedPlayController();
 
 const defaultSettings = {
@@ -54,6 +55,8 @@ const defaultSettings = {
         'clock': 0.8,
         'answer': 1,
         'judge': 0.4,
+        'judge_great': 0.4,
+        'judge_good': 0.4,
         'judge_ex': 0.4,
         'judge_break': 0.4,
         'judge_break_slide': 0.4,
@@ -1014,7 +1017,8 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                 spawnJudgeEffect(hn, evalRes);
             }
 
-            audioManager.queueHitSound(hn, globalTime);
+            audioManager.queueHitSound(hn, globalTime, evalRes.grade);
+            hn._startEffectPlayed = true;
 
             // Touch Hanabi 判定音效：需要判定命中且非 TouchHold 時在此播放
             if (hn.type === 'touch' && (!hn.holdDuration || hn.holdDuration <= 0) && hn.isHanabi && evalRes.grade !== 'MISS') {
@@ -1799,6 +1803,26 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                     note.isHolding = true;
                     note._holdPressed = true;
                     note._waitReleaseSec = 0; // 重置放手計時
+
+                    // 補齊 Hold 音符到達瞬間的起手打擊音效與提前按壓判定 (音符已到達 noteT <= 0 且尚未播放過開頭音效)
+                    if (noteT <= 0 && !note._startEffectPlayed) {
+                        if (!note.triggered) {
+                            note.triggered = true;
+                            note.triggeredTime = globalTime;
+                            note._headJudge = {
+                                grade: 'PERFECT',
+                                subGrade: '',
+                                isFast: false,
+                                diffMSec: 0,
+                                scoreMultiplier: 1.0,
+                                breakMultiplier: 1.0,
+                                breakScoreValue: note.isBreak ? 2600 : 0
+                            };
+                        }
+                        const headGrade = note._headJudge?.grade || 'PERFECT';
+                        audioManager.queueHitSound(note, globalTime, headGrade);
+                        note._startEffectPlayed = true;
+                    }
                 } else {
                     note.isHolding = false;
                     // MajdataPlay 鬆手容錯: DELUXE_HOLD_RELEASE_IGNORE_TIME_SEC = 2 * FRAME_SEC (約 33.3ms)
@@ -2023,6 +2047,19 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
 
                         first.check(currentSensors);
 
+                        // Slide 開頭音效：改為啟動時 (第一個感應器判定) 播放
+                        const leader = note.chainLeader || note;
+                        if (!leader._slideStartPlayed && !leader.isMine && (first.on || (second && second.on))) {
+                            leader._slideStartPlayed = true;
+                            // 呼叫時 leader._startEffectPlayed 需為 false，讓 audioManager 識別為開頭 (break_slide_start)
+                            audioManager.queueSound(leader, globalTime, { includeAnswer: false });
+                            const chainList = leader.chainList || [leader];
+                            for (let k = 0; k < chainList.length; k++) {
+                                chainList[k]._slideStartPlayed = true;
+                                chainList[k]._startEffectPlayed = true;
+                            }
+                        }
+
                         let consumed = 0;
                         if (second) {
                             second.check(currentSensors);
@@ -2071,6 +2108,14 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         note._slideJudged = true;
                         const diffSec = (settings.autoPlay !== false) ? 0 : (globalTime - judgeTiming);
                         note.judgeResult = evaluateSlideGrade(diffSec, note);
+
+                        // Break Slide 結尾判定音效：判定成功時 (非 MISS) 立即播放結尾判定音效 (judge_break_slide + break_slide)
+                        if (note.isBreak && !note._endEffectPlayed && note.judgeResult.grade !== 'MISS') {
+                            note._startEffectPlayed = true;
+                            const soundGrade = note.judgeResult.grade;
+                            audioManager.queueSound(note, globalTime, { includeAnswer: false, grade: soundGrade });
+                            note._endEffectPlayed = true;
+                        }
                     }
                 }
             }
@@ -2107,6 +2152,11 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                                 breakMultiplier: note.isBreak ? 0.3 : 0,
                                 breakScoreValue: note.isBreak ? 1000 : 0
                             };
+                            if (note.isBreak && !note._endEffectPlayed) {
+                                note._startEffectPlayed = true;
+                                audioManager.queueSound(note, globalTime, { includeAnswer: false, grade: 'GOOD' });
+                                note._endEffectPlayed = true;
+                            }
                         } else {
                             note.judgeResult = {
                                 grade: 'MISS',
@@ -2372,29 +2422,30 @@ function draw() {
 
             const lookAhead = 0.1; // 100ms look-ahead
 
-            // 1. Answer 節拍提示音：始終在 note.time 準時播放，不隨玩家輸入改變時間
+            // 1. Answer 節拍提示音：始終在 note.time 準時播放，不隨玩家輸入改變時間 (Slide 音符本身不播放 answer)
             const answerDiffT = note.time - globalTime;
             if (answerDiffT <= lookAhead && !note._answerSoundPlayed) {
-                if (!note.isMine && !(noteType === 'slide' && !note.firstSlide) && answerDiffT >= -0.1) {
+                if (!note.isMine && noteType !== 'slide' && answerDiffT >= -0.1) {
                     audioManager.queueSoundSingle('answer', note.time);
                 }
                 note._answerSoundPlayed = true;
             }
 
-            // 2. Slide 開始音效：在 Slide 啟動時刻 (note.time + slideDelay) 準時播放
-            const startTargetT = note.time + (note.slideDelay ?? 0);
-            const startNoteT = startTargetT - globalTime;
-            if (startNoteT <= lookAhead && !note._slideStartPlayed) {
-                if (noteType === "slide" && !note.isMine && (note.firstSlide || !note.prevSlide)) {
-                    if (startNoteT >= -0.1) {
-                        audioManager.queueSound(note, startTargetT);
+            // 1b. Hold 尾端 Answer 提示音：始終在 Hold 結束時刻準時播放 (無論是否 MISS)
+            const isHoldNoteObj = (note.holdDuration > 0 || note.isHold || noteType === 'hold');
+            if (isHoldNoteObj && !note.isMine && (note.holdDuration ?? 0) > 0) {
+                const holdEndTargetT = note.time + (note.holdDuration ?? 0);
+                const holdEndDiffT = holdEndTargetT - globalTime;
+                if (holdEndDiffT <= lookAhead && !note._holdEndAnswerPlayed) {
+                    if (holdEndDiffT >= -0.1) {
+                        audioManager.queueSoundSingle('answer', holdEndTargetT);
                     }
+                    note._holdEndAnswerPlayed = true;
                 }
-                note._slideStartPlayed = true;
-                note._startEffectPlayed = true;
             }
 
-            // 3. 結束音效 (含前瞻，Hanabi 音效移至判定命中時播放，不再隨音符結束無腦播放)
+            // 2. 結束音效 (含前瞻，排除 answer，因尾端 answer 已由 1b 獨立準時播放)
+            // (註：Slide 開始音效已改為在第一個感應器判定啟動時即時播放，不再隨時間提前排程)
             const endTargetT = note.time + skipT;
             const endNoteT = endTargetT - globalTime;
             if (endNoteT <= lookAhead && !note._endEffectPlayed) {
@@ -2402,7 +2453,9 @@ function draw() {
                     (noteType === "slide" && note.lastSlide && note.isBreak && (note.slideFinish || (note.slideProgress ?? 0) >= 0.5)) ||
                     (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd && (note._holdPressed || note.holdFinish) && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
                 if (shouldPlayEndSound && endNoteT >= -0.1) {
-                    audioManager.queueSound(note, endTargetT);
+                    const soundGrade = note.judgeResult?.grade || note._headJudge?.grade || null;
+                    note._startEffectPlayed = true;
+                    audioManager.queueSound(note, endTargetT, { includeAnswer: false, grade: soundGrade });
                 }
                 note._endEffectPlayed = true;
             }
@@ -2411,8 +2464,12 @@ function draw() {
             const lookAhead = 0.1;
             const startTargetT = note.time + (note.slideDelay ?? 0);
             const endTargetT = note.time + skipT;
+            const isHoldNoteObj = (note.holdDuration > 0 || note.isHold || noteType === 'hold');
             if (note.time - globalTime > lookAhead) {
                 note._answerSoundPlayed = false;
+            }
+            if (isHoldNoteObj && (note.time + (note.holdDuration ?? 0) - globalTime > lookAhead)) {
+                note._holdEndAnswerPlayed = false;
             }
             if (startTargetT - globalTime > lookAhead) {
                 note._slideStartPlayed = false;

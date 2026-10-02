@@ -15,8 +15,22 @@ import {
     easeOutQuad,
     easeInBack,
 } from './helper.js';
+
+// Safari / WebKit 專屬優化與 Polyfill: ctx.setAlpha()
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.setAlpha) {
+    CanvasRenderingContext2D.prototype.setAlpha = function(alpha) {
+        this.globalAlpha = alpha;
+    };
+}
+if (typeof OffscreenCanvasRenderingContext2D !== 'undefined' && !OffscreenCanvasRenderingContext2D.prototype.setAlpha) {
+    OffscreenCanvasRenderingContext2D.prototype.setAlpha = function(alpha) {
+        this.globalAlpha = alpha;
+    };
+}
+
 const charWidthCache = {};
 const RICH_HANABI_COLOR_MAP = ['#ff009dff', '#ff4800', '#ffe100', '#ddff00', '#00bbff'];
+const TOUCH_GROUP_TO_INDEX = { A: 0, B: 8, C: 16, D: 17, E: 25 };
 
 const JUDGE_COLORS = {
     PERFECT: "#FFFE02",
@@ -160,10 +174,13 @@ export class SimaiRenderer {
         };
 
         // 優化垃圾回收 (GC) 的重用物件與快取
-        this._zoneCounts = {};
-        this.drawnBorders = new Set();
-        this.hanabiEffect = {};
+        this._zoneCounts = new Int32Array(33);
+        this.drawnBorders = new Uint8Array(33);
+        this.hanabiEffect = Array.from({ length: 33 }, () => ({
+            time: -99999, x: 0, y: 0, noteT: 0, isCenter: false, cleared: true
+        }));
         this._tempColorConfig = { colorCode: '' };
+        this._tempSize = [1, 1];
         this._auxTextList = new Array(12);
 
         // outlineText / middleDisplay 快取配置
@@ -175,6 +192,12 @@ export class SimaiRenderer {
         this._middleDisplayConfigPercent = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
 
         this._hitEffectCache = null;
+
+        // 打擊與持續判定特效池 (Hit / Hold Effect Pool)
+        this._hitEffectQueue = [];
+        this._hitEffectCount = 0;
+        this._hitPosMap = new Int16Array(9).fill(-1);
+        this._holdPosMap = new Int16Array(9).fill(-1);
     }
 
 
@@ -327,13 +350,18 @@ export class SimaiRenderer {
 
     getNoteSizeScaled(size) {
         if (typeof size === 'number') {
-            return [size, size];
+            this._tempSize[0] = size;
+            this._tempSize[1] = size;
+            return this._tempSize;
         }
         if (size instanceof Array) {
-            if (size.length < 2) return [size[0], size[0]];
-            return [size[0], size[1]];
+            this._tempSize[0] = size[0];
+            this._tempSize[1] = size.length < 2 ? size[0] : size[1];
+            return this._tempSize;
         }
-        return [1, 1];
+        this._tempSize[0] = 1;
+        this._tempSize[1] = 1;
+        return this._tempSize;
     }
 
     setContext(ctx) {
@@ -398,23 +426,222 @@ export class SimaiRenderer {
 
     // --- 視覺效果 ---
 
+    /**
+     * 支援 Safari 原生 ctx.setAlpha 與標準 ctx.globalAlpha 回退
+     * @param {number} alpha
+     */
+    setAlpha(alpha) {
+        if (this.ctx.setAlpha) {
+            this.ctx.setAlpha(alpha);
+        } else {
+            this.ctx.globalAlpha = alpha;
+        }
+    }
+
     ensureHitEffectCache() {
         if (this._hitEffectCache) return;
         this._hitEffectCache = new Path2D();
         this._hitEffectCache.arc(0, 0, 1, 0, Math.PI * 2);
     }
 
-    simpleHitEffect(noteT, judge = null) {
+    /**
+     * 佇列單次打擊光圈特效 (Hit Effect) - 具備同位置去重 (Deduplication)
+     */
+    queueHitEffect(pos, noteT, judge = null, x = null, y = null) {
+        if (!this.settings.drawHitEffect) return;
+        const decayTime = this.settings.effectDecayTime || 0.4;
+        if (noteT / decayTime < -1 || noteT > 0.05) return;
+
+        let px = x;
+        let py = y;
+        if (px === null || py === null) {
+            if (pos && noteRefPos[pos - 1]) {
+                const posInfo = noteRefPos[pos - 1];
+                px = posInfo.x;
+                py = posInfo.y;
+            } else {
+                px = 0;
+                py = 0;
+            }
+        }
+
+        // --- 同位置去重：防止同一位置重疊繪製多個光圈 ---
+        if (pos && pos >= 1 && pos <= 8) {
+            const existingIdx = this._hitPosMap[pos];
+            if (existingIdx !== -1 && existingIdx < this._hitEffectCount) {
+                const existing = this._hitEffectQueue[existingIdx];
+                // 保留最新觸發（noteT 更接近 0）的特效
+                if (noteT > existing.noteT) {
+                    existing.x = px;
+                    existing.y = py;
+                    existing.noteT = noteT;
+                    existing.judge = judge || existing.judge;
+                }
+                return;
+            }
+        } else {
+            const thresholdSq = Math.pow(this.settings.noteBaseSize * 0.5, 2);
+            for (let i = 0; i < this._hitEffectCount; i++) {
+                const eff = this._hitEffectQueue[i];
+                if (eff.type === 'hit') {
+                    const dx = eff.x - px;
+                    const dy = eff.y - py;
+                    if (dx * dx + dy * dy < thresholdSq) {
+                        if (noteT > eff.noteT) {
+                            eff.x = px;
+                            eff.y = py;
+                            eff.noteT = noteT;
+                            eff.judge = judge || eff.judge;
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        let eff = this._hitEffectQueue[this._hitEffectCount];
+        if (!eff) {
+            eff = { type: 'hit', x: 0, y: 0, noteT: 0, judge: null, pos: 0 };
+            this._hitEffectQueue[this._hitEffectCount] = eff;
+        }
+        eff.type = 'hit';
+        eff.x = px;
+        eff.y = py;
+        eff.noteT = noteT;
+        eff.judge = judge;
+        eff.pos = pos || 0;
+
+        if (pos && pos >= 1 && pos <= 8) {
+            this._hitPosMap[pos] = this._hitEffectCount;
+        }
+        this._hitEffectCount++;
+    }
+
+    /**
+     * 佇列持續按壓波紋特效 (Hold Effect) - 具備同位置去重 (Deduplication)
+     */
+    queueHoldEffect(pos, noteT, judge = null, x = null, y = null) {
+        if (!this.settings.drawHitEffect) return;
+
+        let px = x;
+        let py = y;
+        if (px === null || py === null) {
+            if (pos && noteRefPos[pos - 1]) {
+                const posInfo = noteRefPos[pos - 1];
+                px = posInfo.x;
+                py = posInfo.y;
+            } else {
+                px = 0;
+                py = 0;
+            }
+        }
+
+        // --- 同位置去重：防止同一位置重疊繪製多個波紋 ---
+        if (pos && pos >= 1 && pos <= 8) {
+            const existingIdx = this._holdPosMap[pos];
+            if (existingIdx !== -1 && existingIdx < this._hitEffectCount) {
+                const existing = this._hitEffectQueue[existingIdx];
+                existing.x = px;
+                existing.y = py;
+                existing.noteT = noteT;
+                existing.judge = judge || existing.judge;
+                return;
+            }
+        } else {
+            const thresholdSq = Math.pow(this.settings.noteBaseSize * 0.5, 2);
+            for (let i = 0; i < this._hitEffectCount; i++) {
+                const eff = this._hitEffectQueue[i];
+                if (eff.type === 'hold') {
+                    const dx = eff.x - px;
+                    const dy = eff.y - py;
+                    if (dx * dx + dy * dy < thresholdSq) {
+                        eff.x = px;
+                        eff.y = py;
+                        eff.noteT = noteT;
+                        eff.judge = judge || eff.judge;
+                        return;
+                    }
+                }
+            }
+        }
+
+        let eff = this._hitEffectQueue[this._hitEffectCount];
+        if (!eff) {
+            eff = { type: 'hold', x: 0, y: 0, noteT: 0, judge: null, pos: 0 };
+            this._hitEffectQueue[this._hitEffectCount] = eff;
+        }
+        eff.type = 'hold';
+        eff.x = px;
+        eff.y = py;
+        eff.noteT = noteT;
+        eff.judge = judge;
+        eff.pos = pos || 0;
+
+        if (pos && pos >= 1 && pos <= 8) {
+            this._holdPosMap[pos] = this._hitEffectCount;
+        }
+        this._hitEffectCount++;
+    }
+
+    /**
+     * 清空打擊特效佇列與位置去重映射表
+     */
+    clearHitEffects() {
+        this._hitEffectCount = 0;
+        this._hitPosMap.fill(-1);
+        this._holdPosMap.fill(-1);
+    }
+
+    /**
+     * 獨立分離的打擊特效渲染通道 (Batch Hit Effects Pass)
+     * 在所有音符繪製完成後統一執行，整幀只切換一次 lighter 混合模式
+     */
+    drawHitEffects() {
+        if (!this.settings.drawHitEffect || this._hitEffectCount === 0) {
+            this.clearHitEffects();
+            return;
+        }
+
+        const { ctx } = this;
+        const count = this._hitEffectCount;
+        const queue = this._hitEffectQueue;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+
+        for (let i = 0; i < count; i++) {
+            const eff = queue[i];
+            if (eff.type === 'hit') {
+                this.simpleHitEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+            } else if (eff.type === 'hold') {
+                this.simpleHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+            }
+        }
+
+        ctx.restore();
+        this.clearHitEffects();
+    }
+
+    simpleHitEffect(noteT, judge = null, x = 0, y = 0, isBatch = false) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
         const decayAlpha = 1 - Math.max(0, -t);
         const radius = 0.5 * this.settings.noteBaseSize * (1 - decayAlpha);
 
+        if (!isBatch) {
+            this.ctx.save();
+            this.ctx.globalCompositeOperation = 'lighter';
+        }
+
         this.ctx.strokeStyle = getJudgeRgba(judge, 0.9 * decayAlpha);
         this.ctx.lineWidth = 0.25 * this.settings.noteBaseSize * decayAlpha;
         this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        this.ctx.arc(x, y, radius, 0, Math.PI * 2);
         this.ctx.stroke();
+
+        if (!isBatch) {
+            this.ctx.restore();
+        }
     }
 
     simpleHanabi(noteT, isCenter) {
@@ -563,23 +790,32 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
-    simpleHoldEffect(noteT, judge = null) {
+    simpleHoldEffect(noteT, judge = null, x = 0, y = 0, isBatch = false) {
         const t = noteT * -2;
         const decayAlpha = 1 - Math.max(0, t % 1);
         const decayAlpha1 = 1 - Math.max(0, (t + 0.5) % 1);
         const radius = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha);
         const radius1 = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha1);
 
+        if (!isBatch) {
+            this.ctx.save();
+            this.ctx.globalCompositeOperation = 'lighter';
+        }
+
         this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha);
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
         this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        this.ctx.arc(x, y, radius, 0, Math.PI * 2);
         this.ctx.stroke();
         this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha1);
         this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha1;
         this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius1, 0, Math.PI * 2);
+        this.ctx.arc(x, y, radius1, 0, Math.PI * 2);
         this.ctx.stroke();
+
+        if (!isBatch) {
+            this.ctx.restore();
+        }
     }
 
     getNoteTransform(noteT, speedMult = 1, size) {
@@ -641,24 +877,22 @@ export class SimaiRenderer {
 
         this.currentTouchNotes = buckets.touch || [];
         // 重置 zoneCounts，避免每幀分配新物件
-        for (const k in this._zoneCounts) {
-            this._zoneCounts[k] = 0;
-        }
+        this._zoneCounts.fill(0);
         for (let idx = 0; idx < this.currentTouchNotes.length; idx++) {
             const n = this.currentTouchNotes[idx];
             const t = n.time - this.globalTime;
             const isActive = n.holdDuration ? (-t <= n.holdDuration) : (t > 0);
             if (isActive) {
-                const zoneKey = n.touchPos + n.pos;
-                this._zoneCounts[zoneKey] = (this._zoneCounts[zoneKey] || 0) + 1;
+                const zoneKey = TOUCH_GROUP_TO_INDEX[n.touchPos] + (n.touchPos === 'C' ? 0 : n.pos - 1);
+                this._zoneCounts[zoneKey]++;
             }
         }
-        this.drawnBorders.clear();
+        this.drawnBorders.fill(0);
 
         // 重置 hanabiEffect 狀態，避免每幀分配新物件
-        for (const k in this.hanabiEffect) {
-            this.hanabiEffect[k].cleared = true;
-            this.hanabiEffect[k].time = -99999;
+        for (let i = 0; i < 33; i++) {
+            this.hanabiEffect[i].cleared = true;
+            this.hanabiEffect[i].time = -99999;
         }
 
         // 1. 更新座標指標
@@ -687,6 +921,9 @@ export class SimaiRenderer {
             this.drawTapAndHoldList(buckets.tapnhold);
         }
         for (const n of buckets.touch) this.drawTouch(n);
+
+        // 獨立分離的打擊特效層 (Hit Effects Pass)
+        this.drawHitEffects();
 
         this.drawStaticBackground();
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
@@ -1346,29 +1583,23 @@ export class SimaiRenderer {
         const pinkStars = this.settings.pinkStars;
 
         const baseTransform = ctx.getTransform();
-        const effectQueue = this._effectQueue || (this._effectQueue = []);
-        let effectCount = 0;
 
         for (let i = 0; i < notes.length; i++) {
             const s = notes[i];
             const isHold = s.type === "hold";
             const noteT = s.time - globalTime;
+            const posInfo = noteRefPos[s.pos - 1];
 
             if (isHold) {
                 if (-noteT > s.holdDuration) {
                     if (drawHitEffect) {
-                        if (!effectQueue[effectCount]) effectQueue[effectCount] = {};
-                        const eff = effectQueue[effectCount++];
-                        eff.type = 'hit';
-                        eff.pos = s.pos;
-                        eff.t = s.holdDuration + noteT;
+                        this.queueHitEffect(s.pos, s.holdDuration + noteT);
                     }
                     continue;
                 }
 
                 const speed = (s.hispeed === 1) ? this._speedFactor : calcPiecewiseSpeed(this.settings.speed * (s.hispeed || 1));
                 const t = 1 - this.timeFunction(noteT * speed);
-                const posInfo = noteRefPos[s.pos - 1];
 
                 const t1 = 1 - this.timeFunction((noteT + s.holdDuration) * speed);
                 const displayT = Math.min(1, Math.max(md, t));
@@ -1384,9 +1615,9 @@ export class SimaiRenderer {
 
                 // 1. 導引弧 (Arc)
                 ctx.rotate(posInfo.rot);
-                if (currentScale !== 1) ctx.globalAlpha = currentScale;
+                if (currentScale !== 1) ctx.setAlpha(currentScale);
                 this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-                if (currentScale !== 1) ctx.globalAlpha = 1;
+                if (currentScale !== 1) ctx.setAlpha(1);
 
                 // 2. Hold 尾端
                 if (t1 > md && endimg) {
@@ -1417,13 +1648,12 @@ export class SimaiRenderer {
                 }
 
                 if (drawHitEffect) {
-                    if (!effectQueue[effectCount]) effectQueue[effectCount] = {};
-                    const eff = effectQueue[effectCount++];
-                    eff.type = 'holdActive';
-                    eff.pos = s.pos;
-                    eff.t = noteT;
-                    eff.displayT = displayT;
-                    eff.isOn = isOn;
+                    if (noteT <= 0 && noteT >= -0.2) {
+                        this.queueHitEffect(s.pos, noteT, null, posInfo.x * displayT, posInfo.y * displayT);
+                    }
+                    if (isOn) {
+                        this.queueHoldEffect(s.pos, noteT, null, posInfo.x * displayT, posInfo.y * displayT);
+                    }
                 }
 
                 ctx.setTransform(baseTransform);
@@ -1431,11 +1661,7 @@ export class SimaiRenderer {
                 // 普通 Tap / Star
                 if (noteT <= 0) {
                     if (drawHitEffect) {
-                        if (!effectQueue[effectCount]) effectQueue[effectCount] = {};
-                        const eff = effectQueue[effectCount++];
-                        eff.type = 'hit';
-                        eff.pos = s.pos;
-                        eff.t = noteT;
+                        this.queueHitEffect(s.pos, noteT, null, posInfo.x, posInfo.y);
                     }
                     continue;
                 }
@@ -1447,13 +1673,12 @@ export class SimaiRenderer {
                     : this.getTapImage(s.isMine, s.isBreak, s.isDouble);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
                 const size = baseSize * currentScale;
-                const posInfo = noteRefPos[s.pos - 1];
 
                 // 1. 導引弧 (Arc)
                 ctx.rotate(posInfo.rot);
-                if (currentScale !== 1) ctx.globalAlpha = currentScale;
+                if (currentScale !== 1) ctx.setAlpha(currentScale);
                 this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-                if (currentScale !== 1) ctx.globalAlpha = 1;
+                if (currentScale !== 1) ctx.setAlpha(1);
 
                 // 2. 音符本體 (Tap / Star)
                 ctx.setTransform(baseTransform);
@@ -1484,29 +1709,6 @@ export class SimaiRenderer {
 
                 ctx.setTransform(baseTransform);
             }
-        }
-
-        // ==========================================
-        // 批次繪製收集到的擊打與判定特效 (整幀只切換一次 lighter)
-        // ==========================================
-        if (effectCount > 0) {
-            ctx.globalCompositeOperation = 'lighter';
-            for (let i = 0; i < effectCount; i++) {
-                const eff = effectQueue[i];
-                const posInfo = noteRefPos[eff.pos - 1];
-                if (eff.type === 'hit') {
-                    ctx.setTransform(baseTransform);
-                    ctx.translate(posInfo.x, posInfo.y);
-                    this.simpleHitEffect(eff.t);
-                } else if (eff.type === 'holdActive') {
-                    ctx.setTransform(baseTransform);
-                    ctx.translate(posInfo.x * eff.displayT, posInfo.y * eff.displayT);
-                    this.simpleHitEffect(eff.t);
-                    if (eff.isOn) this.simpleHoldEffect(eff.t);
-                }
-            }
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.setTransform(baseTransform);
         }
     }
 
@@ -1645,12 +1847,8 @@ export class SimaiRenderer {
         const noteT = (noteTime - this.globalTime);
         if (noteT > 0) return;
 
-        const key = touchPos + pos;
+        const key = TOUCH_GROUP_TO_INDEX[touchPos] + (touchPos === 'C' ? 0 : pos - 1);
         let existing = this.hanabiEffect[key];
-        if (!existing) {
-            existing = { time: -99999, x: 0, y: 0, noteT: 0, isCenter: false, cleared: true };
-            this.hanabiEffect[key] = existing;
-        }
         if (existing.cleared === false && existing.time > noteTime) {
             return;
         }
@@ -1686,9 +1884,9 @@ export class SimaiRenderer {
 
     drawTouch(s) {
         const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, hispeed } = s;
-        const zoneKey = touchPos + pos;
+        const zoneKey = TOUCH_GROUP_TO_INDEX[touchPos] + (touchPos === 'C' ? 0 : pos - 1);
 
-        const count = this._zoneCounts[zoneKey] || 0;
+        const count = this._zoneCounts[zoneKey];
 
         const noteT = (noteTime - this.globalTime);
         const t = 1 - this.timeFunction(noteT * this._touchSpeedFactor * (hispeed || 1));
@@ -1700,70 +1898,75 @@ export class SimaiRenderer {
             const isOn = (noteTime - this.globalTime) <= -0.1;
             const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
 
-            this.ctx.save();
             if (-noteT > holdDuration) {
                 if (this.settings.drawHitEffect) {
-                    this.ctx.translate(posInfo.x, posInfo.y);
-                    this.simpleHitEffect(holdDuration + noteT);
+                    this.queueHitEffect(null, holdDuration + noteT, null, posInfo.x, posInfo.y);
                 }
-            } else {
-                const size = this.settings.noteBaseSize * 0.7;
-                const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
-                const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
-
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.ctx.save();
-                this.ctx.beginPath();
-                this.ctx.moveTo(0, 0);
-                this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
-                this.ctx.closePath();
-                this.ctx.clip();
-                this.drawImgAtcenter(touchBorder, size * 2.6);
-                this.ctx.restore();
-
-                this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
-                this.ctx.rotate(Math.PI * -0.75);
-                for (let i = 0; i < 4; i++) {
-                    const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
-                    this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
-                    this.ctx.rotate(Math.PI / 2);
-                }
-                this.ctx.globalAlpha = 1;
-                this.drawImgAtcenter(touchPoint, size * 0.4);
-                this.simpleHitEffect(noteT);
-                if (isOn && this.settings.drawHitEffect) this.simpleHoldEffect(noteT);
+                return;
             }
+
+            const size = this.settings.noteBaseSize * 0.7;
+            const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
+            const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+
+            this.ctx.save();
+            this.ctx.translate(posInfo.x, posInfo.y);
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, 0);
+            this.ctx.arc(0, 0, size * 1.3, -Math.PI * 0.5, Math.PI * holdP * 2 - Math.PI * 0.5);
+            this.ctx.closePath();
+            this.ctx.clip();
+            this.drawImgAtcenter(touchBorder, size * 2.6);
             this.ctx.restore();
+
+            this.ctx.setAlpha(Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5));
+            this.ctx.rotate(Math.PI * -0.75);
+            for (let i = 0; i < 4; i++) {
+                const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+                this.ctx.rotate(Math.PI / 2);
+            }
+            this.ctx.setAlpha(1);
+            this.drawImgAtcenter(touchPoint, size * 0.4);
+            this.ctx.restore();
+
+            if (this.settings.drawHitEffect) {
+                if (noteT <= 0 && noteT >= -0.2) {
+                    this.queueHitEffect(null, noteT, null, posInfo.x, posInfo.y);
+                }
+                if (isOn) this.queueHoldEffect(null, noteT, null, posInfo.x, posInfo.y);
+            }
+            return;
+        }
+
+        if (noteT <= 0) {
+            if (this.settings.drawHitEffect) {
+                this.queueHitEffect(null, noteT, null, posInfo.x, posInfo.y);
+            }
             return;
         }
 
         this.ctx.save();
-        if (noteT <= 0) {
-            if (this.settings.drawHitEffect) {
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.simpleHitEffect(noteT);
-            }
-        } else {
-            const size = this.settings.noteBaseSize * 0.7;
-            const a = this.touchTimeFunction(18 * Math.max(1 - t, 0) / 1.5) * 1.6;
-            this.ctx.translate(posInfo.x, posInfo.y);
-            this.ctx.globalAlpha = 1;
+        const size = this.settings.noteBaseSize * 0.7;
+        const a = this.touchTimeFunction(18 * Math.max(1 - t, 0) / 1.5) * 1.6;
+        this.ctx.translate(posInfo.x, posInfo.y);
+        this.ctx.setAlpha(1);
 
-            if (count >= 2 && !this.drawnBorders.has(zoneKey)) {
-                this.drawnBorders.add(zoneKey);
-                this.drawImgAtcenter(borderImg, size * 2.65);
-                if (count > 2) {
-                    this.drawImgAtcenter(borderImg3, size * 2.65);
-                }
+        if (count >= 2 && this.drawnBorders[zoneKey] === 0) {
+            this.drawnBorders[zoneKey] = 1;
+            this.drawImgAtcenter(borderImg, size * 2.65);
+            if (count > 2) {
+                this.drawImgAtcenter(borderImg3, size * 2.65);
             }
-            this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
-            for (let i = 0; i < 4; i++) {
-                this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
-                this.ctx.rotate(Math.PI * 0.5);
-            }
-            this.ctx.globalAlpha = 1;
-            this.drawImgAtcenter(touchPoint, size * 0.4);
         }
+        this.ctx.setAlpha(Math.max(0, 1 - (1 - t) * 0.5));
+        for (let i = 0; i < 4; i++) {
+            this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.rotate(Math.PI * 0.5);
+        }
+        this.ctx.setAlpha(1);
+        this.drawImgAtcenter(touchPoint, size * 0.4);
         this.ctx.restore();
     }
 
@@ -2055,8 +2258,8 @@ export class SimaiRenderer {
         const decay = this.settings.hanabiEffectDecayTime || 0.8;
         let maxTime = -Infinity;
 
-        for (const key in this.hanabiEffect) {
-            const eff = this.hanabiEffect[key];
+        for (let i = 0; i < 33; i++) {
+            const eff = this.hanabiEffect[i];
             if (eff.cleared) continue;
             const t = eff.noteT / decay;
             if (t < -1 || t > 0) continue;
@@ -2065,8 +2268,8 @@ export class SimaiRenderer {
             }
         }
 
-        for (const key in this.hanabiEffect) {
-            const eff = this.hanabiEffect[key];
+        for (let i = 0; i < 33; i++) {
+            const eff = this.hanabiEffect[i];
             if (eff.cleared || eff.time < maxTime) continue;
             const t = eff.noteT / decay;
             if (t < -1 || t > 0) continue;

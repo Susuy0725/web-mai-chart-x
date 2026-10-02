@@ -10,6 +10,52 @@ const clampVolume = (val, max = 1.0, min = 0.0) => {
     return Math.max(min, Math.min(max, num));
 };
 
+/**
+ * 剝離 MP3 檔案的 ID3v2 與 ID3v1 標籤，防止瀏覽器 AudioContext.decodeAudioData 報 EncodingError
+ */
+const stripId3Tags = (arrayBuffer) => {
+    if (!arrayBuffer || arrayBuffer.byteLength < 10) return arrayBuffer;
+    const view = new Uint8Array(arrayBuffer);
+    let start = 0;
+    let end = view.length;
+
+    // 檢查開頭是否有 ID3v2 標籤
+    if (view[0] === 0x49 && view[1] === 0x44 && view[2] === 0x33) {
+        const tagSize = ((view[6] & 0x7F) << 21) |
+            ((view[7] & 0x7F) << 14) |
+            ((view[8] & 0x7F) << 7) |
+            (view[9] & 0x7F);
+        const hasFooter = (view[5] & 0x10) !== 0;
+        start = 10 + tagSize + (hasFooter ? 10 : 0);
+    }
+
+    // 檢查結尾是否有 ID3v1 標籤
+    if (end - start > 128) {
+        const v1Pos = end - 128;
+        if (view[v1Pos] === 0x54 && view[v1Pos + 1] === 0x41 && view[v1Pos + 2] === 0x47) {
+            end -= 128;
+        }
+    }
+
+    if (start > 0 || end < view.length) {
+        return arrayBuffer.slice(start, end);
+    }
+    return arrayBuffer;
+};
+
+/**
+ * 各判定等級之音高微調 (Detune in cents, 100 cents = 1 半音)
+ * PERFECT: 原音高 (0)
+ * GREAT: 略低 (-150 cents)
+ * GOOD: 較低 (-300 cents)
+ */
+export const GRADE_DETUNE = {
+    'CRITICAL_PERFECT': 0,
+    'PERFECT': 0,
+    'GREAT': -300,
+    'GOOD': -600
+};
+
 class AudioManager {
     constructor() {
         this.globalGain = 0.65; // 全域預設音量
@@ -34,14 +80,21 @@ class AudioManager {
         this.bgmOffset = 0;
         this.playbackRate = 1.0;
 
+        // 模式標記：預設為主編輯器模式 (false)，在 _play 模式下啟用 (true)
+        const isBrowserPlay = (typeof window !== 'undefined' && (window.location?.pathname?.includes('/_play') || window.location?.href?.includes('/_play')));
+        this.isPlayMode = !!isBrowserPlay;
+
         this.soundFiles = {
             'clock': './Sounds/clock.ogg',
             'judge': './Sounds/judge.ogg',
+            'judge_great': './Sounds/judge_great.mp3',
+            'judge_good': './Sounds/judge_good.mp3',
             'judge_ex': './Sounds/judge_ex.ogg',
             'judge_break': './Sounds/judge_break.ogg',
             'answer': './Sounds/answer.ogg',
             'break': './Sounds/break.ogg',
             'slide': './Sounds/slide.ogg',
+            'break_slide': './Sounds/break_slide.ogg',
             'break_slide_start': './Sounds/break_slide_start.ogg',
             'judge_break_slide': './Sounds/judge_break_slide.ogg',
             'touch': './Sounds/touch.ogg',
@@ -55,11 +108,14 @@ class AudioManager {
             'clock': 0.8,
             'answer': 1.0,
             'judge': 0.4,
+            'judge_great': 0.4,
+            'judge_good': 0.4,
             'judge_ex': 0.4,
             'judge_break': 0.4,
             'judge_break_slide': 0.4,
             'break': 0.4,
             'slide': 0.4,
+            'break_slide': 0.4,
             'break_slide_start': 0.4,
             'touch': 0.4,
             'hanabi': 0.6,
@@ -355,6 +411,10 @@ class AudioManager {
                 this.sfxVolumes[key] = clampVolume(vol, this.MAX_VOLUME_LIMIT);
             }
         }
+        if (volumes.judge !== undefined) {
+            if (volumes.judge_great === undefined) this.sfxVolumes['judge_great'] = this.sfxVolumes['judge'];
+            if (volumes.judge_good === undefined) this.sfxVolumes['judge_good'] = this.sfxVolumes['judge'];
+        }
         this._updateLongSoundGains();
     }
 
@@ -369,20 +429,36 @@ class AudioManager {
 
         const loadTasks = Object.entries(this.soundFiles).map(async ([key, url]) => {
             try {
-                let arrayBuffer = await idbGet(`sfx_cache_v2_${key}`);
+                // 自動清理老用戶舊版 wav 與損壞之 v2 快取
+                idbDelete(`sfx_cache_${key}`).catch(() => { });
+                idbDelete('sfx_cache_break_slide').catch(() => { });
+                idbDelete('sfx_cache_v2_judge_great').catch(() => { });
+                idbDelete('sfx_cache_v2_judge_good').catch(() => { });
+
+                let arrayBuffer = await idbGet(`sfx_cache_v3_${key}`);
 
                 if (!arrayBuffer) {
                     const response = await fetch(url);
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const contentType = response.headers.get('content-type') || '';
+                    if (contentType.includes('text/html')) {
+                        throw new Error(`Invalid content-type: ${contentType} (404 fallback detected)`);
+                    }
                     arrayBuffer = await response.arrayBuffer();
-                    await idbSet(`sfx_cache_v2_${key}`, arrayBuffer);
+                    // 剝離可能存在的 ID3 標籤，確保音訊數據純淨
+                    arrayBuffer = stripId3Tags(arrayBuffer);
+                    await idbSet(`sfx_cache_v3_${key}`, arrayBuffer);
                 }
 
-                // 自動清理老用戶原本佔用 7.8MB 的舊版 wav 快取
-                idbDelete(`sfx_cache_${key}`).catch(() => {});
-                idbDelete('sfx_cache_break_slide').catch(() => {});
+                let audioBuffer;
+                try {
+                    audioBuffer = await this.ctx.decodeAudioData(arrayBuffer.slice(0));
+                } catch (decodeErr) {
+                    // 若解碼失敗，立即清理該快取，避免下次載入再次受阻
+                    await idbDelete(`sfx_cache_v3_${key}`).catch(() => { });
+                    throw decodeErr;
+                }
 
-                const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer.slice(0));
                 this.bufferMap.set(key, audioBuffer);
             } catch (e) {
                 console.error(`[Audio] ${key} 載入失敗:`, e);
@@ -395,9 +471,9 @@ class AudioManager {
         await Promise.all(loadTasks);
     }
 
-    queueSoundSingle(sample, targetTime, isMono = false) {
+    queueSoundSingle(sample, targetTime, isMono = false, detune = 0) {
         const vol = clampVolume(this.sfxVolumes[sample] ?? 1.0, this.MAX_VOLUME_LIMIT);
-        this._checkAndPush(sample, targetTime, isMono, vol);
+        this._checkAndPush(sample, targetTime, isMono, vol, detune);
     }
 
     queueSound(note, targetTime, options = {}) {
@@ -407,22 +483,136 @@ class AudioManager {
 
         const events = this.getSfxEventsForNote(note, targetTime, options);
         for (const ev of events) {
-            this._checkAndPush(ev.key, ev.time, ev.isMono, ev.volume);
+            this._checkAndPush(ev.key, ev.time, ev.isMono, ev.volume, ev.detune || 0);
         }
     }
 
     /**
-     * 手動打擊命中專用音效 (僅播放判定反饋音效，排除 answer 提示音與 hanabi，避免打擊時間拉偏 answer 或重複播放 hanabi)
+     * 切換音效模式 (false: 主編輯器模式, true: Play 遊戲模式)
      */
-    queueHitSound(note, targetTime) {
-        this.queueSound(note, targetTime, { includeAnswer: false, includeHanabi: false });
+    setPlayMode(val) {
+        this.isPlayMode = !!val;
+    }
+
+    /**
+     * 手動打擊命中專用音效 (僅播放判定反饋音效，排除 answer 提示音與 hanabi，避免打擊時間拉偏 answer 或重複播放 hanabi)
+     * 支援依判定等級 grade (CRITICAL_PERFECT, PERFECT, GREAT, GOOD) 改變音高
+     */
+    queueHitSound(note, targetTime, grade = null) {
+        const effectiveGrade = grade || note.judgeResult?.grade || note._headJudge?.grade || null;
+        this.queueSound(note, targetTime, { includeAnswer: false, includeHanabi: false, isHitSound: true, grade: effectiveGrade, isPlayMode: true });
     }
 
     getSfxEventsForNote(note, targetTime, options = {}) {
-        const { includeAnswer = true, includeHanabi = true } = options;
+        const { includeAnswer = true, includeHanabi = true, isHitSound = false, grade: optGrade, detune: optDetune, isPlayMode: optPlayMode } = options;
         const events = [];
-        let key = 'judge';
+        let key = '';
         let isMono = true;
+
+        const isPlay = (optPlayMode !== undefined) ? !!optPlayMode : this.isPlayMode;
+
+        // ========================================================
+        // 1. 主編輯器模式 (100% 保證與之前原本行為完全相同，不帶 detune)
+        // ========================================================
+        if (!isPlay) {
+            switch (note.type) {
+                case 'tap':
+                    if (note.isMine) {
+                        key = includeAnswer ? 'answer' : '';
+                        break;
+                    }
+                    if (note.isEx) {
+                        key = 'judge_ex';
+                    } else if (note.isBreak) {
+                        key = 'judge_break';
+                        events.push({ key: 'break', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT) });
+                    } else {
+                        key = 'judge';
+                    }
+                    if (includeAnswer) {
+                        events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                    }
+                    break;
+                case 'hold':
+                    if (note.isMine) {
+                        key = includeAnswer ? 'answer' : '';
+                        break;
+                    }
+                    if (includeAnswer) {
+                        events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                    }
+                    if (!note._startEffectPlayed) {
+                        if (note.isBreak) {
+                            key = 'judge_break';
+                            events.push({ key: 'break', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT) });
+                        } else {
+                            if (note.isEx) key = 'judge_ex';
+                            else key = 'judge';
+                        }
+                        isMono = false;
+                    } else {
+                        return events;
+                    }
+                    break;
+                case 'touch':
+                    key = 'touch';
+                    isMono = false;
+                    if (includeAnswer) {
+                        events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                    }
+                    if (note.isHanabi && includeHanabi) {
+                        if (note.holdDuration >= 0) {
+                            if (note._startEffectPlayed) {
+                                key = 'hanabi';
+                                isMono = true;
+                            } else {
+                                return events;
+                            }
+                        } else {
+                            key = 'hanabi';
+                            isMono = true;
+                        }
+                    }
+                    if (note._startEffectPlayed && !(note.isHanabi && includeHanabi)) return events;
+                    break;
+                case 'slide':
+                    if (note.isMine) {
+                        key = '';
+                        break;
+                    }
+                    if (!note._startEffectPlayed && note.isBreak) {
+                        events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT) });
+                        key = 'slide';
+                        isMono = false;
+                    } else {
+                        key = 'slide';
+                        isMono = false;
+                    }
+                    break;
+                default:
+                    return events;
+            }
+
+            if (key) {
+                events.push({ key, time: targetTime, isMono, volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT) });
+            }
+            return events;
+        }
+
+        // ========================================================
+        // 2. Play 遊戲模式 (支援判定音高、專屬音效、Break Slide 專屬邏輯)
+        // ========================================================
+        const grade = optGrade || note.judgeResult?.grade || note._headJudge?.grade || null;
+        const getJudgeSampleKey = (g, isBreak = false) => {
+            if (isBreak) {
+                return 'judge_break';
+            }
+            if (g === 'GREAT') return 'judge_great';
+            if (g === 'GOOD') return 'judge_good';
+            return 'judge';
+        };
+
+        const judgeDetune = typeof optDetune === 'number' ? optDetune : (this.GRADE_DETUNE[grade] ?? 0);
 
         switch (note.type) {
             case 'tap':
@@ -430,13 +620,28 @@ class AudioManager {
                     key = includeAnswer ? 'answer' : '';
                     break;
                 }
-                if (note.isEx) key = 'judge_ex';
-                if (note.isBreak) {
-                    key = 'judge_break';
-                    events.push({ key: 'break', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT) });
+                if (note.isEx) {
+                    key = 'judge_ex';
+                } else if (note.isBreak) {
+                    key = getJudgeSampleKey(grade, true);
+                    if (grade === 'CRITICAL_PERFECT') events.push({
+                        key: 'break',
+                        time: targetTime,
+                        isMono: true,
+                        volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT),
+                        detune: 0
+                    });
+                } else {
+                    key = getJudgeSampleKey(grade, false);
                 }
                 if (includeAnswer) {
-                    events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                    events.push({
+                        key: 'answer',
+                        time: targetTime,
+                        isMono: false,
+                        volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT),
+                        detune: 0
+                    });
                 }
                 break;
             case 'hold':
@@ -445,15 +650,28 @@ class AudioManager {
                     break;
                 }
                 if (includeAnswer) {
-                    events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                    events.push({
+                        key: 'answer',
+                        time: targetTime,
+                        isMono: false,
+                        volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT),
+                        detune: 0
+                    });
                 }
-                if (!note._startEffectPlayed) {
+                // 只要是打擊判定命中 (isHitSound)，或尚未播放過開頭音效，都必須播放開頭打擊音
+                if (isHitSound || !note._startEffectPlayed) {
                     if (note.isBreak) {
-                        key = 'judge_break';
-                        events.push({ key: 'break', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT) });
+                        key = getJudgeSampleKey(grade, true);
+                        if (grade === 'CRITICAL_PERFECT') events.push({
+                            key: 'break',
+                            time: targetTime,
+                            isMono: true,
+                            volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT),
+                            detune: 0
+                        });
                     } else {
                         if (note.isEx) key = 'judge_ex';
-                        else key = 'judge';
+                        else key = getJudgeSampleKey(grade, false);
                     }
                     isMono = false;
                 } else {
@@ -464,7 +682,13 @@ class AudioManager {
                 key = 'touch';
                 isMono = false;
                 if (includeAnswer) {
-                    events.push({ key: 'answer', time: targetTime, isMono: false, volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT) });
+                    events.push({
+                        key: 'answer',
+                        time: targetTime,
+                        isMono: false,
+                        volume: clampVolume(this.sfxVolumes['answer'], this.MAX_VOLUME_LIMIT),
+                        detune: 0
+                    });
                 }
                 if (note.isHanabi && includeHanabi) {
                     if (note.holdDuration >= 0) {
@@ -479,7 +703,7 @@ class AudioManager {
                         isMono = true;
                     }
                 }
-                if (note._startEffectPlayed && !(note.isHanabi && includeHanabi)) return events;
+                if (!isHitSound && note._startEffectPlayed && !(note.isHanabi && includeHanabi)) return events;
                 break;
             case 'slide':
                 if (note.isMine) {
@@ -487,11 +711,17 @@ class AudioManager {
                     break;
                 }
                 if (!note._startEffectPlayed && note.isBreak) {
-                    events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT) });
                     key = 'break_slide_start';
                     isMono = false;
                 } else {
                     if (note.isBreak) {
+                        events.push({
+                            key: 'break_slide',
+                            time: targetTime,
+                            isMono: true,
+                            volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT),
+                            detune: judgeDetune
+                        });
                         key = 'judge_break_slide';
                         isMono = false;
                     } else {
@@ -505,7 +735,14 @@ class AudioManager {
         }
 
         if (key) {
-            events.push({ key, time: targetTime, isMono, volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT) });
+            const isNonPitchKey = (key === 'answer' || key === 'hanabi' || key === 'clock');
+            events.push({
+                key,
+                time: targetTime,
+                isMono,
+                volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT),
+                detune: isNonPitchKey ? 0 : judgeDetune
+            });
         }
         return events;
     }
@@ -513,14 +750,20 @@ class AudioManager {
     /**
      * 內部檢查冷卻時間並使用二分插入佇列
      */
-    _checkAndPush(key, targetTime, isMono, volume = 1) {
+    _checkAndPush(key, targetTime, isMono, volume = 1, detune = 0) {
         const now = performance.now();
         const lastTime = this.lastQueuedTimes.get(key) || 0;
 
         if (now - lastTime < this.MIN_INTERVAL) return;
 
         this.lastQueuedTimes.set(key, now);
-        const item = { key, targetTime, isMono, volume: clampVolume(volume, this.MAX_VOLUME_LIMIT) };
+        const item = {
+            key,
+            targetTime,
+            isMono,
+            volume: clampVolume(volume, this.MAX_VOLUME_LIMIT),
+            detune: Number(detune) || 0
+        };
 
         // 使用 O(log N) 二分搜尋插入維持有序，取代 O(N log N) 排序
         const len = this.soundQueue.length;
@@ -543,16 +786,16 @@ class AudioManager {
     update(globalTime) {
         const lookAhead = 0.1; // 100ms look-ahead
         while (this.soundQueue.length > 0 && globalTime + lookAhead >= this.soundQueue[0].targetTime) {
-            const { key, isMono, volume, targetTime } = this.soundQueue.shift();
+            const { key, isMono, volume, targetTime, detune = 0 } = this.soundQueue.shift();
             const playTime = this.ctx.currentTime + (targetTime - globalTime) / this.playbackRate;
-            this.play(key, isMono, volume, playTime);
+            this.play(key, isMono, volume, playTime, detune);
         }
     }
 
     /**
      * 執行最終播放 (Web Audio API 核心)
      */
-    play(key, isMono = false, volume = 1, playTime = null) {
+    play(key, isMono = false, volume = 1, playTime = null, detune = 0) {
         this.ensureContextSync();
         const buffer = this.bufferMap.get(key);
         if (!buffer) return;
@@ -567,6 +810,15 @@ class AudioManager {
 
         const source = this.ctx.createBufferSource();
         source.buffer = buffer;
+
+        // 設定音高 (detune 以音分為單位，100 cents = 1 半音；若瀏覽器不支援 detune 則回退至 playbackRate)
+        if (detune !== 0) {
+            if (source.detune) {
+                source.detune.setValueAtTime(detune, this.ctx.currentTime);
+            } else if (source.playbackRate) {
+                source.playbackRate.setValueAtTime(Math.pow(2, detune / 1200), this.ctx.currentTime);
+            }
+        }
 
         const gainNode = this.ctx.createGain();
         gainNode.gain.value = clampVolume(volume, this.MAX_VOLUME_LIMIT);

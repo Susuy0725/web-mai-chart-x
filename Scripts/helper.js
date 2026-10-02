@@ -1,5 +1,7 @@
 import { idbGet, idbSet } from "./indexDB.js";
-export { audioManager, GRADE_DETUNE } from "./audioManager.js";
+import { audioManager } from "./audioManager.js";
+export { audioManager };
+export const GRADE_DETUNE = audioManager.GRADE_DETUNE;
 
 export const
     scaleBase = 100,

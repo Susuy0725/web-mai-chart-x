@@ -1,5 +1,5 @@
 let manifest = {
-    defaultLocale: 'zh-TW',
+    defaultLocale: 'en',
     locales: [
         { code: 'zh-TW', name: '繁體中文', englishName: 'Traditional Chinese' },
         { code: 'en', name: 'English', englishName: 'English' },
@@ -9,6 +9,9 @@ let manifest = {
 
 const translations = {};
 const listeners = [];
+
+// 'auto' 表示由 BCP 47 自動偵測系統語言
+const AUTO_LANG = 'auto';
 
 async function fetchManifest() {
     try {
@@ -27,10 +30,14 @@ export function getAvailableLanguages() {
     return manifest.locales || [];
 }
 
-export function detectDefaultLanguage(availableLocales = manifest.locales, defaultLocale = manifest.defaultLocale || 'zh-TW') {
+/**
+ * BCP 47 自動語系偵測
+ * 優先嘗試精確比對，再以前綴比對，最後回傳 defaultLocale
+ */
+export function detectDefaultLanguage(availableLocales = manifest.locales, defaultLocale = manifest.defaultLocale || 'en') {
     const userLangs = (typeof navigator !== 'undefined' && navigator.languages && navigator.languages.length > 0)
         ? navigator.languages
-        : [(typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'zh-TW'];
+        : [(typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en'];
 
     const availableCodes = (availableLocales || []).map(l => l.code);
 
@@ -54,6 +61,17 @@ export function detectDefaultLanguage(availableLocales = manifest.locales, defau
     return defaultLocale;
 }
 
+/**
+ * 解析 'auto' 為實際語系代碼
+ * 若傳入的是實際語系代碼則原樣回傳
+ */
+function resolveEffectiveLang(lang) {
+    if (lang === AUTO_LANG) {
+        return detectDefaultLanguage(manifest.locales, manifest.defaultLocale || 'en');
+    }
+    return lang;
+}
+
 export async function loadLocale(lang) {
     if (translations[lang]) {
         return translations[lang];
@@ -74,49 +92,73 @@ export async function loadLocale(lang) {
     }
 }
 
-// Determine initial target language synchronously without blocking module import
+// 同步判斷儲存的語言設定（可能是 'auto' 或實際語系代碼）
 const savedLang = typeof localStorage !== 'undefined' ? localStorage.getItem('simai_lang') : null;
-const defaultDetectedLang = detectDefaultLanguage(manifest.locales, manifest.defaultLocale || 'zh-TW');
 
-let currentLang = savedLang;
-if (!currentLang || !manifest.locales.some(l => l.code === currentLang)) {
-    currentLang = defaultDetectedLang;
+// 儲存的設定值（'auto' 或語系代碼），供 getCurrentLang() 回傳
+let currentLangSetting = savedLang || AUTO_LANG;
+
+// 確保儲存的語系代碼仍在 manifest 中（若不在則退回 auto）
+if (currentLangSetting !== AUTO_LANG && !manifest.locales.some(l => l.code === currentLangSetting)) {
+    currentLangSetting = AUTO_LANG;
 }
 
 // Non-blocking initialization Promise
 export const i18nReady = (async () => {
     await fetchManifest();
 
-    if (!manifest.locales.some(l => l.code === currentLang)) {
-        currentLang = detectDefaultLanguage(manifest.locales, manifest.defaultLocale || 'zh-TW');
+    // 更新後再次驗證儲存的語系是否仍在 manifest 中
+    if (currentLangSetting !== AUTO_LANG && !manifest.locales.some(l => l.code === currentLangSetting)) {
+        currentLangSetting = AUTO_LANG;
     }
 
-    const defaultLocaleCode = manifest.defaultLocale || 'zh-TW';
+    const defaultLocaleCode = manifest.defaultLocale || 'en';
+    const effectiveLang = resolveEffectiveLang(currentLangSetting);
 
-    await Promise.all([
-        loadLocale(defaultLocaleCode),
-        loadLocale(currentLang)
-    ]);
+    // 預載：fallback 語系 + 目前實際語系（避免重複請求）
+    const toLoad = [defaultLocaleCode];
+    if (effectiveLang !== defaultLocaleCode) toLoad.push(effectiveLang);
+    await Promise.all(toLoad.map(loadLocale));
 
     applyI18nToDOM();
-    listeners.forEach(cb => cb(currentLang));
+    listeners.forEach(cb => cb(effectiveLang));
 })();
 
+/**
+ * 取得目前套用的實際語系代碼（'auto' 模式下回傳偵測到的語系）
+ */
 export function getCurrentLang() {
-    return currentLang;
+    return resolveEffectiveLang(currentLangSetting);
 }
 
+/**
+ * 取得目前儲存的語言設定（可能是 'auto' 或語系代碼）
+ * 供設定選單顯示目前選項使用
+ */
+export function getLangSetting() {
+    return currentLangSetting;
+}
+
+/**
+ * 切換語言
+ * @param {string} lang - 語系代碼，或 'auto' 表示自動偵測
+ */
 export async function setLang(lang) {
-    if (!translations[lang]) {
-        const loaded = await loadLocale(lang);
+    const effectiveLang = resolveEffectiveLang(lang);
+
+    if (!translations[effectiveLang]) {
+        const loaded = await loadLocale(effectiveLang);
         if (!loaded) return false;
     }
-    currentLang = lang;
+
+    currentLangSetting = lang;
+
     if (typeof localStorage !== 'undefined') {
         localStorage.setItem('simai_lang', lang);
     }
+
     applyI18nToDOM();
-    listeners.forEach(cb => cb(lang));
+    listeners.forEach(cb => cb(effectiveLang));
     return true;
 }
 
@@ -126,14 +168,15 @@ export function onLanguageChange(callback) {
 
 export function t(key, params = {}) {
     const keys = key.split('.');
-    const defaultCode = manifest.defaultLocale || 'zh-TW';
-    let value = translations[currentLang];
-    
+    const defaultCode = manifest.defaultLocale || 'en';
+    const effectiveLang = resolveEffectiveLang(currentLangSetting);
+    let value = translations[effectiveLang];
+
     for (const k of keys) {
         if (value && value[k] !== undefined) {
             value = value[k];
         } else {
-            // fallback to default locale
+            // fallback to default locale (en)
             let fallbackValue = translations[defaultCode];
             for (const fk of keys) {
                 if (fallbackValue && fallbackValue[fk] !== undefined) {

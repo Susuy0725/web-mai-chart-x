@@ -1,4 +1,4 @@
-import { getCurrentLang, setLang, getAvailableLanguages, t } from '../i18n.js';
+import { getCurrentLang, getLangSetting, setLang, getAvailableLanguages, t } from '../i18n.js';
 import { audioManager } from '../audioManager.js';
 import { simpleToast } from '../helper.js';
 
@@ -99,10 +99,13 @@ export const settingsConfig = [
                 type: 'dropdown',
                 label: 'settings.items.lang',
                 get options() {
-                    return getAvailableLanguages().map(l => ({ value: l.code, label: l.name }));
+                    return [
+                        { value: 'auto', label: t('settings.items.langAuto') },
+                        ...getAvailableLanguages().map(l => ({ value: l.code, label: l.name }))
+                    ];
                 },
-                def: getCurrentLang(),
-                get: () => getCurrentLang(),
+                def: 'auto',
+                get: () => getLangSetting(),
                 apply: (val) => {
                     setLang(val);
                 }

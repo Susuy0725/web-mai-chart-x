@@ -35,8 +35,6 @@ import { initFindReplace, openFindBar, closeFindBar } from './features/findRepla
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 export { toggleNoteFlag };
 
-// 初始化進行靜態翻譯
-applyI18nToDOM();
 majdataWs.setToastHandler(simpleToast);
 
 initServiceWorker();

@@ -8,3 +8,8 @@ usageMatchRegex:
   - "data-i18n(?:-[a-z0-9_-]+)?=['\"`]({key})['\"`]"
 
 monopoly: true
+
+locales:
+  - zh-TW
+  - en
+  - ja

@@ -114,10 +114,12 @@ export const i18nReady = (async () => {
 
     const defaultLocaleCode = manifest.defaultLocale || 'en';
     const effectiveLang = resolveEffectiveLang(currentLangSetting);
+    const detectedLang = detectDefaultLanguage(manifest.locales, defaultLocaleCode);
 
-    // 預載：fallback 語系 + 目前實際語系（避免重複請求）
+    // 預載：fallback 語系 + 目前實際語系 + 系統偵測語系（避免重複請求）
     const toLoad = [defaultLocaleCode];
     if (effectiveLang !== defaultLocaleCode) toLoad.push(effectiveLang);
+    if (!toLoad.includes(detectedLang)) toLoad.push(detectedLang);
     await Promise.all(toLoad.map(loadLocale));
 
     applyI18nToDOM();
@@ -166,10 +168,10 @@ export function onLanguageChange(callback) {
     listeners.push(callback);
 }
 
-export function t(key, params = {}) {
+export function t(key, params = {}, targetLang = null) {
     const keys = key.split('.');
     const defaultCode = manifest.defaultLocale || 'en';
-    const effectiveLang = resolveEffectiveLang(currentLangSetting);
+    const effectiveLang = targetLang ? resolveEffectiveLang(targetLang) : resolveEffectiveLang(currentLangSetting);
     let value = translations[effectiveLang];
 
     for (const k of keys) {

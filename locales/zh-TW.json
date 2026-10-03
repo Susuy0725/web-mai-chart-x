@@ -176,7 +176,7 @@
       "globalTimeline": "顯示全域時間軸",
       "enableQuickPanel": "啟用快速面板",
       "lang": "語言 / Language",
-      "langAuto": "系統語言",
+      "langAuto": "跟隨系統",
       "drawHitEffect": "渲染擊打特效",
       "drawHanabiEffect": "渲染煙火特效",
       "lowRes": "低解析度模式 (限制 1x DPI 以提升低階裝置效能)",
@@ -217,7 +217,10 @@
       "confirmClearAsset": "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。",
       "warnTitle": "警告",
       "warnContent": "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
-      "continue": "繼續"
+      "continue": "繼續",
+      "loadingProjectData": "正在載入專案資料...",
+      "restoringContent": "還原編輯內容...",
+      "restoringBgm": "正在還原背景音樂..."
     },
     "resource": {
       "title": "資源管理",

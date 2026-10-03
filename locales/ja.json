@@ -176,7 +176,7 @@
       "globalTimeline": "全体のタイムラインを表示",
       "enableQuickPanel": "クイックパネルを有効にする",
       "lang": "言語",
-      "langAuto": "システム言語",
+      "langAuto": "システム設定",
       "lowRes": "低解像度モード (1x 解像度に制限して軽量化)",
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "起動時に MajdataView に自動接続",
@@ -217,7 +217,10 @@
       "confirmClearAsset": "すべての効果音と画像キャッシュファイルをクリアしてもよろしいですか？譜面データは保持されます。",
       "warnTitle": "警告",
       "warnContent": "続行すると予期しないエラーが発生する可能性があります。データをクリアするか、ページを再読み込みすることをお勧めします。<br>データ破損が原因かどうか確認するため、まずはキャッシュデータをクリアしてみてください。",
-      "continue": "続行"
+      "continue": "続行",
+      "loadingProjectData": "プロジェクトデータを読み込み中...",
+      "restoringContent": "編集内容を復元中...",
+      "restoringBgm": "BGMを復元中..."
     },
     "resource": {
       "title": "リソースマネージャー",

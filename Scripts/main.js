@@ -2846,7 +2846,7 @@ function draw(dt = 0) {
  */
 async function loadProjectData(step) {
     const s = step || (() => { });
-    s(84, "正在載入專案資料...");
+    s(84, t('popup.init.loadingProjectData'));
 
     const [
         savedTimeControl,
@@ -2891,7 +2891,7 @@ async function loadProjectData(step) {
     }
 
     if (savedMaiData) {
-        s(88, "還原編輯內容...");
+        s(88, t('popup.init.restoringContent'));
         maidata = savedMaiData;
         editorInput.value = maidata["inote_" + nowDifficulty] || '';
         getres(editorInput.value);
@@ -2941,7 +2941,7 @@ async function loadProjectData(step) {
     applyMovieBrightness(settings.moviebrightness);
 
     if (savedBgm) {
-        s(95, "正在還原背景音樂...");
+        s(95, t('popup.init.restoringBgm'));
         await audioManager.setBackgroundMusic(savedBgm);
         setEndtime(endTime);
     } else {

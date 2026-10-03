@@ -176,7 +176,7 @@
       "globalTimeline": "Show Global Timeline",
       "enableQuickPanel": "Enable Quick Panel",
       "lang": "Language",
-      "langAuto": "System language",
+      "langAuto": "Follow system",
       "drawHitEffect": "Render Hit Effects",
       "drawHanabiEffect": "Render Hanabi Effects",
       "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",
@@ -217,7 +217,10 @@
       "confirmClearAsset": "Are you sure you want to clear all sound effects and image cache files? Chart data will be kept.",
       "warnTitle": "Warning",
       "warnContent": "Continuing may cause unexpected errors. We recommend clearing temporary data or reloading the page.<br>You can try clearing cached data first to see if corrupted data was the cause.",
-      "continue": "Continue"
+      "continue": "Continue",
+      "loadingProjectData": "Loading project data...",
+      "restoringContent": "Restoring editor content...",
+      "restoringBgm": "Restoring background music..."
     },
     "resource": {
       "title": "Resource Manager",

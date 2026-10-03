@@ -5,7 +5,7 @@ const CACHE_NAME = (() => {
         self.location.hostname === 'localhost' ||
         self.location.hostname === '127.0.0.1' ||
         self.location.hostname.endsWith('.ngrok-free.app')||
-        self.location.hostname.endsWith('.trycloudflare.com');
+        self.location.hostname === 'debug.tri-dent.cc';
 
     if (isDev) {
         return 'web-mai-chart-cache-' + Date.now();

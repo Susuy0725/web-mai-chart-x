@@ -141,7 +141,8 @@
       "basic": "基本",
       "display": "顯示",
       "sfx": "音效",
-      "other": "其他"
+      "other": "其他",
+      "maintenance": "維護"
     },
     "items": {
       "speed": " Tap/Hold 速度",
@@ -181,7 +182,11 @@
       "drawHanabiEffect": "渲染煙火特效",
       "lowRes": "低解析度模式 (限制 1x DPI 以提升低階裝置效能)",
       "majdataWsUrl": "MajdataView WebSocket 位址",
-      "autoConnectMajdataView": "自動連接 MajdataView"
+      "autoConnectMajdataView": "自動連接 MajdataView",
+      "exportAllData": "匯出全站專案與設定 (wmcx_output.zip)",
+      "exportAllDataBtn": "匯出備份",
+      "importAllData": "還原全站專案與設定 (wmcx_output.zip)",
+      "importAllDataBtn": "匯入還原"
     },
     "middleDisplayOpts": {
       "off": "關閉",

@@ -141,7 +141,8 @@
       "basic": "基本",
       "display": "表示",
       "sfx": "音声",
-      "other": "その他"
+      "other": "その他",
+      "maintenance": "メンテナンス"
     },
     "items": {
       "speed": "Tap/Hold速度",
@@ -181,7 +182,11 @@
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "起動時に MajdataView に自動接続",
       "drawHanabiEffect": "花火のエフェクトのレンダリング",
-      "drawHitEffect": "ヒットエフェクトをレンダリングする"
+      "drawHitEffect": "ヒットエフェクトをレンダリングする",
+      "exportAllData": "全プロジェクトと設定をエクスポート (wmcx_output.zip)",
+      "exportAllDataBtn": "バックアップ出力",
+      "importAllData": "全プロジェクトと設定を復元 (wmcx_output.zip)",
+      "importAllDataBtn": "復元インポート"
     },
     "middleDisplayOpts": {
       "off": "オフ",

@@ -141,7 +141,8 @@
       "basic": "Basic",
       "display": "Display",
       "sfx": "Audio",
-      "other": "Other"
+      "other": "Other",
+      "maintenance": "Maintenance"
     },
     "items": {
       "speed": "Tap/Hold Speed",
@@ -181,7 +182,11 @@
       "drawHanabiEffect": "Render Hanabi Effects",
       "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",
       "majdataWsUrl": "MajdataView WebSocket URL",
-      "autoConnectMajdataView": "Auto-connect to MajdataView"
+      "autoConnectMajdataView": "Auto-connect to MajdataView",
+      "exportAllData": "Export all projects & settings (wmcx_output.zip)",
+      "exportAllDataBtn": "Export Backup",
+      "importAllData": "Restore projects & settings (wmcx_output.zip)",
+      "importAllDataBtn": "Import Restore"
     },
     "middleDisplayOpts": {
       "off": "Off",

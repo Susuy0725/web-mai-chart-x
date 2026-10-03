@@ -8,6 +8,7 @@
  */
 
 import { extractSimaiEditorData } from '../core/wmcxExtract.js';
+import { t } from '../i18n.js';
 
 /**
  * 確保 JSZip 函式庫已載入
@@ -61,6 +62,8 @@ export async function packageWmcxData(extractedData, options = {}) {
 
     const {
         rootFolderName = 'wmcx_output',
+        selectedProjectIds = null,
+        includeSettings = true,
         onProgress
     } = options;
 
@@ -70,13 +73,48 @@ export async function packageWmcxData(extractedData, options = {}) {
     // 1. 建立根目錄 wmcx_output
     const root = rootFolderName ? zip.folder(rootFolderName) : zip;
 
-    // 2. 寫入 settings.json (包含版本中繼資料與 projectsMeta)
-    const settingsJsonStr = JSON.stringify(extractedData.settingsEnvelope || {}, null, 2);
-    root.file('settings.json', settingsJsonStr);
+    // 2. 篩選欲匯出的專案清單
+    let projects = extractedData.projects || [];
+    if (Array.isArray(selectedProjectIds)) {
+        const idSet = new Set(selectedProjectIds);
+        projects = projects.filter(p => idSet.has(p.id));
+    }
 
-    // 3. 逐一寫入各專案
-    const projects = extractedData.projects || [];
+    // 3. 寫入 settings.json（僅在 includeSettings 為 true 時寫入，並嚴格過濾 projectsMeta）
+    if (includeSettings && extractedData.settingsEnvelope) {
+        // 深拷貝 settingsEnvelope，避免污染原始提取快照
+        const filteredEnvelope = JSON.parse(JSON.stringify(extractedData.settingsEnvelope));
+        if (filteredEnvelope.projectsMeta) {
+            const selectedDirNames = new Set(projects.map(p => p.dirName));
+            const newMeta = {};
+            for (const [dirName, meta] of Object.entries(filteredEnvelope.projectsMeta)) {
+                if (selectedDirNames.has(dirName)) {
+                    newMeta[dirName] = meta;
+                }
+            }
+            filteredEnvelope.projectsMeta = newMeta;
+        }
+        const settingsJsonStr = JSON.stringify(filteredEnvelope, null, 2);
+        root.file('settings.json', settingsJsonStr);
+    }
+
+    // 4. 逐一寫入勾選的專案至 ZIP
+    const totalProjects = projects.length;
+    let projIdx = 0;
+
     for (const project of projects) {
+        projIdx++;
+        if (typeof onProgress === 'function') {
+            const pct = Math.round((projIdx / (totalProjects + 1)) * 35);
+            try {
+                onProgress({
+                    percent: pct,
+                    currentFile: project.name,
+                    message: t('popup.maintenance.preparingAssets', { current: projIdx, total: totalProjects, name: project.name })
+                });
+            } catch (_) {}
+        }
+
         const projFolder = root.folder(project.dirName);
 
         // 譜面檔案
@@ -94,7 +132,7 @@ export async function packageWmcxData(extractedData, options = {}) {
         }
     }
 
-    // 4. 生成壓縮檔 Blob 並回報進度
+    // 5. 生成壓縮檔 Blob 並回報壓縮進度 (35% ~ 100%)
     const zipBlob = await zip.generateAsync(
         {
             type: 'blob',
@@ -103,11 +141,15 @@ export async function packageWmcxData(extractedData, options = {}) {
         },
         (metadata) => {
             if (typeof onProgress === 'function') {
+                const pct = 35 + Math.round((metadata.percent / 100) * 65);
                 try {
                     onProgress({
-                        percent: Math.round(metadata.percent),
+                        percent: pct,
                         currentFile: metadata.currentFile || '',
-                        message: `正在壓縮檔案: ${metadata.currentFile || '封裝中...'}`
+                        message: t('popup.maintenance.compressing', {
+                            percent: pct,
+                            file: metadata.currentFile || t('popup.maintenance.packaging')
+                        })
                     });
                 } catch (_) {}
             }

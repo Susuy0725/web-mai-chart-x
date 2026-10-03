@@ -1,8 +1,7 @@
 import { getCurrentLang, getLangSetting, setLang, getAvailableLanguages, detectDefaultLanguage, t } from '../i18n.js';
 import { audioManager } from '../audioManager.js';
-import { simpleToast } from '../helper.js';
-import { exportWmcxZip } from '../features/wmcxPackage.js';
-import { restoreWmcxZip } from '../features/wmcxRestore.js';
+import { openExportSelectionModal, openImportSelectionModal } from '../modals/maintenanceModal.js';
+import { openResourceManager } from '../modals/resourceManagerModal.js';
 
 export const defaultSettings = {
     // Game
@@ -293,23 +292,21 @@ export const settingsConfig = [
         label: 'settings.tabs.maintenance',
         items: [
             {
+                id: 'manageResources',
+                type: 'button',
+                label: 'settings.items.manageResources',
+                btnText: 'settings.items.manageResourcesBtn',
+                onClick: () => {
+                    openResourceManager();
+                }
+            },
+            {
                 id: 'exportAllData',
                 type: 'button',
                 label: 'settings.items.exportAllData',
                 btnText: 'settings.items.exportAllDataBtn',
-                onClick: async () => {
-                    try {
-                        simpleToast({ content: '正在打包全站專案與設定...', type: 'info', timeout: 2000 });
-                        await exportWmcxZip({
-                            downloadFilename: 'wmcx_output.zip',
-                            rootFolderName: 'wmcx_output',
-                            autoDownload: true
-                        });
-                        simpleToast({ content: '全站備份檔已成功打包下載！', type: 'success' });
-                    } catch (err) {
-                        console.error('[Settings] 匯出失敗:', err);
-                        simpleToast({ content: '匯出失敗: ' + (err.message || err), type: 'error' });
-                    }
+                onClick: () => {
+                    openExportSelectionModal();
                 }
             },
             {
@@ -321,25 +318,10 @@ export const settingsConfig = [
                     const input = document.createElement('input');
                     input.type = 'file';
                     input.accept = '.zip,application/zip';
-                    input.onchange = async (e) => {
+                    input.onchange = (e) => {
                         const file = e.target.files?.[0];
-                        if (!file) return;
-
-                        if (!confirm('確定要還原此備份壓縮檔嗎？所有專案將會匯入至本機資料庫。')) {
-                            return;
-                        }
-
-                        try {
-                            simpleToast({ content: '正在解壓並還原備份資料...', type: 'info', timeout: 2500 });
-                            const res = await restoreWmcxZip(file);
-                            simpleToast({
-                                content: `還原完成！共匯入 ${res.importedProjectsCount} 個專案與設定。`,
-                                type: 'success',
-                                timeout: 3500
-                            });
-                        } catch (err) {
-                            console.error('[Settings] 還原失敗:', err);
-                            simpleToast({ content: '還原失敗: ' + (err.message || err), type: 'error' });
+                        if (file) {
+                            openImportSelectionModal(file);
                         }
                     };
                     input.click();

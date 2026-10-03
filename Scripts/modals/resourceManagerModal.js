@@ -126,6 +126,24 @@ export async function openResourceManager() {
 
     await renderContent(container);
 
+    function promptReloadAfterClear() {
+        popupWindow({
+            title: t('popup.resource.cleanCompleteTitle') || '清理完成',
+            content: t('popup.resource.cleanCompleteReloadNotice') || '清理完成，請重新整理以完成清理。',
+            width: 380,
+            unclosable: true,
+            mode: 'dialog',
+            buttons: [
+                {
+                    text: t('popup.resource.reloadButton') || '重新整理',
+                    onClick: () => {
+                        window.location.reload();
+                    }
+                }
+            ]
+        });
+    }
+
     popupWindow({
         title: t('popup.resource.title'),
         customContent: container,
@@ -147,7 +165,7 @@ export async function openResourceManager() {
                                         await clearStoreKeys();
                                         await renderContent(container);
                                         optCtx.close();
-                                        simpleToast({ content: t('popup.resource.toastClearAll'), type: "success" });
+                                        promptReloadAfterClear();
                                     } catch (e) {
                                         console.error("清除資料失敗:", e);
                                     }
@@ -158,10 +176,10 @@ export async function openResourceManager() {
                                 onClick: async (optCtx) => {
                                     if (!confirm(t('popup.resource.confirmClearChart'))) return;
                                     try {
-                                        const count = await clearStoreKeys(key => typeof key === 'string' && key.startsWith('simai_'));
+                                        await clearStoreKeys(key => typeof key === 'string' && key.startsWith('simai_'));
                                         await renderContent(container);
                                         optCtx.close();
-                                        simpleToast({ content: t('popup.resource.toastClearChart', { count }), type: "success" });
+                                        promptReloadAfterClear();
                                     } catch (e) {
                                         console.error("清除譜面失敗:", e);
                                     }
@@ -172,10 +190,10 @@ export async function openResourceManager() {
                                 onClick: async (optCtx) => {
                                     if (!confirm(t('popup.resource.confirmClearAsset'))) return;
                                     try {
-                                        const count = await clearStoreKeys(key => typeof key === 'string' && (key.startsWith('sfx_cache_') || key.startsWith('img_cache_')));
+                                        await clearStoreKeys(key => typeof key === 'string' && (key.startsWith('sfx_cache_') || key.startsWith('img_cache_')));
                                         await renderContent(container);
                                         optCtx.close();
-                                        simpleToast({ content: t('popup.resource.toastClearAsset', { count }), type: "success" });
+                                        promptReloadAfterClear();
                                     } catch (e) {
                                         console.error("清除素材失敗:", e);
                                     }

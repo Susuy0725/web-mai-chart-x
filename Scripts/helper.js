@@ -2860,6 +2860,7 @@ export class SimaiLogicControler {
         playing,
         timeControlSliding,
         readyBeat,
+        clockBpm = 60,
         playedClock,
         settings = {},
         visualHeight,
@@ -2884,7 +2885,8 @@ export class SimaiLogicControler {
 
         // 節拍器邏輯
         if (playing && readyBeat) {
-            const beatDuration = 240 / clockBpm;
+            const effectiveBpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
+            const beatDuration = 240 / effectiveBpm;
             for (let i = 0; i < 4; i++) {
                 const clockT = (i / 4) * beatDuration - globalTime;
                 if (clockT > 0) {

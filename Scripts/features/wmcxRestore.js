@@ -9,6 +9,7 @@
 
 import { ensureJSZip } from './wmcxPackage.js';
 import { projectCreate, projectList, idbSetProject, idbSet } from '../indexDB.js';
+import { t } from '../i18n.js';
 
 /**
  * 解析 maidata.txt 內容為鍵值物件
@@ -30,14 +31,123 @@ export function parseMaidata(raw) {
 }
 
 /**
+ * 快速預覽並檢測 ZIP 檔案結構（不解壓大二進制檔）
+ * @param {File|Blob} zipFile 
+ * @returns {Promise<{
+ *   hasSettings: boolean,
+ *   settingsCount: number,
+ *   projects: Array<{
+ *     dirName: string,
+ *     name: string,
+ *     hasMaidata: boolean,
+ *     trackFilename: string|null,
+ *     bgFilename: string|null,
+ *     pvFilename: string|null
+ *   }>
+ * }>}
+ */
+export async function inspectWmcxZip(zipFile) {
+    const JSZip = await ensureJSZip();
+    const zip = await JSZip.loadAsync(zipFile);
+
+    let rootPrefix = '';
+    const fileKeys = Object.keys(zip.files);
+    if (fileKeys.some(k => k.startsWith('wmcx_output/'))) {
+        rootPrefix = 'wmcx_output/';
+    }
+
+    // 檢查 settings.json
+    let hasSettings = false;
+    let settingsCount = 0;
+    let projectsMeta = {};
+    const settingsEntry = zip.file(`${rootPrefix}settings.json`) || zip.file('settings.json');
+    if (settingsEntry) {
+        hasSettings = true;
+        try {
+            const text = await settingsEntry.async('string');
+            const parsed = JSON.parse(text);
+            const settingsObj = parsed.settings || parsed;
+            settingsCount = Object.keys(settingsObj).length;
+            projectsMeta = parsed.projectsMeta || {};
+        } catch (_) {}
+    }
+
+    // 取得所有專案資料夾名稱
+    const projectFolderNames = new Set();
+    fileKeys.forEach(k => {
+        const relativePath = rootPrefix ? (k.startsWith(rootPrefix) ? k.slice(rootPrefix.length) : '') : k;
+        if (!relativePath || relativePath.startsWith('settings.json')) return;
+        if (relativePath.includes('../') || relativePath.includes('..\\')) return;
+
+        const segments = relativePath.split('/');
+        if (segments.length >= 2 && segments[0].trim().length > 0) {
+            projectFolderNames.add(segments[0]);
+        }
+    });
+
+    const projects = [];
+    for (const folderName of projectFolderNames) {
+        const folderPath = `${rootPrefix}${folderName}/`;
+        const projectFiles = fileKeys.filter(k => k.startsWith(folderPath) && !k.endsWith('/'));
+
+        let maidataTitle = '';
+        let hasMaidata = false;
+        const maidataFile = zip.file(`${folderPath}maidata.txt`);
+        if (maidataFile) {
+            hasMaidata = true;
+            try {
+                const text = await maidataFile.async('string');
+                const parsed = parseMaidata(text);
+                if (parsed.title) maidataTitle = parsed.title.trim();
+            } catch (_) {}
+        }
+
+        let trackFilename = null;
+        let bgFilename = null;
+        let pvFilename = null;
+
+        for (const fullPath of projectFiles) {
+            const fileName = fullPath.slice(folderPath.length);
+            const lowerName = fileName.toLowerCase();
+            if (lowerName.startsWith('track.')) trackFilename = fileName;
+            else if (lowerName.startsWith('bg.')) bgFilename = fileName;
+            else if (lowerName.startsWith('pv.')) pvFilename = fileName;
+        }
+
+        const displayName = maidataTitle || folderName;
+        projects.push({
+            dirName: folderName,
+            name: displayName,
+            hasMaidata,
+            trackFilename,
+            bgFilename,
+            pvFilename,
+            meta: projectsMeta[folderName] || projectsMeta[displayName] || null
+        });
+    }
+
+    return {
+        hasSettings,
+        settingsCount,
+        projects
+    };
+}
+
+/**
  * 從 ZIP 檔案還原使用者設定與所有專案
  * @param {File|Blob} zipFile - 使用者上傳的 .zip 檔案
  * @param {object} [options]
+ * @param {boolean} [options.includeSettings=true] - 是否還原全域設定
+ * @param {Array<string>|null} [options.selectedFolderNames=null] - 欲還原的專案目錄清單（若為 null 則還原全部）
  * @param {(progress: { percent: number, message: string, currentProject: string }) => void} [options.onProgress]
  * @returns {Promise<{ importedProjectsCount: number, settingsRestored: boolean, projects: Array<{ id: string, name: string }> }>}
  */
 export async function restoreWmcxZip(zipFile, options = {}) {
-    const { onProgress } = options;
+    const {
+        includeSettings = true,
+        selectedFolderNames = null,
+        onProgress
+    } = options;
 
     const report = (percent, message, currentProject = '') => {
         if (typeof onProgress === 'function') {
@@ -47,7 +157,7 @@ export async function restoreWmcxZip(zipFile, options = {}) {
         }
     };
 
-    report(5, '正在讀取與解析壓縮檔...');
+    report(5, t('popup.maintenance.readingZip'));
     const JSZip = await ensureJSZip();
     const zip = await JSZip.loadAsync(zipFile);
 
@@ -65,8 +175,8 @@ export async function restoreWmcxZip(zipFile, options = {}) {
     let projectsMeta = {};
     const settingsEntry = zip.file(`${rootPrefix}settings.json`) || zip.file('settings.json');
 
-    if (settingsEntry) {
-        report(15, '正在還原全域設定...');
+    if (includeSettings && settingsEntry) {
+        report(15, t('popup.maintenance.restoringSettings'));
         try {
             const settingsJsonText = await settingsEntry.async('string');
             const envelope = JSON.parse(settingsJsonText);
@@ -87,11 +197,18 @@ export async function restoreWmcxZip(zipFile, options = {}) {
         } catch (e) {
             console.warn('[wmcxRestore] 還原 settings.json 失敗:', e);
         }
+    } else if (settingsEntry) {
+        // 即使不還原設定，也嘗試解析 projectsMeta 供專案狀態還原
+        try {
+            const settingsJsonText = await settingsEntry.async('string');
+            const envelope = JSON.parse(settingsJsonText);
+            projectsMeta = envelope.projectsMeta || {};
+        } catch (_) {}
     }
 
     // 3. 識別各專案資料夾
     // 目標資料夾路徑形如: `${rootPrefix}{folderName}/...`
-    report(25, '正在分析專案清單...');
+    report(25, t('popup.maintenance.analyzingProjects'));
     const projectFolderNames = new Set();
 
     fileKeys.forEach(k => {
@@ -111,7 +228,13 @@ export async function restoreWmcxZip(zipFile, options = {}) {
         }
     });
 
-    const folderList = Array.from(projectFolderNames);
+    let folderList = Array.from(projectFolderNames);
+
+    // 根據 selectedFolderNames 進行過濾
+    if (Array.isArray(selectedFolderNames)) {
+        const folderSet = new Set(selectedFolderNames);
+        folderList = folderList.filter(f => folderSet.has(f));
+    }
     const totalProjects = folderList.length;
     const importedProjects = [];
 
@@ -125,7 +248,7 @@ export async function restoreWmcxZip(zipFile, options = {}) {
         const folderPath = `${rootPrefix}${folderName}/`;
 
         const percent = 25 + Math.round(((i + 1) / totalProjects) * 70);
-        report(percent, `正在還原專案 (${i + 1}/${totalProjects}): ${folderName}`, folderName);
+        report(percent, t('popup.maintenance.restoringProject', { current: i + 1, total: totalProjects, name: folderName }), folderName);
 
         // 讀取 maidata.txt
         let maidataText = '';
@@ -226,7 +349,7 @@ export async function restoreWmcxZip(zipFile, options = {}) {
         });
     }
 
-    report(100, '還原完成！');
+    report(100, t('popup.maintenance.restoreDone'));
 
     // 觸發全域專案變更事件，通知各介面刷新清單
     if (typeof window !== 'undefined') {

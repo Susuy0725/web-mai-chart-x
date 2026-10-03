@@ -591,9 +591,11 @@ const updateSlider = (time) => {
     timeline.style.setProperty('--timeline-progress', stopPos);
 };
 
-manageResourcesButton.addEventListener('click', () => {
-    openResourceManager();
-});
+if (manageResourcesButton) {
+    manageResourcesButton.addEventListener('click', () => {
+        openResourceManager();
+    });
+}
 
 editMusicButton.addEventListener('click', () => {
     openBgmEditor({
@@ -2769,6 +2771,7 @@ function draw(dt = 0) {
         playing,
         timeControlSliding,
         readyBeat,
+        clockBpm,
         playedClock,
         settings,
         visualHeight,

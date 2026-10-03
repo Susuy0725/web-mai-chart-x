@@ -17,7 +17,8 @@ export function openSettingsModal({
     audioManager,
     saveSettingsDebounce,
     setEditorCss,
-    draw
+    draw,
+    initialTab = 0
 }) {
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
@@ -35,8 +36,10 @@ export function openSettingsModal({
 
     const sections = [];
     const tabs = [];
+    let currentTabIndex = initialTab;
 
     const switchTab = (index) => {
+        currentTabIndex = index;
         tabs.forEach((tab, i) => {
             tab.classList.toggle('active', i === index);
         });
@@ -254,21 +257,29 @@ export function openSettingsModal({
             // --- B. 處理 Dropdown ---
             else if (item.type === 'dropdown') {
                 el = createDropdown(currentVal, item.options);
-                el.addEventListener('change', (e) => {
-                    try { targetRef[targetKey] = e.target.value; } catch (err) { }
+                el.addEventListener('change', async (e) => {
+                    const newValue = e.target.value;
+                    try { targetRef[targetKey] = newValue; } catch (err) { }
                     if (item.id === 'lang') {
-                        setLang(e.target.value);
-                        idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-                        if (popupCtx) {
-                            popupCtx.close();
-                            // 重新開啟設定彈窗以應用新語系介面
-                            openSettingsModal({
-                                settings,
-                                audioManager,
-                                saveSettingsDebounce,
-                                setEditorCss,
-                                draw
-                            });
+                        el.disabled = true;
+                        const success = await setLang(newValue);
+                        if (success) {
+                            idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
+                            if (popupCtx) {
+                                popupCtx.close();
+                                // 重新開啟設定彈窗以應用新語系介面
+                                openSettingsModal({
+                                    settings,
+                                    audioManager,
+                                    saveSettingsDebounce,
+                                    setEditorCss,
+                                    draw,
+                                    initialTab: currentTabIndex
+                                });
+                            }
+                        } else {
+                            el.disabled = false;
+                            el.value = currentVal;
                         }
                     }
                 });
@@ -341,7 +352,7 @@ export function openSettingsModal({
         });
     });
 
-    switchTab(0);
+    switchTab(currentTabIndex);
 
     const oldAudioSettings = {
         globalVolume: settings.globalVolume,

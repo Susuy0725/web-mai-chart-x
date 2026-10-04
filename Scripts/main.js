@@ -529,6 +529,7 @@ let ctx = canvas.getContext('2d');
 initQuickPanel({
     quickPanel,
     settings,
+    getSettings: () => settings,
     isInitComplete: () => isInitComplete,
     onRotateSelection: (dir) => rotateSelection(dir),
     onFlipVertical: () => flipVertical(),

@@ -13,10 +13,12 @@ import { t } from '../i18n.js';
  * @param {HTMLElement} options.redoButton
  * @param {HTMLElement} options.undoButton
  * @param {HTMLElement} options.getCursorNoteIndex
+ * @param {Function} [options.getSettings] - 動態取得最新設定
  */
 export function initQuickPanel({
     quickPanel,
     settings,
+    getSettings,
     isInitComplete,
     onRotateSelection,
     onFlipVertical,
@@ -173,18 +175,50 @@ export function initQuickPanel({
     document.addEventListener('mousemove', updatePointerPosition, { passive: true });
     document.addEventListener('pointermove', updatePointerPosition, { passive: true });
 
+    function resolveCurrentSettings() {
+        if (typeof getSettings === 'function') {
+            return getSettings() || {};
+        }
+        return settings || {};
+    }
+
+    function hasActiveModal() {
+        return !!(
+            document.querySelector('.popup-backdrop') ||
+            document.querySelector('.wmc-welcome-overlay') ||
+            document.querySelector('[role="dialog"]') ||
+            document.querySelector('dialog[open]')
+        );
+    }
+
     // 2. 鍵盤按下事件（在 capture 階段確保優先攔截）
     function handleKeyDown(e) {
         const ready = typeof isInitComplete === 'function' ? isInitComplete() : isInitComplete;
         if (!ready || !quickPanel) return;
 
-        const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+        // 若畫面上有任何彈窗開啟中，不應觸發快速面板；若已在按住狀態則重置關閉
+        if (hasActiveModal()) {
+            if (isCtrlShiftPressed) {
+                hideQuickPanel();
+            }
+            return;
+        }
+
+        // 作業系統環境判斷：在 Windows/Linux 上，Windows/Meta 鍵不可被視為快速面板修飾鍵
+        const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent || navigator.platform || '');
+        if (e.metaKey && !isMac) {
+            // Windows 鍵被按下，避免誤攔截 Win+Shift 系統快捷鍵 (如 Win+Shift+S 螢幕截圖)
+            return;
+        }
+
+        const isCtrlOrCmd = isMac ? (e.ctrlKey || e.metaKey) : e.ctrlKey;
         const isShift = e.shiftKey;
 
-        // 當按下 Ctrl/Cmd + Shift 時
+        // 當按下 Ctrl + Shift 時
         if (isCtrlOrCmd && isShift) {
-            // 若設定中已停用快速面板，提示使用者
-            if (settings && settings.enableQuickPanel === false) {
+            const currentSettings = resolveCurrentSettings();
+            // 啟用快速面板預設為開啟 (true)，僅當明確為 false 時停用
+            if (currentSettings.enableQuickPanel === false) {
                 if (!isCtrlShiftPressed) {
                     simpleToast({
                         content: t("toast.quickPanelDisabled"),
@@ -241,13 +275,17 @@ export function initQuickPanel({
     function handleKeyUp(e) {
         if (!isCtrlShiftPressed) return;
 
+        const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent || navigator.platform || '');
+        const isCtrlOrCmdReleased = isMac ? (!e.ctrlKey && !e.metaKey) : !e.ctrlKey;
+        const isShiftReleased = !e.shiftKey;
+
         const isModifier =
-            e.key === 'Control' || e.key === 'Shift' || e.key === 'Meta' ||
+            e.key === 'Control' || e.key === 'Shift' || (isMac && e.key === 'Meta') ||
             e.code === 'ControlLeft' || e.code === 'ControlRight' ||
             e.code === 'ShiftLeft' || e.code === 'ShiftRight' ||
-            e.code === 'MetaLeft' || e.code === 'MetaRight';
+            (isMac && (e.code === 'MetaLeft' || e.code === 'MetaRight'));
 
-        const modifierReleased = isModifier || !(e.ctrlKey || e.metaKey) || !e.shiftKey;
+        const modifierReleased = isModifier || isCtrlOrCmdReleased || isShiftReleased;
 
         if (modifierReleased) {
             const actionDir = directionOfPointer;

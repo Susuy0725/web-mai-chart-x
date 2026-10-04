@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.04 (2)]
+
+### Added
+- 新增簡體中文（`zh-CN`）與韓文（`ko`）多語言在地化支援，並強化瀏覽器語言自動偵測與變體映射。
+- 新增初次啟動導覽彈窗（`welcomeModal`），提供服務條款確認、自舊站遷移導出引導（限 `tri-dent.cc` 網域）、備份包匯入還原及歡迎頁面。
+- 新增導覽彈窗專屬 Material Design 暗色樣式（`Styles/welcome.css`）與流暢箭頭動態效果。
+
+### Changed
+- 快速面板（Quick Panel）改為預設啟用（`enableQuickPanel = true`），並支援即時動態讀取最新設定變更。
+- 最佳化 Service Worker（`sw.js`）離線快取清單：加入新模組與樣式表，並清理重構前的過期失效路徑。
+- 初次啟動導覽彈窗觸發條件與資料庫狀態聯動，支援在資源管理「清除所有資料」後重新觸發。
+
+### Fixed
+- 修復快速面板在 Windows 系統下會被 `Win + Shift`（如螢幕截圖快捷鍵 `Win + Shift + S`）錯誤攔截的問題。
+- 修復畫面上已有任何彈窗時快速面板仍會被觸發的問題。
+- 修復備份包匯入彈窗層級被導覽彈窗遮擋，以及步驟四（歡迎使用）在匯入完成前過早觸發的問題。
+
 ## [2026.10.04 (1)]
 
 ### Added

@@ -2,8 +2,10 @@ let manifest = {
     defaultLocale: 'en',
     locales: [
         { code: 'zh-TW', name: '繁體中文', englishName: 'Traditional Chinese' },
+        { code: 'zh-CN', name: '简体中文', englishName: 'Simplified Chinese' },
         { code: 'en', name: 'English', englishName: 'English' },
-        { code: 'ja', name: '日本語', englishName: 'Japanese' }
+        { code: 'ja', name: '日本語', englishName: 'Japanese' },
+        { code: 'ko', name: '한국어', englishName: 'Korean' }
     ]
 };
 
@@ -32,7 +34,7 @@ export function getAvailableLanguages() {
 
 /**
  * BCP 47 自動語系偵測
- * 優先嘗試精確比對，再以前綴比對，最後回傳 defaultLocale
+ * 優先嘗試精確比對，再進行中文變體映射，最後以前綴比對與 defaultLocale 回傳
  */
 export function detectDefaultLanguage(availableLocales = manifest.locales, defaultLocale = manifest.defaultLocale || 'en') {
     const userLangs = (typeof navigator !== 'undefined' && navigator.languages && navigator.languages.length > 0)
@@ -49,7 +51,22 @@ export function detectDefaultLanguage(availableLocales = manifest.locales, defau
         const exactMatch = availableCodes.find(code => code.toLowerCase() === normalized.toLowerCase());
         if (exactMatch) return exactMatch;
 
-        // 2. Prefix / Base language match (e.g. "zh-HK" -> "zh-TW", "en-US" -> "en")
+        // 2. 中文特定變體與腳本標籤映射 (Simplified / Traditional)
+        const lowerNorm = normalized.toLowerCase();
+        if (lowerNorm.startsWith('zh')) {
+            // 簡體中文模式 (zh-Hans, zh-CN, zh-SG, zh-MY)
+            const isSimplified = lowerNorm.includes('hans') || lowerNorm.includes('cn') || lowerNorm.includes('sg') || lowerNorm.includes('my');
+            if (isSimplified && availableCodes.includes('zh-CN')) {
+                return 'zh-CN';
+            }
+            // 繁體中文模式 (zh-Hant, zh-TW, zh-HK, zh-MO)
+            const isTraditional = lowerNorm.includes('hant') || lowerNorm.includes('tw') || lowerNorm.includes('hk') || lowerNorm.includes('mo');
+            if (isTraditional && availableCodes.includes('zh-TW')) {
+                return 'zh-TW';
+            }
+        }
+
+        // 3. Prefix / Base language match (e.g. "en-US" -> "en", "ko-KR" -> "ko")
         const primarySubtag = normalized.split('-')[0].toLowerCase();
         const prefixMatch = availableCodes.find(code => {
             const codePrimary = code.split('-')[0].toLowerCase();

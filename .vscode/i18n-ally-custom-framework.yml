@@ -11,5 +11,7 @@ monopoly: true
 
 locales:
   - zh-TW
+  - zh-CN
   - en
   - ja
+  - ko

@@ -605,7 +605,7 @@ export async function openExportSelectionModal() {
  * 開啟「匯入確認選擇彈窗」
  * @param {File} zipFile - 使用者選取的 ZIP 檔案
  */
-export async function openImportSelectionModal(zipFile) {
+export async function openImportSelectionModal(zipFile, options = {}) {
     ensureMaintenanceStyles();
 
     simpleToast({ content: t('popup.maintenance.parsingZip'), type: 'info', timeout: 1500 });
@@ -615,6 +615,7 @@ export async function openImportSelectionModal(zipFile) {
     } catch (err) {
         console.error('[ImportModal] 預檢失敗:', err);
         simpleToast({ content: t('popup.maintenance.parseZipError', { error: err.message || err }), type: 'error' });
+        options.onCancel?.(err);
         return;
     }
 
@@ -622,6 +623,7 @@ export async function openImportSelectionModal(zipFile) {
 
     if (projects.length === 0 && !hasSettings) {
         simpleToast({ content: t('popup.maintenance.emptyZip'), type: 'warn' });
+        options.onCancel?.();
         return;
     }
 
@@ -835,15 +837,23 @@ export async function openImportSelectionModal(zipFile) {
 
     // 建立彈窗
     let modalInstance = null;
+    let importExecuted = false;
     modalInstance = popupWindow({
         title: t('popup.maintenance.titleImport'),
         customContent: container,
         width: 600,
         maxWidth: 720,
+        onClose: () => {
+            if (!importExecuted) {
+                options.onCancel?.();
+            }
+        },
         buttons: [
             {
                 text: t('popup.maintenance.cancel'),
-                onClick: (ctx) => ctx.close()
+                onClick: (ctx) => {
+                    ctx.close();
+                }
             },
             {
                 text: hasSettings
@@ -855,6 +865,7 @@ export async function openImportSelectionModal(zipFile) {
 
                     if (selectedFolders.length === 0 && !includeSettings) return;
 
+                    importExecuted = true;
                     ctx.close();
 
                     const progressModal = openFrozenProgressModal(t('popup.maintenance.importProgressTitle'));
@@ -879,9 +890,15 @@ export async function openImportSelectionModal(zipFile) {
                             type: 'success',
                             timeout: 3500
                         });
+                        if (typeof options.onComplete === 'function') {
+                            options.onComplete(res);
+                        }
                     } catch (err) {
                         console.error('[ImportModal] 還原失敗:', err);
                         progressModal.error(t('popup.maintenance.restoreFailed', { error: err.message || err }));
+                        if (typeof options.onCancel === 'function') {
+                            options.onCancel(err);
+                        }
                     }
                 }
             }

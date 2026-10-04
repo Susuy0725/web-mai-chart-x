@@ -33,6 +33,7 @@ import { checkAndHandleDriveOpenWith } from './services/driveOpenWith.js';
 import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
+import { showWelcomeModal } from './modals/welcomeModal.js';
 export { toggleNoteFlag };
 
 majdataWs.setToastHandler(simpleToast);
@@ -42,6 +43,7 @@ disableNavigationGestures();
 
 let
     isInitComplete = false,
+    isDatabaseEmpty = false,
     images,
     readyBeat = false,
     maidata = {},
@@ -3073,6 +3075,7 @@ async function _init() {
         setEditorCss,
         resize,
         setIsInitComplete: (val) => { isInitComplete = val; },
+        setIsDatabaseEmpty: (val) => { isDatabaseEmpty = val; },
         updateDiscordRPC,
         getMaidata: () => maidata,
         getNowDifficulty: () => nowDifficulty,
@@ -3084,6 +3087,7 @@ async function _init() {
             checkAndHandleDriveOpenWith({
                 loadProject
             });
+            showWelcomeModal({ isDatabaseEmpty });
         }
     });
 }
@@ -3106,5 +3110,6 @@ window.setEditorCss = setEditorCss;
 window.resize = resize;
 window.draw = draw;
 window.saveSettingsDebounce = saveSettingsDebounce;
+window.openWelcomeModal = () => showWelcomeModal(true);
 
 _init();

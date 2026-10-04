@@ -163,6 +163,10 @@ export async function openResourceManager() {
                                     if (!confirm(t('popup.resource.confirmClearAll'))) return;
                                     try {
                                         await clearStoreKeys();
+                                        try {
+                                            localStorage.removeItem('wmcx_first_run_completed');
+                                            localStorage.removeItem('simai_lastProjectId');
+                                        } catch {}
                                         await renderContent(container);
                                         optCtx.close();
                                         promptReloadAfterClear();

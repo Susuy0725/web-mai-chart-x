@@ -1,0 +1,372 @@
+/* ==========================================================================
+   Welcome Modal Style Sheet - Web mai Chart X
+   初次啟動導覽彈窗 (凍結操作式、Material Design 暗色風格)
+   ========================================================================== */
+
+.wmc-welcome-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.86);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.wmc-welcome-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.wmc-welcome-dialog {
+    background: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.15);
+    width: 460px;
+    max-width: calc(100vw - 32px);
+    padding: 34px 28px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+    box-sizing: border-box;
+    transform: scale(0.95);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wmc-welcome-overlay.active .wmc-welcome-dialog {
+    transform: scale(1);
+}
+
+/* 步驟切換容器 */
+.wmc-welcome-step {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    animation: wmcStepFadeIn 0.24s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.wmc-welcome-step.active {
+    display: flex;
+}
+
+@keyframes wmcStepFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ==========================================================================
+   步驟一：品牌與服務條款 (Step 1)
+   ========================================================================== */
+.wmc-welcome-logo {
+    width: 104px;
+    height: 104px;
+    object-fit: contain;
+    margin-bottom: 16px;
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
+}
+
+.wmc-welcome-brand {
+    font-size: 22px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+
+.wmc-welcome-subdesc {
+    font-size: 13px;
+    color: #9e9e9e;
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.wmc-welcome-agreement-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #d0d0d0;
+}
+
+.wmc-welcome-agreement-row a {
+    color: #60a5fa;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.wmc-welcome-agreement-row a:hover {
+    color: #93c5fd;
+}
+
+.wmc-welcome-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #757575;
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    display: inline-grid;
+    place-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.wmc-welcome-checkbox:hover {
+    border-color: #9e9e9e;
+}
+
+.wmc-welcome-checkbox:checked {
+    background-color: #49e;
+    border-color: #49e;
+}
+
+.wmc-welcome-checkbox:checked::before {
+    content: "";
+    width: 9px;
+    height: 5px;
+    border-left: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* ==========================================================================
+   步驟二：舊站遷移 (Step 2)
+   ========================================================================== */
+.wmc-welcome-domain-tag {
+    font-family: 'Plus Jakarta Sans', monospace, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #f0f0f0;
+    letter-spacing: 0.3px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+}
+
+.wmc-welcome-domain-tag.target {
+    font-size: 15px;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.wmc-welcome-arrow-down {
+    width: 38px;
+    height: 42px;
+    margin: 10px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    animation: wmcArrowBounceDown 1.5s ease-in-out infinite;
+}
+
+@keyframes wmcArrowBounceDown {
+    0%, 100% {
+        transform: translateY(0);
+        opacity: 0.85;
+        filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.2));
+    }
+    50% {
+        transform: translateY(7px);
+        opacity: 1;
+        filter: drop-shadow(0 5px 10px rgba(73, 238, 255, 0.5));
+    }
+}
+
+/* ==========================================================================
+   步驟三：備份包匯入 (Step 3)
+   ========================================================================== */
+.wmc-welcome-graphic-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin: 10px 0 16px 0;
+}
+
+.wmc-welcome-icon-box {
+    width: 58px;
+    height: 58px;
+    background: #252525;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #e5e5e5;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.wmc-welcome-arrow-right {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    animation: wmcArrowSlideRight 1.5s ease-in-out infinite;
+}
+
+@keyframes wmcArrowSlideRight {
+    0%, 100% {
+        transform: translateX(0);
+        opacity: 0.85;
+        filter: drop-shadow(2px 0 4px rgba(255, 255, 255, 0.2));
+    }
+    50% {
+        transform: translateX(7px);
+        opacity: 1;
+        filter: drop-shadow(5px 0 10px rgba(73, 238, 255, 0.5));
+    }
+}
+
+/* ==========================================================================
+   通用步驟標題與說明文字
+   ========================================================================== */
+.wmc-welcome-step-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 14px;
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+}
+
+.wmc-welcome-step-desc {
+    font-size: 13px;
+    color: #b5b5b5;
+    line-height: 1.6;
+    margin-bottom: 24px;
+    white-space: pre-line;
+}
+
+/* ==========================================================================
+   步驟四：歡迎使用 (Step 4)
+   ========================================================================== */
+.wmc-welcome-final-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 12px;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+.wmc-welcome-final-brand {
+    font-size: 28px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    margin-bottom: 32px;
+}
+
+/* ==========================================================================
+   操作按鈕設計 (高對比 Material Design 風格)
+   ========================================================================== */
+.wmc-welcome-btn-full {
+    width: 100%;
+    padding: 11px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: #282828;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.wmc-welcome-btn-full:hover:not(:disabled) {
+    background: #363636;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.wmc-welcome-btn-full:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.wmc-welcome-btn-row {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.wmc-welcome-btn-half {
+    flex: 1;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    border: none;
+}
+
+.wmc-welcome-btn-half.primary {
+    background: #ffffff;
+    color: #121212;
+}
+
+.wmc-welcome-btn-half.primary:hover {
+    background: #e2e2e2;
+}
+
+.wmc-welcome-btn-half.secondary {
+    background: #282828;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.wmc-welcome-btn-half.secondary:hover {
+    background: #363636;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.wmc-welcome-btn-confirm {
+    width: 100%;
+    padding: 11px 24px;
+    font-size: 15px;
+    font-weight: 700;
+    background: #ffffff;
+    color: #121212;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.18s ease, transform 0.1s ease;
+}
+
+.wmc-welcome-btn-confirm:hover {
+    background: #e5e5e5;
+}
+
+.wmc-welcome-btn-confirm:active {
+    transform: scale(0.98);
+}

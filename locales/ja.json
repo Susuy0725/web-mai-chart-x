@@ -579,6 +579,21 @@
       "legalTitle": "規約とポリシー",
       "privacyPolicy": "プライバシーポリシー",
       "termsOfService": "利用規約"
+    },
+    "welcome": {
+      "step1Desc": "オープンソースで使いやすい maimai 譜面オンラインエディタ",
+      "agreeText": "チェックすることで以下に同意したとみなされます：",
+      "andText": "および",
+      "nextStep": "次へ",
+      "migrateTitle": "旧サイトからのデータ移行",
+      "migrateDesc": "URLの移行を行いましたが、ご安心ください。\nプロジェクトは安全に保存されています。以下のツールを使用して\n旧サイトのデータをエクスポートできます。",
+      "openMigrateTool": "移行ツールを開く",
+      "skip": "スキップ",
+      "importTitle": "バックアップをインポート",
+      "importDesc": "ここで以前エクスポートしたバックアップをインポートできます。\n後から設定画面でインポートすることも可能です。",
+      "importBackup": "バックアップをインポート",
+      "welcomeTitle": "ようこそ",
+      "confirm": "確定"
     }
   },
   "rpc": {

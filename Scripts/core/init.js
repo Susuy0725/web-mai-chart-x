@@ -77,6 +77,13 @@ async function setupCurrentProject(ctx, step) {
     step(78, t('popup.init.initProjects'));
 
     const migratedId = await ctx.migrateFromLegacy();
+    const lastId = localStorage.getItem('simai_lastProjectId');
+    const list = await ctx.projectList();
+    const isDatabaseEmpty = (!migratedId && (!list || list.length === 0));
+    if (typeof ctx.setIsDatabaseEmpty === 'function') {
+        ctx.setIsDatabaseEmpty(isDatabaseEmpty);
+    }
+
     if (migratedId) {
         ctx.setCurrentProjectId(migratedId);
         localStorage.setItem('simai_lastProjectId', migratedId);
@@ -84,8 +91,6 @@ async function setupCurrentProject(ctx, step) {
         return;
     }
 
-    const lastId = localStorage.getItem('simai_lastProjectId');
-    const list = await ctx.projectList();
     if (lastId && list.some(p => p.id === lastId)) {
         ctx.setCurrentProjectId(lastId);
     } else if (list.length > 0) {
@@ -243,6 +248,10 @@ function handleInitError(e, popupCtx) {
                 if (!confirm(t('popup.init.confirmClearAll'))) return;
                 try {
                     await clearIndexedDBStore();
+                    try {
+                        localStorage.removeItem('wmcx_first_run_completed');
+                        localStorage.removeItem('simai_lastProjectId');
+                    } catch {}
                     console.log("已清除 IndexedDB 中的所有資料");
                 } catch (err) {
                     console.error("清除 IndexedDB 資料失敗:", err);

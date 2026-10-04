@@ -579,6 +579,21 @@
       "legalTitle": "条款与政策",
       "privacyPolicy": "隐私权政策",
       "termsOfService": "服务条款"
+    },
+    "welcome": {
+      "step1Desc": "一个开源、易用的 maimai 谱面在线编辑器",
+      "agreeText": "勾选即表示已阅毕",
+      "andText": "及",
+      "nextStep": "下一步",
+      "migrateTitle": "自旧站迁移数据",
+      "migrateDesc": "本工具进行了网址迁移，但请放心，\n您的项目仍完好保存在原处，您可以使用下方的工具导出\n您在旧站的所有数据",
+      "openMigrateTool": "前往迁移工具",
+      "skip": "略过",
+      "importTitle": "导入备份包",
+      "importDesc": "可以在这里导入之前导出的备份包，\n也能够在之后在设置中导入",
+      "importBackup": "导入备份包",
+      "welcomeTitle": "欢迎使用",
+      "confirm": "确定"
     }
   },
   "rpc": {

@@ -579,6 +579,21 @@
       "legalTitle": "Policies & Terms",
       "privacyPolicy": "Privacy Policy",
       "termsOfService": "Terms of Service"
+    },
+    "welcome": {
+      "step1Desc": "An open-source, easy-to-use maimai online chart editor",
+      "agreeText": "Checking this indicates agreement to the",
+      "andText": "and",
+      "nextStep": "Next",
+      "migrateTitle": "Migrate Data from Legacy Site",
+      "migrateDesc": "We have migrated to a new URL, but rest assured:\nyour projects are safely preserved. You can use the tool below to export\nall your data from the legacy site.",
+      "openMigrateTool": "Open Migration Tool",
+      "skip": "Skip",
+      "importTitle": "Import Backup Package",
+      "importDesc": "You can import previously exported backup packages here,\nor do it anytime in Settings.",
+      "importBackup": "Import Backup",
+      "welcomeTitle": "Welcome to",
+      "confirm": "Get Started"
     }
   },
   "rpc": {

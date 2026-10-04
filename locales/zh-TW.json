@@ -188,7 +188,12 @@
       "exportAllData": "匯出備份包",
       "exportAllDataBtn": "匯出",
       "importAllData": "匯入備份包",
-      "importAllDataBtn": "匯入"
+      "importAllDataBtn": "匯入",
+      "showJudge": "顯示判定",
+      "showCriticalPerfect": "顯示 critical perfect",
+      "showBreakCriticalPerfect": "顯示 break critical perfect",
+      "showFastLate": "顯示 fast / late",
+      "autoPlay": "遊玩模式"
     },
     "middleDisplayOpts": {
       "off": "關閉",
@@ -196,6 +201,11 @@
       "score": "分數(101%+)",
       "scorePlus": "分數(101%+)",
       "scoreMinus": "分數(101%-)"
+    },
+    "autoPlayOpts": {
+      "computer": "Autoplay (電腦)",
+      "simulate": "Autoplay (模擬)",
+      "off": "手動遊玩"
     }
   },
   "popup": {

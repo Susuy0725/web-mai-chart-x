@@ -110,7 +110,6 @@ const QUARTER_PI = Math.PI / 4;
 
 const R_INNER_38 = innerCirleBase * 0.38;
 const R_OUTER_42 = innerCirleBase * 0.42;
-const R_INNER_V_ARC = innerCirleBase * 0.972;
 const R_INNER_S_Z = innerCirleBase * 0.414;
 const R_CIR_CENTER = innerCirleBase * 0.456;
 const R_CIR_ARC_1 = innerCirleBase * 0.472;
@@ -176,8 +175,6 @@ function getSlidePath(start, end, type, mid = null) {
             }
             const midInfo = noteRefPos[mid - 1];
             r.moveTo(startInfo.x, startInfo.y);
-            r.lineTo(midInfo.x, midInfo.y);
-            r.lineToArc(0, 0, R_INNER_V_ARC, midInfo.rot - HALF_PI);
             r.lineTo(midInfo.x, midInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
             break;
@@ -900,7 +897,8 @@ export function simaiDecode(data = "", baseOffset = true) {
                                 slideDelay: currentDelay,
                                 slideDuration: segmentDuration,
                                 isIllegal: seg.illegal,
-                                cullSkipExtend: d - cullSkipSum
+                                cullSkipExtend: d - cullSkipSum,
+                                endTangent: seg.path.endTangent(),
                             });
 
                             if (index === segments.length - 1) {

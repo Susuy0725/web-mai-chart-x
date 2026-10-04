@@ -188,7 +188,12 @@
       "exportAllData": "バックアップをポエクスポート",
       "exportAllDataBtn": "エクスポート",
       "importAllData": "バックアップをインポート",
-      "importAllDataBtn": "インポート"
+      "importAllDataBtn": "インポート",
+      "showJudge": "判定表示",
+      "showCriticalPerfect": "Critical Perfect 表示",
+      "showBreakCriticalPerfect": "Break Critical Perfect 表示",
+      "showFastLate": "Fast / Late 表示",
+      "autoPlay": "プレイモード"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -196,6 +201,11 @@
       "score": "達成率(101%+)",
       "scorePlus": "達成率(101%+)",
       "scoreMinus": "達成率(101%-)"
+    },
+    "autoPlayOpts": {
+      "computer": "Autoplay (PC)",
+      "simulate": "Autoplay (シミュレーション)",
+      "off": "マニュアル"
     }
   },
   "popup": {

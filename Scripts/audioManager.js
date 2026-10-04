@@ -581,13 +581,22 @@ class AudioManager {
                         key = '';
                         break;
                     }
-                    if (!note._startEffectPlayed && note.isBreak) {
-                        events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT) });
-                        key = 'slide';
+                    if (!note._startEffectPlayed) {
+                        if (note.isBreak) {
+                            events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT) });
+                            key = 'break_slide_start';
+                        } else {
+                            key = 'slide';
+                        }
                         isMono = false;
                     } else {
-                        key = 'slide';
-                        isMono = false;
+                        if (note.isBreak) {
+                            key = 'judge_break_slide';
+                            isMono = false;
+                        } else {
+                            key = '';
+                            return events;
+                        }
                     }
                     break;
                 default:
@@ -711,8 +720,12 @@ class AudioManager {
                     key = '';
                     break;
                 }
-                if (!note._startEffectPlayed && note.isBreak) {
-                    key = 'break_slide_start';
+                if (!note._startEffectPlayed) {
+                    if (note.isBreak) {
+                        key = 'break_slide_start';
+                    } else {
+                        key = 'slide';
+                    }
                     isMono = false;
                 } else {
                     if (note.isBreak) {
@@ -726,8 +739,9 @@ class AudioManager {
                         key = 'judge_break_slide';
                         isMono = false;
                     } else {
-                        key = 'slide';
-                        isMono = false;
+                        // 一般 slide 結尾不應該要有 judge 音效
+                        key = '';
+                        return events;
                     }
                 }
                 break;

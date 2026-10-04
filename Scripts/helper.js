@@ -1,5 +1,6 @@
-import { idbGet, idbSet } from "./indexDB.js";
+import { idbGet, idbSet, idbDelete } from "./indexDB.js";
 import { audioManager } from "./audioManager.js";
+import { getSkinCandidateUrls, skinAliases } from "./core/skinConfig.js";
 export { audioManager };
 export const GRADE_DETUNE = audioManager.GRADE_DETUNE;
 
@@ -14,7 +15,7 @@ export function imgNotExists(image) {
     return false;
 }
 
-const baseURL = './Skin/';
+const baseURL = (typeof window !== 'undefined' && window.location.pathname.includes('/_play/')) ? '../Skin/' : './Skin/';
 
 // 核心渲染素材（首屏 Canvas 必備打擊元件，優先載入以大幅加速 LCP）
 const coreImageKeys = [
@@ -29,7 +30,20 @@ const coreImageKeys = [
     'star', 'star_pink', 'star_break', 'star_each', 'star_ex',
     'slide', 'slide_each', 'slide_break',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
-    'touch_just', 'touchhold_off'
+    'touch_just', 'touchhold_off',
+    'judge_text_good', 'judge_text_miss', 'judge_text_great',
+    'judge_text_perfect', 'judge_text_normal', 'judge_text_break',
+    'judge_text_cPerfect_break', 'judge_text_perfect_break',
+    'fast', 'late',
+    // Slide 專屬 JUST 判定素材
+    'just_curv_l', 'just_curv_l_p', 'just_curv_l_fast_gd', 'just_curv_l_fast_gr', 'just_curv_l_late_gd', 'just_curv_l_late_gr',
+    'just_curv_r', 'just_curv_r_p', 'just_curv_r_fast_gd', 'just_curv_r_fast_gr', 'just_curv_r_late_gd', 'just_curv_r_late_gr',
+    'just_str_l', 'just_str_l_p', 'just_str_l_fast_gd', 'just_str_l_fast_gr', 'just_str_l_late_gd', 'just_str_l_late_gr',
+    'just_str_r', 'just_str_r_p', 'just_str_r_fast_gd', 'just_str_r_fast_gr', 'just_str_r_late_gd', 'just_str_r_late_gr',
+    'just_wifi_d', 'just_wifi_d_p', 'just_wifi_d_fast_gd', 'just_wifi_d_fast_gr', 'just_wifi_d_late_gd', 'just_wifi_d_late_gr',
+    'just_wifi_u', 'just_wifi_u_p', 'just_wifi_u_fast_gd', 'just_wifi_u_fast_gr', 'just_wifi_u_late_gd', 'just_wifi_u_late_gr',
+    // Slide 專屬 MISS 判定素材
+    'miss_curv_l', 'miss_curv_r', 'miss_str_l', 'miss_str_r', 'miss_wifi_d', 'miss_wifi_u'
 ];
 
 // 次要/特殊素材（WiFi 連續動畫幀、地雷、雙押星等，由背景非同步載入不阻塞首屏）
@@ -294,6 +308,10 @@ export class PathRecorder {
         const x = cx + r * Math.cos(startAngle);
         const y = cy + r * Math.sin(startAngle);
         this.lineTo(x, y);
+    }
+
+    endTangent() {
+        return this.getPointAt(1).rot;
     }
 }
 /*export function drawArrowShape(ctx) {
@@ -975,13 +993,19 @@ export async function loadAllImages(onProgress) {
         if (onProgress) onProgress((loadedCore / totalCore) * 100, key);
     };
 
+    const registerImgWithAliases = (key, img) => {
+        images[key] = img;
+        const alias = skinAliases[key];
+        if (alias && !images[alias]) images[alias] = img;
+    };
+
     // 1. 優先載入首屏必需的核心元件（大幅縮減 LCP 阻塞時間）
     const coreQueue = coreImageKeys.map(async key => {
-        const url = `${baseURL}${key}.png`;
+        const candidates = getSkinCandidateUrls(key, baseURL);
         try {
             try {
-                const img = await getImgWithCache(url, key);
-                if (img) images[key] = img;
+                const img = await getImgWithCandidates(candidates, key);
+                if (img) registerImgWithAliases(key, img);
             } catch (err) {
                 console.warn(`[資源缺失] 無法載入 ${key}:`, err);
             }
@@ -1003,10 +1027,10 @@ export async function loadAllImages(onProgress) {
         for (let i = 0; i < secondaryKeys.length; i += batchSize) {
             const batch = secondaryKeys.slice(i, i + batchSize);
             await Promise.all(batch.map(async key => {
-                const url = `${baseURL}${key}.png`;
+                const candidates = getSkinCandidateUrls(key, baseURL);
                 try {
-                    const img = await getImgWithCache(url, key);
-                    if (img) images[key] = img;
+                    const img = await getImgWithCandidates(candidates, key);
+                    if (img) registerImgWithAliases(key, img);
                 } catch (err) {
                     console.warn(`[背景資源缺失] 無法載入 ${key}:`, err);
                 }
@@ -1016,37 +1040,70 @@ export async function loadAllImages(onProgress) {
 
     return images;
 }
-async function getImgWithCache(url, key) {
-    // 1. 嘗試從 IndexedDB 取得 Blob
-    let blob = await idbGet(`img_cache_${key}`);
 
-    if (!blob) {
-        // 2. 沒快取則抓取網路資料
+/**
+ * 載入指定 key 的圖片素材，依優先序回退：
+ * 1. 優先從 Skin/Default/{type}/{fileName} 載入
+ * 2. 若 Default 不存在，改從 Skin/Shared/{type}/{fileName} (或 Skin/Shared/{fileName}) 載入
+ * 3. 降級保底原有的 Skin/{fileName} 載入
+ * @param {string[]} candidateUrls 候選 URL 陣列 (依優先序排列)
+ * @param {string} key 素材識別碼
+ */
+async function getImgWithCandidates(candidateUrls, key) {
+    const loadBlobAsImage = (b) => new Promise((resolve, reject) => {
+        const img = new Image();
+        const objUrl = URL.createObjectURL(b);
+        img.onload = () => {
+            URL.revokeObjectURL(objUrl);
+            resolve(img);
+        };
+        img.onerror = async () => {
+            URL.revokeObjectURL(objUrl);
+            await idbDelete(`img_cache_skin_${key}`).catch(() => { });
+            reject(new Error(`Failed to decode image blob for key: ${key}`));
+        };
+        img.src = objUrl;
+    });
+
+    // 1. 嘗試從 IndexedDB 取得皮膚快取 (使用 img_cache_skin_ 前綴避免舊快取干擾)
+    let blob = await idbGet(`img_cache_skin_${key}`).catch(() => null);
+
+    if (blob && blob.type && !blob.type.startsWith('image/')) {
+        await idbDelete(`img_cache_skin_${key}`).catch(() => { });
+        blob = null;
+    }
+
+    if (blob) {
         try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP status ${response.status}`);
-            }
-            blob = await response.blob();
-            // 3. 存入 IndexedDB
-            await idbSet(`img_cache_${key}`, blob);
-        } catch (e) {
-            console.error(`圖片載入失敗: ${url}`, e);
-            throw e; // 拋出錯誤以利呼叫端捕獲
+            return await loadBlobAsImage(blob);
+        } catch {
+            blob = null;
         }
     }
 
-    if (!blob) {
-        throw new Error(`Blob is null for key: ${key}`);
+    // 2. 依候選路徑依序嘗試載入：優先 Default -> 其次 Shared -> 最後 Fallback
+    let lastError = null;
+    for (const url of candidateUrls) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) continue; // 404 或其他狀態碼，嘗試下一個候選
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) continue; // Vite SPA fallback
+            blob = await response.blob();
+            const img = await loadBlobAsImage(blob);
+            await idbSet(`img_cache_skin_${key}`, blob).catch(() => { });
+            return img;
+        } catch (err) {
+            lastError = err;
+        }
     }
 
-    // 4. 將 Blob 轉為 Image 物件
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(new Error(`Failed to decode image blob for key: ${key}`));
-        img.src = URL.createObjectURL(blob);
-    });
+    throw lastError || new Error(`All candidate skin URLs failed for ${key}`);
+}
+
+async function getImgWithCache(url, key) {
+    const candidates = [url, ...getSkinCandidateUrls(key, baseURL)];
+    return await getImgWithCandidates(candidates, key);
 }
 export function generatePath(startPos, endPos) {
     console.warn("path missing, using straight line as fallback");

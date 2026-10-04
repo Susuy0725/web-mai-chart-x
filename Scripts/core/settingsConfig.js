@@ -13,6 +13,9 @@ export const defaultSettings = {
     showSensor: true,
     rotateStars: true,
     pinkStars: false,
+    showJudge: true, // 顯示判定
+    showCriticalPerfect: true, // 顯示 critical perfect
+    showBreakCriticalPerfect: true, // 顯示 break critical perfect
     // Misc
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
@@ -193,6 +196,18 @@ export const settingsConfig = [
                 def: defaultSettings.drawHanabiEffect || false
             },
             {
+                id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,
+                apply: (val) => { renderer.settings.showJudge = val; draw(); }
+            },
+            {
+                id: 'showCriticalPerfect', type: 'checkbox', label: 'settings.items.showCriticalPerfect', def: defaultSettings.showCriticalPerfect ?? true,
+                apply: (val) => { renderer.settings.showCriticalPerfect = val; draw(); }
+            },
+            {
+                id: 'showBreakCriticalPerfect', type: 'checkbox', label: 'settings.items.showBreakCriticalPerfect', def: defaultSettings.showBreakCriticalPerfect ?? true,
+                apply: (val) => { renderer.settings.showBreakCriticalPerfect = val; draw(); }
+            },
+            {
                 id: 'lowRes',
                 type: 'checkbox',
                 label: 'settings.items.lowRes',
@@ -200,18 +215,6 @@ export const settingsConfig = [
                 apply: () => {
                     window.resize?.(true);
                 }
-            },
-            {
-                id: 'majdataWsUrl',
-                type: 'text',
-                label: 'settings.items.majdataWsUrl',
-                def: defaultSettings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata'
-            },
-            {
-                id: 'autoConnectMajdataView',
-                type: 'checkbox',
-                label: 'settings.items.autoConnectMajdataView',
-                def: defaultSettings.autoConnectMajdataView || false
             },
             {
                 id: 'resetPanelRatio',
@@ -285,7 +288,19 @@ export const settingsConfig = [
             },
             {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
-            }
+            },
+            {
+                id: 'majdataWsUrl',
+                type: 'text',
+                label: 'settings.items.majdataWsUrl',
+                def: defaultSettings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata'
+            },
+            {
+                id: 'autoConnectMajdataView',
+                type: 'checkbox',
+                label: 'settings.items.autoConnectMajdataView',
+                def: defaultSettings.autoConnectMajdataView || false
+            },
         ]
     },
     {

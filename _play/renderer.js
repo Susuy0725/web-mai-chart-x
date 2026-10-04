@@ -12,16 +12,17 @@ import {
     exColor,
     easeOutQuad,
     easeInBack,
+    imgNotExists,
 } from '../Scripts/helper.js';
 
 // Safari / WebKit 專屬優化與 Polyfill: ctx.setAlpha()
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.setAlpha) {
-    CanvasRenderingContext2D.prototype.setAlpha = function(alpha) {
+    CanvasRenderingContext2D.prototype.setAlpha = function (alpha) {
         this.globalAlpha = alpha;
     };
 }
 if (typeof OffscreenCanvasRenderingContext2D !== 'undefined' && !OffscreenCanvasRenderingContext2D.prototype.setAlpha) {
-    OffscreenCanvasRenderingContext2D.prototype.setAlpha = function(alpha) {
+    OffscreenCanvasRenderingContext2D.prototype.setAlpha = function (alpha) {
         this.globalAlpha = alpha;
     };
 }
@@ -274,6 +275,9 @@ export class SimaiRenderer {
         this._hitEffectCount = 0;
         this._hitPosMap = new Int16Array(9).fill(-1);
         this._holdPosMap = new Int16Array(9).fill(-1);
+
+        // 打擊判定文字特效佇列 (Judge Text / Break Effect Queue)
+        this.judgeEffects = [];
     }
 
     getCanvasWH() {
@@ -545,6 +549,482 @@ export class SimaiRenderer {
         this.clearHitEffects();
     }
 
+    /**
+     * 觸發單次打擊判定文字與圖片特效 (globalTime driven)
+     * @param {Object} note 擊中的音符
+     * @param {Object} judgeResult 判定結果物件 (grade, subGrade, isBreak, breakScoreValue 等)
+     * @param {number|null} triggerTime 觸發時的譜面時間 (秒)，若為空則使用 this.globalTime
+     */
+    spawnJudgeEffect(note, judgeResult, triggerTime = null) {
+        if (!this.isPlaying) return;
+        if (!this.settings || this.settings.showJudge === false) return;
+        if (!judgeResult) return;
+        let x = 0, y = 0, rot = 0;
+        let posKey = null;
+
+        const noteType = note.type;
+        const slideType = note.slideType || '';
+        const isWifi = !!(note.isWifi || note.slideType === 'w');
+        const startPos = note.pos;
+        const endPos = note.slideEnd || note.pos;
+        const rawContent = note.rawContent || note.slidePath || '';
+        const wPaths = note.wPaths;
+
+        if (note.type === 'slide') {
+            if (noteRefPos[endPos - 1]) {
+                x = noteRefPos[endPos - 1].x;
+                y = noteRefPos[endPos - 1].y;
+                rot = note.endTangent ?? 0;
+                posKey = endPos;
+            }
+        } else if (note.type === 'touch') {
+            const ref = touchRefPos[note.touchPos] ? touchRefPos[note.touchPos][note.pos - 1] : { x: 0, y: 0 };
+            x = ref ? ref.x : 0;
+            y = ref ? ref.y : 0;
+            rot = ref ? ref.rot : 0;
+            posKey = null; // Touch 音符走坐標距離去重
+        } else if (noteRefPos[note.pos - 1]) {
+            x = noteRefPos[note.pos - 1].x;
+            y = noteRefPos[note.pos - 1].y;
+            rot = noteRefPos[note.pos - 1].rot;
+            posKey = note.pos;
+        }
+
+        const isBreak = !!note.isBreak;
+        let breakScoreValue = judgeResult.breakScoreValue;
+        if (isBreak && (breakScoreValue === undefined || breakScoreValue === null)) {
+            if (judgeResult.grade === 'CRITICAL_PERFECT') {
+                breakScoreValue = 2600;
+            } else if (judgeResult.grade === 'PERFECT') {
+                breakScoreValue = (judgeResult.breakMultiplier === 0.5) ? 2500 : 2550;
+            } else if (judgeResult.grade === 'GREAT') {
+                breakScoreValue = (judgeResult.scoreMultiplier <= 0.5) ? 1250 : ((judgeResult.scoreMultiplier <= 0.6) ? 1500 : 2000);
+            } else if (judgeResult.grade === 'GOOD') {
+                breakScoreValue = 1000;
+            } else {
+                breakScoreValue = 0;
+            }
+        }
+
+        const text = isBreak ? `${breakScoreValue}` : (judgeResult.grade === 'CRITICAL_PERFECT' ? 'PERFECT' : judgeResult.grade);
+        const startTime = (triggerTime !== null && triggerTime !== undefined) ? triggerTime : this.globalTime;
+        const duration = noteType === 'slide' ? 0.3 : 0.2; // 300, 200 ms
+
+        const isSlide = (noteType === 'slide');
+
+        // --- 同位置去重 (Deduplication) 機制：確保 Slide 與 Tap 互不干擾，且不同 Slide 各自獨立繪製 ---
+        if (isSlide) {
+            // Slide 特效去重：同一個 Slide note 實例重複觸發時覆蓋更新；
+            // 不同的 Slide 音符（即使相同 endPos，例如 2-5[4:1]/8-5[4:1]）各自獨立保留並繪製，絕不覆蓋彼此，亦不與 Tap 判定文字互相覆蓋
+            for (let i = 0; i < this.judgeEffects.length; i++) {
+                const existing = this.judgeEffects[i];
+                if (existing.isSlide && existing.note === note) {
+                    existing.text = text;
+                    existing.isBreak = isBreak;
+                    existing.breakScoreValue = breakScoreValue;
+                    existing.subGrade = judgeResult.subGrade;
+                    existing.grade = judgeResult.grade;
+                    existing.startTime = startTime;
+                    existing.duration = duration;
+                    existing.x = x;
+                    existing.y = y;
+                    existing.rot = rot;
+                    existing.posKey = posKey;
+                    existing.noteType = noteType;
+                    existing.slideType = slideType;
+                    existing.isWifi = isWifi;
+                    existing.startPos = startPos;
+                    existing.endPos = endPos;
+                    existing.rawContent = rawContent;
+                    existing.wPaths = wPaths;
+                    return;
+                }
+            }
+        } else {
+            // 非 Slide 音符 (Tap / Hold / Touch 等)：防止連打時同一位置重疊繪製多個判定文字 (絕不覆蓋 Slide 特效)
+            if (posKey && posKey >= 1 && posKey <= 8) {
+                for (let i = 0; i < this.judgeEffects.length; i++) {
+                    const existing = this.judgeEffects[i];
+                    if (!existing.isSlide && existing.posKey === posKey) {
+                        existing.text = text;
+                        existing.isBreak = isBreak;
+                        existing.breakScoreValue = breakScoreValue;
+                        existing.subGrade = judgeResult.subGrade;
+                        existing.grade = judgeResult.grade;
+                        existing.startTime = startTime;
+                        existing.duration = duration;
+                        existing.x = x;
+                        existing.y = y;
+                        existing.rot = rot;
+                        existing.posKey = posKey;
+                        existing.noteType = noteType;
+                        existing.slideType = slideType;
+                        existing.isWifi = isWifi;
+                        existing.startPos = startPos;
+                        existing.endPos = endPos;
+                        existing.rawContent = rawContent;
+                        existing.wPaths = wPaths;
+                        return;
+                    }
+                }
+            } else {
+                // Touch 音符或任意坐標：採用距離平方比對 (阈值設為 noteBaseSize 半徑範圍)
+                const thresholdSq = Math.pow((this.settings.noteBaseSize || 11) * 0.75, 2);
+                for (let i = 0; i < this.judgeEffects.length; i++) {
+                    const existing = this.judgeEffects[i];
+                    if (!existing.isSlide) {
+                        const dx = existing.x - x;
+                        const dy = existing.y - y;
+                        if (dx * dx + dy * dy < thresholdSq) {
+                            existing.text = text;
+                            existing.isBreak = isBreak;
+                            existing.breakScoreValue = breakScoreValue;
+                            existing.subGrade = judgeResult.subGrade;
+                            existing.grade = judgeResult.grade;
+                            existing.startTime = startTime;
+                            existing.duration = duration;
+                            existing.x = x;
+                            existing.y = y;
+                            existing.rot = rot;
+                            existing.posKey = posKey;
+                            existing.noteType = noteType;
+                            existing.slideType = slideType;
+                            existing.isWifi = isWifi;
+                            existing.startPos = startPos;
+                            existing.endPos = endPos;
+                            existing.rawContent = rawContent;
+                            existing.wPaths = wPaths;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        this.judgeEffects.push({
+            note,
+            isSlide,
+            posKey,
+            text,
+            isBreak,
+            breakScoreValue,
+            subGrade: judgeResult.subGrade,
+            grade: judgeResult.grade,
+            startTime,
+            duration,
+            x,
+            y,
+            rot,
+            noteType,
+            slideType,
+            isWifi,
+            startPos,
+            endPos,
+            rawContent,
+            wPaths
+        });
+
+        if (this.judgeEffects.length > 25) {
+            this.judgeEffects.shift();
+        }
+    }
+
+    queueJudgeEffect(note, judgeResult, triggerTime = null) {
+        if (!this.isPlaying) return;
+        this.spawnJudgeEffect(note, judgeResult, triggerTime);
+    }
+
+    clearJudgeEffects() {
+        if (this.judgeEffects) {
+            this.judgeEffects.length = 0;
+        }
+    }
+
+    /**
+     * 依據 MajdataPlay 規範，根據 Slide 類型、起終點與判定等級取得 Slide 專屬 JUST / MISS 圖片 Key
+     * 參考來源: MajdataPlay SlideOK.cs, CustomSkin.cs, NoteHelper.cs, NoteLoader.cs
+     * @param {Object} eff 特效物件
+     * @param {Object} images 圖片資源表
+     * @returns {string|null}
+     */
+    getSlideJustImageKey(eff, images) {
+        if (!eff || eff.noteType !== 'slide') return null;
+
+        const startPos = Number(eff.startPos || 1);
+        const endPos = Number(eff.endPos || eff.startPos || 1);
+        const slideType = String(eff.slideType || '');
+        const raw = String(eff.rawContent || slideType);
+        const showCP = (this.settings.showBreakCriticalPerfect !== false) && (this.settings.showCriticalPerfect !== false);
+
+        // 1. 判斷 Shape: 'curv', 'str', 'wifi'
+        // 參照 MajdataPlay: NoteHelper.GetSlideOKShapeFromSlideType
+        let shape = 'str';
+        const isWifi = !!(eff.isWifi || slideType === 'w');
+        const isCurv = !isWifi && (
+            slideType === '^' || slideType === '<' || slideType === '>' ||
+            slideType.includes('circle') ||
+            raw.includes('^') || raw.includes('<') || raw.includes('>')
+        );
+
+        if (isWifi) {
+            shape = 'wifi';
+        } else if (isCurv) {
+            shape = 'curv';
+        } else {
+            shape = 'str';
+        }
+
+        // 2. 判斷 Direction: R vs L (Wifi 為 U vs D)
+        // 參照 MajdataPlay: NoteCreateHelper.DetectJustType(content, out endPos)
+        // IsUpperHalf: 7, 8, 1, 2
+        // IsRightHalf: 1, 2, 3, 4
+        const isUpperHalf = (pos) => (pos === 7 || pos === 8 || pos === 5 || pos === 6);
+        const isRightHalf = (pos) => (pos >= 1 && pos <= 4);
+
+        let isJustR = false;
+        if (isWifi) {
+            isJustR = isUpperHalf(endPos);
+        } else if (slideType === '>' || raw.includes('>')) {
+            isJustR = isUpperHalf(startPos);
+        } else if (slideType === '<' || raw.includes('<')) {
+            isJustR = !isUpperHalf(startPos);
+        } else if (slideType === '^' || raw.includes('^')) {
+            const diff = (endPos - startPos + 8) % 8;
+            isJustR = (diff < 4);
+        } else {
+            // 直線與折線 (-, v, V, s, z, p, q, pp, qq 等)
+            isJustR = isRightHalf(endPos);
+        }
+
+        const dir = (shape === 'wifi') ? (isJustR ? 'u' : 'd') : (isJustR ? 'r' : 'l');
+        const state = `${shape}_${dir}`;
+
+        // 3. 根據 Grade 與 SubGrade 選擇對應的圖片 Key
+        // 參照 MajdataPlay: SlideOK.cs 與 CustomSkin.cs
+        if (eff.grade === 'MISS') {
+            const missKey = `miss_${state}`;
+            if (images && images[missKey] && !imgNotExists(images[missKey])) {
+                return missKey;
+            }
+            return null; // fallback 到一般 judge_text_miss
+        }
+
+        let candidateKey = null;
+        if (eff.grade === 'CRITICAL_PERFECT' || eff.grade === 'PERFECT') {
+            candidateKey = showCP ? `just_${state}` : `just_${state}_p`;
+        } else if (eff.grade === 'GREAT') {
+            candidateKey = (eff.subGrade === 'FAST') ? `just_${state}_fast_gr` : `just_${state}_late_gr`;
+        } else if (eff.grade === 'GOOD') {
+            candidateKey = (eff.subGrade === 'FAST') ? `just_${state}_fast_gd` : `just_${state}_late_gd`;
+        }
+
+        if (candidateKey && images && images[candidateKey] && !imgNotExists(images[candidateKey])) {
+            return candidateKey;
+        }
+
+        const fallbackKey = `just_${state}`;
+        if (images && images[fallbackKey] && !imgNotExists(images[fallbackKey])) {
+            return fallbackKey;
+        }
+
+        return null;
+    }
+
+    /**
+     * 獨立的打擊判定文字/圖片與閃爍特效渲染通道 (Judge Effects Pass - globalTime driven)
+     * @param {number|null} currentTime 當前譜面時間 (秒)，若為空則使用 this.globalTime
+     */
+    drawJudgeEffects(currentTime = null) {
+        if (!this.isPlaying) return;
+        if (!this.settings || this.settings.showJudge === false) return;
+        if (!this.judgeEffects || this.judgeEffects.length === 0) return;
+        const now = (currentTime !== null && currentTime !== undefined) ? currentTime : this.globalTime;
+        const ctx = this.ctx;
+        const images = this.images;
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        for (let i = this.judgeEffects.length - 1; i >= 0; i--) {
+            const eff = this.judgeEffects[i];
+            const elapsed = now - eff.startTime;
+            const isSlide = eff.noteType === 'slide';
+            const isWifiEff = eff.isWifi;
+            // 若時間已超過持續時間，或使用者大幅快退 (超過 0.2 秒)，移除該特效
+            if (elapsed > eff.duration || elapsed < -0.2) {
+                this.judgeEffects.splice(i, 1);
+                continue;
+            }
+            if (elapsed < 0) {
+                continue; // 尚未到達觸發時間
+            }
+
+            const progress = elapsed / eff.duration;
+            const alpha = Math.max(0,
+                ((progress < 0.375 && isSlide) ?
+                    ((progress / 0.375)) :
+                    ((1 - progress) < 0.375 ?
+                        1 - (progress - 0.625) / 0.375 : 1.0)));
+            const distOffset = isSlide ? 0 : -8;
+            const angle = Math.atan2(eff.y, eff.x);
+            const curX = eff.x + (eff.x === 0 && eff.y === 0 ? 0 : Math.cos(angle) * distOffset);
+            const curY = eff.y + (eff.x === 0 && eff.y === 0 ? -distOffset : Math.sin(angle) * distOffset);
+            const rot = eff.rot;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(curX, curY);
+            ctx.rotate(rot);
+
+            // 擊中彈出縮放效果 (前 0.07 秒內從 1.25 縮至 1.0)
+            const popScale = (progress < 0.375 && !isSlide) ? (1.25 - 0.25 * (progress / 0.375)) : 1.0;
+            ctx.scale(popScale, popScale);
+
+            // 嘗試取得 Slide 專屬 JUST / MISS 圖片 (參照 MajdataPlay)
+            const slideJustKey = this.getSlideJustImageKey(eff, images);
+            let imgKey = null;
+            let isBreakFlashing = false;
+            let isSlideJust = false;
+
+            if (slideJustKey && images && images[slideJustKey] && !imgNotExists(images[slideJustKey])) {
+                imgKey = slideJustKey;
+                isSlideJust = true;
+                if (eff.isBreak && eff.grade === 'CRITICAL_PERFECT') {
+                    isBreakFlashing = false;
+                }
+            } else {
+                if (eff.isBreak) {
+                    if (eff.grade === 'CRITICAL_PERFECT') {
+                        const showCP = (this.settings.showBreakCriticalPerfect !== false) && (this.settings.showCriticalPerfect !== false);
+                        if (showCP) {
+                            imgKey = 'judge_text_cPerfect_break';
+                        } else {
+                            imgKey = 'judge_text_perfect_break';
+                        }
+                        isBreakFlashing = true;
+                    } else if (eff.grade === 'PERFECT') {
+                        imgKey = 'judge_text_perfect_break';
+                        isBreakFlashing = false;
+                    } else if (eff.grade === 'GREAT') {
+                        imgKey = 'judge_text_great';
+                    } else if (eff.grade === 'GOOD') {
+                        imgKey = 'judge_text_good';
+                    } else {
+                        imgKey = 'judge_text_miss';
+                    }
+                } else {
+                    if (eff.grade === 'CRITICAL_PERFECT') {
+                        if (this.settings.showCriticalPerfect !== false) {
+                            imgKey = 'judge_text_normal'; // normal 是 CRITICAL PERFECT
+                        } else {
+                            imgKey = 'judge_text_perfect';
+                        }
+                    } else if (eff.grade === 'PERFECT') {
+                        imgKey = 'judge_text_perfect';
+                    } else if (eff.grade === 'GREAT') {
+                        imgKey = 'judge_text_great';
+                    } else if (eff.grade === 'GOOD') {
+                        imgKey = 'judge_text_good';
+                    } else {
+                        imgKey = 'judge_text_miss';
+                    }
+                }
+            }
+
+            const img = (images && imgKey) ? images[imgKey] : null;
+            const hasValidImg = img && !imgNotExists(img);
+
+            let judgeWidth = 20.0;
+            let judgeHeight = judgeWidth * (82 / 223); // 約 7.35
+
+            if (isSlideJust && hasValidImg) {
+                // Slide 專屬素材尺寸依 MajdataPlay 規範：WiFi 寬度約 32，Curv / Str 寬度約 24
+                judgeWidth = (isWifiEff ? 37.0 : 24.0) * 1.65;
+                judgeHeight = judgeWidth * (img.naturalHeight / img.naturalWidth);
+            }
+
+            if (hasValidImg) {
+                if (isBreakFlashing && !isSlide) {
+                    // Break 文字/JUST 閃爍動畫：以 globalTime 驅動高頻閃爍 (約每 0.034 秒切換一次)
+                    const normalImg = images ? images[this.settings.showCriticalPerfect !== false ? 'judge_text_normal' : 'judge_text_perfect'] : null;
+                    const isFlash = Math.floor(elapsed / 0.03) % 3 === 0;
+
+                    ctx.save();
+                    if (isFlash) {
+                        ctx.drawImage(img, -judgeWidth / 2, -judgeHeight / 2, judgeWidth, judgeHeight);
+                    } else {
+                        const altImg = (!isSlideJust && normalImg && !imgNotExists(normalImg)) ? normalImg : img;
+                        ctx.drawImage(altImg, -judgeWidth / 2, -judgeHeight / 2, judgeWidth, judgeHeight);
+                    }
+                    ctx.restore();
+                } else {
+                    const slideFlip = (imgKey && (imgKey.includes('_l') || imgKey.includes('_d')));
+                    const isCruvSlide = (imgKey && (imgKey.includes('curv')));
+                    const strSlideOffset = this.getSlideOffset(eff, slideFlip, isCruvSlide);
+                    ctx.save();
+                    ctx.rotate(isSlide ? Math.PI * (isWifiEff * 0.5 + slideFlip + isCruvSlide * (slideFlip ? 0.15 : -0.165)) : 0);
+                    ctx.drawImage(img,
+                        (isSlide ? (!slideFlip * -judgeWidth + (slideFlip - 0.5) * strSlideOffset.x) : -judgeWidth / 2),
+                        -judgeHeight / 2 + isSlide * ((isCruvSlide ? -2.7 : 2) + strSlideOffset.y),
+
+                        judgeWidth, judgeHeight);
+                    ctx.restore();
+                }
+            }
+
+            // 渲染 FAST / LATE 副標籤
+            // 注意：Slide 專屬 JUST 圖片 (如 just_curv_l_fast_gr) 本身已印有 FAST/LATE 字樣，若為 Slide JUST 則跳過副標籤繪製
+            const showFastLate = !isSlideJust && (this.settings.showFastLate !== false) && !!eff.subGrade;
+            if (showFastLate) {
+                const subKey = eff.subGrade === 'FAST' ? 'fast' : 'late';
+                const subImg = (images && images[subKey]) ? images[subKey] : null;
+                if (subImg && !imgNotExists(subImg)) {
+                    const subWidth = 4.8 * 4;
+                    const subHeight = subWidth * (82 / 223); // 約 1.76
+                    const subY = (judgeHeight / 2) + 0.6;
+                    ctx.drawImage(subImg, -subWidth / 2, subY - subHeight / 2, subWidth, subHeight);
+                }
+            }
+
+            // Break 額外數值 (2600, 2550 等)
+            // no ai slop
+            /*if (eff.isBreak && eff.breakScoreValue !== undefined && eff.breakScoreValue !== null) {
+                ctx.save();
+                const scoreY = showFastLate ? ((judgeHeight / 2) + 2.1) : ((judgeHeight / 2) + 1.2);
+                ctx.font = 'bold 1.6px combo';
+                ctx.fillStyle = '#fff4a3';
+                ctx.shadowColor = '#ffbb00';
+                ctx.shadowBlur = 3;
+                ctx.fillText(`${eff.breakScoreValue}`, 0, scoreY);
+                ctx.restore();
+            }*/
+
+            ctx.restore();
+        }
+        ctx.restore();
+    }
+
+    getSlideOffset(eff, flip, cruv) {
+        const slideType = eff.slideType;
+        const ps = (eff.startPos - eff.endPos + 8) % 8;
+        switch (slideType) {
+            case 'w': {
+                if (flip) return { x: -60, y: -7 };
+                return { x: -61, y: 3 };
+            }
+            case '-': {
+                if (ps == 3 || ps == 5) return { x: -1, y: -0.5 };
+                return { x: 3, y: -0.5 };
+            }
+            case 'pp':
+            case 'qq':
+                return { x: 3, y: -0.5 };
+            default:
+                return { x: 0, y: 0, rot: 0 };
+        }
+    }
+
     simpleHitEffect(noteT, judge = null, x = 0, y = 0, isBatch = false) {
         const t = noteT / this.settings.effectDecayTime;
         if (t < -1) return;
@@ -785,13 +1265,19 @@ export class SimaiRenderer {
             playScore,
             playScoreMinus,
             noteQuantity = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0 },
-            playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
+            isPlaying,
+            playing,
         } = state;
 
         this.globalTime = globalTime;
         this.playCombo = playCombo;
         this.playScore = playScore;
         this.playScoreMinus = (playScoreMinus !== undefined) ? playScoreMinus : 101;
+        this.isPlaying = (isPlaying !== undefined) ? !!isPlaying : (playing !== undefined ? !!playing : false);
+
+        if (!this.isPlaying) {
+            this.clearJudgeEffects();
+        }
 
         if (!this.images) return;
 
@@ -862,8 +1348,9 @@ export class SimaiRenderer {
             this.drawTouch(currentTouchNotes[i]);
         }
 
-        // --- 獨立分離的打擊特效層 (Hit Effects Pass) ---
+        // --- 獨立分離的打擊特效層 (Hit & Judge Effects Pass) ---
         this.drawHitEffects();
+        this.drawJudgeEffects();
 
         this.drawStaticBackground();
 

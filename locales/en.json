@@ -188,7 +188,12 @@
       "exportAllData": "Export backup pack",
       "exportAllDataBtn": "Export",
       "importAllData": "Import backup pack",
-      "importAllDataBtn": "Import"
+      "importAllDataBtn": "Import",
+      "showJudge": "Show Judge",
+      "showCriticalPerfect": "Show Critical Perfect",
+      "showBreakCriticalPerfect": "Show Break Critical Perfect",
+      "showFastLate": "Show Fast / Late",
+      "autoPlay": "Play Mode"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -196,6 +201,11 @@
       "score": "Score (101%+)",
       "scorePlus": "Score (101%+)",
       "scoreMinus": "Score (101%-)"
+    },
+    "autoPlayOpts": {
+      "computer": "Autoplay (Computer)",
+      "simulate": "Autoplay (Simulation)",
+      "off": "Manual Play"
     }
   },
   "popup": {

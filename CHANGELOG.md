@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## [2026.10.05 (1)]
+
+### Changed
+- 改變皮膚儲存方式
+- 改變判定效果
+
+
 ## [2026.10.04 (2)]
 
 ### Added

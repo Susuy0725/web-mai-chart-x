@@ -656,6 +656,8 @@ function setDataEmpty() {
     applyMovieBrightness(settings.moviebrightness);
     inputDebounce();
     saveMaidata();
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
 
     //projSet('background_image', null).catch(() => { });
     //projSet('background_video', null).catch(() => { });
@@ -690,6 +692,8 @@ fetchFromMainoteButton.addEventListener('click', () => {
 });
 
 const getres = ((simaiDataValue) => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
     const result = (() => {
         try {
             return simaiDecode(simaiDataValue, 0);
@@ -704,6 +708,8 @@ const getres = ((simaiDataValue) => {
         } else {
             notes = result.notes;
             decodedTags = result.tags || [];
+            renderer?.clearJudgeEffects();
+            renderer?.clearHitEffects();
 
             setEndtime(result.endTime);
             clockBpm = result.bpm;
@@ -1483,6 +1489,8 @@ document.addEventListener('selectionchange', () => {
 });
 
 editorInput.addEventListener('input', () => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
     const value = editorInput.value;
     isContextEdited = true;
 
@@ -1609,6 +1617,8 @@ const difficultyInputDebounce = debounce(() => {
 }, 500);
 
 changeDifficulty.addEventListener('change', (e) => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
     console.log("難度變更為:", e.target.value);
     const oldDiff = nowDifficulty;
     const nowEditorContent = editorInput.value;
@@ -1966,6 +1976,8 @@ const updateVisualTime = (newTime) => {
     } else {
         audioManager.clearSoundQueue();
         audioManager.stopBGM();
+        renderer?.clearJudgeEffects();
+        renderer?.clearHitEffects();
         draw();
         if (settings.cursorFollow) {
             const point = rawData.slice(0, nowIndex + 1).join(',').length;
@@ -2219,6 +2231,8 @@ playButton.addEventListener('click', () => {
         // --- 停止音效與 BGM ---
         audioManager.stopAllLongSounds();
         audioManager.stopBGM();
+        renderer?.clearJudgeEffects();
+        renderer?.clearHitEffects();
 
         notes.forEach(n => n._riserActive = false); // 強制重置標記
 
@@ -2276,6 +2290,8 @@ resetButton.addEventListener('click', () => {
     // --- 停止音效與 BGM ---
     audioManager.stopAllLongSounds();
     audioManager.stopBGM();
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
 
     videoSeekDebounce(0);
 
@@ -2303,6 +2319,8 @@ stopButton.addEventListener('click', () => {
     // --- 停止音效與 BGM ---
     audioManager.stopAllLongSounds();
     audioManager.stopBGM();
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
 
     notes.forEach(n => n._riserActive = false); // 強制重置標記
 
@@ -2383,6 +2401,8 @@ function seekToTime(targetTime) {
     updateSlider(realTime);
     slideInputDebounce();
     audioManager.stopAllLongSounds();
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
 
     if (playButton.dataset.playing === 'true') {
         audioManager.playBGM(realTime);
@@ -2801,6 +2821,7 @@ function draw(dt = 0) {
             noteQuantity,
             playScoreRes,
             nowIndex,
+            isPlaying: playing,
         });
         drawMainCanvasOpenedInExternalWindow();
     } else if (!noRender) {
@@ -2817,6 +2838,7 @@ function draw(dt = 0) {
                 noteQuantity,
                 playScoreRes,
                 nowIndex,
+                isPlaying: playing,
             });
         }
     }

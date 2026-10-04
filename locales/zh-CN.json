@@ -188,7 +188,12 @@
       "exportAllData": "导出备份包",
       "exportAllDataBtn": "导出",
       "importAllData": "导入备份包",
-      "importAllDataBtn": "导入"
+      "importAllDataBtn": "导入",
+      "showJudge": "显示判定",
+      "showCriticalPerfect": "显示 critical perfect",
+      "showBreakCriticalPerfect": "显示 break critical perfect",
+      "showFastLate": "显示 fast / late",
+      "autoPlay": "游玩模式"
     },
     "middleDisplayOpts": {
       "off": "关闭",
@@ -196,6 +201,11 @@
       "score": "分数(101%+)",
       "scorePlus": "分数(101%+)",
       "scoreMinus": "分数(101%-)"
+    },
+    "autoPlayOpts": {
+      "computer": "Autoplay (电脑)",
+      "simulate": "Autoplay (模拟)",
+      "off": "手动游玩"
     }
   },
   "popup": {

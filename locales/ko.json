@@ -188,7 +188,12 @@
       "exportAllData": "백업 패키지 내보내기",
       "exportAllDataBtn": "내보내기",
       "importAllData": "백업 패키지 가져오기",
-      "importAllDataBtn": "가져오기"
+      "importAllDataBtn": "가져오기",
+      "showJudge": "판정 표시",
+      "showCriticalPerfect": "Critical Perfect 표시",
+      "showBreakCriticalPerfect": "Break Critical Perfect 표시",
+      "showFastLate": "Fast / Late 표시",
+      "autoPlay": "플레이 모드"
     },
     "middleDisplayOpts": {
       "off": "끄기",
@@ -196,6 +201,11 @@
       "score": "점수(101%+)",
       "scorePlus": "점수(101%+)",
       "scoreMinus": "점수(101%-)"
+    },
+    "autoPlayOpts": {
+      "computer": "Autoplay (컴퓨터)",
+      "simulate": "Autoplay (시뮬레이션)",
+      "off": "수동 플레이"
     }
   },
   "popup": {

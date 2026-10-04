@@ -8,7 +8,7 @@
     <meta name="description" content="Web mai Chart X 譜面播放器，支援流暢預覽與模擬遊玩 maimai 譜面。">
     <title>Web mai Chart X - Play</title>
     <link rel="icon" type="image/x-icon" href="../favicon.ico">
-    <link rel="preload" as="image" href="../Skin/outline.png" fetchpriority="high">
+    <link rel="preload" as="image" href="../Skin/Shared/outline.png" fetchpriority="high">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,7 +49,7 @@
     <main id="app" role="main"
         style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: hidden;">
         <div id="canvasContainer">
-            <img src="../Skin/outline.png" alt="外框輪廓" onerror="this.style.display = 'none'" id="canvasOutline"
+            <img src="../Skin/Shared/outline.png" alt="外框輪廓" onerror="this.style.display = 'none'" id="canvasOutline"
                 width="1000" height="1000" fetchpriority="high">
             <canvas id="main" aria-label="譜面播放畫布"></canvas>
             <div class="backgroundContainer">
@@ -74,10 +74,10 @@
                             play_arrow
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="autoPlay" data-autoplay="true"
-                        title="Auto / Manual Play" role="button" tabindex="0" aria-label="自動模擬或手動遊玩">
+                    <div class="controlButton" data-buttonAction="autoPlay" data-autoplay="computer"
+                        title="Autoplay (電腦)" role="button" tabindex="0" aria-label="自動或手動遊玩">
                         <span class="material-symbols-outlined" translate="no">
-                            smart_toy
+                            computer
                         </span>
                     </div>
                     <div class="controlButton" data-buttonAction="playbackSpeedMinus" title="減慢播放速度 (Ctrl+O / -0.25x)"

@@ -2188,8 +2188,31 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                     note.slideProgress = 0;
                 }
             } else {
-                // 若尚未結束，進行隊列狀態機檢查 (含 Lookahead 容錯)
-                // 只要 noteT 到達即可滑動推進，不再使用 slideDelay 延遲阻擋
+                if (!note.judgeQueues && !note.judgeQueue) {
+                    const baseQueue = getSlideJudgeQueue(note, renderer);
+                    note.tableConst = baseQueue.tableConst ?? (note.tableConst || 0.18);
+                    if (baseQueue.isWifi && baseQueue.branches) {
+                        note.isWifi = true;
+                        note.judgeQueues = [
+                            baseQueue.branches.left.map(a => a.clone()),
+                            baseQueue.branches.center.map(a => a.clone()),
+                            baseQueue.branches.right.map(a => a.clone())
+                        ];
+                        note.judgeQueue = note.judgeQueues[1];
+                        note._totalAreasCount = 4;
+                        note._fullJudgeQueues = [
+                            baseQueue.branches.left.map(a => a.clone()),
+                            baseQueue.branches.center.map(a => a.clone()),
+                            baseQueue.branches.right.map(a => a.clone())
+                        ];
+                    } else {
+                        note.isWifi = false;
+                        note.judgeQueue = baseQueue.map(a => a.clone());
+                        note.judgeQueues = [note.judgeQueue];
+                        note._totalAreasCount = note.judgeQueue.length;
+                        note._fullJudgeQueues = [baseQueue.map(a => a.clone())];
+                    }
+                }
                 const queues = note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
                 const hasRemaining = queues.some(q => q.length > 0);
                 if (!note.slideFinish) {
@@ -2204,18 +2227,24 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
 
                                 let consumed = 0;
                                 // 參照 MajdataPlay SlideBase.cs lines 305-340:
-                                // 只有在 first 允許跳過 (isSkippable) 或 first 已經被按壓 (on) 時，才允許檢查與跳轉至 second
-                                if (second && (first.isSkippable || first.on)) {
+                                // 1. 若 first 已經完成 (first.isFinished: 已劃進並離開)，first 確定消耗；若 second 同時已完成則 consumed = 2
+                                // 2. 若 first 尚未完成但允許略過 (first.isSkippable)，且玩家直接觸發了 second，則略過 first 推進
+                                // 3. 不可略過區 (first.isSkippable === false) 絕不能因 second.on 被跳過
+                                if (first.isFinished) {
+                                    consumed = 1;
+                                    if (second) {
+                                        second.check(currentSensors);
+                                        if (second.isFinished) {
+                                            consumed = 2;
+                                        }
+                                    }
+                                } else if (first.isSkippable && second) {
                                     second.check(currentSensors);
                                     if (second.isFinished) {
                                         consumed = 2;
                                     } else if (second.on) {
                                         consumed = 1;
                                     }
-                                }
-
-                                if (consumed === 0 && first.isFinished) {
-                                    consumed = 1;
                                 }
 
                                 if (consumed > 0) {
@@ -2290,9 +2319,15 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             }
 
             // 超時判定 (TooLateJudge - 600ms 寬容窗口: StartTiming + Length + 0.60s)
-            const tooLateTiming = startTiming + slideDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
+            // 連鎖 Slide 的前段需以整條 chain 末段的時間為準，否則後段尚在進行時前段就會提早讓整條 MISS
+            const chainTail = note.chainTail || note;
+            const tailStartTiming = chainTail.time + (chainTail.slideDelay ?? 0);
+            const tailDuration = chainTail.slideDuration ?? 0;
+            const ownTooLate = startTiming + slideDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
+            const tailTooLate = tailStartTiming + tailDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
+            const tooLateTiming = (chainTail === note || isGroupPartEnd) ? ownTooLate : Math.max(ownTooLate, tailTooLate);
             if (globalTime > tooLateTiming && !note.slideFinish) {
-                const tail = note.chainTail || note;
+                const tail = chainTail;
                 const isTail = (note === tail || isGroupPartEnd);
 
                 if (isTail) {

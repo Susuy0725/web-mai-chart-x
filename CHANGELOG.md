@@ -2,13 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.05 (2)]
+
+### Fixed
+- 修正 Simplay slide 問題
+- 修正格式化功能會導致部分譜面音符遺失的問題
 
 ## [2026.10.05 (1)]
 
 ### Changed
 - 改變皮膚儲存方式
 - 改變判定效果
-
 
 ## [2026.10.04 (2)]
 

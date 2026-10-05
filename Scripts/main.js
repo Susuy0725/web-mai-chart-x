@@ -35,6 +35,7 @@ import { initFindReplace, openFindBar, closeFindBar } from './features/findRepla
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 import { showWelcomeModal } from './modals/welcomeModal.js';
 import { openSubdivisionModal } from './modals/subdivisionModal.js';
+import { handleFormatDocument, formatDocument, formatSimai } from './features/formatter.js';
 export { toggleNoteFlag };
 
 majdataWs.setToastHandler(simpleToast);
@@ -128,6 +129,7 @@ const r180Button = getButton("rotate180", "utility");
 const fVerticalButton = getButton("flipVertical", "utility");
 const fHorizontalButton = getButton("flipHorizontal", "utility");
 const subdivisionButton = getButton("subdivisionTool", "utility");
+const formatDocumentButton = getButton("formatDocument", "utility");
 const editorBackgroundImage = document.getElementById('backgroundImage');
 const editorBackgroundVideo = document.getElementById('backgroundVideo');
 if (editorBackgroundVideo) {
@@ -474,6 +476,20 @@ if (visualToolModeSelect) {
 
 window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
+
+    // 支援 Shift + Alt + F (VS Code 標準 Format Document / Selection)
+    if (e.shiftKey && e.altKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        handleFormatDocument(editorInput, { simpleToast, t });
+        return;
+    }
+
+    // 支援 Ctrl + Shift + I (格式化快捷鍵)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        handleFormatDocument(editorInput, { simpleToast, t });
+        return;
+    }
 
     // 支援 Ctrl+Z / Cmd+Z (復原) 與 Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (重做)
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -2472,6 +2488,11 @@ if (subdivisionButton) {
         });
     });
 }
+if (formatDocumentButton) {
+    formatDocumentButton.addEventListener('click', () => {
+        handleFormatDocument(editorInput, { simpleToast, t });
+    });
+}
 
 function syncPlayTimer() {
     if (playButton.dataset.playing === 'true') {
@@ -3159,5 +3180,6 @@ window.draw = draw;
 window.saveSettingsDebounce = saveSettingsDebounce;
 window.openWelcomeModal = () => showWelcomeModal(true);
 window.openSubdivisionModal = () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
+window.formatDocument = () => handleFormatDocument(editorInput, { simpleToast, t });
 
 _init();

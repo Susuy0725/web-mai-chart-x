@@ -632,7 +632,6 @@ export class SimaiRenderer {
      * @param {number|null} triggerTime 觸發時的譜面時間 (秒)，若為空則使用 this.globalTime
      */
     spawnJudgeEffect(note, judgeResult = null, triggerTime = null) {
-        if (!this.isPlaying) return;
         if (!this.settings || this.settings.showJudge === false) return;
         if (!note) return;
         let x = 0, y = 0, rot = 0;
@@ -806,12 +805,12 @@ export class SimaiRenderer {
     }
 
     queueJudgeEffect(note, judgeResult = null, triggerTime = null) {
-        if (!this.isPlaying) return;
         if (!note) return;
         const targetT = (triggerTime !== null && triggerTime !== undefined) ? triggerTime : this.globalTime;
         const duration = (note.type === 'slide') ? 0.3 : 0.2;
-        // 若該音符觸發時間已超過動畫長度，則代表已播放完成，避免每幀重複加入
-        if (this.globalTime - targetT > duration) return;
+        const elapsed = this.globalTime - targetT;
+        // 若該音符尚未到達觸發時間 (容許 0.05 秒誤差)，或已超過動畫長度，則忽略
+        if (elapsed < -0.05 || elapsed > duration) return;
         this.spawnJudgeEffect(note, judgeResult, targetT);
     }
 
@@ -901,7 +900,6 @@ export class SimaiRenderer {
      * @param {number|null} currentTime 當前譜面時間 (秒)，若為空則使用 this.globalTime
      */
     drawJudgeEffects(currentTime = null) {
-        if (!this.isPlaying) return;
         if (!this.settings || this.settings.showJudge === false) return;
         if (!this.judgeEffects || this.judgeEffects.length === 0) return;
         const now = (currentTime !== null && currentTime !== undefined) ? currentTime : this.globalTime;
@@ -2051,7 +2049,7 @@ export class SimaiRenderer {
                     if (drawHitEffect) {
                         this.queueHitEffect(s.pos, s.holdDuration + noteT);
                     }
-                    if (this.isPlaying && this.settings.showJudge !== false) {
+                    if (this.settings.showJudge !== false) {
                         this.queueJudgeEffect(s, null, s.time + s.holdDuration);
                     }
                     continue;
@@ -2122,7 +2120,7 @@ export class SimaiRenderer {
                     if (drawHitEffect) {
                         this.queueHitEffect(s.pos, noteT, null, posInfo.x, posInfo.y);
                     }
-                    if (this.isPlaying && this.settings.showJudge !== false) {
+                    if (this.settings.showJudge !== false) {
                         this.queueJudgeEffect(s, null, s.time);
                     }
                     continue;
@@ -2364,7 +2362,7 @@ export class SimaiRenderer {
                 if (this.settings.drawHitEffect) {
                     this.queueHitEffect(null, holdDuration + noteT, null, posInfo.x, posInfo.y);
                 }
-                if (this.isPlaying && this.settings.showJudge !== false) {
+                if (this.settings.showJudge !== false) {
                     this.queueJudgeEffect(s, null, noteTime + holdDuration);
                 }
                 return;
@@ -2409,7 +2407,7 @@ export class SimaiRenderer {
             if (this.settings.drawHitEffect) {
                 this.queueHitEffect(null, noteT, null, posInfo.x, posInfo.y);
             }
-            if (this.isPlaying && this.settings.showJudge !== false) {
+            if (this.settings.showJudge !== false) {
                 this.queueJudgeEffect(s, null, noteTime);
             }
             return;
@@ -2484,7 +2482,7 @@ export class SimaiRenderer {
         }
 
         if (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish || !s.nextSlide)) {
-            if (this.isPlaying && this.settings.showJudge !== false) {
+            if (this.settings.showJudge !== false) {
                 const p = path || generatePath(pos, slideEnd);
                 if (s.endTangent === undefined && p) s.endTangent = p.endTangent;
                 if (s.lastSlide) this.queueJudgeEffect(s, null, noteTime + slideDelay + slideDuration);

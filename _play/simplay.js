@@ -111,7 +111,7 @@ export class SimulatedPlayController {
                 const slideDuration = note.slideDuration ?? 0;
 
                 // 頭部點擊感應：僅在單一 Slide 或連鎖 Slide 的第一段時產生
-                // 只在到達時的打擊窗口內短暫按壓起點感應區，不在星星滑動前死按起點
+                // 只在打擊窗口內短暫按壓起點，不在星星開始滑動前持續按住起點
                 const isHeadPart = note.firstSlide || !note.prevSlide;
                 const slideT = -noteT - slideDelay;
                 if (isHeadPart && noteT <= 0 && -noteT <= this._simulatTouchDuration) {
@@ -125,6 +125,10 @@ export class SimulatedPlayController {
 
                 // 劃軌判定感應模擬（隊列驅動解決）
                 if (!note.isMine && slideDuration > 0) {
+                    // 若整條 Slide 已經判定處理完畢，直接忽略
+                    if (note.slideFinish) {
+                        continue;
+                    }
                     // 若前段連鎖 Slide 尚未判定完成，等待前段隊列結算後再啟動
                     if (note.prevSlide && !note.prevSlide.slideFinish) {
                         continue;
@@ -144,6 +148,9 @@ export class SimulatedPlayController {
 
                     if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
                         const totalCount = note._totalAreasCount || 1;
+                        const progress = Math.min(1, Math.max(0, slideT / arriveEndTime));
+                        // 實時依手指滑動進度更新引導箭頭消散
+                        note.slideProgress = Math.min(1, Math.max(note.slideProgress || 0, progress));
 
                         if (totalCount <= 1) {
                             // 單一感應區 Slide
@@ -158,46 +165,56 @@ export class SimulatedPlayController {
                                     }
                                 }
                             }
-                            note.slideProgress = slideT >= arriveEndTime ? 1 : Math.max(0, slideT / arriveEndTime);
                         } else {
-                            // 多步驟 Slide：以時間比例精確決定當前手指劃到的步驟感應區
-                            const stepDuration = arriveEndTime / (totalCount - 1);
-                            const stepIndex = Math.min(totalCount - 1, Math.floor(slideT / stepDuration));
+                            // 多步驟 Slide：以平滑手指軌跡推進各感應區
+                            const floatIdx = progress * (totalCount - 1);
+                            const curIdx = Math.min(totalCount - 1, Math.floor(floatIdx));
 
                             for (let b = 0; b < queues.length; b++) {
-                                const fullQ = (note._fullJudgeQueues && note._fullJudgeQueues[b]) ? note._fullJudgeQueues[b] : (note._fullJudgeQueue || queues[b]);
-                                const currentArea = fullQ[stepIndex];
-                                if (currentArea && currentArea.areas) {
-                                    for (let s = 0; s < currentArea.areas.length; s++) {
-                                        this.activeSensors.add(currentArea.areas[s]);
-                                    }
-                                }
+                                const queue = queues[b];
+                                // 若分支隊列已經被處理完 (清空)，直接忽略
+                                if (!queue || queue.length === 0) continue;
 
-                                // 兩區交接模擬：剛跨入下一區時保留上一區少許時間，保證視覺感應過渡流暢與完成狀態判定
-                                const frac = (slideT / stepDuration) - stepIndex;
-                                if (frac < 0.25 && stepIndex > 0) {
-                                    const prevArea = fullQ[stepIndex - 1];
-                                    if (prevArea && prevArea.areas) {
-                                        for (let s = 0; s < prevArea.areas.length; s++) {
-                                            this.activeSensors.add(prevArea.areas[s]);
+                                const fullQ = (note._fullJudgeQueues && note._fullJudgeQueues[b]) ? note._fullJudgeQueues[b] : (note._fullJudgeQueue || queue);
+                                const branchTotal = fullQ.length;
+                                const processedCount = branchTotal - queue.length;
+
+                                // 1. 當前手指區域：若已在隊列中被處理 (curIdx < processedCount)，則忽略！
+                                if (curIdx >= processedCount && curIdx < branchTotal) {
+                                    const currentArea = fullQ[curIdx];
+                                    if (currentArea && currentArea.areas) {
+                                        for (let s = 0; s < currentArea.areas.length; s++) {
+                                            this.activeSensors.add(currentArea.areas[s]);
                                         }
                                     }
                                 }
-                            }
 
-                            // 實時依隊列完成進度更新 slideProgress
-                            const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
-                            const finishedCount = totalCount - queueRemaining;
-                            note.slideProgress = Math.min(1, Math.max(note.slideProgress || 0, finishedCount / totalCount));
-                        }
+                                // 2. 兩區交接：上一區若已被處理 (curIdx - 1 < processedCount)，則忽略！
+                                const frac = floatIdx - curIdx;
+                                if (progress < 1.0 && curIdx > 0 && frac < 0.35) {
+                                    if (curIdx - 1 >= processedCount) {
+                                        const prevArea = fullQ[curIdx - 1];
+                                        if (prevArea && prevArea.areas) {
+                                            for (let s = 0; s < prevArea.areas.length; s++) {
+                                                this.activeSensors.add(prevArea.areas[s]);
+                                            }
+                                        }
+                                    }
+                                } else if (curIdx < branchTotal - 1 && frac > 0.65) {
+                                    if (curIdx + 1 >= processedCount) {
+                                        const nextArea = fullQ[curIdx + 1];
+                                        if (nextArea && nextArea.areas) {
+                                            for (let s = 0; s < nextArea.areas.length; s++) {
+                                                this.activeSensors.add(nextArea.areas[s]);
+                                            }
+                                        }
+                                    }
+                                }
 
-                        // 到達終點且已判定完成時，在 touchHoldEnd 容錯窗口內持續維持終點感應高亮
-                        if (slideT >= arriveEndTime && slideT <= slideDuration + touchHoldEnd) {
-                            if (note._fullJudgeQueues) {
-                                for (let b = 0; b < note._fullJudgeQueues.length; b++) {
-                                    const fullQ = note._fullJudgeQueues[b];
-                                    if (fullQ && fullQ.length > 0) {
-                                        const lastArea = fullQ[fullQ.length - 1];
+                                // 3. 終點停留：終點若已被處理 (branchTotal - 1 < processedCount)，則忽略！
+                                if (progress >= 1.0) {
+                                    if (branchTotal - 1 >= processedCount) {
+                                        const lastArea = fullQ[branchTotal - 1];
                                         if (lastArea && lastArea.areas) {
                                             for (let s = 0; s < lastArea.areas.length; s++) {
                                                 this.activeSensors.add(lastArea.areas[s]);

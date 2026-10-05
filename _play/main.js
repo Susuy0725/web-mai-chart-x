@@ -897,7 +897,7 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                     const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
                     matches = sensorSet.has(normSensor);
                 } else {
-                    matches = sensorSet.has('A' + note.pos) || sensorSet.has('B' + note.pos);
+                    matches = sensorSet.has('A' + note.pos);
                 }
                 if (matches) {
                     const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - note.time);
@@ -1876,9 +1876,32 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                     }
                 }
 
-                // 滑動過程中的感應區反饋 (前半段高亮起點，後半段高亮終點)
-                const currentPos = (p > 0.5) ? (note.slideEnd || note.pos) : note.pos;
-                compSensors.add('A' + currentPos);
+                // 滑動過程中的感應區反饋：僅在劃軌期間以及到達終點後的短暫停留窗口內高亮，逾期徹底放手不殘留
+                const touchHoldEnd = (note.lastSlide || !note.nextSlide) ? 0.08 : 0.02;
+                if (globalTime <= endTiming + touchHoldEnd) {
+                    if (!note.judgeQueue && !note.judgeQueues) {
+                        const baseQueue = getSlideJudgeQueue(note, renderer);
+                        note.tableConst = baseQueue.tableConst ?? 0.18;
+                        note.judgeQueue = baseQueue.map(a => a.clone());
+                        note.judgeQueues = [note.judgeQueue];
+                        note._totalAreasCount = note.judgeQueue.length;
+                        note._fullJudgeQueue = baseQueue.map(a => a.clone());
+                        note._fullJudgeQueues = [note._fullJudgeQueue];
+                    }
+                    const fullQ = note._fullJudgeQueue || (note._fullJudgeQueues ? note._fullJudgeQueues[0] : null);
+                    if (fullQ && fullQ.length > 0) {
+                        const stepIndex = Math.min(fullQ.length - 1, Math.floor(p * (fullQ.length - 1)));
+                        const curArea = fullQ[stepIndex];
+                        if (curArea && curArea.areas) {
+                            for (let s = 0; s < curArea.areas.length; s++) {
+                                compSensors.add(curArea.areas[s]);
+                            }
+                        }
+                    } else {
+                        const currentPos = (p > 0.5) ? (note.slideEnd || note.pos) : note.pos;
+                        compSensors.add('A' + currentPos);
+                    }
+                }
 
                 // 到達結尾時刻，結算劃軌
                 if (globalTime >= endTiming) {
@@ -1902,10 +1925,6 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                                 note._endEffectPlayed = true;
                             }
                         }
-                    }
-                    if (globalTime - endTiming <= 0.08) {
-                        const endPos = note.slideEnd || note.pos;
-                        compSensors.add('A' + endPos);
                     }
                 }
             }
@@ -1932,8 +1951,7 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
         if (isHold) {
             const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
             const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
-            const isSensorPressed = currentSensors.has(sensorId) ||
-                (noteType !== 'touch' && (currentSensors.has('A' + note.pos) || currentSensors.has('B' + note.pos)));
+            const isSensorPressed = currentSensors.has(sensorId);
 
             if (noteT <= 0.05 && -noteT <= note.holdDuration) {
                 // 支援任意時刻中途補按/續按：只要在 Hold 持續時間內按壓即可生效長按，非必須起手擊中
@@ -2170,58 +2188,64 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                     note.slideProgress = 0;
                 }
             } else {
-                // 若尚未結束且隊列中仍有判定區，進行隊列狀態機檢查 (含 Lookahead 容錯)
+                // 若尚未結束，進行隊列狀態機檢查 (含 Lookahead 容錯)
                 // 只要 noteT 到達即可滑動推進，不再使用 slideDelay 延遲阻擋
                 const queues = note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
                 const hasRemaining = queues.some(q => q.length > 0);
-                if (!note.slideFinish && hasRemaining) {
-                    for (let x = 0; x < queues.length; x++) {
-                        const queue = queues[x];
-                        while (queue.length > 0) {
-                            const first = queue[0];
-                            const second = queue.length >= 2 ? queue[1] : null;
+                if (!note.slideFinish) {
+                    if (hasRemaining) {
+                        for (let x = 0; x < queues.length; x++) {
+                            const queue = queues[x];
+                            while (queue.length > 0) {
+                                const first = queue[0];
+                                const second = queue.length >= 2 ? queue[1] : null;
 
-                            let consumed = 0;
-                            if (second) {
-                                second.check(currentSensors);
-                                if (second.isFinished) {
-                                    consumed = 2;
-                                } else if (second.on && !first.on && first.isSkippable) {
-                                    consumed = 1;
-                                }
-                            }
+                                first.check(currentSensors);
 
-                            if (consumed === 0 && first.isFinished) {
-                                consumed = 1;
-                            }
-
-                            if (consumed > 0) {
-                                // Slide 開頭音效：第一個感應器剛被完成時播放
-                                const leader = note.chainLeader || note;
-                                if (!leader._slideStartPlayed && !leader.isMine) {
-                                    leader._slideStartPlayed = true;
-                                    // 呼叫時 leader._startEffectPlayed 需為 false，讓 audioManager 識別為開頭 (break_slide_start / slide)
-                                    audioManager.queueSound(leader, globalTime, { includeAnswer: false });
-                                    const chainList = leader.chainList || [leader];
-                                    for (let k = 0; k < chainList.length; k++) {
-                                        chainList[k]._slideStartPlayed = true;
-                                        chainList[k]._startEffectPlayed = true;
+                                let consumed = 0;
+                                // 參照 MajdataPlay SlideBase.cs lines 305-340:
+                                // 只有在 first 允許跳過 (isSkippable) 或 first 已經被按壓 (on) 時，才允許檢查與跳轉至 second
+                                if (second && (first.isSkippable || first.on)) {
+                                    second.check(currentSensors);
+                                    if (second.isFinished) {
+                                        consumed = 2;
+                                    } else if (second.on) {
+                                        consumed = 1;
                                     }
                                 }
 
-                                queue.splice(0, consumed);
-                                if (note.prevSlide && !note.prevSlide.slideFinish) {
-                                    forceFinishParentSlide(note.prevSlide);
+                                if (consumed === 0 && first.isFinished) {
+                                    consumed = 1;
                                 }
-                                continue;
-                            }
 
-                            if (first.on) {
-                                if (note.prevSlide && !note.prevSlide.slideFinish) {
-                                    forceFinishParentSlide(note.prevSlide);
+                                if (consumed > 0) {
+                                    // Slide 開頭音效：第一個感應器剛被完成時播放
+                                    const leader = note.chainLeader || note;
+                                    if (!leader._slideStartPlayed && !leader.isMine) {
+                                        leader._slideStartPlayed = true;
+                                        // 呼叫時 leader._startEffectPlayed 需為 false，讓 audioManager 識別為開頭 (break_slide_start / slide)
+                                        audioManager.queueSound(leader, globalTime, { includeAnswer: false });
+                                        const chainList = leader.chainList || [leader];
+                                        for (let k = 0; k < chainList.length; k++) {
+                                            chainList[k]._slideStartPlayed = true;
+                                            chainList[k]._startEffectPlayed = true;
+                                        }
+                                    }
+
+                                    queue.splice(0, consumed);
+                                    if (note.prevSlide && !note.prevSlide.slideFinish) {
+                                        forceFinishParentSlide(note.prevSlide);
+                                    }
+                                    continue;
                                 }
+
+                                if (first.on) {
+                                    if (note.prevSlide && !note.prevSlide.slideFinish) {
+                                        forceFinishParentSlide(note.prevSlide);
+                                    }
+                                }
+                                break;
                             }
-                            break;
                         }
                     }
 
@@ -2240,7 +2264,8 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         // 僅在最後一段結算總評級 (以 MajdataPlay 官方 judgeTiming 基準計算放開當下的時間差)
                         if (isGroupPartEnd && !note._slideJudged) {
                             note._slideJudged = true;
-                            const diffSec = (settings.autoPlay !== false) ? 0 : (globalTime - judgeTiming);
+                            const isAuto = getAutoPlayMode() !== 'off';
+                            const diffSec = (isAuto && (settings.simplayPerfect ?? true)) ? 0 : (globalTime - judgeTiming);
                             note.judgeResult = evaluateSlideGrade(diffSec, note);
 
                             // Break Slide 結尾判定音效：判定成功時 (非 MISS) 立即播放結尾判定音效 (judge_break_slide + break_slide)

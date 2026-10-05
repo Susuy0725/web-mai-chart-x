@@ -111,13 +111,14 @@ export class SimulatedPlayController {
                 const slideDuration = note.slideDuration ?? 0;
 
                 // 頭部點擊感應：僅在單一 Slide 或連鎖 Slide 的第一段時產生
-                // 在 noteT <= 0 且星星尚未開始滑動 (slideT < 0) 期間，手指按在起點感應區上
+                // 只在到達時的打擊窗口內短暫按壓起點感應區，不在星星滑動前死按起點
                 const isHeadPart = note.firstSlide || !note.prevSlide;
                 const slideT = -noteT - slideDelay;
-                if (isHeadPart && noteT <= 0 && (slideT < 0 || -noteT <= this._simulatTouchDuration)) {
+                if (isHeadPart && noteT <= 0 && -noteT <= this._simulatTouchDuration) {
                     this.activeSensors.add('A' + note.pos);
-                    if (!note.triggered && -noteT <= this._simulatTouchDuration && onHit) {
+                    if (!note.headTriggered && !note.triggered && onHit) {
                         note.headTriggered = true;
+                        note.triggered = true;
                         onHit('A' + note.pos, forcePerfect ? 0 : -noteT + randomOffset);
                     }
                 }
@@ -141,7 +142,7 @@ export class SimulatedPlayController {
                         this.slideQueue.push(note);
                     }
 
-                    if (slideT >= 0) {
+                    if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
                         const totalCount = note._totalAreasCount || 1;
 
                         if (totalCount <= 1) {
@@ -157,42 +158,28 @@ export class SimulatedPlayController {
                                     }
                                 }
                             }
+                            note.slideProgress = slideT >= arriveEndTime ? 1 : Math.max(0, slideT / arriveEndTime);
                         } else {
-                            // 多步驟 Slide：以隊列依序出隊推進方式解決各步驟
+                            // 多步驟 Slide：以時間比例精確決定當前手指劃到的步驟感應區
                             const stepDuration = arriveEndTime / (totalCount - 1);
-                            // 計算當前時刻應已完成的隊列步驟數 (保留最後一個步驟待到達時由狀態機結算)
-                            const targetCompletedSteps = Math.min(totalCount - 1, Math.floor(slideT / stepDuration));
+                            const stepIndex = Math.min(totalCount - 1, Math.floor(slideT / stepDuration));
 
                             for (let b = 0; b < queues.length; b++) {
-                                const queue = queues[b];
-                                const currentCompleted = totalCount - queue.length;
-
-                                // 依隊列先進先出 (FIFO) 依序出隊已完成的步驟，避免跳幀遺漏感應區
-                                if (currentCompleted < targetCompletedSteps) {
-                                    const countToPop = Math.min(queue.length - 1, targetCompletedSteps - currentCompleted);
-                                    if (countToPop > 0) {
-                                        queue.splice(0, countToPop);
-                                    }
-                                }
-
-                                // 取得當前隊列前端正在進行的步驟感應區
-                                const currentArea = queue[0];
+                                const fullQ = (note._fullJudgeQueues && note._fullJudgeQueues[b]) ? note._fullJudgeQueues[b] : (note._fullJudgeQueue || queues[b]);
+                                const currentArea = fullQ[stepIndex];
                                 if (currentArea && currentArea.areas) {
                                     for (let s = 0; s < currentArea.areas.length; s++) {
                                         this.activeSensors.add(currentArea.areas[s]);
                                     }
                                 }
 
-                                // 兩區交接模擬：剛跨入下一區時保留上一區少許時間，保證視覺感應過渡流暢
-                                const frac = (slideT / stepDuration) - targetCompletedSteps;
-                                if (frac < 0.25 && targetCompletedSteps > 0 && note._fullJudgeQueues) {
-                                    const fullQ = note._fullJudgeQueues[b] || note._fullJudgeQueue;
-                                    if (fullQ && fullQ[targetCompletedSteps - 1]) {
-                                        const prevArea = fullQ[targetCompletedSteps - 1];
-                                        if (prevArea && prevArea.areas) {
-                                            for (let s = 0; s < prevArea.areas.length; s++) {
-                                                this.activeSensors.add(prevArea.areas[s]);
-                                            }
+                                // 兩區交接模擬：剛跨入下一區時保留上一區少許時間，保證視覺感應過渡流暢與完成狀態判定
+                                const frac = (slideT / stepDuration) - stepIndex;
+                                if (frac < 0.25 && stepIndex > 0) {
+                                    const prevArea = fullQ[stepIndex - 1];
+                                    if (prevArea && prevArea.areas) {
+                                        for (let s = 0; s < prevArea.areas.length; s++) {
+                                            this.activeSensors.add(prevArea.areas[s]);
                                         }
                                     }
                                 }
@@ -220,12 +207,12 @@ export class SimulatedPlayController {
                                 }
                             }
                         }
+                    }
 
-                        // 若已超時仍未標記完成，強制清空隊列保證 main.js 結算
-                        if (slideT >= arriveEndTime + 0.05 && !note.slideFinish) {
-                            for (let b = 0; b < queues.length; b++) {
-                                queues[b].length = 0;
-                            }
+                    // 若已超時仍未標記完成，強制清空隊列保證 main.js 結算
+                    if (slideT >= arriveEndTime + 0.05 && !note.slideFinish) {
+                        for (let b = 0; b < queues.length; b++) {
+                            queues[b].length = 0;
                         }
                     }
                     // 超過 slideDuration + touchHoldEnd 之後，不加入任何感應器，徹底防止結尾殘留

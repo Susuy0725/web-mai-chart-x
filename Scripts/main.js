@@ -34,6 +34,7 @@ import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 import { showWelcomeModal } from './modals/welcomeModal.js';
+import { openSubdivisionModal } from './modals/subdivisionModal.js';
 export { toggleNoteFlag };
 
 majdataWs.setToastHandler(simpleToast);
@@ -43,6 +44,7 @@ disableNavigationGestures();
 
 let
     isInitComplete = false,
+    isImagesLoaded = false,
     isDatabaseEmpty = false,
     images,
     readyBeat = false,
@@ -125,6 +127,7 @@ const rCCwiseButton = getButton("rotateCounterClockwise", "utility");
 const r180Button = getButton("rotate180", "utility");
 const fVerticalButton = getButton("flipVertical", "utility");
 const fHorizontalButton = getButton("flipHorizontal", "utility");
+const subdivisionButton = getButton("subdivisionTool", "utility");
 const editorBackgroundImage = document.getElementById('backgroundImage');
 const editorBackgroundVideo = document.getElementById('backgroundVideo');
 if (editorBackgroundVideo) {
@@ -2218,6 +2221,10 @@ function sendMajdataPlay() {
 }
 
 playButton.addEventListener('click', () => {
+    if (!isImagesLoaded) {
+        simpleToast({ content: t('popup.init.loadingAssets') || '素材載入中，請稍候...', type: 'warning' });
+        return;
+    }
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
         updatePauseBackgroundDisplay();
@@ -2455,6 +2462,16 @@ rCCwiseButton.addEventListener('click', () => rotateSelection(-1));
 r180Button.addEventListener('click', () => rotateSelection(4));
 fVerticalButton.addEventListener('click', flipVertical);
 fHorizontalButton.addEventListener('click', flipHorizontal);
+if (subdivisionButton) {
+    subdivisionButton.addEventListener('click', () => {
+        openSubdivisionModal({
+            editorInput,
+            applyHighlight,
+            recordEditorHistory,
+            inputDebounce
+        });
+    });
+}
 
 function syncPlayTimer() {
     if (playButton.dataset.playing === 'true') {
@@ -2773,7 +2790,7 @@ function drawMainCanvasOpenedInExternalWindow() {
 }
 
 function draw(dt = 0) {
-    if (!renderer) return;
+    if (!renderer || !isImagesLoaded) return;
     if (secondCtx && externalWindow) {
         syncSecondWindowBackground();
     }
@@ -3024,6 +3041,7 @@ if (projectManagerButton) {
         openProjectManager({
             getCurrentProjectId: () => currentProjectId,
             loadProject,
+            images,
             getFileHandlerCtx: () => ({
                 audioManager,
                 getMaidata: () => maidata,
@@ -3098,7 +3116,13 @@ async function _init() {
         setEditorCss,
         resize,
         setIsInitComplete: (val) => { isInitComplete = val; },
+        setIsImagesLoaded: (val) => { isImagesLoaded = val; },
+        getIsImagesLoaded: () => isImagesLoaded,
         setIsDatabaseEmpty: (val) => { isDatabaseEmpty = val; },
+        getImages: () => images,
+        getRenderer: () => renderer,
+        getVisualEditorRenderer: () => visualEditorRenderer,
+        getPreviewRender: () => previewRender,
         updateDiscordRPC,
         getMaidata: () => maidata,
         getNowDifficulty: () => nowDifficulty,
@@ -3134,5 +3158,6 @@ window.resize = resize;
 window.draw = draw;
 window.saveSettingsDebounce = saveSettingsDebounce;
 window.openWelcomeModal = () => showWelcomeModal(true);
+window.openSubdivisionModal = () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
 
 _init();

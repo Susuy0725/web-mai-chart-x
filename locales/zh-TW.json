@@ -44,6 +44,7 @@
     "editRotate180": "180度旋轉",
     "editFlipVertical": "上下反轉",
     "editFlipHorizontal": "左右反轉",
+    "editSubdivision": "切分細分與轉換",
     "offset": "偏移",
     "changeDifficulty": "難度切換",
     "playbackSpeed": "播放速度",
@@ -624,5 +625,30 @@
     "toastToggleBkFull": "已切換全文的 Break (bk) 狀態",
     "toastToggleExSelection": "已切換選取範圍的 EX (ex) 狀態",
     "toastToggleExFull": "已切換全文的 EX (ex) 狀態"
+  },
+  "subdivision": {
+    "title": "切分細分與轉換",
+    "scope": "轉換範圍",
+    "scopeSelection": "選取範圍",
+    "scopeAll": "全譜面",
+    "scopeChars": "字元",
+    "detectedDivision": "目前切分",
+    "mode": "轉換模式",
+    "modeMultiply": "倍化細分",
+    "modeCompress": "壓縮折半",
+    "modeConvert": "指定切分轉換",
+    "multiplier": "細分倍數",
+    "divisor": "壓縮除數",
+    "customMultiplier": "自訂倍數",
+    "customDivisor": "自訂除數",
+    "targetDivision": "切分轉換",
+    "insertHeader": "在開頭補上新切分標籤 (例如 {8})",
+    "restoreHeader": "在結尾還原原切分標籤 (避免干擾後續譜面節奏)",
+    "mergeConflict": "壓縮遇實體音符時合併為雙打音符 (如 1/5)",
+    "previewOriginal": "轉換前 (Original)",
+    "previewResult": "轉換後 (Result)",
+    "stepsChange": "拍數",
+    "apply": "套用轉換",
+    "appliedToast": "已成功套用切分細分與轉換"
   }
 }

@@ -44,6 +44,7 @@
     "editRotate180": "180도 회전",
     "editFlipVertical": "상하 반전",
     "editFlipHorizontal": "좌우 반전",
+    "editSubdivision": "박자 세분화 및 변환",
     "offset": "오프셋",
     "changeDifficulty": "난이도 전환",
     "playbackSpeed": "재생 속도",
@@ -624,5 +625,30 @@
     "toastToggleBkFull": "전체 Break (bk) 상태를 전환했습니다",
     "toastToggleExSelection": "선택 영역의 EX (ex) 상태를 전환했습니다",
     "toastToggleExFull": "전체 EX (ex) 상태를 전환했습니다"
+  },
+  "subdivision": {
+    "title": "박자 세분화 및 변환",
+    "scope": "변환 대상",
+    "scopeSelection": "선택 영역",
+    "scopeAll": "전체 채보",
+    "scopeChars": "자",
+    "detectedDivision": "현재 박자 분할",
+    "mode": "변환 모드",
+    "modeMultiply": "배화 세분화",
+    "modeCompress": "압축 및 절반화",
+    "modeConvert": "지정 분할로 변환",
+    "multiplier": "세분화 배율",
+    "divisor": "압축 제수",
+    "customMultiplier": "사용자 지정 배율",
+    "customDivisor": "사용자 지정 제수",
+    "targetDivision": "목표 분할",
+    "insertHeader": "맨 앞에 새 분할 태그 삽입 (예: {8})",
+    "restoreHeader": "맨 뒤에 원래 분할 태그 복원 (안전한 선택 영역 변환)",
+    "mergeConflict": "충돌 시 노트를 동시치기로 결합 (/)",
+    "previewOriginal": "변환 전 (Original)",
+    "previewResult": "변환 후 (Result)",
+    "stepsChange": "박자 수",
+    "apply": "변환 적용",
+    "appliedToast": "박자 세분화 및 변환을 적용했습니다"
   }
 }

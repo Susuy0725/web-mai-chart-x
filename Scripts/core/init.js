@@ -7,36 +7,64 @@ import { openDB } from '../indexDB.js';
  * @param {Object} ctx
  */
 export function runInitModal(ctx) {
-    popupWindow({
-        title: t('popup.init.title'),
-        content: "",
-        buttons: [],
-        unclosable: true,
-        onOpen: async (popupCtx) => {
-            const step = (p, msg) => (popupCtx.setProgress(p), popupCtx.setContent(msg));
-            try {
-                // 1. 載入並解碼靜態素材 (音效與圖片)
-                const loadedImages = await loadAssets(ctx, step);
-
-                // 2. 確定並建立當前專案
-                await setupCurrentProject(ctx, step);
-
-                // 3. 讀取並自動補齊全域設定
-                const settings = await loadAndRestoreSettings(ctx, step);
-
-                // 4. 載入專案譜面資料與設定編輯器 UI
-                await setupEditorUIAndData(ctx, settings, step);
-
-                // 5. 初始化三大渲染核心
-                initRenderers(ctx, settings, loadedImages);
-
-                // 6. 首繪、調整視窗尺寸與啟動就緒
-                await finalizeInit(ctx, settings, popupCtx, step);
-            } catch (e) {
-                handleInitError(e, popupCtx);
+    // 1. 背景非同步啟動圖片素材與音效載入（不阻塞使用者檢視與操作編輯器）
+    (async () => {
+        try {
+            const loadedImages = await ctx.loadAllImages();
+            ctx.setImages(loadedImages);
+            if (typeof ctx.getRenderer === 'function' && ctx.getRenderer()) {
+                ctx.getRenderer().setImages(loadedImages);
             }
+            if (typeof ctx.getVisualEditorRenderer === 'function' && ctx.getVisualEditorRenderer()) {
+                ctx.getVisualEditorRenderer().setImages(loadedImages);
+            }
+            if (typeof ctx.getPreviewRender === 'function' && ctx.getPreviewRender()) {
+                if (typeof ctx.getPreviewRender().setImages === 'function') {
+                    ctx.getPreviewRender().setImages(loadedImages);
+                }
+            }
+            if (typeof ctx.setIsImagesLoaded === 'function') {
+                ctx.setIsImagesLoaded(true);
+            }
+            // 圖片素材完全抓取完成後觸發首繪，讓譜面完整呈現
+            if (typeof ctx.draw === 'function') {
+                ctx.draw();
+            }
+        } catch (err) {
+            console.error('[Assets] 背景圖片載入失敗:', err);
         }
-    });
+    })();
+
+    if (ctx.audioManager && typeof ctx.audioManager.init === 'function') {
+        ctx.audioManager.init().catch(err => {
+            console.warn('[Audio] 背景音效載入失敗:', err);
+        });
+    }
+
+    // 2. 前景立即初始化專案與編輯器 UI，讓使用者第一時間看到編輯器
+    (async () => {
+        try {
+            const step = () => {};
+
+            // 確定並建立當前專案
+            await setupCurrentProject(ctx, step);
+
+            // 讀取並自動補齊全域設定
+            const settings = await loadAndRestoreSettings(ctx, step);
+
+            // 載入專案譜面資料與設定編輯器 UI
+            await setupEditorUIAndData(ctx, settings, step);
+
+            // 初始化三大渲染核心（若背景圖片尚未就緒則以 {} 或已完成之 images 注入）
+            const currentImages = (typeof ctx.getImages === 'function' ? ctx.getImages() : null) || {};
+            initRenderers(ctx, settings, currentImages);
+
+            // 調整尺寸、套用樣式、解鎖介面並完成初始化
+            await finalizeInit(ctx, settings);
+        } catch (e) {
+            handleInitError(e);
+        }
+    })();
 }
 
 // ==========================================
@@ -203,13 +231,21 @@ function initRenderers(ctx, settings, loadedImages) {
     const previewRender = new ctx.SimaiPreviewRenderer(ctx.previewCanvas, settings);
     previewRender.setZoom(settings.visualZoom);
     previewRender.setTimebase(v1, v2);
+    if (typeof previewRender.setImages === 'function') {
+        previewRender.setImages(loadedImages);
+    }
     ctx.setPreviewRender(previewRender);
+
+    // 若圖片在此之前已於背景載入完成，直接繪製
+    if (typeof ctx.getIsImagesLoaded === 'function' && ctx.getIsImagesLoaded()) {
+        ctx.draw();
+    }
 }
 
 /**
  * 6. 首繪、調整介面尺寸與啟動就緒
  */
-async function finalizeInit(ctx, settings, popupCtx, step) {
+async function finalizeInit(ctx, settings) {
     ctx.setPlaybackSpeed(settings.playbackSpeed);
 
     if (ctx.canvasOutline) {
@@ -217,13 +253,10 @@ async function finalizeInit(ctx, settings, popupCtx, step) {
     }
 
     ctx.applyMovieBrightness(settings.moviebrightness);
-    ctx.draw();
     ctx.updateSlider(ctx.getRealTime());
     ctx.setEditorCss(!await ctx.projGet('hide_editor'));
 
-    step(100, t('popup.init.rendering'));
     ctx.resize();
-    popupCtx.close();
     ctx.setIsInitComplete(true);
     ctx.updateDiscordRPC(ctx.getMaidata(), ctx.getNowDifficulty());
     if (typeof ctx.onInitFinished === 'function') {
@@ -238,68 +271,69 @@ async function finalizeInit(ctx, settings, popupCtx, step) {
 /**
  * 7. 初始化例外救援處理
  */
-function handleInitError(e, popupCtx) {
+function handleInitError(e) {
     console.error("初始化失敗:", e);
-    popupCtx.setContent(t('popup.init.errorContent', { message: e.message }));
-    popupCtx.setButtons([
-        {
-            text: t('popup.init.clearAll'),
-            onClick: async () => {
-                if (!confirm(t('popup.init.confirmClearAll'))) return;
-                try {
-                    await clearIndexedDBStore();
+    let errorPopup = null;
+    errorPopup = popupWindow({
+        title: t('popup.init.title'),
+        content: t('popup.init.errorContent', { message: e.message }),
+        unclosable: true,
+        buttons: [
+            {
+                text: t('popup.init.clearAll'),
+                onClick: async () => {
+                    if (!confirm(t('popup.init.confirmClearAll'))) return;
                     try {
-                        localStorage.removeItem('wmcx_first_run_completed');
-                        localStorage.removeItem('simai_lastProjectId');
-                    } catch {}
-                    console.log("已清除 IndexedDB 中的所有資料");
-                } catch (err) {
-                    console.error("清除 IndexedDB 資料失敗:", err);
+                        await clearIndexedDBStore();
+                        try {
+                            localStorage.removeItem('wmcx_first_run_completed');
+                            localStorage.removeItem('simai_lastProjectId');
+                        } catch {}
+                        console.log("已清除 IndexedDB 中的所有資料");
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("清除 IndexedDB 資料失敗:", err);
+                    }
+                }
+            },
+            {
+                text: t('popup.init.clearChartCache'),
+                onClick: async () => {
+                    if (!confirm(t('popup.init.confirmClearChart'))) return;
+                    try {
+                        const count = await clearIndexedDBStore((key) =>
+                            typeof key === 'string' && (key.startsWith('simai_') || key.startsWith('proj_') || key === '__project_list__')
+                        );
+                        console.log(`[IDB] 已成功清理 ${count} 項譜面資料`);
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("清除特定資料失敗:", err);
+                    }
+                }
+            },
+            {
+                text: t('popup.init.clearAssetCache'),
+                onClick: async () => {
+                    if (!confirm(t('popup.init.confirmClearAsset'))) return;
+                    try {
+                        const count = await clearIndexedDBStore((key) =>
+                            typeof key === 'string' && (key.startsWith('sfx_cache_') || key.startsWith('img_cache_'))
+                        );
+                        console.log(`[IDB] 已成功清理 ${count} 項素材快取資料`);
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("清除特定資料失敗:", err);
+                    }
+                }
+            },
+            {
+                text: t('popup.close'),
+                onClick: () => {
+                    errorPopup?.close();
                 }
             }
-        },
-        {
-            text: t('popup.init.clearChartCache'),
-            onClick: async () => {
-                if (!confirm(t('popup.init.confirmClearChart'))) return;
-                try {
-                    const count = await clearIndexedDBStore((key) =>
-                        typeof key === 'string' && (key.startsWith('simai_') || key.startsWith('proj_') || key === '__project_list__')
-                    );
-                    console.log(`[IDB] 已成功清理 ${count} 項譜面資料`);
-                } catch (err) {
-                    console.error("清除特定資料失敗:", err);
-                }
-            }
-        },
-        {
-            text: t('popup.init.clearAssetCache'),
-            onClick: async () => {
-                if (!confirm(t('popup.init.confirmClearAsset'))) return;
-                try {
-                    const count = await clearIndexedDBStore((key) =>
-                        typeof key === 'string' && (key.startsWith('sfx_cache_') || key.startsWith('img_cache_'))
-                    );
-                    console.log(`[IDB] 已成功清理 ${count} 項素材快取資料`);
-                } catch (err) {
-                    console.error("清除特定資料失敗:", err);
-                }
-            }
-        },
-        {
-            text: t('popup.close'),
-            onClick: () => {
-                popupWindow({
-                    title: t('popup.init.warnTitle'),
-                    content: t('popup.init.warnContent'),
-                    buttons: [
-                        { text: t('popup.init.continue'), onClick: () => { popupCtx.close(); }, hideOnClick: true },
-                        { text: t('popup.cancel'), hideOnClick: true }
-                    ]
-                });
-            }
-        }
-    ]);
+        ]
+    });
 }
 
 /**

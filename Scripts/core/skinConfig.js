@@ -281,6 +281,16 @@ export function inferSkinType(key) {
     return null;
 }
 
+export const sharedAssetKeys = new Set([
+    'no_image',
+    'ColorBall',
+    'HexEffect',
+    'StarEffect',
+    'outline',
+    'TouchEffparts_01',
+    'TouchEffparts_02'
+]);
+
 /**
  * 取得指定 key 的所有可能皮膚候選路徑 (依優先序排列)
  * 1. Skin/Default/{type}/{fileName}
@@ -291,6 +301,15 @@ export function inferSkinType(key) {
  * @returns {string[]}
  */
 export function getSkinCandidateUrls(key, baseURL) {
+    // 若該素材屬於純共用素材 (Shared)，優先從 Shared 載入以避免不必要的 Default 404 紀錄
+    if (sharedAssetKeys.has(key)) {
+        return [
+            `${baseURL}Shared/${key}.png`,
+            `${baseURL}Default/${key}.png`,
+            `${baseURL}${key}.png`
+        ];
+    }
+
     const urls = [];
     const rel = defaultSkinMap[key] || defaultSkinMap[key.toLowerCase()];
 
@@ -340,7 +359,6 @@ export function getSkinCandidateUrls(key, baseURL) {
         urls.push(`${baseURL}Shared/JudgeTextSkins/judge_text_perfect_break.png`);
     } else if (key === 'no_image') {
         urls.push(`${baseURL}Shared/no_image.png`);
-        urls.push(`${baseURL}Default/no_image.png`);
         urls.push(`${baseURL}no_image.png`);
     }
 

@@ -44,6 +44,7 @@
     "editRotate180": "180度回転",
     "editFlipVertical": "上下反転",
     "editFlipHorizontal": "左右反転",
+    "editSubdivision": "拍の細分化・変換",
     "offset": "オフセット",
     "changeDifficulty": "難易度",
     "playbackSpeed": "再生速度",
@@ -624,5 +625,30 @@
     "toastToggleBkFull": "全テキストの Break (bk) 状態を切り替えました",
     "toastToggleExSelection": "選択範囲の EX (ex) 状態を切り替えました",
     "toastToggleExFull": "全テキストの EX (ex) 状態を切り替えました"
+  },
+  "subdivision": {
+    "title": "拍の細分化・変換",
+    "scope": "変換対象",
+    "scopeSelection": "選択範囲",
+    "scopeAll": "全譜面",
+    "scopeChars": "文字",
+    "detectedDivision": "現在の拍分割",
+    "mode": "変換モード",
+    "modeMultiply": "倍化・細分化",
+    "modeCompress": "圧縮・半減",
+    "modeConvert": "指定分割へ変換",
+    "multiplier": "細分化倍率",
+    "divisor": "圧縮約数",
+    "customMultiplier": "カスタム倍率",
+    "customDivisor": "カスタム約数",
+    "targetDivision": "目標分割",
+    "insertHeader": "先頭に新しい分割タグを挿入 (例: {8})",
+    "restoreHeader": "末尾に元の分割タグを復元 (安全な選択範囲変換)",
+    "mergeConflict": "衝突時にノートを同時押しに結合 (/)",
+    "previewOriginal": "変換前 (Original)",
+    "previewResult": "変換後 (Result)",
+    "stepsChange": "拍数",
+    "apply": "変換を適用",
+    "appliedToast": "拍の細分化・変換を適用しました"
   }
 }

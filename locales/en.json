@@ -44,6 +44,7 @@
     "editRotate180": "Rotate 180°",
     "editFlipVertical": "Flip Vertical",
     "editFlipHorizontal": "Flip Horizontal",
+    "editSubdivision": "Subdivision & Conversion",
     "offset": "Offset",
     "changeDifficulty": "Difficulty",
     "playbackSpeed": "Speed",
@@ -624,5 +625,30 @@
     "toastToggleBkFull": "Toggled Break (bk) status for all text",
     "toastToggleExSelection": "Toggled EX (ex) status for selection",
     "toastToggleExFull": "Toggled EX (ex) status for all text"
+  },
+  "subdivision": {
+    "title": "Beat Subdivision & Conversion",
+    "scope": "Target Scope",
+    "scopeSelection": "Selection",
+    "scopeAll": "Entire Chart",
+    "scopeChars": "chars",
+    "detectedDivision": "Current Division",
+    "mode": "Mode",
+    "modeMultiply": "Subdivide (Multiply)",
+    "modeCompress": "Compress (Divide)",
+    "modeConvert": "Specific Division",
+    "multiplier": "Multiplier",
+    "divisor": "Divisor",
+    "customMultiplier": "Custom Multiplier",
+    "customDivisor": "Custom Divisor",
+    "targetDivision": "Target Division",
+    "insertHeader": "Insert new division tag at start (e.g. {8})",
+    "restoreHeader": "Restore original division at end (safe selection)",
+    "mergeConflict": "Combine conflicting notes into double notes (/)",
+    "previewOriginal": "Original",
+    "previewResult": "Result",
+    "stepsChange": "Beats",
+    "apply": "Apply",
+    "appliedToast": "Beat subdivision & conversion applied successfully"
   }
 }

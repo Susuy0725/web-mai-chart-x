@@ -778,7 +778,7 @@ export class SimaiRenderer {
         // 參照 MajdataPlay: NoteCreateHelper.DetectJustType(content, out endPos)
         // IsUpperHalf: 7, 8, 1, 2
         // IsRightHalf: 1, 2, 3, 4
-        const isUpperHalf = (pos) => (pos === 7 || pos === 8 || pos === 5 || pos === 6);
+        const isUpperHalf = (pos) => (pos === 7 || pos === 8 || pos === 1 || pos === 2);
         const isRightHalf = (pos) => (pos >= 1 && pos <= 4);
 
         let isJustR = false;
@@ -1263,6 +1263,7 @@ export class SimaiRenderer {
             activeSensors,
             playCombo,
             playScore,
+            playScoreRes,
             playScoreMinus,
             noteQuantity = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0 },
             isPlaying,

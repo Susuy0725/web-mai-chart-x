@@ -1054,7 +1054,8 @@ async function getImgWithCandidates(candidateUrls, key) {
         const img = new Image();
         const objUrl = URL.createObjectURL(b);
         img.onload = () => {
-            URL.revokeObjectURL(objUrl);
+            // 注意：不要在 onload 立即 revokeObjectURL，因為 images[key] 是全域常駐字典，
+            // 其它 DOM 元件 (如專案總管封面、譜面資訊彈窗) 會直接讀取 img.src。
             resolve(img);
         };
         img.onerror = async () => {

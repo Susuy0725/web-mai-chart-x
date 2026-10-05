@@ -199,8 +199,8 @@ async function startProjectUpload(proj, card, getFileHandlerCtx) {
  * @param {Function} options.loadProject
  * @param {Function} [options.getFileHandlerCtx]
  */
-export function openProjectManager({ getCurrentProjectId, loadProject, getFileHandlerCtx }) {
-    const defaultCoverUrl = 'Skin/no_image.png';
+export function openProjectManager({ getCurrentProjectId, loadProject, getFileHandlerCtx, images }) {
+    const defaultCoverUrl = images?.['no_image']?.src || 'Skin/Shared/no_image.png';
     let projectManagerPopup;
 
     const formatLastEdit = (timestamp) => {
@@ -342,11 +342,15 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                 -webkit-user-drag: none;
                 pointer-events: none;
             `;
+            imgEl.onerror = () => {
+                imgEl.onerror = null;
+                imgEl.src = 'Skin/Shared/no_image.png';
+            };
             imgEl.src = defaultCoverUrl;
 
             // 非同步載入背景圖
             idbGetProject(proj.id, 'background_image').then((bgFile) => {
-                if (bgFile instanceof Blob) {
+                if (bgFile instanceof Blob && bgFile.size > 0) {
                     try {
                         const url = URL.createObjectURL(bgFile);
                         imgEl.src = url;

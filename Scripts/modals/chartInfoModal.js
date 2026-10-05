@@ -112,8 +112,13 @@ export function openChartInfoModal({
         imgContainer.className = 'chart-info-img-container';
         const img = document.createElement('img');
         img.className = 'chart-info-img';
-        const backgroundImage = getBackgroundImage();
-        img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['no_image'].src;
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = 'Skin/Shared/no_image.png';
+        };
+        img.src = (backgroundImage && backgroundImage.size > 0)
+            ? URL.createObjectURL(backgroundImage)
+            : (images?.['no_image']?.src || 'Skin/Shared/no_image.png');
 
         const imgWrapper = document.createElement('div');
         imgWrapper.className = 'chart-info-img-wrapper';

@@ -86,14 +86,25 @@ export function showSwUpdateComplete() {
 window.showSwUpdateComplete = showSwUpdateComplete;
 
 export function initServiceWorker() {
-    const isDev =
-        self.location.hostname === 'localhost' ||
-        self.location.hostname === '127.0.0.1' ||
-        self.location.hostname.endsWith('.ngrok-free.app') ||
-        self.location.hostname === 'debug.tri-dent.cc';
+    const isRelease = self.location.hostname === 'susuy0725.github.io';
 
+    if (!isRelease) {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+                for (const reg of registrations) {
+                    reg.unregister();
+                }
+            }).catch(() => { });
+        }
+        if ('caches' in window) {
+            caches.keys().then((keys) => {
+                for (const key of keys) caches.delete(key);
+            }).catch(() => { });
+        }
+        return;
+    }
 
-    if ('serviceWorker' in navigator && !isDev) {
+    if ('serviceWorker' in navigator && isRelease) {
         navigator.serviceWorker.addEventListener('message', (event) => {
             const data = event.data;
             if (!data) return;

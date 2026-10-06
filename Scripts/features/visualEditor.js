@@ -185,18 +185,42 @@ export function createVisualNoteCallbacks(ctx) {
         }
 
         const cleanNotePart = stripLeadingTags(segment);
+        const settings = getSettings();
+        const selectedType = settings?.visualSelectedNoteType || 'tap';
+
+        const effectiveType = selectedType === 'break' ? 'tap' : selectedType;
+        let noteString = String(lane);
+        let noteLabel = 'Tap';
+
+        if (effectiveType === 'slide') {
+            const endLane = (lane % 8) + 1;
+            noteString = `${lane}-${endLane}`;
+            noteLabel = 'Slide';
+        } else if (effectiveType === 'touch') {
+            noteString = `B${lane}`;
+            noteLabel = 'Touch';
+        } else if (effectiveType === 'touchhold') {
+            noteString = `B${lane}h[4:1]`;
+            noteLabel = 'TouchHold';
+        } else if (effectiveType === 'hold') {
+            noteString = `${lane}h[4:1]`;
+            noteLabel = 'Hold';
+        } else {
+            noteString = String(lane);
+        }
+
         let newSegment = "";
         if (cleanNotePart === "") {
-            newSegment = segment + String(lane);
+            newSegment = segment + noteString;
         } else {
-            newSegment = segment + "/" + String(lane);
+            newSegment = segment + "/" + noteString;
         }
 
         rawData[closestIndex] = newSegment;
         const newContent = rawData.join(',');
         updateEditorAndSave(newContent);
 
-        simpleToast({ content: `已在軌道 ${lane} 放置 Tap 音符`, type: 'success', timeout: 1000 });
+        simpleToast({ content: `已在軌道 ${lane} 放置 ${noteLabel} 音符`, type: 'success', timeout: 1000 });
     };
 
     const visualPlaceHoldNote = (lane, clickTime, durationTime, originalNote = null) => {
@@ -343,7 +367,54 @@ export function createVisualNoteCallbacks(ctx) {
         const clean = stripLeadingTags(originalPart);
         const prefix = originalPart.substring(0, originalPart.length - clean.length);
 
-        const nextClean = getNextNoteClean(clean, lane);
+        const settings = getSettings();
+        const toolMode = settings?.visualToolMode;
+        let nextClean = clean;
+
+        if (toolMode === 'modifier') {
+            const selectedModifier = settings?.visualSelectedModifier || 'none';
+            const isTouchFamily = !!(note.touchPos || clean.match(/^[A-E]/i));
+
+            // 相容性防呆驗證
+            if (selectedModifier === 'break' && isTouchFamily) {
+                simpleToast({ content: 'Touch 類音符不支援 Break 效果', type: 'warning', timeout: 1500 });
+                return;
+            }
+
+            if (selectedModifier === 'firework' && !isTouchFamily) {
+                simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                return;
+            }
+
+            if (clean.includes('h[')) {
+                const match = clean.match(/^([A-E]?\d+h)([xbmf]?)((\[\d+:\d+\])?)/);
+                if (match) {
+                    const head = match[1];
+                    const tail = match[3] || '';
+                    const mod = selectedModifier === 'ex' ? 'x' :
+                                selectedModifier === 'break' ? 'b' :
+                                selectedModifier === 'mine' ? 'm' :
+                                selectedModifier === 'firework' ? 'f' : '';
+                    nextClean = `${head}${mod}${tail}`;
+                }
+            } else {
+                const base = clean.replace(/[xbmf]/g, '');
+                const mod = selectedModifier === 'ex' ? 'x' :
+                            selectedModifier === 'break' ? 'b' :
+                            selectedModifier === 'mine' ? 'm' :
+                            selectedModifier === 'firework' ? 'f' : '';
+                nextClean = `${base}${mod}`;
+            }
+            const modLabel = selectedModifier === 'ex' ? 'EX' :
+                             selectedModifier === 'break' ? 'Break' :
+                             selectedModifier === 'mine' ? '地雷' :
+                             selectedModifier === 'firework' ? 'FW' : '無效果';
+            simpleToast({ content: `已為音符套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
+        } else {
+            nextClean = getNextNoteClean(clean, lane);
+            simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
+        }
+
         const newPart = prefix + nextClean;
 
         parts[partIndex] = newPart;
@@ -351,8 +422,6 @@ export function createVisualNoteCallbacks(ctx) {
 
         const newContent = rawData.join(',');
         updateEditorAndSave(newContent);
-
-        simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
     };
 
     return {
@@ -526,8 +595,15 @@ export function initVisualScroller(ctx) {
                 saveSettingsDebounce();
                 draw();
             } else {
-                const scrollDelta = visualScroller.pxToSec(e.deltaY * (e.deltaMode === 1 ? 20 : 1));
-                updateVisualTime(getRealTime() + scrollDelta);
+                // 將 deltaY 根據 deltaMode 標準化為像素位移量 (像素模式直接使用，行模式換算為基準行高 24px)
+                const deltaPixels = e.deltaMode === 1
+                    ? e.deltaY * 24
+                    : (e.deltaMode === 2 ? e.deltaY * 200 : e.deltaY);
+                // 依據當前實際縮放倍率 (zoom) 動態換算時間位移量
+                const currentZoom = renderer.zoom || settings.visualZoom || 100;
+                const scrollDelta = deltaPixels / currentZoom;
+                // 反轉上下方向：向上滾動 (deltaY < 0) 推進時間，向下滾動 (deltaY > 0) 倒退時間，與觸控板操作體驗保持一致
+                updateVisualTime(getRealTime() - scrollDelta);
             }
         }, { passive: false });
     };

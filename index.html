@@ -58,17 +58,17 @@
     </noscript>
 
     <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,arrow_back,arrow_selector_tool,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,arrow_back,arrow_selector_tool,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning"
         media="print" onload="this.media='all'">
     <noscript>
         <link rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,arrow_back,arrow_selector_tool,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
+            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
     </noscript>
 
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="Styles/main.css">
+    <link rel="stylesheet" href="Styles/main.css?v=visual_11">
     <link rel="stylesheet" href="Styles/settings.css">
     <link rel="stylesheet" href="Styles/popup.css">
     <link rel="stylesheet" href="Styles/drive.css">
@@ -173,18 +173,169 @@
             <textarea id="editor-input" class="editor-layer" spellcheck="false" data-i18n="textarea.placeholder"
                 aria-label="譜面資料編輯區" placeholder="在此輸入譜面資料..."></textarea>
             <canvas id="visualEditor" class="visualEditor-layer" style="display: none;" aria-label="視覺化編輯器畫布"></canvas>
-            <div id="switchBox" class="switchBox">
-                <input type="radio" id="switch-mode-keyboard" name="switchBoxMode" value="keyboard" checked
-                    aria-label="鍵盤編輯模式">
-                <label for="switch-mode-keyboard" class="switch-item" title="鍵盤編輯">
-                    <span class="material-symbols-outlined" translate="no">keyboard</span>
-                </label>
-                <div class="switch-divider"></div>
-                <input type="radio" id="switch-mode-selector" name="switchBoxMode" value="selector"
-                    aria-label="視覺化編輯模式">
-                <label for="switch-mode-selector" class="switch-item" title="視覺化編輯">
-                    <span class="material-symbols-outlined" translate="no">arrow_selector_tool</span>
-                </label>
+            <!-- 視覺編輯工具欄容器 (僅在視覺編輯模式下顯示) -->
+            <div id="visualToolBar" class="visual-toolbar"
+                style="display: none; position: absolute; right: 16px; bottom: 16px; z-index: 10;">
+                <!-- 左側音符選擇子面板 -->
+                <div id="visualNotePalette" class="visual-sub-palette visual-note-palette" style="display: none;">
+                    <div class="palette-item active" data-note-type="tap" title="Tap 音符">
+                        <img src="./Skin/Default/TapSkins/tap.png" alt="Tap">
+                    </div>
+                    <div class="palette-item" data-note-type="hold" title="Hold 音符">
+                        <img src="./Skin/Default/HoldSkins/hold.png" alt="Hold">
+                    </div>
+                    <div class="palette-item" data-note-type="slide" title="Slide / Star 音符">
+                        <img src="./Skin/Default/StarSkins/star.png" alt="Slide">
+                    </div>
+                    <div class="palette-item" data-note-type="touch" title="Touch 音符">
+                        <img src="./Skin/Default/TouchSkins/touch.png" alt="Touch">
+                    </div>
+                    <div class="palette-item" data-note-type="touchhold" title="TouchHold 音符">
+                        <img src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="TouchHold">
+                    </div>
+                </div>
+
+                <!-- 左側效果附加子面板 -->
+                <div id="visualModifierPalette" class="visual-sub-palette visual-modifier-palette"
+                    style="display: none;">
+                    <div class="palette-item active" data-modifier-type="none" title="無效果">
+                        <span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>
+                    </div>
+                    <div class="palette-item" data-modifier-type="ex" title="EX 效果">
+                        <span class="modifier-text-btn" translate="no">EX</span>
+                    </div>
+                    <div class="palette-item" data-modifier-type="break" title="Break 效果">
+                        <img src="./Skin/Default/TapSkins/tap_break.png" alt="Break">
+                    </div>
+                    <div class="palette-item" data-modifier-type="mine" title="地雷效果">
+                        <img src="./Skin/Default/TapSkins/tap_mine.png" alt="地雷">
+                    </div>
+                    <div class="palette-item" data-modifier-type="firework" title="煙火效果 (FW)">
+                        <span class="modifier-text-btn" translate="no">FW</span>
+                    </div>
+                </div>
+
+                <!-- 左側網格切分子面板 (預設展開鋪開，自訂溢出允許滾動) -->
+                <div id="visualDivisionPalette" class="visual-sub-palette visual-division-palette"
+                    style="display: none;">
+                    <div class="palette-item active" data-division-val="4" title="1/4 切分">
+                        <span class="division-text-btn" translate="no">1/4</span>
+                    </div>
+                    <div class="palette-item" data-division-val="8" title="1/8 切分">
+                        <span class="division-text-btn" translate="no">1/8</span>
+                    </div>
+                    <div class="palette-item" data-division-val="12" title="1/12 切分">
+                        <span class="division-text-btn" translate="no">1/12</span>
+                    </div>
+                    <div class="palette-item" data-division-val="16" title="1/16 切分">
+                        <span class="division-text-btn" translate="no">1/16</span>
+                    </div>
+                    <div class="palette-item" data-division-val="24" title="1/24 切分">
+                        <span class="division-text-btn" translate="no">1/24</span>
+                    </div>
+                    <div class="palette-item" data-division-val="32" title="1/32 切分">
+                        <span class="division-text-btn" translate="no">1/32</span>
+                    </div>
+                    <div class="palette-item" data-division-val="48" title="1/48 切分">
+                        <span class="division-text-btn" translate="no">1/48</span>
+                    </div>
+                    <div class="palette-item" data-division-val="64" title="1/64 切分">
+                        <span class="division-text-btn" translate="no">1/64</span>
+                    </div>
+                    <div class="palette-item custom-item" data-division-val="custom" title="自訂切分...">
+                        <span class="division-text-btn" translate="no">...</span>
+                    </div>
+                </div>
+
+                <!-- 1. 歷史操作群組 (撤銷 / 重作) -->
+                <div id="visualHistoryGroup" class="visual-tool-group visual-history-group">
+                    <div id="visualUndoBtn" class="switch-item disabled" role="button" tabindex="0" title="復原 (Ctrl+Z)"
+                        aria-label="復原">
+                        <span class="material-symbols-outlined" translate="no">undo</span>
+                    </div>
+                    <div id="visualRedoBtn" class="switch-item disabled" role="button" tabindex="0" title="重作 (Ctrl+Y)"
+                        aria-label="重作">
+                        <span class="material-symbols-outlined" translate="no">redo</span>
+                    </div>
+                </div>
+
+                <!-- 2. 縮放群組 (+ / -) -->
+                <div id="visualZoomGroup" class="visual-tool-group visual-zoom-group">
+                    <div id="visualZoomInBtn" class="switch-item" role="button" tabindex="0" title="放大時間軸"
+                        aria-label="放大時間軸">
+                        <span class="material-symbols-outlined" translate="no">add</span>
+                    </div>
+                    <div id="visualZoomOutBtn" class="switch-item" role="button" tabindex="0" title="縮小時間軸"
+                        aria-label="縮小時間軸">
+                        <span class="material-symbols-outlined" translate="no">remove</span>
+                    </div>
+                </div>
+
+                <!-- 3. 網格切分群組 (單鍵，帶子選單) -->
+                <div id="visualDivisionGroup" class="visual-tool-group visual-division-group">
+                    <div id="visualDivisionBtn" class="switch-item tool-division-item sub-menu-trigger" role="button"
+                        tabindex="0" title="網格切分 (點擊展開選單)" aria-label="網格切分">
+                        <span class="trigger-icon-slot" id="currentDivisionText">
+                            <span class="division-text-btn" translate="no">1/4</span>
+                        </span>
+                        <svg class="corner-arrow" viewBox="0 0 6 6" width="6" height="6" aria-hidden="true"
+                            focusable="false">
+                            <polygon points="0,6 0,0 6,6" fill="rgba(255, 255, 255, 0.85)" />
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- 4. 主垂直工具欄 -->
+                <div id="visualToolGroup" class="visual-tool-group">
+                    <!-- 音符放置 (編輯模式) -->
+                    <input type="radio" id="tool-mode-place" name="visualTool" value="place" checked aria-label="放置音符"
+                        style="display: none;">
+                    <label for="tool-mode-place" id="toolPlaceLabel"
+                        class="switch-item tool-place-item sub-menu-trigger" title="放置音符 (點擊展開選單)">
+                        <span class="trigger-icon-slot" id="currentNoteIconContainer">
+                            <img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="目前音符"
+                                class="current-note-img">
+                        </span>
+                        <svg class="corner-arrow" viewBox="0 0 6 6" width="6" height="6" aria-hidden="true"
+                            focusable="false">
+                            <polygon points="0,6 0,0 6,6" fill="rgba(255, 255, 255, 0.85)" />
+                        </svg>
+                    </label>
+
+                    <!-- 效果附加工具 (點擊展開選單，與其他工具互斥) -->
+                    <input type="radio" id="tool-mode-modifier" name="visualTool" value="modifier" aria-label="套用效果工具"
+                        style="display: none;">
+                    <label for="tool-mode-modifier" id="toolModifierLabel"
+                        class="switch-item tool-modifier-item sub-menu-trigger" title="套用效果 (點擊展開選單)">
+                        <span class="trigger-icon-slot" id="currentModifierIcon">
+                            <span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>
+                        </span>
+                        <svg class="corner-arrow" viewBox="0 0 6 6" width="6" height="6" aria-hidden="true"
+                            focusable="false">
+                            <polygon points="0,6 0,0 6,6" fill="rgba(255, 255, 255, 0.85)" />
+                        </svg>
+                    </label>
+
+                    <!-- 選取工具 -->
+                    <input type="radio" id="tool-mode-select" name="visualTool" value="select" aria-label="選取工具"
+                        style="display: none;">
+                    <label for="tool-mode-select" class="switch-item" title="選取工具 (S)">
+                        <span class="material-symbols-outlined" translate="no">arrow_selector_tool</span>
+                    </label>
+
+                    <!-- 橡皮擦工具 -->
+                    <input type="radio" id="tool-mode-eraser" name="visualTool" value="eraser" aria-label="橡皮擦工具"
+                        style="display: none;">
+                    <label for="tool-mode-eraser" class="switch-item" title="橡皮擦工具">
+                        <span class="material-symbols-outlined" translate="no">ink_eraser</span>
+                    </label>
+                </div>
+
+                <!-- 底端展開/收納按鈕 (方形且永遠純黑、無白邊) -->
+                <div id="visualToolCollapseBtn" class="visual-collapse-btn" role="button" tabindex="0" title="收納/展開工具列"
+                    aria-label="收納/展開工具列" style="width: 32px; height: 32px; background: #000000; border: none;">
+                    <span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span>
+                </div>
             </div>
         </div>
         <div id="utilityContainer">
@@ -320,11 +471,12 @@
                             <div class="utilityButton" data-buttonAction="findReplace" data-i18n="menu.toolsFindReplace"
                                 role="button" tabindex="0" aria-label="尋找與取代">尋找與取代
                             </div>
-                            <div class="utilityButton" data-buttonAction="subdivisionTool" data-i18n="menu.editSubdivision"
-                                role="button" tabindex="0" aria-label="切分細分與轉換">切分細分與轉換
+                            <div class="utilityButton" data-buttonAction="subdivisionTool"
+                                data-i18n="menu.editSubdivision" role="button" tabindex="0" aria-label="切分細分與轉換">切分細分與轉換
                             </div>
-                            <div class="utilityButton" data-buttonAction="formatDocument" data-i18n="menu.editFormatDocument"
-                                role="button" tabindex="0" aria-label="格式化文件 (Shift+Alt+F)">格式化文件 (Format)
+                            <div class="utilityButton" data-buttonAction="formatDocument"
+                                data-i18n="menu.editFormatDocument" role="button" tabindex="0"
+                                aria-label="格式化文件 (Shift+Alt+F)">格式化文件 (Format)
                             </div>
                             <hr>
                             <div class="utilityButton" data-buttonAction="toggleBk" data-i18n="menu.toolsToggleBk"
@@ -356,6 +508,13 @@
                     <div class="utilitySeparator utility-break"></div>
                 </div>
                 <div class="utility-row utility-row-2">
+                    <div class="utilityButton noFixedsize" data-buttonAction="displayMode" data-i18n="menu.displayMode">
+                        顯示模式
+                        <select name="displayMode" aria-label="顯示模式">
+                            <option value="simai" data-i18n="menu.displayModeSimai">simai 語法</option>
+                            <option value="visual" data-i18n="menu.displayModeVisual">軌道</option>
+                        </select>
+                    </div>
                     <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
                         <input type="number" step="0.01" value="0" name="d" aria-label="譜面偏移秒數">
                     </div>
@@ -389,28 +548,6 @@
                         拍號
                         <input type="number" step="1" value="4" name="tb1" aria-label="拍號分子">/ <input type="number"
                             step="1" value="4" name="tb2" aria-label="拍號分母">
-                    </div>
-                    <div class="utilitySeparator"></div>
-                    <div class="utilityButton noFixedsize" data-buttonAction="gridDivision"
-                        data-i18n="menu.gridDivision" style="display: none;">切分
-                        <select name="gridDivision" aria-label="格線切分">
-                            <option value="4">1/4</option>
-                            <option value="8">1/8</option>
-                            <option value="12">1/12</option>
-                            <option value="16">1/16</option>
-                            <option value="24">1/24</option>
-                            <option value="32">1/32</option>
-                            <option value="48">1/48</option>
-                            <option value="64">1/64</option>
-                            <option value="custom" data-i18n="menu.gridDivisionCustom">自訂...</option>
-                        </select>
-                    </div>
-                    <div class="utilityButton noFixedsize" data-buttonAction="visualToolMode"
-                        data-i18n="menu.visualToolMode" style="display: none;">模式
-                        <select name="visualToolMode" aria-label="視覺工具模式">
-                            <option value="edit" data-i18n="menu.visualToolModeEdit">編輯</option>
-                            <option value="select" data-i18n="menu.visualToolModeSelect">選擇</option>
-                        </select>
                     </div>
                     <div class="utilityButton noFixedsize" data-buttonAction="readyBeat" data-i18n="menu.readyBeat">
                         預備拍<input type="checkbox" name="d" aria-label="啟用預備拍">

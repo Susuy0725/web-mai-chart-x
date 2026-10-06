@@ -107,6 +107,8 @@ body {
     left: 0;
     object-fit: contain;
     scale: 0.89;
+    will-change: transform;
+    transform: translateZ(0);
 }
 
 #canvasContainer .backgroundContainer {
@@ -123,6 +125,8 @@ body {
     left: 0;
     object-fit: contain;
     scale: 0.98;
+    will-change: transform;
+    transform: translateZ(0);
 }
 
 #canvasContainer #backgroundVideo {
@@ -483,6 +487,8 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 @media (max-aspect-ratio: 1/1) {
     :root {
         --utility-rows: 2;
+        --utility-row-height: 35px;
+        --utility-height: 70px;
     }
 
     #topUtilityBtns {
@@ -622,12 +628,24 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 #editorContainer {
     position: absolute;
     top: var(--utility-height, 40px);
-    bottom: 30px;
     left: calc(var(--split-ratio) * 100%);
     width: calc((1 - var(--split-ratio)) * 100%);
     height: calc(100% - var(--playControls-height) - var(--utility-height, 40px));
     background: var(--editor-background);
     /* 背景深色 */
+    overflow: hidden;
+}
+
+body.resizing-panels * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    transition: none !important;
+}
+
+body.resizing-panels #canvasContainer img,
+body.resizing-panels #canvasContainer video,
+body.resizing-panels #canvasContainer canvas {
+    pointer-events: none !important;
 }
 
 #panelSplitter {
@@ -1276,4 +1294,346 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     background: rgba(255, 255, 255, 0.15);
     margin: 0 1px;
     flex-shrink: 0;
+}
+
+/* 視覺編輯專屬工具欄容器 (同 switchBox 貼地陰影質感) */
+.visual-toolbar {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* 主垂直工具組 (風格同 switchBox) */
+.visual-tool-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    background: var(--main-color);
+    border: none;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: bottom center;
+}
+
+.visual-tool-group.collapsed {
+    max-height: 0;
+    padding: 0 4px;
+    opacity: 0;
+    transform: scale(0.85) translateY(10px);
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.visual-tool-group input[type="radio"] {
+    display: none;
+}
+
+.visual-tool-group .switch-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.15s ease;
+}
+
+.visual-tool-group .switch-item:hover {
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.visual-tool-group input[type="radio"]:checked + .switch-item {
+    background: #484852;
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.visual-tool-group .switch-item .material-symbols-outlined {
+    font-size: 20px;
+}
+
+/* 放置音符按鈕與左下角小箭頭 */
+/* 放置音符按鈕與效果附加按鈕左下角小箭頭 (精準指向左下方的等腰三角) */
+.tool-place-item .current-note-img,
+.tool-modifier-item .current-modifier-icon img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+/* 純文字按鍵 (EX 與 FW，純文字無任何背景裝飾) */
+/* 觸發按鈕內部圖示插槽 */
+.trigger-icon-slot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+}
+
+/* 純文字按鍵 (EX 與 FW，純文字無任何背景裝飾) */
+.modifier-text-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    user-select: none;
+    pointer-events: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* 網格切分、效果文字與通用子選單純文字按鈕 */
+.palette-text-btn,
+.modifier-text-btn,
+.division-text-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: inherit;
+    line-height: 1;
+    color: inherit;
+    letter-spacing: -0.5px;
+    user-select: none;
+    pointer-events: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.palette-item.custom-item .division-text-btn,
+.palette-item.custom-item .palette-text-btn {
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.tool-division-item .division-text-btn {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.tool-division-item:hover .division-text-btn,
+.tool-division-item.menu-open .division-text-btn {
+    color: #ffffff;
+}
+
+/* 帶有子選單的觸發按鈕容器 (通用模組) */
+.sub-menu-trigger,
+.tool-modifier-item,
+.tool-division-item,
+.tool-place-item {
+    position: relative;
+    user-select: none;
+    touch-action: manipulation;
+}
+
+/* 子選單展開中的聚焦按鈕外觀 (通用模組) */
+.sub-menu-trigger.menu-open,
+.tool-place-item.menu-open,
+.tool-modifier-item.menu-open,
+.tool-division-item.menu-open {
+    background: #484852 !important;
+    color: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* 觸發按鈕角標 (通用模組) */
+.sub-menu-trigger .corner-arrow,
+.tool-place-item .corner-arrow,
+.tool-modifier-item .corner-arrow,
+.tool-division-item .corner-arrow {
+    position: absolute;
+    bottom: 2px;
+    left: 2px;
+    width: 6px;
+    height: 6px;
+    pointer-events: none;
+    display: block;
+    transition: fill 0.15s ease;
+}
+
+/* 觸發按鈕內部圖示/文字插槽 (通用模組) */
+.trigger-icon-slot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* 工具群組按鈕停用狀態 */
+.visual-tool-group .switch-item.disabled {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* 左側伸出之垂直子面板 (通用模組，適用於任何現在與未來新增之子選單) */
+.visual-sub-palette,
+.visual-note-palette,
+.visual-modifier-palette,
+.visual-division-palette {
+    position: absolute;
+    right: calc(100% + 6px);
+    bottom: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    background: var(--main-color);
+    border: none !important;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    z-index: 12;
+    height: auto !important;
+    max-height: calc(100vh - 120px) !important;
+    overflow-y: auto !important;
+    touch-action: manipulation;
+    animation: paletteSlideIn 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.visual-sub-palette::-webkit-scrollbar,
+.visual-note-palette::-webkit-scrollbar,
+.visual-modifier-palette::-webkit-scrollbar,
+.visual-division-palette::-webkit-scrollbar {
+    width: 3px;
+}
+
+.visual-sub-palette::-webkit-scrollbar-thumb,
+.visual-note-palette::-webkit-scrollbar-thumb,
+.visual-modifier-palette::-webkit-scrollbar-thumb,
+.visual-division-palette::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
+}
+
+@keyframes paletteSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(8px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+/* 子選單選項項目 (通用模組，所有子選單項目自動生效，不再綁死父層選單名稱) */
+.palette-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.palette-item img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.palette-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.palette-item.active {
+    background: #484852;
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* 最底端展開/收納按鈕 (方形且永遠是黑色，無白邊) */
+.visual-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: #000000 !important;
+    border: none !important;
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.15s ease;
+    touch-action: manipulation;
+}
+
+.visual-collapse-btn:hover {
+    color: #ffffff;
+    background: #000000 !important;
+    border: none !important;
+}
+
+.visual-collapse-btn:active {
+    color: rgba(255, 255, 255, 0.95);
+    background: #000000 !important;
+    border: none !important;
+}
+
+.visual-collapse-btn .material-symbols-outlined {
+    font-size: 20px;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.visual-collapse-btn.collapsed .material-symbols-outlined {
+    transform: rotate(180deg);
+}
+
+/* 行動端與窄螢幕適配 */
+@media (max-width: 600px), (max-aspect-ratio: 1/1) {
+    .visual-toolbar {
+        right: 8px;
+        bottom: 8px;
+        gap: 4px;
+    }
+
+    .visual-sub-palette,
+    .visual-note-palette,
+    .visual-modifier-palette,
+    .visual-division-palette {
+        right: calc(100% + 4px);
+        bottom: 36px;
+        border: none !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
 }

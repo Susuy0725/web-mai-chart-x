@@ -3711,6 +3711,17 @@ export class SimaiVisualEditor {
         const clickedNote = this._hitTestNote(this.mouseX, this.mouseY);
         const lane = this._hitTestLane(this.mouseX);
 
+        if (this.editMode === 'eraser') {
+            if (e.button === 0 && clickedNote !== null) {
+                e.stopPropagation();
+                if (this.onDeleteNote) {
+                    this.onDeleteNote(clickedNote);
+                }
+            }
+            if (!this._isLoopActive()) this._upd();
+            return;
+        }
+
         if (this.editMode === 'select') {
             if (e.button === 0) { // 左鍵在選擇模式
                 if (clickedNote !== null) {
@@ -3892,12 +3903,12 @@ export class SimaiVisualEditor {
 
         if (hoveredHoldTail !== null) {
             this.canvas.style.cursor = 'ns-resize';
-        } else if (this.editMode === 'select') {
+        } else if (this.editMode === 'select' || this.editMode === 'eraser') {
             const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
             if (hoveredNote !== null) {
                 this.canvas.style.cursor = 'pointer';
             } else {
-                this.canvas.style.cursor = 'default';
+                this.canvas.style.cursor = this.editMode === 'eraser' ? 'not-allowed' : 'default';
             }
         } else {
             if (this.hoverLane !== null) {

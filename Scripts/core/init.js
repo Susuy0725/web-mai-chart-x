@@ -188,7 +188,12 @@ async function setupEditorUIAndData(ctx, settings, step) {
         ctx.snapHideCanvas();
     }
 
-    ctx.setSwitchBoxDisplayModeUI(settings.displayMode ?? 'simai');
+    if (typeof ctx.setDisplayModeUI === 'function') {
+        ctx.setDisplayModeUI(settings.displayMode ?? 'simai');
+    }
+    if (typeof ctx.setVisualToolUI === 'function') {
+        ctx.setVisualToolUI(settings.visualToolMode ?? 'edit');
+    }
 
     if (ctx.visualToolModeSelect) {
         ctx.visualToolModeSelect.value = settings.visualToolMode ?? 'edit';

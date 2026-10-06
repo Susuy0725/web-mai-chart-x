@@ -1,14 +1,10 @@
 // Basic service worker for offline caching
 // Cache name should be bumped when assets change
-const CACHE_NAME = (() => {
-    const isDev =
-        self.location.hostname === 'localhost' ||
-        self.location.hostname === '127.0.0.1' ||
-        self.location.hostname.endsWith('.ngrok-free.app')||
-        self.location.hostname === 'debug.tri-dent.cc';
+const isRelease = self.location.hostname === 'susuy0725.github.io';
 
-    if (isDev) {
-        return 'web-mai-chart-cache-' + Date.now();
+const CACHE_NAME = (() => {
+    if (!isRelease) {
+        return 'web-mai-chart-dev-' + Date.now();
     } else {
         return 'web-mai-chart-cache-__CACHE_VERSION__';
     }
@@ -156,6 +152,7 @@ self.addEventListener('activate', (event) => {
     );
 });
 self.addEventListener('fetch', (event) => {
+    if (!isRelease) return;
     if (event.request.method !== 'GET') return;
 
     // 唯有同源請求才處理快取

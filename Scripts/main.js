@@ -1,4 +1,5 @@
 import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags } from './features/visualEditor.js';
+import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
 export { defaultSettings };
 import { initServiceWorker } from './core/swManager.js';
@@ -111,11 +112,40 @@ const chartInfoButton = getButton("chartInfo", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
-const switchBoxRadios = document.querySelectorAll('input[name="switchBoxMode"]');
-const setSwitchBoxDisplayModeUI = (mode) => {
-    const radioVal = (mode === 'simai') ? 'keyboard' : 'selector';
-    const radio = document.querySelector(`input[name="switchBoxMode"][value="${radioVal}"]`);
+const visualToolBarEl = document.getElementById('visualToolBar');
+const visualToolGroupEl = document.getElementById('visualToolGroup');
+const visualNotePaletteEl = document.getElementById('visualNotePalette');
+const visualToolCollapseBtn = document.getElementById('visualToolCollapseBtn');
+const toolPlaceLabel = document.getElementById('toolPlaceLabel');
+const currentNoteIcon = document.getElementById('currentNoteIcon');
+const visualToolRadios = document.querySelectorAll('input[name="visualTool"]');
+const paletteItems = document.querySelectorAll('#visualNotePalette .palette-item');
+const visualHistoryGroupEl = document.getElementById('visualHistoryGroup');
+const visualZoomGroupEl = document.getElementById('visualZoomGroup');
+const visualUndoBtn = document.getElementById('visualUndoBtn');
+const visualRedoBtn = document.getElementById('visualRedoBtn');
+const visualZoomInBtn = document.getElementById('visualZoomInBtn');
+const visualZoomOutBtn = document.getElementById('visualZoomOutBtn');
+const visualModifierBtn = document.getElementById('visualModifierBtn');
+const visualModifierPaletteEl = document.getElementById('visualModifierPalette');
+const currentModifierIcon = document.getElementById('currentModifierIcon');
+const modifierPaletteItems = document.querySelectorAll('#visualModifierPalette .palette-item');
+const visualDivisionGroupEl = document.getElementById('visualDivisionGroup');
+const visualDivisionBtn = document.getElementById('visualDivisionBtn');
+const visualDivisionPaletteEl = document.getElementById('visualDivisionPalette');
+const currentDivisionText = document.getElementById('currentDivisionText');
+const currentNoteIconContainer = document.getElementById('currentNoteIconContainer');
+
+const setVisualToolUI = (mode) => {
+    const radioVal = (mode === 'edit') ? 'place' : mode;
+    const radio = document.querySelector(`input[name="visualTool"][value="${radioVal}"]`);
     if (radio) radio.checked = true;
+};
+const displayModeBtn = document.querySelector('.utilityButton[data-buttonAction="displayMode"]');
+const displayModeSelect = displayModeBtn ? displayModeBtn.querySelector('select[name="displayMode"]') : null;
+const setDisplayModeUI = (mode) => {
+    if (displayModeSelect) displayModeSelect.value = mode;
+    updateGridDivisionVisibility();
 };
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
@@ -195,8 +225,6 @@ const quickPanel = document.getElementById('quick-panel');
 const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
 const canvasOutline = document.getElementById('canvasOutline');
 const backgroundContainer = document.querySelector('#canvasContainer .backgroundContainer');
-const gridDivisionBtn = document.querySelector('.utilityButton[data-buttonAction="gridDivision"]');
-const gridDivisionSelect = gridDivisionBtn ? gridDivisionBtn.querySelector('select[name="gridDivision"]') : null;
 const visualToolModeBtn = document.querySelector('.utilityButton[data-buttonAction="visualToolMode"]');
 const visualToolModeSelect = visualToolModeBtn ? visualToolModeBtn.querySelector('select[name="visualToolMode"]') : null;
 
@@ -325,6 +353,7 @@ if (panelSplitter) {
     let isDraggingSplitter = false;
     let dragStartX = 0;
     let dragStartRatio = 0.5;
+    let pendingRatio = null;
     let resizeRafId = null;
 
     panelSplitter.addEventListener('pointerdown', (e) => {
@@ -341,6 +370,7 @@ if (panelSplitter) {
             canvasContainer.style.width = '';
         }
 
+        document.body.classList.add('resizing-panels');
         panelSplitter.classList.add('dragging');
         panelSplitter.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -358,13 +388,16 @@ if (panelSplitter) {
             newRatio = Math.min(0.85, newRatio);
         }
 
-        settings.splitRatio = newRatio;
-        applySplitRatio(newRatio);
+        pendingRatio = newRatio;
 
         if (!resizeRafId) {
             resizeRafId = requestAnimationFrame(() => {
                 resizeRafId = null;
-                resize(true);
+                if (pendingRatio !== null) {
+                    settings.splitRatio = pendingRatio;
+                    applySplitRatio(pendingRatio);
+                    resize(false);
+                }
             });
         }
     });
@@ -372,9 +405,19 @@ if (panelSplitter) {
     const stopDraggingSplitter = (e) => {
         if (!isDraggingSplitter) return;
         isDraggingSplitter = false;
+        document.body.classList.remove('resizing-panels');
         panelSplitter.classList.remove('dragging');
+        if (resizeRafId) {
+            cancelAnimationFrame(resizeRafId);
+            resizeRafId = null;
+        }
         if (e.pointerId !== undefined && panelSplitter.hasPointerCapture(e.pointerId)) {
             try { panelSplitter.releasePointerCapture(e.pointerId); } catch (_) { }
+        }
+        if (pendingRatio !== null) {
+            settings.splitRatio = pendingRatio;
+            applySplitRatio(pendingRatio);
+            pendingRatio = null;
         }
         if ((settings.splitRatio ?? 0.5) < 0.15) {
             snapHideCanvas();
@@ -409,55 +452,215 @@ timebaseButton.addEventListener('input', function () {
 
 function updateGridDivisionVisibility() {
     const isVis = isVisualMode();
-    if (gridDivisionBtn) {
-        gridDivisionBtn.style.display = isVis ? '' : 'none';
-    }
     if (visualToolModeBtn) {
         visualToolModeBtn.style.display = isVis ? '' : 'none';
+    }
+    if (visualToolBarEl) {
+        visualToolBarEl.style.display = isVis ? 'inline-flex' : 'none';
+        if (!isVis) {
+            VisualSubMenu.hideAllPalettes();
+        }
+    }
+}
+
+function ensureDivisionOption(val) {
+    const strVal = String(val);
+    if (typeof divisionSubMenu !== 'undefined') {
+        divisionSubMenu.ensureItem({
+            value: strVal,
+            title: `1/${strVal} 切分`,
+            render: () => `<span class="division-text-btn" translate="no">1/${strVal}</span>`
+        }, 'custom');
     }
 }
 
 function setGridDivisionUI(val) {
-    if (!gridDivisionSelect) return;
     const strVal = String(val);
-    let opt = Array.from(gridDivisionSelect.options).find(o => o.value === strVal);
-    if (!opt && val > 0) {
-        const customOpt = document.createElement('option');
-        customOpt.value = strVal;
-        customOpt.textContent = `1/${val}`;
-        const lastOpt = gridDivisionSelect.options[gridDivisionSelect.options.length - 1];
-        if (lastOpt && lastOpt.value === 'custom') {
-            gridDivisionSelect.insertBefore(customOpt, lastOpt);
-        } else {
-            gridDivisionSelect.appendChild(customOpt);
-        }
+    if (typeof divisionSubMenu !== 'undefined') {
+        ensureDivisionOption(val);
+        divisionSubMenu.setValue(strVal, true);
     }
-    gridDivisionSelect.value = strVal;
 }
 
-if (gridDivisionSelect) {
-    gridDivisionSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'custom') {
-            const input = prompt('請輸入切分數值 (正整數，例如 7, 14, 42 等)：', settings.gridDivision || 4);
-            if (input === null) {
-                setGridDivisionUI(settings.gridDivision || 4);
-                return;
+if (displayModeSelect) {
+    displayModeSelect.addEventListener('change', (e) => {
+        settings.displayMode = e.target.value;
+        updateGridDivisionVisibility();
+        visualEditorRenderer?.setZoom(settings.visualZoom);
+        previewRender?.setZoom(settings.visualZoom);
+        saveSettingsDebounce();
+        setEditorCss(editorContainer.dataset.hidden !== 'true');
+        draw();
+    });
+}
+
+// 視覺工具切換 (place / select / eraser)
+visualToolRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            const tool = e.target.value;
+            const editMode = (tool === 'place') ? 'edit' : tool;
+            settings.visualToolMode = editMode;
+            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+                visualEditorRenderer.setEditMode(editMode);
             }
-            const val = parseInt(input.trim(), 10);
-            if (!isNaN(val) && val > 0) {
-                settings.gridDivision = val;
-                setGridDivisionUI(val);
-                saveSettingsDebounce();
-                draw();
-            } else {
-                alert('請輸入有效的正整數切分數值。');
-                setGridDivisionUI(settings.gridDivision || 4);
+            if (tool !== 'place' && tool !== 'modifier') {
+                VisualSubMenu.closeAll();
             }
-        } else {
-            const val = parseInt(e.target.value, 10) || 4;
-            settings.gridDivision = val;
             saveSettingsDebounce();
             draw();
+        }
+    });
+});
+
+// --- 可復用子選單組件 (音符種類、效果附加、網格切分) ---
+const noteTypeSubMenu = new VisualSubMenu({
+    id: 'noteType',
+    triggerEl: toolPlaceLabel,
+    paletteEl: visualNotePaletteEl,
+    iconContainerEl: currentNoteIconContainer || toolPlaceLabel,
+    defaultValue: 'tap',
+    itemDefinitions: {
+        tap: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
+        hold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
+        slide: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
+        touch: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchSkins/touch.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
+        touchhold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' }
+    },
+    onSelect: (noteType) => {
+        settings.visualSelectedNoteType = noteType;
+        const placeRadio = document.getElementById('tool-mode-place');
+        if (placeRadio && !placeRadio.checked) {
+            placeRadio.checked = true;
+            placeRadio.dispatchEvent(new Event('change'));
+        }
+        saveSettingsDebounce();
+    }
+});
+
+const modifierSubMenu = new VisualSubMenu({
+    id: 'modifier',
+    triggerEl: toolModifierLabel,
+    paletteEl: visualModifierPaletteEl,
+    iconContainerEl: currentModifierIcon,
+    defaultValue: 'none',
+    highlightNonDefault: false,
+    itemDefinitions: {
+        none: { render: () => '<span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>' },
+        ex: { render: () => '<span class="modifier-text-btn" translate="no">EX</span>' },
+        break: { render: () => '<img src="./Skin/Default/TapSkins/tap_break.png" alt="Break" style="width: 20px; height: 20px; object-fit: contain;">' },
+        mine: { render: () => '<img src="./Skin/Default/TapSkins/tap_mine.png" alt="地雷" style="width: 20px; height: 20px; object-fit: contain;">' },
+        firework: { render: () => '<span class="modifier-text-btn" translate="no">FW</span>' }
+    },
+    onSelect: (modType) => {
+        settings.visualSelectedModifier = modType;
+        saveSettingsDebounce();
+    }
+});
+
+const divisionSubMenu = new VisualSubMenu({
+    id: 'division',
+    triggerEl: visualDivisionBtn,
+    paletteEl: visualDivisionPaletteEl,
+    iconContainerEl: currentDivisionText,
+    defaultValue: '4',
+    itemValueAttr: 'divisionVal',
+    highlightNonDefault: false,
+    itemDefinitions: {
+        '4': { render: () => '<span class="division-text-btn" translate="no">1/4</span>' },
+        '8': { render: () => '<span class="division-text-btn" translate="no">1/8</span>' },
+        '12': { render: () => '<span class="division-text-btn" translate="no">1/12</span>' },
+        '16': { render: () => '<span class="division-text-btn" translate="no">1/16</span>' },
+        '24': { render: () => '<span class="division-text-btn" translate="no">1/24</span>' },
+        '32': { render: () => '<span class="division-text-btn" translate="no">1/32</span>' },
+        '48': { render: () => '<span class="division-text-btn" translate="no">1/48</span>' },
+        '64': { render: () => '<span class="division-text-btn" translate="no">1/64</span>' },
+        'custom': {
+            render: () => `<span class="division-text-btn" translate="no">1/${settings.gridDivision || 4}</span>`,
+            isAction: true,
+            action: () => {
+                const input = prompt('請輸入切分數值 (正整數，例如 7, 14, 42 等)：', settings.gridDivision || 4);
+                if (input === null) return;
+                const val = parseInt(input.trim(), 10);
+                if (!isNaN(val) && val > 0) {
+                    ensureDivisionOption(val);
+                    divisionSubMenu.setValue(String(val));
+                } else {
+                    alert('請輸入有效的正整數切分數值。');
+                }
+            }
+        }
+    },
+    onSelect: (divVal) => {
+        const numVal = parseInt(divVal, 10);
+        if (!isNaN(numVal) && numVal > 0) {
+            settings.gridDivision = numVal;
+            saveSettingsDebounce();
+            draw();
+        }
+    }
+});
+
+// 根據目前設定初始化子選單項目與主按鈕外觀
+if (settings.visualSelectedNoteType === 'break') {
+    settings.visualSelectedNoteType = 'tap';
+}
+if (settings.visualSelectedNoteType) {
+    noteTypeSubMenu.setValue(settings.visualSelectedNoteType, true);
+}
+if (settings.visualSelectedModifier) {
+    modifierSubMenu.setValue(settings.visualSelectedModifier, true);
+}
+const currentGridDiv = settings.gridDivision || 4;
+ensureDivisionOption(currentGridDiv);
+divisionSubMenu.setValue(String(currentGridDiv), true);
+
+// 縮放按鈕 (+ / -)
+const handleVisualZoom = (factor) => {
+    const MIN_ZOOM = 50, MAX_ZOOM = 1000;
+    const currentZoom = (visualEditorRenderer && visualEditorRenderer.zoom) || settings.visualZoom || 100;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom * factor));
+    settings.visualZoom = newZoom;
+    if (visualEditorRenderer && typeof visualEditorRenderer.setZoom === 'function') {
+        visualEditorRenderer.setZoom(newZoom);
+    }
+    saveSettingsDebounce();
+    draw();
+};
+
+if (visualZoomInBtn) {
+    visualZoomInBtn.addEventListener('click', () => handleVisualZoom(1.25));
+}
+if (visualZoomOutBtn) {
+    visualZoomOutBtn.addEventListener('click', () => handleVisualZoom(1 / 1.25));
+}
+
+// 復原 / 重作按鈕 (Undo / Redo)
+if (visualUndoBtn) {
+    visualUndoBtn.addEventListener('click', () => {
+        if (undoButton && !undoButton.classList.contains('disabled')) {
+            undoButton.click();
+        }
+    });
+}
+if (visualRedoBtn) {
+    visualRedoBtn.addEventListener('click', () => {
+        if (redoButton && !redoButton.classList.contains('disabled')) {
+            redoButton.click();
+        }
+    });
+}
+
+// 最底端展開/收納按鈕 (通用控制所有 .visual-tool-group 群組)
+if (visualToolCollapseBtn) {
+    visualToolCollapseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isCollapsed = visualToolCollapseBtn.classList.toggle('collapsed');
+        document.querySelectorAll('.visual-tool-group').forEach(group => {
+            group.classList.toggle('collapsed', isCollapsed);
+        });
+        if (isCollapsed) {
+            VisualSubMenu.closeAll();
         }
     });
 }
@@ -466,6 +669,7 @@ if (visualToolModeSelect) {
     visualToolModeSelect.addEventListener('change', (e) => {
         const mode = e.target.value;
         settings.visualToolMode = mode;
+        setVisualToolUI(mode);
         if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
             visualEditorRenderer.setEditMode(mode);
         }
@@ -527,15 +731,23 @@ window.addEventListener('keydown', (e) => {
                 visualEditorRenderer.clearSelection();
             }
         } else if (e.key === 'e' || e.key === 'E') {
-            if (visualToolModeSelect) {
-                visualToolModeSelect.value = 'edit';
-                visualToolModeSelect.dispatchEvent(new Event('change'));
+            settings.visualToolMode = 'edit';
+            setVisualToolUI('edit');
+            if (visualToolModeSelect) visualToolModeSelect.value = 'edit';
+            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+                visualEditorRenderer.setEditMode('edit');
             }
+            saveSettingsDebounce();
+            draw();
         } else if (e.key === 'v' || e.key === 'V' || e.key === 's' || e.key === 'S') {
-            if (visualToolModeSelect) {
-                visualToolModeSelect.value = 'select';
-                visualToolModeSelect.dispatchEvent(new Event('change'));
+            settings.visualToolMode = 'select';
+            setVisualToolUI('select');
+            if (visualToolModeSelect) visualToolModeSelect.value = 'select';
+            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+                visualEditorRenderer.setEditMode('select');
             }
+            saveSettingsDebounce();
+            draw();
         }
     }
 });
@@ -848,10 +1060,8 @@ const offsetInputDebounce = debounce(() => {
     draw();
 }, 500);
 
-const saveMaidata = debounce(() => {
-    projSet('maidata', maidata).catch((error) => {
-        console.error("儲存maidata到IndexedDB失敗:", error);
-    });
+function saveMaidataImmediate() {
+    if (!maidata) return Promise.resolve();
     if (currentProjectId) {
         const name = maidata?.title || null;
         projectTouch(currentProjectId).catch(() => { });
@@ -860,7 +1070,15 @@ const saveMaidata = debounce(() => {
 
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
-}, 2000);
+
+    return projSet('maidata', maidata).catch((error) => {
+        console.error("儲存maidata到IndexedDB失敗:", error);
+    });
+}
+
+const saveMaidata = debounce(() => {
+    saveMaidataImmediate();
+}, 500);
 
 const inputDebounce = debounce(() => {
     // 記錄歷史 (diff)
@@ -1089,6 +1307,19 @@ const setEditorCss = (visible = null) => {
         setElementDisplay(editorInput, editorVisible);
         setElementDisplay(highlightLayer, editorVisible);
         setElementDisplay(visualEditor, visualVisible);
+        if (visualToolBarEl) {
+            visualToolBarEl.style.display = visualVisible ? 'inline-flex' : 'none';
+            if (!visualVisible && visualNotePaletteEl) {
+                visualNotePaletteEl.style.display = 'none';
+            }
+        }
+    } else {
+        if (visualToolBarEl) {
+            visualToolBarEl.style.display = 'none';
+            if (visualNotePaletteEl) {
+                visualNotePaletteEl.style.display = 'none';
+            }
+        }
     }
 
     if (!visible) {
@@ -1199,15 +1430,23 @@ const invertChange = (change) => {
 };
 
 function updateUndoRedoUI() {
+    const canUndo = Array.isArray(undoStack) && undoStack.length > 0;
+    const canRedo = Array.isArray(redoStack) && redoStack.length > 0;
     if (undoButton) {
-        const canUndo = Array.isArray(undoStack) && undoStack.length > 0;
         undoButton.classList.toggle('disabled', !canUndo);
         undoButton.setAttribute('aria-disabled', String(!canUndo));
     }
     if (redoButton) {
-        const canRedo = Array.isArray(redoStack) && redoStack.length > 0;
         redoButton.classList.toggle('disabled', !canRedo);
         redoButton.setAttribute('aria-disabled', String(!canRedo));
+    }
+    if (visualUndoBtn) {
+        visualUndoBtn.classList.toggle('disabled', !canUndo);
+        visualUndoBtn.setAttribute('aria-disabled', String(!canUndo));
+    }
+    if (visualRedoBtn) {
+        visualRedoBtn.classList.toggle('disabled', !canRedo);
+        visualRedoBtn.setAttribute('aria-disabled', String(!canRedo));
     }
 }
 
@@ -1670,19 +1909,6 @@ changeDifficulty.addEventListener('change', (e) => {
     difficultyInputDebounce();
 });
 
-switchBoxRadios.forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            settings.displayMode = (e.target.value === 'keyboard') ? 'simai' : 'visual';
-            updateGridDivisionVisibility();
-            visualEditorRenderer.setZoom(settings.visualZoom);
-            previewRender.setZoom(settings.visualZoom);
-            saveSettingsDebounce();
-            setEditorCss(editorContainer.dataset.hidden !== 'true');
-            draw();
-        }
-    });
-});
 
 function setupZoomButton(button, isZoomIn) {
     let timeoutId = null;
@@ -3110,7 +3336,8 @@ async function _init() {
         majdataWs,
         applySplitRatio,
         snapHideCanvas,
-        setSwitchBoxDisplayModeUI,
+        setDisplayModeUI,
+        setVisualToolUI,
         visualToolModeSelect,
         setGridDivisionUI,
         updateGridDivisionVisibility,
@@ -3181,5 +3408,25 @@ window.saveSettingsDebounce = saveSettingsDebounce;
 window.openWelcomeModal = () => showWelcomeModal(true);
 window.openSubdivisionModal = () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
 window.formatDocument = () => handleFormatDocument(editorInput, { simpleToast, t });
+
+// 全域頁面卸載/重新整理保護：立即 flush 尚未寫入 IndexedDB 的 maidata 與 settings
+const flushPendingSaves = () => {
+    if (typeof saveMaidata !== 'undefined' && typeof saveMaidata.flush === 'function') {
+        saveMaidata.flush();
+    } else if (typeof saveMaidataImmediate === 'function') {
+        saveMaidataImmediate();
+    }
+    if (typeof saveSettingsDebounce !== 'undefined' && typeof saveSettingsDebounce.flush === 'function') {
+        saveSettingsDebounce.flush();
+    }
+};
+
+window.addEventListener('beforeunload', flushPendingSaves);
+window.addEventListener('pagehide', flushPendingSaves);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        flushPendingSaves();
+    }
+});
 
 _init();

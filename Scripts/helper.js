@@ -87,14 +87,43 @@ export function getButton(action, type = "control") {
 */
 export function debounce(func, delay = 300) {
     let timer = null;
+    let lastArgs = null;
+    let lastThis = null;
 
-    return function (...args) {
+    const debounced = function (...args) {
+        lastArgs = args;
+        lastThis = this;
         if (timer) clearTimeout(timer);
 
         timer = setTimeout(() => {
-            func.apply(this, args);
+            timer = null;
+            func.apply(lastThis, lastArgs);
+            lastArgs = null;
+            lastThis = null;
         }, delay);
     };
+
+    debounced.flush = function () {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+            const res = func.apply(lastThis, lastArgs);
+            lastArgs = null;
+            lastThis = null;
+            return res;
+        }
+    };
+
+    debounced.cancel = function () {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+            lastArgs = null;
+            lastThis = null;
+        }
+    };
+
+    return debounced;
 }
 
 export function throttle(func, delay = 16) {

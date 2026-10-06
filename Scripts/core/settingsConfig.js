@@ -31,6 +31,8 @@ export const defaultSettings = {
     visualZoom: 200, // 視覺模式下的縮放倍率
     gridDivision: 4, // SimaiVisualEditor 的網格切分 (4, 8, 12, 16, 24, 32...)
     visualToolMode: 'edit', // SimaiVisualEditor 工具模式: 'edit' (編輯) 或 'select' (選擇)
+    visualSelectedNoteType: 'tap', // SimaiVisualEditor 選擇的音符類型: 'tap', 'hold', 'slide', 'touch', 'touchhold'
+    visualSelectedModifier: 'none', // SimaiVisualEditor 選擇的附加效果: 'none', 'ex', 'break', 'mine', 'firework'
     splitRatio: 0.5, // 左右面板分割比例
     canvasSnapped: false, // Canvas 是否被 snap 隱藏
     slideIllegalRed: false,

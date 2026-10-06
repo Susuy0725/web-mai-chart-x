@@ -109,30 +109,6 @@ export function throttle(func, delay = 16) {
     };
 }
 
-export function parseTag(str, open, close, specialCase = false) {
-    const regex = new RegExp(`\\${open}([^\\${open}\\${close}]*)\\${close}`, 'g');
-    const matches = [...str.matchAll(regex)];
-    const residue = str.replace(regex, '');
-    if (residue.includes(open) || residue.includes(close)) {
-        return { error: `Invalid format: nested or unmatched ${open}${close}` };
-    }
-    let lastValue = null;
-    for (const match of matches) {
-        const val = match[1].trim();
-        if (val.startsWith('#') && specialCase) { // direct assign #duration
-            const duration = parseFloat(val.substring(1));
-            if (isNaN(duration) || duration < 0) {
-                return { error: `Invalid duration value in direct assign ${open}${close}: must be a non-negative number` };
-            }
-            return { residue: residue.trim(), value: duration, override: true };
-        }
-        if (val === '' || isNaN(val) || parseFloat(val) <= 0) {
-            return { error: `Invalid value in ${open}${close}: must be a positive number` };
-        }
-        lastValue = parseFloat(val);
-    }
-    return { residue: residue.trim(), value: lastValue };
-}
 export function parseBeats(str, bpm, slide = false) {
     if (slide) {
         if (str.includes("##")) {
@@ -2012,11 +1988,18 @@ export async function videoRender(audioManager, canvas, renderer, {
     overallBrightness = 1.0,
     movieBrightness = null,
     noteBrightness = 1.0,
+    settings: customSettings = null,
+    outlineImage: customOutlineImage = null,
+    draw = null,
 } = {}) {
+    const effectiveDraw = typeof draw === 'function'
+        ? draw
+        : (typeof window !== 'undefined' && typeof window.draw === 'function' ? window.draw : null);
+
     if (!window.Mediabunny) {
         await ensureMediabunny();
     }
-    const settings = renderer.settings || window.settings || {};
+    const settings = customSettings || renderer?.settings || window.settings || {};
 
     // 計算背景與音符的最終亮度係數
     const baseMovieBrightness = movieBrightness !== null && movieBrightness !== undefined
@@ -2035,28 +2018,37 @@ export async function videoRender(audioManager, canvas, renderer, {
 
     const introDuration = includeIntro ? 6 : 0;
 
-    const outlineImage = await (async () => {
-        try {
-            const response = await fetch('./Skin/outline.png');
-            if (!response.ok) throw new Error('fetch failed: ' + response.status);
-            const blob = await response.blob();
-            try {
-                if (window.createImageBitmap) return await createImageBitmap(blob);
-            } catch (e) {
-                console.warn('createImageBitmap 失敗，改用 Image element', e);
-            }
-            return await new Promise((res, rej) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
-                img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
-                img.src = URL.createObjectURL(blob);
-            });
-        } catch (e) {
-            console.error(`外框圖片載入失敗`, e);
-            return null;
+    let outlineImage = customOutlineImage;
+    if (!outlineImage && !settings.hideOutline) {
+        const domOutline = typeof document !== 'undefined' ? document.getElementById('canvasOutline') : null;
+        if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
+            outlineImage = domOutline;
+        } else {
+            outlineImage = await (async () => {
+                try {
+                    const outlineSrc = domOutline?.src || './Skin/Shared/outline.png';
+                    const response = await fetch(outlineSrc);
+                    if (!response.ok) throw new Error('fetch failed: ' + response.status);
+                    const blob = await response.blob();
+                    try {
+                        if (window.createImageBitmap) return await createImageBitmap(blob);
+                    } catch (e) {
+                        console.warn('createImageBitmap 失敗，改用 Image element', e);
+                    }
+                    return await new Promise((res, rej) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
+                        img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
+                        img.src = URL.createObjectURL(blob);
+                    });
+                } catch (e) {
+                    console.error(`外框圖片載入失敗`, e);
+                    return null;
+                }
+            })();
         }
-    })();
+    }
 
     if (end <= start) {
         console.log(end, start);
@@ -2751,7 +2743,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                     offCtx.filter = 'none';
                 }
 
-                if (outlineImage) {
+                if (!settings.hideOutline && outlineImage) {
                     const p = Math.min(targetW, targetH) / scaleBase * rs;
                     offCtx.setTransform(p, 0, 0, p, targetW / 2, targetH / 2);
                     offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
@@ -2890,6 +2882,13 @@ export async function videoRender(audioManager, canvas, renderer, {
             try { renderer.setContext(currentContext); } catch (e) { }
             if (currentContext && currentContext.canvas) {
                 try { renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true); } catch (e) { }
+            }
+        }
+        if (effectiveDraw) {
+            try {
+                effectiveDraw();
+            } catch (e) {
+                console.error("videoRender 完成後呼叫 draw 失敗:", e);
             }
         }
     }

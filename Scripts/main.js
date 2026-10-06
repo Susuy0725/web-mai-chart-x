@@ -120,7 +120,6 @@ const setSwitchBoxDisplayModeUI = (mode) => {
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
 const downloadButton = getButton("download", "utility");
-const createNewButton = getButton("createNew", "utility");
 const warnEl = document.querySelector("#utilityContainer .warnbtn");
 const editMusicButton = getButton("editMusic", "utility");
 const rCwiseButton = getButton("rotateClockwise", "utility");
@@ -1036,7 +1035,8 @@ playbackSpeedInput.addEventListener('change', () => {
     simpleToast({ content: `已設定播放速度：${speed}x`, type: 'success', timeout: 1800 });
 });
 
-playbackReset.addEventListener('click', () => {
+playbackReset.addEventListener('click', (e) => {
+    if (e.target === playbackSpeedInput) return;
     setPlaybackSpeed(1);
     simpleToast({ content: '重置播放速度', type: 'success', timeout: 1800 });
 });
@@ -1147,7 +1147,8 @@ chartInfoButton.addEventListener('click', () => {
         setNowDifficulty: (val) => { nowDifficulty = val; },
         changeDifficulty,
         saveMaidata,
-        projSet
+        projSet,
+        projGet
     });
 });
 
@@ -1810,6 +1811,194 @@ if (window.ResizeObserver && topUtilityBtnsEl) {
     utilityObserver.observe(topUtilityBtnsEl);
 }
 
+/**
+ * 增強工具列水平滑動體驗 (支援滑鼠滾輪直接橫向滾動、滑鼠拖曳滑動、觸控防誤觸與邊界陰影指示)
+ */
+function setupUtilityHorizontalScroll() {
+    if (!topUtilityBtnsEl) return;
+
+    const utilityContainer = utilityContainerEl || document.getElementById('utilityContainer');
+    const rows = Array.from(topUtilityBtnsEl.querySelectorAll('.utility-row'));
+
+    // 取得當前真正具有橫向滾動能力的容器
+    function getScrollContainer(target) {
+        if (target) {
+            const row = target.closest('.utility-row');
+            if (row && window.getComputedStyle(row).display !== 'contents') {
+                return row;
+            }
+        }
+        return topUtilityBtnsEl;
+    }
+
+    // 更新邊界陰影指示器與可拖曳樣式
+    function updateScrollIndicators() {
+        const isMobile = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+        let canLeft = false;
+        let canRight = false;
+
+        const checkEl = (el) => {
+            if (!el || window.getComputedStyle(el).display === 'contents') return;
+            const maxScroll = el.scrollWidth - el.clientWidth;
+            if (maxScroll > 1) {
+                el.classList.add('is-draggable');
+                if (el.scrollLeft > 2) canLeft = true;
+                if (el.scrollLeft < maxScroll - 2) canRight = true;
+            } else {
+                el.classList.remove('is-draggable');
+            }
+        };
+
+        if (isMobile && rows.length > 0) {
+            rows.forEach(checkEl);
+        } else {
+            checkEl(topUtilityBtnsEl);
+        }
+
+        if (utilityContainer) {
+            utilityContainer.classList.toggle('can-scroll-left', canLeft);
+            utilityContainer.classList.toggle('can-scroll-right', canRight);
+        }
+    }
+
+    // 1. 滑鼠滾輪直接橫向滾動 (Wheel to Horizontal Scroll)
+    topUtilityBtnsEl.addEventListener('wheel', (e) => {
+        const container = getScrollContainer(e.target);
+        if (!container) return;
+
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        if (maxScroll <= 0) return;
+
+        // 若垂直 deltaY 佔主導，將其轉換為水平滾動；若本身就是橫向 deltaX 則直接使用
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (delta === 0) return;
+
+        // 單位標準化 (處理 line deltaMode)
+        const step = (e.deltaMode === 1) ? delta * 33 : (e.deltaMode === 2 ? delta * 100 : delta);
+
+        const canScrollLeft = container.scrollLeft > 0;
+        const canScrollRight = container.scrollLeft < maxScroll - 1;
+
+        if ((step < 0 && canScrollLeft) || (step > 0 && canScrollRight)) {
+            e.preventDefault();
+            container.scrollLeft += step;
+            updateScrollIndicators();
+        }
+    }, { passive: false });
+
+    // 2. 滑鼠拖曳滑動 (Mouse Drag-to-Scroll)
+    let isMouseDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+    let activeDragContainer = null;
+
+    topUtilityBtnsEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        // 若點擊的是輸入框或下拉選單，不觸發拖曳以保證正常輸入/選取
+        if (e.target.closest('input, select')) return;
+
+        const container = getScrollContainer(e.target);
+        if (!container || container.scrollWidth <= container.clientWidth) return;
+
+        isMouseDown = true;
+        hasDragged = false;
+        activeDragContainer = container;
+        startX = e.clientX;
+        startScrollLeft = container.scrollLeft;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isMouseDown || !activeDragContainer) return;
+
+        const dx = e.clientX - startX;
+        if (!hasDragged && Math.abs(dx) > 4) {
+            hasDragged = true;
+            activeDragContainer.classList.add('is-dragging');
+            topUtilityBtnsEl.classList.add('is-dragging');
+        }
+
+        if (hasDragged) {
+            e.preventDefault();
+            activeDragContainer.scrollLeft = startScrollLeft - dx;
+            updateScrollIndicators();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (!isMouseDown) return;
+        isMouseDown = false;
+
+        if (activeDragContainer) {
+            activeDragContainer.classList.remove('is-dragging');
+            topUtilityBtnsEl.classList.remove('is-dragging');
+            activeDragContainer = null;
+        }
+
+        if (hasDragged) {
+            // 在 capture 階段阻斷下一個 click 事件，防止拖曳放開時誤點按鈕
+            const suppressClick = (ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+            };
+            window.addEventListener('click', suppressClick, { capture: true, once: true });
+            setTimeout(() => {
+                window.removeEventListener('click', suppressClick, { capture: true });
+                hasDragged = false;
+            }, 60);
+        }
+    });
+
+    // 3. 觸控滑動防誤觸 (Touch swipe click suppression)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchHasMoved = false;
+
+    topUtilityBtnsEl.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            touchHasMoved = false;
+        }
+    }, { passive: true });
+
+    topUtilityBtnsEl.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches.length === 1) {
+            const dx = Math.abs(e.touches[0].clientX - touchStartX);
+            if (dx > 7) {
+                touchHasMoved = true;
+            }
+        }
+    }, { passive: true });
+
+    topUtilityBtnsEl.addEventListener('touchend', () => {
+        if (touchHasMoved) {
+            const suppressClick = (ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+            };
+            window.addEventListener('click', suppressClick, { capture: true, once: true });
+            setTimeout(() => {
+                window.removeEventListener('click', suppressClick, { capture: true });
+                touchHasMoved = false;
+            }, 80);
+        }
+    }, { passive: true });
+
+    // 監聽滾動以即時更新陰影指示器
+    topUtilityBtnsEl.addEventListener('scroll', updateScrollIndicators, { passive: true });
+    rows.forEach(r => r.addEventListener('scroll', updateScrollIndicators, { passive: true }));
+    window.addEventListener('resize', updateScrollIndicators, { passive: true });
+
+    // 初始化與變更觀察
+    updateScrollIndicators();
+    if (window.ResizeObserver) {
+        new ResizeObserver(updateScrollIndicators).observe(topUtilityBtnsEl);
+    }
+}
+
+setupUtilityHorizontalScroll();
+
 hideUtilityButton.addEventListener('click', () => {
     const utilityBtns = topUtilityBtnsEl;
     const utilityContainer = utilityContainerEl;
@@ -2149,8 +2338,56 @@ timeline.addEventListener('input', () => {
 });
 
 let bgmUpdateTimer = null;
+let bgWatchdogTimer = null;
 
-if (keepRenderingWhilePause) requestAnimationFrame(update);
+function requestNextFrame(callback) {
+    if (secondCtx && secondaryWindow && secondaryWindow.isActive() && secondaryWindow.externalWindow) {
+        try {
+            return secondaryWindow.externalWindow.requestAnimationFrame(callback);
+        } catch (_) { }
+    }
+    return window.requestAnimationFrame(callback);
+}
+
+function checkBgWatchdog() {
+    const isPlaying = playButton && playButton.dataset.playing === 'true';
+    if (isPlaying) {
+        if (!bgWatchdogTimer) {
+            bgWatchdogTimer = setInterval(() => {
+                if (playButton.dataset.playing !== 'true') {
+                    clearInterval(bgWatchdogTimer);
+                    bgWatchdogTimer = null;
+                    return;
+                }
+                const now = performance.now();
+                if (lastTimestamp === null || (now - lastTimestamp) >= 45) {
+                    update(now);
+                }
+            }, 30);
+        }
+    } else {
+        if (bgWatchdogTimer) {
+            clearInterval(bgWatchdogTimer);
+            bgWatchdogTimer = null;
+        }
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        if (playButton.dataset.playing === 'true') {
+            requestNextFrame(update);
+            checkBgWatchdog();
+        }
+    } else {
+        checkBgWatchdog();
+        if (playButton.dataset.playing === 'true' || keepRenderingWhilePause) {
+            requestNextFrame(update);
+        }
+    }
+});
+
+if (keepRenderingWhilePause) requestNextFrame(update);
 
 function updatePauseBackgroundDisplay() {
     const hideBg = !!settings.hideBackgroundWhenPaused;
@@ -2263,6 +2500,7 @@ playButton.addEventListener('click', () => {
             majdataWs.pause();
         }
 
+        checkBgWatchdog();
         draw(); // 立即更新畫布，反映暫停狀態
     } else {
         lastStartTime = realTime; // 記錄開始播放的時間點
@@ -2293,6 +2531,7 @@ playButton.addEventListener('click', () => {
             sendMajdataPlay();
         }
 
+        checkBgWatchdog();
         update(lastTimestamp);
     }
     slideInputDebounce();
@@ -2324,6 +2563,7 @@ resetButton.addEventListener('click', () => {
         majdataWs.stop();
     }
 
+    checkBgWatchdog();
     draw(); // 立即更新畫布，反映停止狀態
 });
 
@@ -2351,6 +2591,7 @@ stopButton.addEventListener('click', () => {
         majdataWs.stop();
     }
 
+    checkBgWatchdog();
     draw(); // 立即更新畫布，反映停止狀態
 });
 
@@ -2571,6 +2812,7 @@ function update(timestamp) {
             globalTime = endTime;
             updateSlider(endTime);
             playStartTimestamp = null;
+            checkBgWatchdog();
         }
     }
 
@@ -2580,8 +2822,8 @@ function update(timestamp) {
         // 確保一幀只呼叫一次渲染
         draw(dt);
 
-        // 確保一個循環只請求一次下一幀[cite: 2]
-        requestAnimationFrame(update);
+        // 確保一個循環只請求一次下一幀（自動選擇主視窗或活動外部視窗 rAF）
+        requestNextFrame(update);
     } else {
         // 暫停且不需持續渲染時，重置 timestamp 以免下次啟動時 dt 過大[cite: 2]
         lastTimestamp = null;
@@ -2640,11 +2882,21 @@ popup.addEventListener('click', () => {
         getDPR,
         resize,
         draw,
+        updatePauseBackgroundDisplay,
+        updateVideoBackgroundDisplay,
         onClose: () => {
             secondCtx = null;
+            externalWindow = null;
+            syncSecondWindowBackground = () => { };
+            if (typeof draw === 'function') draw();
         }
     });
     secondCtx = secondaryWindow.secondCtx;
+    externalWindow = secondaryWindow.externalWindow;
+    syncSecondWindowBackground = secondaryWindow.syncBackground;
+    if (playButton.dataset.playing === 'true' || keepRenderingWhilePause) {
+        requestNextFrame(update);
+    }
 });
 
 recordVideoButton.addEventListener('click', () => {
@@ -2662,6 +2914,7 @@ recordVideoButton.addEventListener('click', () => {
         getMaidata: () => maidata,
         getNowDifficulty: () => nowDifficulty,
         getSettings: () => settings,
+        draw,
     });
 });
 

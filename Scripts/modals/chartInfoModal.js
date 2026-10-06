@@ -16,6 +16,7 @@ import { t } from '../i18n.js';
  * @param {HTMLSelectElement} options.changeDifficulty
  * @param {Function} options.saveMaidata
  * @param {Function} [options.projSet]
+ * @param {Function} [options.projGet]
  */
 export function openChartInfoModal({
     getMaidata,
@@ -29,7 +30,8 @@ export function openChartInfoModal({
     setNowDifficulty,
     changeDifficulty,
     saveMaidata,
-    projSet
+    projSet,
+    projGet
 }) {
     const maidata = getMaidata();
     const tempData = { ...(maidata || {}) };
@@ -108,17 +110,52 @@ export function openChartInfoModal({
         };
 
         // 左側：圖片更換
+        const defaultCoverUrl = images?.['no_image']?.src || 'Skin/Shared/no_image.png';
         const imgContainer = document.createElement('div');
         imgContainer.className = 'chart-info-img-container';
         const img = document.createElement('img');
         img.className = 'chart-info-img';
         img.onerror = () => {
             img.onerror = null;
-            img.src = 'Skin/Shared/no_image.png';
+            img.src = defaultCoverUrl;
         };
-        img.src = (backgroundImage && backgroundImage.size > 0)
-            ? URL.createObjectURL(backgroundImage)
-            : (images?.['no_image']?.src || 'Skin/Shared/no_image.png');
+
+        const currentBg = typeof getBackgroundImage === 'function' ? getBackgroundImage() : null;
+        let isImageSet = false;
+
+        if (currentBg instanceof Blob && currentBg.size > 0) {
+            try {
+                img.src = URL.createObjectURL(currentBg);
+                isImageSet = true;
+            } catch (_) {}
+        } else if (typeof currentBg === 'string' && currentBg.trim()) {
+            img.src = currentBg;
+            isImageSet = true;
+        } else if (editorBackgroundImage && editorBackgroundImage.src && !editorBackgroundImage.src.endsWith('no_image.png')) {
+            img.src = editorBackgroundImage.src;
+            isImageSet = true;
+        }
+
+        if (!isImageSet) {
+            img.src = defaultCoverUrl;
+            if (typeof projGet === 'function') {
+                projGet('background_image').then((bgFile) => {
+                    if (!isImageSet && bgFile instanceof Blob && bgFile.size > 0) {
+                        try {
+                            const url = URL.createObjectURL(bgFile);
+                            img.src = url;
+                            isImageSet = true;
+                            if (typeof setBackgroundImage === 'function') {
+                                setBackgroundImage(bgFile);
+                            }
+                            if (editorBackgroundImage) {
+                                editorBackgroundImage.src = url;
+                            }
+                        } catch (_) {}
+                    }
+                }).catch(() => {});
+            }
+        }
 
         const imgWrapper = document.createElement('div');
         imgWrapper.className = 'chart-info-img-wrapper';
@@ -138,12 +175,19 @@ export function openChartInfoModal({
                 if (file) {
                     const objectUrl = URL.createObjectURL(file);
                     img.src = objectUrl;
-                    setBackgroundImage(file);
+                    isImageSet = true;
+                    if (typeof setBackgroundImage === 'function') {
+                        setBackgroundImage(file);
+                    }
                     if (editorBackgroundImage) {
                         editorBackgroundImage.src = objectUrl;
                         editorBackgroundImage.style.display = 'block';
                     }
-                    if (typeof projSet === 'function') projSet('background_image', file);
+                    if (typeof projSet === 'function') {
+                        projSet('background_image', file).catch((err) => {
+                            console.error('儲存封面至 IndexedDB 失敗:', err);
+                        });
+                    }
                 }
             };
             fileInput.click();

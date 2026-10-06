@@ -1,4 +1,4 @@
-import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase, isObject } from './helper.js';
+import { parseBeats, PathRecorder, noteRefPos, innerCirleBase, isObject } from './helper.js';
 
 export let warns = [];
 export let warnpos = [];

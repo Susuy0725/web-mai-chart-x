@@ -398,6 +398,42 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     -webkit-user-select: none;
 }
 
+#utilityContainer::before,
+#utilityContainer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    height: var(--utility-height, 40px);
+    width: 24px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    z-index: 15;
+}
+
+#utilityContainer::before {
+    left: 0;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.45), transparent);
+}
+
+#utilityContainer::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.45), transparent);
+}
+
+#utilityContainer.can-scroll-left::before {
+    opacity: 1;
+}
+
+#utilityContainer.can-scroll-right::after {
+    opacity: 1;
+}
+
+#utilityContainer.expanded::before,
+#utilityContainer.expanded::after {
+    display: none;
+}
+
 #utilityContainer.expanded {
     position: absolute;
     height: var(--utility-hidden-height);
@@ -469,15 +505,44 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     display: flex;
     flex-direction: row;
     overflow-x: auto;
+    overflow-y: hidden;
     gap: 5px;
     scrollbar-width: none;
     box-sizing: border-box;
     font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
     align-items: center;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#topUtilityBtns::-webkit-scrollbar {
+    display: none;
 }
 
 .utility-row {
     display: contents;
+}
+
+#topUtilityBtns.is-draggable,
+.utility-row.is-draggable {
+    cursor: grab;
+}
+
+#topUtilityBtns.is-dragging,
+.utility-row.is-dragging {
+    cursor: grabbing !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+#topUtilityBtns.is-dragging *,
+.utility-row.is-dragging * {
+    cursor: grabbing !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
 }
 
 @media (max-aspect-ratio: 1/1) {
@@ -492,6 +557,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
         gap: 0;
         padding: 5px;
         overflow-x: hidden;
+        overflow-y: hidden;
     }
 
     .utility-row {
@@ -505,6 +571,11 @@ body.editor-hidden #playControls #showPlayControlsBtn,
         overflow-y: hidden;
         scrollbar-width: none;
         flex: 0 0 30px;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     .utility-row::-webkit-scrollbar {
@@ -539,7 +610,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     cursor: pointer;
     overflow: hidden;
     transition: background 100ms ease;
-    touch-action: manipulation;
+    touch-action: pan-x;
     user-select: none;
     -webkit-user-select: none;
 }

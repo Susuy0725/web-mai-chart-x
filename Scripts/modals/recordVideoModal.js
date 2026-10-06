@@ -19,6 +19,7 @@ export async function openRecordVideoModal({
     getMaidata,
     getNowDifficulty,
     getSettings,
+    draw,
 }) {
     if (!window.Mediabunny) {
         try {
@@ -76,9 +77,19 @@ export async function openRecordVideoModal({
 
     // 預載入外框圖片
     let outlineImage = null;
+    const getEffectiveOutlineImage = () => {
+        if (outlineImage) return outlineImage;
+        const domOutline = document.getElementById('canvasOutline');
+        if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
+            return domOutline;
+        }
+        return null;
+    };
+
     (async () => {
         try {
-            const response = await fetch('./Skin/outline.png');
+            const outlineSrc = document.getElementById('canvasOutline')?.src || './Skin/Shared/outline.png';
+            const response = await fetch(outlineSrc);
             if (response.ok) {
                 const blob = await response.blob();
                 try {
@@ -545,14 +556,19 @@ export async function openRecordVideoModal({
         }
         previewRenderer.resize(pWidth, pHeight, 1, true);
 
+        const curSettings = typeof getSettings === 'function' ? getSettings() : settings;
+        if (previewRenderer) {
+            previewRenderer.settings = curSettings;
+        }
+
         previewCtx.save();
         previewCtx.setTransform(1, 0, 0, 1, 0, 0);
-        previewCtx.fillStyle = settings.backgroundColor || '#000000';
+        previewCtx.fillStyle = curSettings.backgroundColor || '#000000';
         previewCtx.fillRect(0, 0, pWidth, pHeight);
 
         const overallBrightness = overallBrightSlider.value / 100;
         const noteBrightness = noteBrightSlider.value / 100;
-        const baseMovieBrightness = Math.max(0, 1 + 0.1875 * (settings.moviebrightness ?? -3));
+        const baseMovieBrightness = Math.max(0, 1 + 0.1875 * (curSettings.moviebrightness ?? -3));
         const finalBgBrightness = Math.max(0, baseMovieBrightness * overallBrightness);
         const finalNoteBrightness = Math.max(0, noteBrightness * overallBrightness);
 
@@ -598,10 +614,12 @@ export async function openRecordVideoModal({
             } catch (e) { }
         }
 
-        if (outlineImage) {
+        const hideOutline = typeof curSettings.hideOutline === 'boolean' ? curSettings.hideOutline : false;
+        const curOutline = getEffectiveOutlineImage();
+        if (!hideOutline && curOutline) {
             const p = Math.min(pWidth, pHeight) / 100 * rs;
             previewCtx.setTransform(p, 0, 0, p, pWidth / 2, pHeight / 2);
-            previewCtx.drawImage(outlineImage, 100 * -0.5 * 0.9, 100 * -0.5 * 0.9, 100 * 0.9, 100 * 0.9);
+            previewCtx.drawImage(curOutline, 100 * -0.5 * 0.9, 100 * -0.5 * 0.9, 100 * 0.9, 100 * 0.9);
         }
         previewCtx.restore();
 
@@ -729,6 +747,7 @@ export async function openRecordVideoModal({
 
                     pwCtx.close();
 
+                    const curSettings = typeof getSettings === 'function' ? getSettings() : settings;
                     videoRender(audioManager, canvas, renderer, {
                         start: startVal,
                         end: endVal,
@@ -757,6 +776,9 @@ export async function openRecordVideoModal({
                             diff: nowDifficulty,
                             lv: String(maidata[`lv_${nowDifficulty}`] || ''),
                         },
+                        settings: curSettings,
+                        outlineImage: getEffectiveOutlineImage(),
+                        draw,
                     });
                 }
             },
@@ -771,6 +793,9 @@ export async function openRecordVideoModal({
                 hideOnClick: true,
                 onClick: () => {
                     stopPreviewPlay();
+                    if (typeof draw === 'function') {
+                        draw();
+                    }
                 }
             }
         ]

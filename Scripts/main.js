@@ -2,6 +2,7 @@ import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags } from 
 import { showFloatingMenu, hideFloatingMenu, showBoxFloatingMenu, hideBoxFloatingMenu } from './features/visualFloatingMenu.js';
 import { openNoteDurationModal } from './modals/noteDurationModal.js';
 import { openSlideEditorModal } from './modals/slideEditorModal.js';
+import { openTouchGroupModal } from './modals/touchGroupModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
 export { defaultSettings };
@@ -1674,7 +1675,9 @@ const {
     visualDeleteNote,
     visualChangeNote,
     getNoteCurrentProperties,
-    visualUpdateNoteProperty
+    visualUpdateNoteProperty,
+    getNoteTouchGroup,
+    visualUpdateTouchGroup
 } = createVisualNoteCallbacks({
     quantizeTime,
     getRawData: () => rawData,
@@ -1739,7 +1742,27 @@ const onVisualSelectionChange = (selectedNotes) => {
                     },
                     onEditTouchGroup: () => {
                         hideFloatingMenu();
-                        simpleToast({ content: 'Touch群組編輯功能開發中', type: 'info', timeout: 1500 });
+                        const groupData = getNoteTouchGroup(note);
+                        if (!groupData) {
+                            simpleToast({ content: '無法取得該拍點 Touch 群組', type: 'error', timeout: 1500 });
+                            return;
+                        }
+                        openTouchGroupModal({
+                            note,
+                            touchGroupData: groupData,
+                            renderer,
+                            settings,
+                            images,
+                            bpm: clockBpm,
+                            onApply: ({ touchNotes }) => {
+                                visualUpdateTouchGroup(groupData.commaIndex, {
+                                    leadingTags: groupData.leadingTags,
+                                    nonTouchParts: groupData.nonTouchParts,
+                                    touchNotes
+                                });
+                                draw();
+                            }
+                        });
                     }
                 });
                 return;

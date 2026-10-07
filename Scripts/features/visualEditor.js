@@ -65,11 +65,11 @@ export function peelNoteStructure(clean) {
     // 3. 判斷是否為 Touch 類音符
     const touchMatch = withoutBracket.match(/^([ABCDE]\d+|C)/i);
     if (touchMatch) {
-        const touchPos = touchMatch[0];
+        const touchPos = touchMatch[0].toUpperCase();
         const rest = withoutBracket.slice(touchPos.length);
         const isHold = rest.includes('h');
         const flagsRaw = rest.replace(/h/g, '');
-        const flags = new Set(flagsRaw.match(/[mf]/g) || []);
+        const flags = new Set(flagsRaw.match(/[mfx]/g) || []);
 
         return {
             type: isHold ? 'touchhold' : 'touch',
@@ -118,7 +118,8 @@ export function rebuildPeeledNote(peeled) {
     if (peeled.isTouch) {
         const flagsStr = Array.from(peeled.flags).join('');
         const holdStr = peeled.isHold ? 'h' : '';
-        return `${peeled.pos}${holdStr}${flagsStr}${peeled.duration}`;
+        const durStr = peeled.isHold ? (peeled.duration ? (peeled.duration.startsWith('[') ? peeled.duration : `[${peeled.duration}]`) : '[4:1]') : '';
+        return `${peeled.pos}${holdStr}${durStr}${flagsStr}`;
     }
 
     const flagsArr = Array.from(peeled.flags);
@@ -933,6 +934,78 @@ export function createVisualNoteCallbacks(ctx) {
         simpleToast({ content: `已更新音符: ${nextClean}`, type: 'success', timeout: 1000 });
     };
 
+    const getNoteTouchGroup = (note) => {
+        const commaIndex = note?.index;
+        if (commaIndex === undefined || commaIndex === null) return null;
+        const rawData = getRawData();
+        const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+        if (segment === "" || segment.startsWith("||")) return null;
+
+        const parts = segment.split('/');
+        let leadingTags = "";
+        const touchNotes = [];
+        const nonTouchParts = [];
+
+        parts.forEach((p, idx) => {
+            const clean = stripLeadingTags(p);
+            if (idx === 0) {
+                leadingTags = p.substring(0, p.length - clean.length);
+            }
+            const peeled = peelNoteStructure(clean);
+            if (peeled.isTouch) {
+                touchNotes.push({
+                    raw: clean,
+                    pos: peeled.pos,
+                    isHold: peeled.isHold,
+                    duration: peeled.duration ? peeled.duration.replace(/[\[\]]/g, '') : '',
+                    flags: new Set(peeled.flags)
+                });
+            } else {
+                nonTouchParts.push(clean);
+            }
+        });
+
+        let initialSelectedIndex = 0;
+        const targetPos = note.touchPos === 'C' ? 'C' : ((note.touchPos && note.pos) ? `${note.touchPos}${note.pos}` : null);
+        if (targetPos) {
+            const foundIdx = touchNotes.findIndex(t => t.pos === targetPos);
+            if (foundIdx !== -1) initialSelectedIndex = foundIdx;
+        }
+
+        return {
+            commaIndex,
+            leadingTags,
+            touchNotes,
+            nonTouchParts,
+            initialSelectedIndex
+        };
+    };
+
+    const visualUpdateTouchGroup = (commaIndex, { leadingTags = "", nonTouchParts = [], touchNotes = [] }) => {
+        const rawData = getRawData();
+        if (commaIndex === undefined || commaIndex === null || commaIndex >= rawData.length) return;
+
+        const touchPartStrings = touchNotes.map(tn => {
+            const flagsStr = Array.from(tn.flags || []).join('');
+            const holdStr = tn.isHold ? 'h' : '';
+            const durStr = tn.isHold ? (tn.duration ? `[${tn.duration.replace(/[\[\]]/g, '')}]` : '[4:1]') : '';
+            return `${tn.pos}${holdStr}${durStr}${flagsStr}`;
+        });
+
+        const allParts = [...nonTouchParts, ...touchPartStrings];
+        let newSegment = "";
+        if (allParts.length > 0) {
+            allParts[0] = leadingTags + allParts[0];
+            newSegment = allParts.join('/');
+        } else {
+            newSegment = leadingTags;
+        }
+
+        rawData[commaIndex] = newSegment;
+        const newContent = rawData.join(',');
+        updateEditorAndSave(newContent);
+    };
+
     return {
         getOrCreateCommaIndex,
         stripLeadingTags,
@@ -941,7 +1014,9 @@ export function createVisualNoteCallbacks(ctx) {
         visualDeleteNote,
         visualChangeNote,
         getNoteCurrentProperties,
-        visualUpdateNoteProperty
+        visualUpdateNoteProperty,
+        getNoteTouchGroup,
+        visualUpdateTouchGroup
     };
 }
 

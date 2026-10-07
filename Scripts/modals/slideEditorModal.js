@@ -531,7 +531,11 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         const previewCanvas = container.querySelector('#sem-preview-canvas');
         if (!previewCanvas) return;
 
-        const effectiveSettings = renderer?.settings || settings || {};
+        const effectiveSettings = {
+            ...(renderer?.settings || settings || {}),
+            showJudge: false,
+            showCriticalPerfect: false
+        };
         const effectiveImages = renderer?.images || images;
 
         previewRenderer = new SimaiRenderer(previewCanvas, effectiveSettings);

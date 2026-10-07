@@ -262,9 +262,12 @@ export class SecondaryWindowManager {
         const PLAY_SVG_HTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff" style="display:block;margin-left:2px;"><path d="M8 5v14l11-7z"/></svg>`;
         const PAUSE_SVG_HTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff" style="display:block;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
-        const updatePlayBtnState = () => {
+        let lastIsPlaying = null;
+        const updatePlayBtnState = (force = false) => {
             if (!secPlayBtn) return;
             const isPlaying = playButton && playButton.dataset.playing === 'true';
+            if (!force && lastIsPlaying === isPlaying) return;
+            lastIsPlaying = isPlaying;
             secPlayBtn.innerHTML = isPlaying ? PAUSE_SVG_HTML : PLAY_SVG_HTML;
             secPlayBtn.title = isPlaying ? '暫停 (Space)' : '播放 (Space)';
         };
@@ -274,7 +277,7 @@ export class SecondaryWindowManager {
                 e.stopPropagation();
                 if (playButton) {
                     playButton.click();
-                    updatePlayBtnState();
+                    updatePlayBtnState(true);
                 }
             });
         }
@@ -287,7 +290,7 @@ export class SecondaryWindowManager {
                     e.preventDefault();
                     if (playButton) {
                         playButton.click();
-                        updatePlayBtnState();
+                        updatePlayBtnState(true);
                     }
                 }
             }

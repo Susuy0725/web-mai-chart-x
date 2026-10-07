@@ -80,8 +80,9 @@ export class SimulatedPlayController {
 
             // 1. Tap / Star / 普通 Touch：在擊中時刻產生感應器輸入並觸發判定
             if (!isHoldNote && (noteType === 'tap' || noteType === 'touch')) {
-                const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
-                const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
+                const sensorId = (noteType === 'touch')
+                    ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
+                    : ('A' + note.pos);
                 if (noteT <= 0 && -noteT <= this._simulatTouchDuration) {
                     this.activeSensors.add(sensorId);
                 }
@@ -93,8 +94,9 @@ export class SimulatedPlayController {
             // 2. Hold & TouchHold：在到達時刻觸發判定，並在長按期間持續產生感應器輸入
             // （短 Hold 如 1h、1h[1:0] 的 holdDuration 為 1e-4，保障至少 touchDuration / 0.15s 觸發與感應窗口）
             if (isHoldNote) {
-                const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
-                const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
+                const sensorId = (noteType === 'touch')
+                    ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
+                    : ('A' + note.pos);
                 const holdEnd = Math.max(note.holdDuration, this._simulatTouchDuration); // safe margin
 
                 if (noteT <= 0 && -noteT <= holdEnd) {
@@ -116,10 +118,11 @@ export class SimulatedPlayController {
                 const slideT = -noteT - slideDelay;
                 if (isHeadPart && noteT <= 0 && -noteT <= this._simulatTouchDuration) {
                     this.activeSensors.add('A' + note.pos);
-                    if (!note.headTriggered && !note.triggered && onHit) {
+                    if (!note.headTriggered && !note.triggered) {
                         note.headTriggered = true;
                         note.triggered = true;
-                        onHit('A' + note.pos, forcePerfect ? 0 : -noteT + randomOffset);
+                        note.triggeredTime = note.time;
+                        note._startEffectPlayed = true;
                     }
                 }
 

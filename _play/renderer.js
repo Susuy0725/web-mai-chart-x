@@ -376,6 +376,7 @@ export class SimaiRenderer {
      */
     queueHitEffect(pos, noteT, judge = null, x = null, y = null) {
         if (this.settings.drawHitEffect === false) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
         const decayTime = this.settings.effectDecayTime || 0.4;
         if (noteT / decayTime < -1 || noteT > 0.05) return;
 
@@ -449,6 +450,7 @@ export class SimaiRenderer {
      */
     queueHoldEffect(pos, noteT, judge = null, x = null, y = null) {
         if (this.settings.drawHitEffect === false) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
 
         let px = x;
         let py = y;
@@ -1933,7 +1935,9 @@ export class SimaiRenderer {
         const ctx = this.ctx;
 
         if (triggered) {
-            this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            if (!s.judgeResult || s.judgeResult.grade !== 'MISS') {
+                this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            }
             return;
         }
 
@@ -1982,7 +1986,9 @@ export class SimaiRenderer {
         const ctx = this.ctx;
 
         if (triggered) {
-            this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            if (!s.judgeResult || s.judgeResult.grade !== 'MISS') {
+                this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            }
             return;
         }
 
@@ -2206,7 +2212,9 @@ export class SimaiRenderer {
         }
 
         if (triggered) {
-            this.queueHitEffect(null, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            if (!s.judgeResult || s.judgeResult.grade !== 'MISS') {
+                this.queueHitEffect(null, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            }
             return;
         }
 

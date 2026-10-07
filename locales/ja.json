@@ -73,6 +73,7 @@
     "placeholder": "ここに譜面データを入力してください..."
   },
   "toast": {
+    "loadingAssetsWait": "素材を読み込み中、しばらくお待ちください...",
     "needBgm": "先に楽曲を読み込んでください",
     "cropSuccess": "再生ヘッドより前の音声を切り取りました",
     "padSuccess": "音声の先頭に無音を追加しました",
@@ -532,7 +533,12 @@
       "jumpStart": "開始位置へ",
       "jumpEnd": "終了位置へ",
       "playPreview": "プレビュー再生",
-      "pausePreview": "プレビュー一時停止"
+      "pausePreview": "プレビュー一時停止",
+      "quality": "画質 / ビットレート:",
+      "qualityUltra": "最高画質 (~25 Mbps)",
+      "qualityHigh": "高画質 (~18 Mbps, 推奨)",
+      "qualityMedium": "標準画質 (~10 Mbps)",
+      "customBitrate": "カスタムビットレート (Mbps):"
     },
     "quickGenerate": {
       "title": "クイック生成",

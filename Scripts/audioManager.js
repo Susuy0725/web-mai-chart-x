@@ -802,6 +802,10 @@ class AudioManager {
         const lookAhead = 0.1; // 100ms look-ahead
         while (this.soundQueue.length > 0 && globalTime + lookAhead >= this.soundQueue[0].targetTime) {
             const { key, isMono, volume, targetTime, detune = 0 } = this.soundQueue.shift();
+            // 若音效落後超過 50ms（例如跳轉 seek 後殘留），果斷丟棄避免音爆與主線程卡頓
+            if (targetTime < globalTime - 0.05) {
+                continue;
+            }
             const playTime = this.ctx.currentTime + (targetTime - globalTime) / this.playbackRate;
             this.play(key, isMono, volume, playTime, detune);
         }
@@ -954,6 +958,7 @@ class AudioManager {
 
     clearSoundQueue() {
         this.soundQueue = [];
+        this.lastQueuedTimes.clear();
     }
 }
 

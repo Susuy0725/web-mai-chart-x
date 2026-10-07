@@ -143,6 +143,10 @@ export class SimaiRenderer {
     constructor(canvas, settings) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        if (this.ctx) {
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+        }
         this.settings = settings;
         this.images = null;
         this.globalTime = 0;
@@ -370,6 +374,10 @@ export class SimaiRenderer {
     setContext(ctx) {
         this.canvas = ctx.canvas;
         this.ctx = ctx;
+        if (this.ctx) {
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+        }
         this.updateCanvasMetrics();
         this.invalidateCaches();
     }
@@ -386,6 +394,9 @@ export class SimaiRenderer {
 
         this.canvas.width = w;
         this.canvas.height = h;
+
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
 
         const p = Math.min(w, h) / scaleBase * this.scale;
         this.ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
@@ -452,6 +463,7 @@ export class SimaiRenderer {
      */
     queueHitEffect(pos, noteT, judge = null, x = null, y = null) {
         if (!this.settings.drawHitEffect) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
         const decayTime = this.settings.effectDecayTime || 0.4;
         if (noteT / decayTime < -1 || noteT > 0.05) return;
 
@@ -525,6 +537,7 @@ export class SimaiRenderer {
      */
     queueHoldEffect(pos, noteT, judge = null, x = null, y = null) {
         if (!this.settings.drawHitEffect) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
 
         let px = x;
         let py = y;
@@ -1735,6 +1748,9 @@ export class SimaiRenderer {
         const allRes = playScoreRes.tap + playScoreRes.hold + playScoreRes.slide + playScoreRes.touch + playScoreRes.break;
 
         ctx.save();
+        if ('textRendering' in ctx) {
+            try { ctx.textRendering = 'geometricPrecision'; } catch (_) { }
+        }
         ctx.fillStyle = "white";
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
@@ -1801,6 +1817,10 @@ export class SimaiRenderer {
         cache.width = wPx;
         cache.height = hPx;
         const cctx = cache.getContext('2d');
+        if (cctx) {
+            cctx.imageSmoothingEnabled = true;
+            cctx.imageSmoothingQuality = 'high';
+        }
         const p = Math.min(wPx, hPx) / scaleBase * scale;
         cctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
 
@@ -1822,6 +1842,8 @@ export class SimaiRenderer {
         const { ctx } = this;
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(this._staticBackgroundCache, 0, 0);
         ctx.restore();
     }
@@ -1864,6 +1886,10 @@ export class SimaiRenderer {
             }
 
             const mctx = this._middleDisplayCtx;
+            if (mctx) {
+                mctx.imageSmoothingEnabled = true;
+                mctx.imageSmoothingQuality = 'high';
+            }
             mctx.clearRect(0, 0, pxW, pxH);
             mctx.save();
             mctx.setTransform(p, 0, 0, p, pxW / 2, pxH / 2);
@@ -1943,6 +1969,10 @@ export class SimaiRenderer {
             shapes.width = wPx;
             shapes.height = hPx;
             const sctx = shapes.getContext('2d');
+            if (sctx) {
+                sctx.imageSmoothingEnabled = true;
+                sctx.imageSmoothingQuality = 'high';
+            }
             sctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
             sctx.save();
             sctx.beginPath();
@@ -1972,6 +2002,13 @@ export class SimaiRenderer {
             texts.width = wPx;
             texts.height = hPx;
             const tctx = texts.getContext('2d');
+            if (tctx) {
+                tctx.imageSmoothingEnabled = true;
+                tctx.imageSmoothingQuality = 'high';
+                if ('textRendering' in tctx) {
+                    try { tctx.textRendering = 'geometricPrecision'; } catch (_) { }
+                }
+            }
             tctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
             tctx.save();
             tctx.fillStyle = '#ffffff30';

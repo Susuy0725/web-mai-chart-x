@@ -109,81 +109,6 @@ export function throttle(func, delay = 16) {
     };
 }
 
-export function parseBeats(str, bpm, slide = false) {
-    if (slide) {
-        if (str.includes("##")) {
-            const parts = str.split("##");
-            if (parts.length === 3) { // dt##bpm##t:b
-                const delay = parseFloat(parts[0]);
-                const overrideBpm = parseFloat(parts[1]);
-                if (isNaN(delay) || delay < 0 || isNaN(overrideBpm) || overrideBpm <= 0) {
-                    console.warn("Invalid delay or bpm value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                const [time, beat] = parts[2].split(":");
-                if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-                    console.warn("Invalid time or beat value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
-            } else if (parts.length === 2) { // dt##t:b dt##t
-                const delay = parseFloat(parts[0]);
-                if (isNaN(delay) || delay < 0) {
-                    console.warn("Invalid delay value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                if (parts[1].includes(":")) {
-                    const [time, beat] = parts[1].split(":");
-                    if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-                        console.warn("Invalid time or beat value in slide note:", str);
-                        return { time: -1, delay: -1 };
-                    }
-                    return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
-                }
-                const time = parseFloat(parts[1]);
-                if (isNaN(time) || time < 0) {
-                    console.warn("Invalid time value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                return { time: time, delay: delay };
-            }
-        } else if (str.includes("#") && !str.includes(":")) { // bpm#t
-            const [bpmStr, timeStr] = str.split("#").map(s => s.trim());
-            const overrideBpm = parseFloat(bpmStr);
-            const time = parseFloat(timeStr);
-            if (isNaN(overrideBpm) || overrideBpm <= 0 || isNaN(time) || time < 0) {
-                console.warn("Invalid bpm or time value in slide note:", str);
-                return { time: -1, delay: -1 };
-            }
-            return { time: time, delay: (60 / overrideBpm) };
-        }
-    } else {
-        if (str.startsWith('#')) { // direct assign #duration
-            const duration = parseFloat(str.substring(1));
-            if (isNaN(duration) || duration < 0) {
-                console.warn("Invalid duration value in direct assign note:", str);
-                return { time: -1, delay: -1 };
-            }
-            return { time: duration, delay: 0 };
-        }
-    }
-    if (str.includes(":")) { // bpm#t:b or t:b
-        const [time, beat] = str.split(":");
-        if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-            console.warn("Invalid time or beat value in hold note:", str);
-            return { time: -1, delay: -1 };
-        }
-        if (time.includes("#")) {
-            const [bpmStr, timeStr] = time.split("#");
-            const overrideBpm = parseFloat(bpmStr);
-            return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(timeStr)), delay: (60 / overrideBpm) };
-        } else {
-            return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: (60 / bpm) };
-        }
-    }
-    console.warn("Invalid hold duration format or empty:", str);
-    return { time: -1, delay: -1 };
-}
 export class PathRecorder {
     constructor() {
         this.segments = [];
@@ -1969,9 +1894,11 @@ function drawAllPerfectOverlay(ctx, apT, w, h) {
 export async function videoRender(audioManager, canvas, renderer, {
     start = 0,
     end = 0,
-    fps = 30,
-    width = 1080,
-    height = 720,
+    fps = 60,
+    width = 1920,
+    height = 1080,
+    bitrate = null,
+    quality = 'high',
     bgmVolume = 0.8,
     sfxVolume = 1.0,
     includeAudio = true,
@@ -2013,7 +1940,8 @@ export async function videoRender(audioManager, canvas, renderer, {
         Mp4OutputFormat,
         CanvasSource,
         AudioBufferSource,
-        QUALITY_HIGH
+        QUALITY_HIGH,
+        QUALITY_VERY_HIGH,
     } = window.Mediabunny || {};
 
     const introDuration = includeIntro ? 6 : 0;
@@ -2031,7 +1959,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                     if (!response.ok) throw new Error('fetch failed: ' + response.status);
                     const blob = await response.blob();
                     try {
-                        if (window.createImageBitmap) return await createImageBitmap(blob);
+                        if (window.createImageBitmap) return await createImageBitmap(blob, { resizeQuality: 'high' });
                     } catch (e) {
                         console.warn('createImageBitmap 失敗，改用 Image element', e);
                     }
@@ -2081,13 +2009,24 @@ export async function videoRender(audioManager, canvas, renderer, {
         }
 
         // 強制確保寬高為偶數 (AVC/H.264 編碼器嚴格要求，避免奇數尺寸拋錯)
-        const targetW = Math.max(2, Math.round((Number(width) || 1080) / 2) * 2);
-        const targetH = Math.max(2, Math.round((Number(height) || 720) / 2) * 2);
+        const targetW = Math.max(2, Math.round((Number(width) || 1920) / 2) * 2);
+        const targetH = Math.max(2, Math.round((Number(height) || 1080) / 2) * 2);
 
         const off = document.createElement('canvas');
         off.width = targetW;
         off.height = targetH;
-        const offCtx = off.getContext('2d');
+        const offCtx = off.getContext('2d', {
+            alpha: false,
+            desynchronized: false,
+            willReadFrequently: false
+        });
+
+        // 確保離屏繪製 context 具備高品質影像平滑
+        offCtx.imageSmoothingEnabled = true;
+        offCtx.imageSmoothingQuality = 'high';
+        if ('textRendering' in offCtx) {
+            try { offCtx.textRendering = 'geometricPrecision'; } catch (_) { }
+        }
 
         // 鎖定 off 畫布尺寸，避免外部事件或意外 resize 竄改寬高
         try {
@@ -2126,17 +2065,45 @@ export async function videoRender(audioManager, canvas, renderer, {
             renderer.setContext(offCtx);
         }
         exportRenderer.resize(targetW, targetH, 1, true);
+        if (exportRenderer.ctx) {
+            exportRenderer.ctx.imageSmoothingEnabled = true;
+            exportRenderer.ctx.imageSmoothingQuality = 'high';
+        }
 
         const target = new BufferTarget();
         const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
         output = new Output({ format, target });
 
+        // 計算最適合音遊高速動態畫面的視訊編碼位元率 (Bitrate)
+        let resolvedBitrate;
+        if (typeof bitrate === 'number' && bitrate > 0) {
+            resolvedBitrate = Math.round(bitrate);
+        } else {
+            // 根據解析度、FPS 與品質模式動態自適應計算 (bps)
+            // 基準：1080p 60fps
+            const pixels = targetW * targetH;
+            const refPixels = 1920 * 1080;
+            const pixelRatio = Math.max(0.5, pixels / refPixels);
+            const fpsRatio = Math.max(0.6, Math.min(fps, 120) / 60);
+
+            let baseBps = 20_000_000; // 預設 high: 20 Mbps @ 1080p 60fps
+            if (quality === 'ultra') {
+                baseBps = 28_000_000; // ultra: 28 Mbps @ 1080p 60fps
+            } else if (quality === 'medium') {
+                baseBps = 10_000_000; // medium: 10 Mbps @ 1080p 60fps
+            } else if (quality === 'low') {
+                baseBps = 5_000_000; // medium: 10 Mbps @ 1080p 60fps
+            }
+            resolvedBitrate = Math.round(Math.max(6_000_000, baseBps * Math.pow(pixelRatio, 0.9) * Math.pow(fpsRatio, 0.75)));
+        }
+
         // 視訊軌設定
         const encodingConfig = {
             codec: 'avc',
-            bitrate: QUALITY_HIGH,
-            keyFrameInterval: 0.5,
-            latencyMode: 'quality'
+            bitrate: resolvedBitrate,
+            keyFrameInterval: 2.0, // 2 秒關鍵幀，提升 GOP 編碼效率與動態畫質，消除過密 I 幀帶來的瞬時模糊
+            latencyMode: 'quality',
+            bitrateMode: 'variable'
         };
 
         const videoSource = new CanvasSource(off, encodingConfig);
@@ -2664,6 +2631,8 @@ export async function videoRender(audioManager, canvas, renderer, {
             try {
                 offCtx.save();
                 offCtx.setTransform(1, 0, 0, 1, 0, 0);
+                offCtx.imageSmoothingEnabled = true;
+                offCtx.imageSmoothingQuality = 'high';
                 offCtx.fillStyle = settings.backgroundColor || '#000';
                 offCtx.fillRect(0, 0, off.width, off.height);
                 const rs = exportRenderer.scale || scale;
@@ -2746,10 +2715,14 @@ export async function videoRender(audioManager, canvas, renderer, {
                 if (!settings.hideOutline && outlineImage) {
                     const p = Math.min(targetW, targetH) / scaleBase * rs;
                     offCtx.setTransform(p, 0, 0, p, targetW / 2, targetH / 2);
+                    offCtx.imageSmoothingEnabled = true;
+                    offCtx.imageSmoothingQuality = 'high';
                     offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
                 }
             } finally {
                 offCtx.restore();
+                offCtx.imageSmoothingEnabled = true;
+                offCtx.imageSmoothingQuality = 'high';
             }
 
             try {
@@ -3031,6 +3004,12 @@ export class SimaiLogicControler {
 
             // 音效和狀態管理
             if (!skipAudioQueue) {
+                const lookAhead = 0.1; // 100ms look-ahead
+                const startTargetT = note.time + (note.slideDelay ?? 0);
+                const startNoteT = startTargetT - globalTime;
+                const endTargetT = note.time + skipT;
+                const endNoteT = endTargetT - globalTime;
+
                 if (playing && !timeControlSliding) {
                     // Riser 邏輯
                     if (noteType === "touch" && note.holdDuration > 0) {
@@ -3045,40 +3024,48 @@ export class SimaiLogicControler {
                         }
                     }
 
-                    const lookAhead = 0.1; // 100ms look-ahead
-
-                    // 開始音效 (含前瞻)
-                    const startTargetT = note.time + (note.slideDelay ?? 0);
-                    const startNoteT = startTargetT - globalTime;
-                    if (startNoteT <= lookAhead && !note._startEffectPlayed) {
-                        if (!(noteType === "slide" && !note.firstSlide)) {
-                            audioManager.queueSound(note, startTargetT);
+                    // 開始音效 (含前瞻，僅在 [-0.05, lookAhead] 視窗內發聲)
+                    if (startNoteT > lookAhead) {
+                        note._startEffectPlayed = false;
+                    } else if (startNoteT >= -0.05) {
+                        if (!note._startEffectPlayed) {
+                            if (!(noteType === "slide" && !note.firstSlide)) {
+                                audioManager.queueSound(note, startTargetT);
+                            }
+                            note._startEffectPlayed = true;
                         }
+                    } else {
                         note._startEffectPlayed = true;
                     }
-                    // 結束音效 (含前瞻)
-                    const endTargetT = note.time + skipT;
-                    const endNoteT = endTargetT - globalTime;
-                    if (endNoteT <= lookAhead && !note._endEffectPlayed) {
-                        const shouldPlayEndSound =
-                            (noteType === "slide" && note.lastSlide && note.isBreak) ||
-                            note.isHanabi ||
-                            (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
-                        if (shouldPlayEndSound) {
-                            audioManager.queueSound(note, endTargetT);
+
+                    // 結束音效 (含前瞻，僅在 [-0.05, lookAhead] 視窗內發聲)
+                    if (endNoteT > lookAhead) {
+                        note._endEffectPlayed = false;
+                    } else if (endNoteT >= -0.05) {
+                        if (!note._endEffectPlayed) {
+                            const shouldPlayEndSound =
+                                (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                                note.isHanabi ||
+                                (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
+                            if (shouldPlayEndSound) {
+                                audioManager.queueSound(note, endTargetT);
+                            }
+                            note._endEffectPlayed = true;
                         }
+                    } else {
                         note._endEffectPlayed = true;
                     }
                 } else {
-                    // 倒帶或拖動時重置狀態
-                    const lookAhead = 0.1;
-                    const startTargetT = note.time + (note.slideDelay ?? 0);
-                    const endTargetT = note.time + skipT;
-                    if (startTargetT - globalTime > lookAhead) {
+                    // 倒帶、拖動或暫停時重置狀態
+                    if (startNoteT > lookAhead) {
                         note._startEffectPlayed = false;
+                    } else {
+                        note._startEffectPlayed = true;
                     }
-                    if (endTargetT - globalTime > lookAhead) {
+                    if (endNoteT > lookAhead) {
                         note._endEffectPlayed = false;
+                    } else {
+                        note._endEffectPlayed = true;
                     }
                     if (note.time - globalTime > 0) {
                         if (note._riserActive) {

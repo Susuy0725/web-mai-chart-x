@@ -73,6 +73,7 @@
     "placeholder": "여기에 채보 데이터를 입력하세요..."
   },
   "toast": {
+    "loadingAssetsWait": "소재 로딩 중, 잠시만 기다려주세요...",
     "needBgm": "먼저 음악을 가져와 주세요",
     "cropSuccess": "재생 위치 이전의 오디오를 잘랐습니다",
     "padSuccess": "오디오 시작 부분에 무음을 추가했습니다",
@@ -532,7 +533,12 @@
       "jumpStart": "시작점으로 이동",
       "jumpEnd": "끝점으로 이동",
       "playPreview": "미리보기 재생",
-      "pausePreview": "미리보기 일시정지"
+      "pausePreview": "미리보기 일시정지",
+      "quality": "화질 / 비트레이트:",
+      "qualityUltra": "최고 화질 (~25 Mbps)",
+      "qualityHigh": "고화질 (~18 Mbps, 권장)",
+      "qualityMedium": "표준 화질 (~10 Mbps)",
+      "customBitrate": "사용자 지정 비트레이트 (Mbps):"
     },
     "quickGenerate": {
       "title": "빠른 생성",

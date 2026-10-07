@@ -1,38 +1,26 @@
 import { simpleToast, popupWindow, createLabeledInput1, ensureJsMediaTags } from '../helper.js';
 import { t } from '../i18n.js';
+import { appContext } from '../core/appContext.js';
 
 /**
  * 開啟譜面資訊編輯彈窗
- * @param {Object} options
- * @param {Function} options.getMaidata
- * @param {Function} options.setMaidata
- * @param {Function} options.getBackgroundImage
- * @param {Function} options.setBackgroundImage
- * @param {Object} options.images
- * @param {HTMLElement} options.editorBackgroundImage
- * @param {Object} options.audioManager
- * @param {Function} options.getNowDifficulty
- * @param {Function} options.setNowDifficulty
- * @param {HTMLSelectElement} options.changeDifficulty
- * @param {Function} options.saveMaidata
- * @param {Function} [options.projSet]
- * @param {Function} [options.projGet]
+ * @param {Object} [options={}]
  */
-export function openChartInfoModal({
-    getMaidata,
-    setMaidata,
-    getBackgroundImage,
-    setBackgroundImage,
-    images,
-    editorBackgroundImage,
-    audioManager,
-    getNowDifficulty,
-    setNowDifficulty,
-    changeDifficulty,
-    saveMaidata,
-    projSet,
-    projGet
-}) {
+export function openChartInfoModal(options = {}) {
+    const getMaidata = options.getMaidata || appContext.get('getMaidata');
+    const setMaidata = options.setMaidata || appContext.get('setMaidata');
+    const getBackgroundImage = options.getBackgroundImage || appContext.get('getBackgroundImage');
+    const setBackgroundImage = options.setBackgroundImage || appContext.get('setBackgroundImage');
+    const rawImages = options.images !== undefined ? options.images : appContext.get('images');
+    const images = typeof rawImages === 'function' ? rawImages() : rawImages;
+    const editorBackgroundImage = options.editorBackgroundImage || appContext.get('editorBackgroundImage') || document.getElementById('editorBackgroundImage');
+    const audioManager = options.audioManager || appContext.audioManager;
+    const getNowDifficulty = options.getNowDifficulty || appContext.get('getNowDifficulty');
+    const setNowDifficulty = options.setNowDifficulty || appContext.get('setNowDifficulty');
+    const changeDifficulty = options.changeDifficulty || appContext.get('changeDifficulty') || document.getElementById('changeDifficulty');
+    const saveMaidata = options.saveMaidata || appContext.get('saveMaidata');
+    const projSet = options.projSet || appContext.get('projSet');
+    const projGet = options.projGet || appContext.get('projGet');
     const maidata = getMaidata();
     const tempData = { ...(maidata || {}) };
     const inputRefs = {};

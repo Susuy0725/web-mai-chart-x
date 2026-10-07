@@ -73,6 +73,7 @@
     "placeholder": "在此輸入譜面資料..."
   },
   "toast": {
+    "loadingAssetsWait": "素材載入中，請稍候...",
     "needBgm": "請先匯入音樂",
     "cropSuccess": "音訊已自播放頭裁剪",
     "padSuccess": "已在音訊開頭補白",
@@ -532,7 +533,12 @@
       "jumpStart": "跳至起點",
       "jumpEnd": "跳至終點",
       "playPreview": "播放預覽",
-      "pausePreview": "暫停預覽"
+      "pausePreview": "暫停預覽",
+      "quality": "畫質 / 碼率:",
+      "qualityUltra": "極致超清 (~25 Mbps)",
+      "qualityHigh": "高畫質 (~18 Mbps, 推薦)",
+      "qualityMedium": "標準畫質 (~10 Mbps)",
+      "customBitrate": "自訂碼率 (Mbps):"
     },
     "quickGenerate": {
       "title": "快速生成",

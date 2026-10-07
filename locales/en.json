@@ -73,6 +73,7 @@
     "placeholder": "Enter chart data here..."
   },
   "toast": {
+    "loadingAssetsWait": "Loading assets, please wait...",
     "needBgm": "Please load music first",
     "cropSuccess": "Audio cropped from playhead",
     "padSuccess": "Padded silence at the beginning of audio",
@@ -532,7 +533,12 @@
       "jumpStart": "Jump to Start",
       "jumpEnd": "Jump to End",
       "playPreview": "Play Preview",
-      "pausePreview": "Pause Preview"
+      "pausePreview": "Pause Preview",
+      "quality": "Quality / Bitrate:",
+      "qualityUltra": "Ultra (~25 Mbps)",
+      "qualityHigh": "High (~18 Mbps, Recommended)",
+      "qualityMedium": "Standard (~10 Mbps)",
+      "customBitrate": "Custom Bitrate (Mbps):"
     },
     "quickGenerate": {
       "title": "Quick Generate",

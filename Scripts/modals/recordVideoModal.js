@@ -93,7 +93,7 @@ export async function openRecordVideoModal({
             if (response.ok) {
                 const blob = await response.blob();
                 try {
-                    if (window.createImageBitmap) outlineImage = await createImageBitmap(blob);
+                    if (window.createImageBitmap) outlineImage = await createImageBitmap(blob, { resizeQuality: 'high' });
                 } catch (e) { }
                 if (!outlineImage) {
                     outlineImage = await new Promise((res, rej) => {
@@ -263,12 +263,14 @@ export async function openRecordVideoModal({
     // 3. 解析度選單 + 自訂欄位
     // ==========================================
     const resField = createLabeledInput1({
-        value: '1280x720',
+        value: '1920x1080',
         labelText: t('popup.recordVideo.resolution'),
         type: 'select',
         assign: 'record_res_select',
         ref: inputRefs,
         options: [
+            { value: '2560x1440', label: '2560 x 1440 (2K 1440p 16:9)' },
+            { value: '1440x1440', label: '1440 x 1440 (2K 1:1)' },
             { value: '1920x1080', label: '1920 x 1080 (1080p 16:9)' },
             { value: '1080x1080', label: '1080 x 1080 (1080p 1:1)' },
             { value: '1280x720', label: '1280 x 720 (720p 16:9)' },
@@ -280,8 +282,8 @@ export async function openRecordVideoModal({
 
     const customResContainer = document.createElement('div');
     customResContainer.style.cssText = 'display:none; gap:8px; margin-top:4px;';
-    const customWidth = createLabeledInput1({ value: 1080, labelText: t('popup.recordVideo.customWidth'), type: 'number', assign: 'custom_w', ref: inputRefs });
-    const customHeight = createLabeledInput1({ value: 720, labelText: t('popup.recordVideo.customHeight'), type: 'number', assign: 'custom_h', ref: inputRefs });
+    const customWidth = createLabeledInput1({ value: 1920, labelText: t('popup.recordVideo.customWidth'), type: 'number', assign: 'custom_w', ref: inputRefs });
+    const customHeight = createLabeledInput1({ value: 1080, labelText: t('popup.recordVideo.customHeight'), type: 'number', assign: 'custom_h', ref: inputRefs });
     customWidth.wrapper.style.flex = '1';
     customHeight.wrapper.style.flex = '1';
     customResContainer.append(customWidth.wrapper, customHeight.wrapper);
@@ -296,17 +298,17 @@ export async function openRecordVideoModal({
 
     const getTargetResolution = () => {
         if (resField.input.value === 'custom') {
-            const w = parseInt(inputRefs.custom_w?.value || 1080, 10);
-            const h = parseInt(inputRefs.custom_h?.value || 720, 10);
+            const w = parseInt(inputRefs.custom_w?.value || 1920, 10);
+            const h = parseInt(inputRefs.custom_h?.value || 1080, 10);
             return [
-                Math.max(2, Math.round((Math.max(100, isNaN(w) ? 1080 : w)) / 2) * 2),
-                Math.max(2, Math.round((Math.max(100, isNaN(h) ? 720 : h)) / 2) * 2)
+                Math.max(2, Math.round((Math.max(100, isNaN(w) ? 1920 : w)) / 2) * 2),
+                Math.max(2, Math.round((Math.max(100, isNaN(h) ? 1080 : h)) / 2) * 2)
             ];
         }
         const parts = resField.input.value.split('x').map(Number);
         return [
-            Math.max(2, Math.round((parts[0] || 1280) / 2) * 2),
-            Math.max(2, Math.round((parts[1] || 720) / 2) * 2)
+            Math.max(2, Math.round((parts[0] || 1920) / 2) * 2),
+            Math.max(2, Math.round((parts[1] || 1080) / 2) * 2)
         ];
     };
 
@@ -314,26 +316,52 @@ export async function openRecordVideoModal({
     // 4. FPS 選單 + 自訂欄位
     // ==========================================
     const fpsField = createLabeledInput1({
-        value: '30',
+        value: '60',
         labelText: 'FPS:',
         type: 'select',
         assign: 'record_fps_select',
         ref: inputRefs,
         options: [
-            { value: '120', label: '120' },
-            { value: '60', label: '60' },
-            { value: '30', label: '30' },
-            { value: '24', label: '24' },
+            { value: '120', label: '120 FPS' },
+            { value: '60', label: '60 FPS' },
+            { value: '30', label: '30 FPS' },
+            { value: '24', label: '24 FPS' },
             { value: 'custom', label: t('popup.recordVideo.custom') }
         ]
     });
 
-    const customFps = createLabeledInput1({ value: 30, labelText: t('popup.recordVideo.customFps'), type: 'number', assign: 'custom_fps', ref: inputRefs });
+    const customFps = createLabeledInput1({ value: 60, labelText: t('popup.recordVideo.customFps'), type: 'number', assign: 'custom_fps', ref: inputRefs });
     customFps.wrapper.style.cssText = 'display:none; margin-top:4px;';
     fpsField.wrapper.appendChild(customFps.wrapper);
 
     fpsField.input.addEventListener('change', (e) => {
         customFps.wrapper.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    // ==========================================
+    // 4.1 畫質 / 碼率選單 + 自訂欄位
+    // ==========================================
+    const qualityField = createLabeledInput1({
+        value: 'high',
+        labelText: t('popup.recordVideo.quality') || '畫質 / 碼率:',
+        type: 'select',
+        assign: 'record_quality_select',
+        ref: inputRefs,
+        options: [
+            { value: 'ultra', label: t('popup.recordVideo.qualityUltra') || '極致超清 (~25 Mbps)' },
+            { value: 'high', label: t('popup.recordVideo.qualityHigh') || '高畫質 (~18 Mbps, 推薦)' },
+            { value: 'medium', label: t('popup.recordVideo.qualityMedium') || '標準畫質 (~10 Mbps)' },
+            { value: 'low', label: t('popup.recordVideo.qualityLow') || '低畫質 (~5 Mbps)' },
+            { value: 'custom', label: t('popup.recordVideo.custom') }
+        ]
+    });
+
+    const customBitrate = createLabeledInput1({ value: 20, labelText: t('popup.recordVideo.customBitrate') || '自訂碼率 (Mbps):', type: 'number', assign: 'custom_bitrate', ref: inputRefs });
+    customBitrate.wrapper.style.cssText = 'display:none; margin-top:4px;';
+    qualityField.wrapper.appendChild(customBitrate.wrapper);
+
+    qualityField.input.addEventListener('change', (e) => {
+        customBitrate.wrapper.style.display = e.target.value === 'custom' ? 'block' : 'none';
     });
 
     // ==========================================
@@ -683,6 +711,7 @@ export async function openRecordVideoModal({
         timeWrapper,
         resField.wrapper,
         fpsField.wrapper,
+        qualityField.wrapper,
         bgmVolField.wrapper,
         sfxVolField.wrapper,
         brightSectionTitle,
@@ -721,21 +750,28 @@ export async function openRecordVideoModal({
 
                     let widthVal, heightVal;
                     if (resField.input.value === 'custom') {
-                        widthVal = parseInt(inputRefs.custom_w?.value || 1080, 10);
-                        heightVal = parseInt(inputRefs.custom_h?.value || 720, 10);
+                        widthVal = parseInt(inputRefs.custom_w?.value || 1920, 10);
+                        heightVal = parseInt(inputRefs.custom_h?.value || 1080, 10);
                     } else {
                         [widthVal, heightVal] = resField.input.value.split('x').map(Number);
                     }
 
                     // 強制確保輸出尺寸為正偶數 (AVC/H.264 與 WebCodecs 編碼器規範)
-                    widthVal = Math.max(2, Math.round((Number(widthVal) || 1080) / 2) * 2);
-                    heightVal = Math.max(2, Math.round((Number(heightVal) || 720) / 2) * 2);
+                    widthVal = Math.max(2, Math.round((Number(widthVal) || 1920) / 2) * 2);
+                    heightVal = Math.max(2, Math.round((Number(heightVal) || 1080) / 2) * 2);
 
                     let fpsVal;
                     if (fpsField.input.value === 'custom') {
-                        fpsVal = parseInt(inputRefs.custom_fps?.value || 30, 10);
+                        fpsVal = parseInt(inputRefs.custom_fps?.value || 60, 10);
                     } else {
                         fpsVal = parseInt(fpsField.input.value, 10);
+                    }
+
+                    let qualityVal = qualityField.input.value || 'high';
+                    let bitrateVal = null;
+                    if (qualityVal === 'custom') {
+                        const mbps = parseFloat(inputRefs.custom_bitrate?.value || 20);
+                        bitrateVal = Math.round(Math.max(1, isNaN(mbps) ? 20 : mbps) * 1_000_000);
                     }
 
                     const bgmVolValNum = Number(inputRefs.record_bgm_vol?.value || 1);
@@ -754,6 +790,8 @@ export async function openRecordVideoModal({
                         fps: fpsVal,
                         width: widthVal,
                         height: heightVal,
+                        quality: qualityVal,
+                        bitrate: bitrateVal,
                         bgmVolume: bgmVolValNum,
                         sfxVolume: sfxVolValNum,
                         overallBrightness: overallBrightSlider.value / 100,

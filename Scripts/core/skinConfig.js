@@ -123,8 +123,8 @@ export const defaultSkinMap = {
     "star_break_double": "StarSkins/star_break_double.png",
     "star_break_double_mine": "StarSkins/star_break_double_mine.png",
     "star_break_mine": "StarSkins/star_break_mine.png",
-    "star_double": "StarSkins/star_double.png",
-    "star_double_mine": "StarSkins/star_double_mine.png",
+    "star_double_mine": "StarSkins/star_mine_double.png",
+    "star_mine_double": "StarSkins/star_mine_double.png",
     "star_each": "StarSkins/star_each.png",
     "star_each_double": "StarSkins/star_each_double.png",
     "star_ex": "StarSkins/star_ex.png",
@@ -262,7 +262,9 @@ export const skinAliases = {
     'touchhold_3_mine': 'touchhold_mine_3',
     'touchhold_mine_3': 'touchhold_3_mine',
     'touchhold_border_mine': 'touchhold_break_mine',
-    'touchhold_break_mine': 'touchhold_border_mine'
+    'touchhold_break_mine': 'touchhold_border_mine',
+    'star_mine_double': 'star_double_mine',
+    'star_double_mine': 'star_mine_double'
 };
 
 export function inferSkinType(key) {

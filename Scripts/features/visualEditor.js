@@ -187,26 +187,36 @@ export function createVisualNoteCallbacks(ctx) {
         const cleanNotePart = stripLeadingTags(segment);
         const settings = getSettings();
         const selectedType = settings?.visualSelectedNoteType || 'tap';
+        const selectedModifier = settings?.visualSelectedModifier || 'none';
 
         const effectiveType = selectedType === 'break' ? 'tap' : selectedType;
         let noteString = String(lane);
         let noteLabel = 'Tap';
 
+        const modChar = (selectedModifier === 'ex') ? 'x' :
+                        (selectedModifier === 'break') ? 'b' :
+                        (selectedModifier === 'mine') ? 'm' :
+                        (selectedModifier === 'firework') ? 'f' : '';
+
         if (effectiveType === 'slide') {
-            const endLane = (lane % 8) + 1;
-            noteString = `${lane}-${endLane}`;
+            const endLane = ((lane + 3) % 8) + 1;
+            noteString = `${lane}-${endLane}${modChar}[4:1]`;
             noteLabel = 'Slide';
         } else if (effectiveType === 'touch') {
-            noteString = `B${lane}`;
+            const touchMod = (selectedModifier === 'break') ? '' : modChar;
+            noteString = `B${lane}${touchMod}`;
             noteLabel = 'Touch';
         } else if (effectiveType === 'touchhold') {
-            noteString = `B${lane}h[4:1]`;
+            const touchMod = (selectedModifier === 'break') ? '' : modChar;
+            noteString = `B${lane}h${touchMod}[4:1]`;
             noteLabel = 'TouchHold';
         } else if (effectiveType === 'hold') {
-            noteString = `${lane}h[4:1]`;
+            const holdMod = (selectedModifier === 'firework') ? '' : modChar;
+            noteString = `${lane}h${holdMod}[4:1]`;
             noteLabel = 'Hold';
         } else {
-            noteString = String(lane);
+            const tapMod = (selectedModifier === 'firework') ? '' : modChar;
+            noteString = `${lane}${tapMod}`;
         }
 
         let newSegment = "";
@@ -424,13 +434,109 @@ export function createVisualNoteCallbacks(ctx) {
         updateEditorAndSave(newContent);
     };
 
+    const getNoteCurrentProperties = (note) => {
+        const commaIndex = note?.index;
+        if (commaIndex === undefined || commaIndex === null) return null;
+        const lane = note.pos;
+        if (!lane) return null;
+
+        const rawData = getRawData();
+        const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+        if (segment === "" || segment.startsWith("||")) return null;
+
+        const parts = segment.split('/');
+        const partIndex = parts.findIndex(p => {
+            const clean = stripLeadingTags(p);
+            if (note.touchPos) {
+                return clean.startsWith(note.touchPos + (note.pos || ''));
+            }
+            return clean.startsWith(String(lane));
+        });
+
+        if (partIndex === -1) return null;
+
+        const originalPart = parts[partIndex];
+        const clean = stripLeadingTags(originalPart);
+
+        const bracketMatch = clean.match(/\[([^\]]*)\]/);
+        const duration = bracketMatch ? bracketMatch[1] : null;
+
+        const slideMatch = clean.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/);
+        const slidePattern = slideMatch ? slideMatch[1] : null;
+
+        const isSlide = !!slideMatch || note.type === 'slide' || !!note.slideType;
+        const isHold = clean.includes('h') || !!note.isHold || !!note.isTouchHold;
+
+        return {
+            part: clean,
+            duration,
+            slidePattern,
+            isSlide,
+            isHold
+        };
+    };
+
+    const visualUpdateNoteProperty = (note, { duration, slidePattern }) => {
+        const commaIndex = note?.index;
+        if (commaIndex === undefined || commaIndex === null) return;
+        const lane = note.pos;
+        if (!lane) return;
+
+        const rawData = getRawData();
+        const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
+        if (segment === "" || segment.startsWith("||")) return;
+
+        const parts = segment.split('/');
+        const partIndex = parts.findIndex(p => {
+            const clean = stripLeadingTags(p);
+            if (note.touchPos) {
+                return clean.startsWith(note.touchPos + (note.pos || ''));
+            }
+            return clean.startsWith(String(lane));
+        });
+
+        if (partIndex === -1) return;
+
+        const originalPart = parts[partIndex];
+        const clean = stripLeadingTags(originalPart);
+        const prefix = originalPart.substring(0, originalPart.length - clean.length);
+
+        let nextClean = clean;
+
+        if (duration !== undefined && duration !== null) {
+            const durFormatted = `[${duration.replace(/[\[\]]/g, '')}]`;
+            if (nextClean.includes('[')) {
+                nextClean = nextClean.replace(/\[[^\]]*\]/, durFormatted);
+            } else {
+                nextClean = nextClean + durFormatted;
+            }
+        }
+
+        if (slidePattern !== undefined && slidePattern !== null) {
+            const REGEX_SLIDE_SYM = /((?:pp)|(?:qq)|[-<>^vpqszVw])/;
+            if (REGEX_SLIDE_SYM.test(nextClean)) {
+                nextClean = nextClean.replace(REGEX_SLIDE_SYM, slidePattern);
+            }
+        }
+
+        const newPart = prefix + nextClean;
+        parts[partIndex] = newPart;
+        rawData[commaIndex] = parts.join('/');
+
+        const newContent = rawData.join(',');
+        updateEditorAndSave(newContent);
+        simpleToast({ content: `已更新音符: ${nextClean}`, type: 'success', timeout: 1000 });
+    };
+
     return {
         getOrCreateCommaIndex,
         stripLeadingTags,
         visualPlaceNote,
         visualPlaceHoldNote,
         visualDeleteNote,
-        visualChangeNote
+        visualChangeNote,
+        getNoteCurrentProperties,
+        visualUpdateNoteProperty
     };
 }
 

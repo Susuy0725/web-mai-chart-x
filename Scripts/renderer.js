@@ -3018,10 +3018,10 @@ export class SimaiVisualEditor {
     }
 
     drawTap(s) {
-        const { time: noteTime, pos, isBreak, isDouble } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
         const t = (noteTime - this.globalTime);
 
-        const img = this.images[isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap")];
+        const img = this.images[isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
         if (imgNotExists(img)) return;
         const size = this.settings.noteBaseSize;
         const x = visualNoteRefPos[pos - 1].x;
@@ -3032,7 +3032,7 @@ export class SimaiVisualEditor {
             this.ctx.globalAlpha = this.passOpacity;
         }
         this.drawImgAtcenter(img, size, x, y);
-        if (s.isEx) {
+        if (s.isEx && !isMine) {
             this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "tap")];
             const ex = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
             this.drawImgAtcenter(ex, size, x, y);
@@ -3043,11 +3043,13 @@ export class SimaiVisualEditor {
     }
 
     drawStar(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMultiple } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine } = s;
         const t = (noteTime - this.globalTime);
 
-        const img = this.images[isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
-            : (isBreak ? "star_break" : (isDouble ? "star_each" : "star"))
+        const img = this.images[isMine ?
+            (isMultiple ? "star_mine_double" : "star_mine")
+            : (isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
+                : (isBreak ? "star_break" : (isDouble ? "star_each" : "star")))
         ];
         if (imgNotExists(img)) return;
         const size = this.settings.noteBaseSize;
@@ -3059,7 +3061,7 @@ export class SimaiVisualEditor {
             this.ctx.globalAlpha = this.passOpacity;
         }
         this.drawImgAtcenter(img, size, x, y);
-        if (s.isEx) {
+        if (s.isEx && !isMine) {
             this._tempColorConfig.colorCode = this.exColor[isBreak ? "break" : (isDouble ? "double" : "star")];
             const ex = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.4, this._tempColorConfig);
             this.drawImgAtcenter(ex, size * 0.95, x, y);
@@ -3070,48 +3072,60 @@ export class SimaiVisualEditor {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, holdDuration } = s;
+        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration } = s;
         const t = (noteTime - this.globalTime);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
         if (holdDuration) {
             const imgs = [];
             for (let i = 0; i < 4; i++) {
-                const img = this.images["touchhold_" + i];
+                const img = this.images[isMine ? ("touchhold_" + i + "_mine") : ("touchhold_" + i)];
                 if (imgNotExists(img)) return;
                 imgs.push(img);
             }
-            const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
+            const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
 
             this.ctx.save();
 
             const size = this.settings.noteBaseSize * 0.6;
 
             this.ctx.translate(posInfo.x, t * -this.zoom);
-            this.ctx.globalAlpha = 0.4;
             this.ctx.lineWidth = size * 0.6;
-            this.ctx.globalCompositeOperation = "lighter";
             let hp = (holdDuration / 4) * -this.zoom;
-            for (let i = 0; i < 4; i++) {
+
+            if (isMine) {
+                this.ctx.globalAlpha = 0.6;
+                this.ctx.globalCompositeOperation = "source-over";
+                this.ctx.strokeStyle = "#737373";
                 this.ctx.beginPath();
-                this.ctx.moveTo(0, hp * i);
-                this.ctx.lineTo(0, hp * (i + 1));
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(0, hp * 4);
                 this.ctx.closePath();
-                switch (i) {
-                    case 0:
-                        this.ctx.strokeStyle = "#EC4402";
-                        break;
-                    case 1:
-                        this.ctx.strokeStyle = "#F6EE01";
-                        break;
-                    case 2:
-                        this.ctx.strokeStyle = "#0CA163";
-                        break;
-                    case 3:
-                        this.ctx.strokeStyle = "#0197F5";
-                        break;
-                }
                 this.ctx.stroke();
+            } else {
+                this.ctx.globalAlpha = 0.4;
+                this.ctx.globalCompositeOperation = "lighter";
+                for (let i = 0; i < 4; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, hp * i);
+                    this.ctx.lineTo(0, hp * (i + 1));
+                    this.ctx.closePath();
+                    switch (i) {
+                        case 0:
+                            this.ctx.strokeStyle = "#EC4402";
+                            break;
+                        case 1:
+                            this.ctx.strokeStyle = "#F6EE01";
+                            break;
+                        case 2:
+                            this.ctx.strokeStyle = "#0CA163";
+                            break;
+                        case 3:
+                            this.ctx.strokeStyle = "#0197F5";
+                            break;
+                    }
+                    this.ctx.stroke();
+                }
             }
             this.ctx.globalCompositeOperation = "source-over";
             this.ctx.globalAlpha = 1;
@@ -3128,8 +3142,8 @@ export class SimaiVisualEditor {
             return;
         }
 
-        const img = this.images[isDouble ? "touch_each" : "touch"];
-        const touchPoint = this.images[isDouble ? "touch_point_each" : "touch_point"];
+        const img = this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")];
+        const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
         if (imgNotExists(img)) return;
 
         this.ctx.save();
@@ -3151,11 +3165,11 @@ export class SimaiVisualEditor {
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, holdDuration } = s;
+        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration } = s;
         const t = (noteTime - this.globalTime);
         const posInfo = visualNoteRefPos[pos - 1];
 
-        const img = this.images[isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")];
+        const img = this.images[isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
         if (imgNotExists(img)) return;
 
         function drawHoldImage(ctx, img, size, sizeOffset) {
@@ -3176,7 +3190,7 @@ export class SimaiVisualEditor {
 
         drawHoldImage(this.ctx, img, size, sizeOffset);
 
-        if (s.isEx) {
+        if (s.isEx && !isMine) {
             this._tempColorConfig.colorCode = isBreak ? this.exColor.break : (isDouble ? this.exColor.double : this.exColor.tap);
             const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
             drawHoldImage(this.ctx, ex, size, sizeOffset);
@@ -3185,7 +3199,7 @@ export class SimaiVisualEditor {
     }
 
     drawSlide(s) {
-        const target = this.images[s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")];
+        const target = this.images[s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
         if (imgNotExists(target)) return;
 
         const { time: noteTime, pos, slideDelay, slideDuration } = s;
@@ -3399,6 +3413,42 @@ export class SimaiVisualEditor {
         this.onDeleteNote = onDelete;
         this.onChangeNote = onChange;
         this.onPlaceHold = onPlaceHold;
+    }
+
+    setSelectionCallback(cb) {
+        this.onSelectionChange = cb;
+    }
+
+    _notifySelectionChange() {
+        if (typeof this.onSelectionChange === 'function') {
+            this.onSelectionChange(this.selectedNotes);
+        }
+    }
+
+    getNoteScreenPos(note) {
+        if (!note) return null;
+        let noteX = visualNoteRefPos[note.pos - 1]?.x;
+        if (note.touchPos && touchRefPos[note.touchPos]) {
+            const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
+            if (posInfo) noteX = posInfo.x;
+        }
+        if (noteX === undefined) return null;
+
+        const gt = this.globalTime;
+        const noteY = (note.time - gt) * -this.zoom;
+
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = this.settings?.lowRes ? 1 : (window.devicePixelRatio || 1);
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const p = Math.min(w, h) / scaleBase;
+
+        const physicalX = noteX * p + w / 2;
+        const physicalY = noteY * p + h / 2;
+        const clientX = rect.left + physicalX / dpr;
+        const clientY = rect.top + physicalY / dpr;
+
+        return { clientX, clientY };
     }
 
     _hitTestHoldTail(mouseX, mouseY) {
@@ -3625,9 +3675,8 @@ export class SimaiVisualEditor {
 
         if (this.selectedNotes.size > 0) {
             ctx.save();
-            const size = this.settings.noteBaseSize * 1.15;
-            ctx.strokeStyle = '#00E5FF';
-            ctx.lineWidth = 2.5;
+            const size = this.settings.noteBaseSize * 1.2;
+            const r = 6;
 
             for (const note of this.selectedNotes) {
                 let noteX = visualNoteRefPos[note.pos - 1]?.x;
@@ -3641,7 +3690,59 @@ export class SimaiVisualEditor {
 
                 ctx.save();
                 ctx.translate(noteX, noteY);
-                ctx.strokeRect(-size / 2, -size / 2, size, size);
+
+                // 柔和半透明底色
+                ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                    ctx.roundRect(-size / 2, -size / 2, size, size, r);
+                } else {
+                    ctx.rect(-size / 2, -size / 2, size, size);
+                }
+                ctx.fill();
+
+                // 霓虹微發光邊框
+                ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
+                ctx.shadowBlur = 8;
+                ctx.strokeStyle = '#00E5FF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 四個角的裝飾標記 (Corner Accents)
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                const bracketLen = 6;
+                const half = size / 2;
+
+                // 左上角
+                ctx.beginPath();
+                ctx.moveTo(-half, -half + bracketLen);
+                ctx.lineTo(-half, -half);
+                ctx.lineTo(-half + bracketLen, -half);
+                ctx.stroke();
+
+                // 右上角
+                ctx.beginPath();
+                ctx.moveTo(half - bracketLen, -half);
+                ctx.lineTo(half, -half);
+                ctx.lineTo(half, -half + bracketLen);
+                ctx.stroke();
+
+                // 左下角
+                ctx.beginPath();
+                ctx.moveTo(-half, half - bracketLen);
+                ctx.lineTo(-half, half);
+                ctx.lineTo(-half + bracketLen, half);
+                ctx.stroke();
+
+                // 右下角
+                ctx.beginPath();
+                ctx.moveTo(half - bracketLen, half);
+                ctx.lineTo(half, half);
+                ctx.lineTo(half, half - bracketLen);
+                ctx.stroke();
+
                 ctx.restore();
             }
             ctx.restore();
@@ -3652,15 +3753,39 @@ export class SimaiVisualEditor {
             const maxX = Math.max(this.selectionStart.x, this.selectionEnd.x);
             const minY = Math.min(this.selectionStart.y, this.selectionEnd.y);
             const maxY = Math.max(this.selectionStart.y, this.selectionEnd.y);
+            const boxW = maxX - minX;
+            const boxH = maxY - minY;
 
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.15)';
+            // 柔和主題填充底色
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.12)';
+            // 發光邊框
+            ctx.shadowColor = 'rgba(0, 229, 255, 0.5)';
+            ctx.shadowBlur = 6;
             ctx.strokeStyle = '#00E5FF';
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
 
-            ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-            ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(minX, minY, boxW, boxH, 4);
+            } else {
+                ctx.rect(minX, minY, boxW, boxH);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            // 四個角的 Material 錨點飾角 (Corner Handles)
+            ctx.shadowBlur = 0;
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#FFFFFF';
+            const hSize = 4;
+            const halfH = hSize / 2;
+            ctx.fillRect(minX - halfH, minY - halfH, hSize, hSize);
+            ctx.fillRect(maxX - halfH, minY - halfH, hSize, hSize);
+            ctx.fillRect(minX - halfH, maxY - halfH, hSize, hSize);
+            ctx.fillRect(maxX - halfH, maxY - halfH, hSize, hSize);
+
             ctx.restore();
         }
     }
@@ -3757,6 +3882,7 @@ export class SimaiVisualEditor {
                     this.selectedNotes.clear();
                 }
             }
+            this._notifySelectionChange();
             if (!this._isLoopActive()) this._upd();
             return;
         }
@@ -3776,9 +3902,11 @@ export class SimaiVisualEditor {
                             this.selectedNotes.add(clickedNote);
                         }
                     }
+                    this._notifySelectionChange();
                 } else {
                     if (!e.ctrlKey && !e.shiftKey) {
                         this.selectedNotes.clear();
+                        this._notifySelectionChange();
                     }
                     this.isSelectingBox = true;
                     this.selectionStart = { x: this.mouseX, y: this.mouseY };
@@ -3795,6 +3923,7 @@ export class SimaiVisualEditor {
                         this.onDeleteNote(Array.from(this.selectedNotes));
                     }
                     this.selectedNotes.clear();
+                    this._notifySelectionChange();
                 }
             }
             if (!this._isLoopActive()) this._upd();
@@ -3878,6 +4007,7 @@ export class SimaiVisualEditor {
             this.markerPressed = false;
             if (this.isSelectingBox) {
                 this.isSelectingBox = false;
+                this._notifySelectionChange();
             }
 
             if (this.longPressTimer) {

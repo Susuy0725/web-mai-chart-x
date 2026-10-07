@@ -225,6 +225,9 @@ function initRenderers(ctx, settings, loadedImages) {
         ctx.visualPlaceHoldNote
     );
     visualEditorRenderer.setTimeQuantizer(ctx.quantizeTime);
+    if (typeof ctx.onSelectionChange === 'function') {
+        visualEditorRenderer.setSelectionCallback(ctx.onSelectionChange);
+    }
 
     // 安全讀取拍號輸入值
     const v1 = ctx.timebaseButton?.querySelector('input[name="tb1"]')?.value ?? 4;

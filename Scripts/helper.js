@@ -687,7 +687,11 @@ export function popupWindow({
 
     let closeBtn = null;
     if (!unclosable) {
-        backdrop.onclick = (e) => e.target === backdrop && closePopup();
+        backdrop.onclick = (e) => {
+            // 注意：onclick 屬性處理器若回傳 false 會呼叫 preventDefault，
+            // 導致彈窗內核取方塊等原生控制項無法切換，故此處不可回傳值
+            if (e.target === backdrop) closePopup();
+        };
         closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'popup-close-btn';

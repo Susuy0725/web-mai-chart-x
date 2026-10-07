@@ -1,4 +1,6 @@
 import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags } from './features/visualEditor.js';
+import { showFloatingMenu, hideFloatingMenu } from './features/visualFloatingMenu.js';
+import { openNoteDurationModal } from './modals/noteDurationModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
 export { defaultSettings };
@@ -137,6 +139,7 @@ const currentDivisionText = document.getElementById('currentDivisionText');
 const currentNoteIconContainer = document.getElementById('currentNoteIconContainer');
 
 const setVisualToolUI = (mode) => {
+    hideFloatingMenu();
     const radioVal = (mode === 'edit') ? 'place' : mode;
     const radio = document.querySelector(`input[name="visualTool"][value="${radioVal}"]`);
     if (radio) radio.checked = true;
@@ -1664,7 +1667,9 @@ const {
     visualPlaceNote,
     visualPlaceHoldNote,
     visualDeleteNote,
-    visualChangeNote
+    visualChangeNote,
+    getNoteCurrentProperties,
+    visualUpdateNoteProperty
 } = createVisualNoteCallbacks({
     quantizeTime,
     getRawData: () => rawData,
@@ -1676,6 +1681,37 @@ const {
     getDecodedTags: () => decodedTags,
     updateEditorAndSave
 });
+
+const onVisualSelectionChange = (selectedNotes) => {
+    if (selectedNotes && selectedNotes.size === 1) {
+        const note = Array.from(selectedNotes)[0];
+        const props = getNoteCurrentProperties(note);
+        if (props && (props.isHold || props.isSlide)) {
+            const screenPos = visualEditorRenderer?.getNoteScreenPos(note);
+            if (screenPos) {
+                showFloatingMenu(note, screenPos, props, {
+                    onChangeDuration: () => {
+                        hideFloatingMenu();
+                        openNoteDurationModal({
+                            note,
+                            currentDuration: props.duration || '',
+                            isSlide: props.isSlide,
+                            onApply: (newDurationStr) => {
+                                visualUpdateNoteProperty(note, { duration: newDurationStr });
+                                draw();
+                            }
+                        });
+                    },
+                    onChangePattern: () => {
+                        // 改變軌跡 (保留供後續串接)
+                    }
+                });
+                return;
+            }
+        }
+    }
+    hideFloatingMenu();
+};
 
 function recordEditorHistory() {
     if (editorInput.value !== lastEditorValue) {
@@ -2206,6 +2242,7 @@ editorInput.addEventListener('touchstart', () => {
  * 2. 核心更新與慣性邏輯 (Unified Time & Scroller Pipeline)
  */
 const updateVisualTime = (newTime) => {
+    hideFloatingMenu();
     const min = parseFloat(timeline.min) || 0;
     const max = parseFloat(timeline.max) || 0;
     const clampedTime = Math.max(min, Math.min(max, newTime));
@@ -2512,6 +2549,7 @@ playButton.addEventListener('click', () => {
             editorBackgroundVideo.pause();
             editorBackgroundVideo.style.display = 'none';
         }
+        hideFloatingMenu();
         playButton.dataset.playing = 'true';
         playButton.children[0].innerText = "pause";
         lastTimestamp = performance.now();
@@ -3358,6 +3396,7 @@ async function _init() {
         visualDeleteNote,
         visualChangeNote,
         visualPlaceHoldNote,
+        onSelectionChange: onVisualSelectionChange,
         quantizeTime,
         timebaseButton,
         setPlaybackSpeed,
@@ -3382,7 +3421,10 @@ async function _init() {
         getNowDifficulty: () => nowDifficulty,
         setImages: (val) => { images = val; },
         setRenderer: (val) => { renderer = val; },
-        setVisualEditorRenderer: (val) => { visualEditorRenderer = val; },
+        setVisualEditorRenderer: (val) => {
+            visualEditorRenderer = val;
+            visualEditorRenderer?.setSelectionCallback(onVisualSelectionChange);
+        },
         setPreviewRender: (val) => { previewRender = val; },
         onInitFinished: () => {
             checkAndHandleDriveOpenWith({

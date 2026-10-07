@@ -1,4 +1,4 @@
-import { simpleToast } from '../helper.js';
+import { simpleToast, popupWindow } from '../helper.js';
 
 /**
  * 去除字串開頭的 BPM、拍號等前綴標籤
@@ -22,6 +22,191 @@ export function getNextNoteClean(clean, L) {
 
     console.log(`isBreak=${isBreak}, isEx=${isEx}, slide=${slide}, hold=${hold}, touch=${touch}`);
     return String(clean);
+}
+
+/**
+ * 剝皮解析音符字串結構 (參考 decode.js 解析流水線)
+ * @param {string} clean 
+ */
+export function peelNoteStructure(clean) {
+    // 1. 剝離時長
+    const bracketMatch = clean.match(/\[([^\]]*)\]/);
+    const duration = bracketMatch ? bracketMatch[0] : '';
+    const withoutBracket = clean.replace(/\[[^\]]*\]/g, '');
+
+    // 2. 判斷是否為 Slide
+    const REGEX_SLIDE_SYM = /((?:pp)|(?:qq)|[-<>^vpqszVw])/;
+    const slideMatch = withoutBracket.match(REGEX_SLIDE_SYM);
+
+    if (slideMatch) {
+        const slideIndex = slideMatch.index;
+        const headPart = withoutBracket.slice(0, slideIndex);
+        const trackPart = withoutBracket.slice(slideIndex);
+
+        const headLaneMatch = headPart.match(/^\d+/);
+        const headLane = headLaneMatch ? headLaneMatch[0] : '1';
+        const headFlagsRaw = headPart.slice(headLane.length);
+        const headFlags = new Set(headFlagsRaw.match(/[bxm$@?!]/g) || []);
+
+        const trackFlags = new Set(trackPart.match(/[bm]/g) || []);
+        const cleanTrack = trackPart.replace(/[bm]/g, '');
+
+        return {
+            type: 'slide',
+            headLane,
+            headFlags,
+            trackPart: cleanTrack,
+            trackFlags,
+            duration,
+            isTouch: false
+        };
+    }
+
+    // 3. 判斷是否為 Touch 類音符
+    const touchMatch = withoutBracket.match(/^([ABCDE]\d+|C)/i);
+    if (touchMatch) {
+        const touchPos = touchMatch[0];
+        const rest = withoutBracket.slice(touchPos.length);
+        const isHold = rest.includes('h');
+        const flagsRaw = rest.replace(/h/g, '');
+        const flags = new Set(flagsRaw.match(/[mf]/g) || []);
+
+        return {
+            type: isHold ? 'touchhold' : 'touch',
+            pos: touchPos,
+            isHold,
+            flags,
+            duration,
+            isTouch: true
+        };
+    }
+
+    // 4. 普通音符 / Hold 音符
+    const laneMatch = withoutBracket.match(/^\d+/);
+    const lane = laneMatch ? laneMatch[0] : '1';
+    const rest = withoutBracket.slice(lane.length);
+    const isHold = rest.includes('h');
+    const flagsRaw = rest.replace(/h/g, '');
+    const flags = new Set(flagsRaw.match(/[bxm]/g) || []);
+
+    return {
+        type: isHold ? 'hold' : 'tap',
+        pos: lane,
+        isHold,
+        flags,
+        duration,
+        isTouch: false
+    };
+}
+
+/**
+ * 將剝皮後的結構重新拼裝為標準 simai 字串
+ * @param {Object} peeled 
+ */
+export function rebuildPeeledNote(peeled) {
+    if (peeled.type === 'slide') {
+        const headFlagsArr = Array.from(peeled.headFlags);
+        headFlagsArr.sort((a, b) => {
+            const order = { b: 1, x: 2, m: 3 };
+            return (order[a] || 9) - (order[b] || 9);
+        });
+        const headFlagsStr = headFlagsArr.join('');
+        const trackFlagsStr = Array.from(peeled.trackFlags).join('');
+        return `${peeled.headLane}${headFlagsStr}${peeled.trackPart}${trackFlagsStr}${peeled.duration}`;
+    }
+
+    if (peeled.isTouch) {
+        const flagsStr = Array.from(peeled.flags).join('');
+        const holdStr = peeled.isHold ? 'h' : '';
+        return `${peeled.pos}${holdStr}${flagsStr}${peeled.duration}`;
+    }
+
+    const flagsArr = Array.from(peeled.flags);
+    flagsArr.sort((a, b) => {
+        const order = { b: 1, x: 2, m: 3 };
+        return (order[a] || 9) - (order[b] || 9);
+    });
+    const flagsStr = flagsArr.join('');
+    const holdStr = peeled.isHold ? 'h' : '';
+    return `${peeled.pos}${flagsStr}${holdStr}${peeled.duration}`;
+}
+
+/**
+ * 彈出設定拍點 BPM 數值的視窗 (Material Design 原生 HTML + CSS)
+ * @param {Object} options
+ * @param {number} options.currentBpm 當前 BPM 數值
+ * @param {Function} options.onApply 套用回呼 (newBpm) => void
+ */
+export function openBpmInputModal({ currentBpm = 120, onApply }) {
+    const container = document.createElement('div');
+    container.style.cssText = 'display: flex; flex-direction: column; gap: 14px; color: #e2e8f0; font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif; user-select: none; -webkit-user-select: none;';
+
+    container.innerHTML = `
+        <div style="font-size: 13px; color: #94a3b8;">設定此拍點的 BPM 變更標籤：</div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="number" id="wmc-bpm-input" step="0.1" min="1" max="999" value="${currentBpm}" 
+                style="flex: 1; height: 42px; padding: 0 14px; font-size: 18px; font-weight: bold; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none; transition: border-color 0.15s ease;">
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            ${[-10, -5, -1, 1, 5, 10].map(delta => `
+                <button type="button" class="wmc-bpm-delta-btn" data-delta="${delta}"
+                    style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">
+                    ${delta > 0 ? `+${delta}` : delta}
+                </button>
+            `).join('')}
+        </div>
+    `;
+
+    const input = container.querySelector('#wmc-bpm-input');
+    container.querySelectorAll('.wmc-bpm-delta-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const delta = parseFloat(btn.dataset.delta);
+            const val = parseFloat(input.value) || currentBpm;
+            input.value = Math.max(1, Math.round((val + delta) * 10) / 10);
+        });
+    });
+
+    let modal = null;
+    const handleApply = () => {
+        const val = parseFloat(input.value);
+        if (isNaN(val) || val <= 0) {
+            simpleToast({ content: '請輸入有效的 BPM 數值', type: 'warning', timeout: 1500 });
+            return;
+        }
+        if (typeof onApply === 'function') {
+            onApply(val);
+        }
+        modal?.close();
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleApply();
+        }
+    });
+
+    modal = popupWindow({
+        title: '設定拍點 BPM',
+        customContent: container,
+        width: 340,
+        buttons: [
+            {
+                text: '取消',
+                onClick: () => modal?.close()
+            },
+            {
+                text: '確認套用',
+                isPrimary: true,
+                onClick: handleApply
+            }
+        ]
+    });
+
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 50);
 }
 
 /**
@@ -174,29 +359,122 @@ export function createVisualNoteCallbacks(ctx) {
             return;
         }
 
+        const settings = getSettings();
+        const selectedType = settings?.visualSelectedNoteType || 'tap';
+
+        // 放置 BPM 標籤模式
+        if (selectedType === 'bpm') {
+            let currentBpm = getClockBpm() || 120;
+            const decodedTags = getDecodedTags();
+            if (decodedTags) {
+                const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
+                if (bpmTag) currentBpm = bpmTag.value;
+            }
+
+            const existingBpmMatch = segment.match(/\(([0-9]+(?:\.[0-9]+)?)\)/);
+            if (existingBpmMatch) {
+                currentBpm = parseFloat(existingBpmMatch[1]);
+            }
+
+            openBpmInputModal({
+                currentBpm,
+                onApply: (bpmVal) => {
+                    const raw = getRawData();
+                    let curSegment = raw[closestIndex] ? raw[closestIndex].trim() : "";
+                    if (curSegment.match(/\([0-9]+(?:\.[0-9]+)?\)/)) {
+                        curSegment = curSegment.replace(/\([0-9]+(?:\.[0-9]+)?\)/, `(${bpmVal})`);
+                    } else {
+                        curSegment = `(${bpmVal})` + curSegment;
+                    }
+                    raw[closestIndex] = curSegment;
+                    const newContent = raw.join(',');
+                    updateEditorAndSave(newContent);
+                    simpleToast({ content: `已在此拍點設定 BPM: ${bpmVal}`, type: 'success', timeout: 1000 });
+                }
+            });
+            return;
+        }
+
         const parts = segment === "" ? [] : segment.split('/');
-        const alreadyOccupied = parts.some(p => {
+        const existingIndex = parts.findIndex(p => {
             const clean = stripLeadingTags(p);
             return clean.startsWith(String(lane));
         });
 
-        if (alreadyOccupied) {
-            return;
-        }
-
-        const cleanNotePart = stripLeadingTags(segment);
-        const settings = getSettings();
-        const selectedType = settings?.visualSelectedNoteType || 'tap';
         const selectedModifier = settings?.visualSelectedModifier || 'none';
-
         const effectiveType = selectedType === 'break' ? 'tap' : selectedType;
-        let noteString = String(lane);
-        let noteLabel = 'Tap';
 
         const modChar = (selectedModifier === 'ex') ? 'x' :
                         (selectedModifier === 'break') ? 'b' :
                         (selectedModifier === 'mine') ? 'm' :
                         (selectedModifier === 'firework') ? 'f' : '';
+
+        // 已存在音符時：同種類不更動，不同種類就地替換
+        if (existingIndex !== -1) {
+            const origPart = parts[existingIndex];
+            const origClean = stripLeadingTags(origPart);
+            const leadingTags = origPart.substring(0, origPart.length - origClean.length);
+
+            // 辨識原有音符種類
+            const REGEX_SLIDE_SYM = /(?:pp)|(?:qq)|[-<>^vpqszVw]/;
+            let origType = 'tap';
+            if (REGEX_SLIDE_SYM.test(origClean)) {
+                origType = 'slide';
+            } else if (/^[A-E]\d|C/i.test(origClean)) {
+                origType = origClean.includes('h') ? 'touchhold' : 'touch';
+            } else if (origClean.includes('h')) {
+                origType = 'hold';
+            } else {
+                origType = 'tap';
+            }
+
+            // 1. 拿著相同種類音符點擊：維持原樣不發生任何變更
+            if (origType === effectiveType) {
+                return;
+            }
+
+            // 2. 拿著不同種類音符點擊：執行就地替換，使用預設值（不繼承舊時長與旗標）
+            let newNoteStr = String(lane);
+            let newLabel = 'Tap';
+
+            if (effectiveType === 'slide') {
+                const endLane = ((lane + 3) % 8) + 1;
+                const headMod = (selectedModifier === 'firework') ? '' : modChar;
+                newNoteStr = `${lane}${headMod}-${endLane}[4:1]`;
+                newLabel = 'Slide';
+            } else if (effectiveType === 'touch') {
+                const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
+                newNoteStr = `B${lane}${touchMod}`;
+                newLabel = 'Touch';
+            } else if (effectiveType === 'touchhold') {
+                const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
+                newNoteStr = `B${lane}h${touchMod}[4:1]`;
+                newLabel = 'TouchHold';
+            } else if (effectiveType === 'hold') {
+                let holdTag = 'h';
+                if (selectedModifier === 'break') holdTag = 'bh';
+                else if (selectedModifier === 'ex') holdTag = 'hx';
+                else if (selectedModifier === 'mine') holdTag = 'hm';
+                newNoteStr = `${lane}${holdTag}[4:1]`;
+                newLabel = 'Hold';
+            } else {
+                const tapMod = (selectedModifier === 'firework') ? '' : modChar;
+                newNoteStr = `${lane}${tapMod}`;
+                newLabel = 'Tap';
+            }
+
+            parts[existingIndex] = leadingTags + newNoteStr;
+            rawData[closestIndex] = parts.join('/');
+            updateEditorAndSave(rawData.join(','));
+
+            simpleToast({ content: `已將軌道 ${lane} 的音符替換為 ${newLabel} 音符`, type: 'info', timeout: 1000 });
+            return;
+        }
+
+        const cleanNotePart = stripLeadingTags(segment);
+
+        let noteString = String(lane);
+        let noteLabel = 'Tap';
 
         if (effectiveType === 'slide') {
             const endLane = ((lane + 3) % 8) + 1;
@@ -396,96 +674,112 @@ export function createVisualNoteCallbacks(ctx) {
 
         if (toolMode === 'modifier') {
             const selectedModifier = settings?.visualSelectedModifier || 'none';
-            const isTouchFamily = !!(note.touchPos || clean.match(/^[A-E]/i));
+            const peeled = peelNoteStructure(clean);
 
-            // 相容性防呆驗證
-            if (selectedModifier === 'break' && isTouchFamily) {
-                simpleToast({ content: 'Touch 類音符不支援 Break 效果', type: 'warning', timeout: 1500 });
-                return;
-            }
-
-            if (selectedModifier === 'firework' && !isTouchFamily) {
-                simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
-                return;
-            }
-
-            const REGEX_SLIDE_SYM = /((?:pp)|(?:qq)|[-<>^vpqszVw])/;
-            const isSlide = REGEX_SLIDE_SYM.test(clean);
-
-            if (isSlide) {
-                const isTrackClick = (note.hitPart === 'track') || (note.type === 'slide' && note.hitPart !== 'head');
-                const slideMatch = clean.match(/^([1-8])([bxm]?)([-<>^vpqszVw].*?)(\[[^\]]*\])?$/);
-
-                if (slideMatch) {
-                    const headLane = slideMatch[1];
-                    const headMod = slideMatch[2] || '';
-                    const slideBody = slideMatch[3];
-                    const duration = slideMatch[4] || '';
-
+            // 1. 若選擇「無效果 (none)」：徹底剝除所有 flags
+            if (selectedModifier === 'none') {
+                if (peeled.type === 'slide') {
+                    const isTrackClick = (note.hitPart === 'track') || (note.type === 'slide' && note.hitPart !== 'head');
                     if (isTrackClick) {
-                        // 點擊軌跡修改軌跡的屬性
-                        if (selectedModifier === 'ex') {
+                        peeled.trackFlags.clear();
+                        simpleToast({ content: '已清除滑星軌跡的修飾效果', type: 'info', timeout: 1000 });
+                    } else {
+                        peeled.headFlags.clear();
+                        simpleToast({ content: '已清除星星頭的修飾效果', type: 'info', timeout: 1000 });
+                    }
+                } else {
+                    peeled.flags.clear();
+                    simpleToast({ content: '已清除音符的所有修飾效果', type: 'info', timeout: 1000 });
+                }
+                nextClean = rebuildPeeledNote(peeled);
+            } else {
+                // 2. 具體旗標操作
+                const targetFlag = selectedModifier === 'ex' ? 'x' :
+                                   selectedModifier === 'break' ? 'b' :
+                                   selectedModifier === 'mine' ? 'm' :
+                                   selectedModifier === 'firework' ? 'f' : '';
+                const modLabel = selectedModifier === 'ex' ? 'EX' :
+                                 selectedModifier === 'break' ? 'Break' :
+                                 selectedModifier === 'mine' ? '地雷' :
+                                 selectedModifier === 'firework' ? '煙火' : '';
+
+                // 相容性防呆校驗 (參考 decode.js)
+                if (targetFlag === 'b' && peeled.isTouch) {
+                    simpleToast({ content: 'Touch 類音符不支援 Break 效果', type: 'warning', timeout: 1500 });
+                    return;
+                }
+                if (targetFlag === 'f' && !peeled.isTouch) {
+                    simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                    return;
+                }
+
+                if (peeled.type === 'slide') {
+                    const isTrackClick = (note.hitPart === 'track') || (note.type === 'slide' && note.hitPart !== 'head');
+                    if (isTrackClick) {
+                        // 點擊軌跡：支援 b 與 m
+                        if (targetFlag === 'x') {
                             simpleToast({ content: '滑星軌跡不支援 EX 效果（僅星星頭支援）', type: 'warning', timeout: 1500 });
                             return;
                         }
-                        if (selectedModifier === 'firework') {
-                            simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                        if (targetFlag === 'f') {
+                            simpleToast({ content: '煙火效果僅限 Touch 音符', type: 'warning', timeout: 1500 });
                             return;
                         }
-                        const cleanBody = slideBody.replace(/[bm]/g, '');
-                        const newTrackMod = selectedModifier === 'break' ? 'b' :
-                                            selectedModifier === 'mine' ? 'm' : '';
-                        const newSlideBody = `${cleanBody}${newTrackMod}`;
-                        nextClean = `${headLane}${headMod}${newSlideBody}${duration}`;
 
-                        const modLabel = selectedModifier === 'break' ? 'Break' :
-                                         selectedModifier === 'mine' ? '地雷' : '無效果';
-                        simpleToast({ content: `已為滑星軌跡套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
+                        if (peeled.trackFlags.has(targetFlag)) {
+                            // 已存在 -> 剝除 (Toggle off)
+                            peeled.trackFlags.delete(targetFlag);
+                            simpleToast({ content: `已移除軌跡的 ${modLabel} 效果`, type: 'info', timeout: 1000 });
+                        } else {
+                            // 不存在 -> 注入 (Toggle on)，互斥處理
+                            if (targetFlag === 'm') peeled.trackFlags.delete('b');
+                            if (targetFlag === 'b') peeled.trackFlags.delete('m');
+                            peeled.trackFlags.add(targetFlag);
+                            simpleToast({ content: `已為軌跡套用 ${modLabel} 效果`, type: 'success', timeout: 1000 });
+                        }
                     } else {
-                        // 點擊星星頭修改頭的屬性
-                        if (selectedModifier === 'firework') {
-                            simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                        // 點擊星星頭：支援 b, x, m (x 與 b 完美共存)
+                        if (targetFlag === 'f') {
+                            simpleToast({ content: '煙火效果僅限 Touch 音符', type: 'warning', timeout: 1500 });
                             return;
                         }
-                        const newHeadMod = selectedModifier === 'ex' ? 'x' :
-                                           selectedModifier === 'break' ? 'b' :
-                                           selectedModifier === 'mine' ? 'm' : '';
-                        nextClean = `${headLane}${newHeadMod}${slideBody}${duration}`;
 
-                        const modLabel = selectedModifier === 'ex' ? 'EX' :
-                                         selectedModifier === 'break' ? 'Break' :
-                                         selectedModifier === 'mine' ? '地雷' : '無效果';
-                        simpleToast({ content: `已為星星頭套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
+                        if (peeled.headFlags.has(targetFlag)) {
+                            // 已存在 -> 剝除 (Toggle off)
+                            peeled.headFlags.delete(targetFlag);
+                            simpleToast({ content: `已移除星星頭的 ${modLabel} 效果`, type: 'info', timeout: 1000 });
+                        } else {
+                            // 不存在 -> 注入 (Toggle on)
+                            if (targetFlag === 'm') {
+                                peeled.headFlags.delete('b');
+                                peeled.headFlags.delete('x');
+                            } else {
+                                peeled.headFlags.delete('m');
+                            }
+                            peeled.headFlags.add(targetFlag);
+                            simpleToast({ content: `已為星星頭套用 ${modLabel} 效果`, type: 'success', timeout: 1000 });
+                        }
+                    }
+                } else {
+                    // 普通 / Hold / Touch 音符
+                    if (peeled.flags.has(targetFlag)) {
+                        // 已存在 -> 剝除 (Toggle off)
+                        peeled.flags.delete(targetFlag);
+                        simpleToast({ content: `已移除音符的 ${modLabel} 效果`, type: 'info', timeout: 1000 });
+                    } else {
+                        // 不存在 -> 注入 (Toggle on)
+                        if (targetFlag === 'm') {
+                            peeled.flags.delete('b');
+                            peeled.flags.delete('x');
+                        } else if (targetFlag === 'b' || targetFlag === 'x') {
+                            peeled.flags.delete('m');
+                        }
+                        peeled.flags.add(targetFlag);
+                        simpleToast({ content: `已為音符套用 ${modLabel} 效果`, type: 'success', timeout: 1000 });
                     }
                 }
-            } else if (clean.includes('h[')) {
-                const match = clean.match(/^([A-E]?\d+h)([xbmf]?)((\[\d+:\d+\])?)/);
-                if (match) {
-                    const head = match[1];
-                    const tail = match[3] || '';
-                    const mod = selectedModifier === 'ex' ? 'x' :
-                                selectedModifier === 'break' ? 'b' :
-                                selectedModifier === 'mine' ? 'm' :
-                                selectedModifier === 'firework' ? 'f' : '';
-                    nextClean = `${head}${mod}${tail}`;
-                }
-                const modLabel = selectedModifier === 'ex' ? 'EX' :
-                                 selectedModifier === 'break' ? 'Break' :
-                                 selectedModifier === 'mine' ? '地雷' :
-                                 selectedModifier === 'firework' ? 'FW' : '無效果';
-                simpleToast({ content: `已為音符套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
-            } else {
-                const base = clean.replace(/[xbmf]/g, '');
-                const mod = selectedModifier === 'ex' ? 'x' :
-                            selectedModifier === 'break' ? 'b' :
-                            selectedModifier === 'mine' ? 'm' :
-                            selectedModifier === 'firework' ? 'f' : '';
-                nextClean = `${base}${mod}`;
-                const modLabel = selectedModifier === 'ex' ? 'EX' :
-                                 selectedModifier === 'break' ? 'Break' :
-                                 selectedModifier === 'mine' ? '地雷' :
-                                 selectedModifier === 'firework' ? 'FW' : '無效果';
-                simpleToast({ content: `已為音符套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
+
+                nextClean = rebuildPeeledNote(peeled);
             }
         } else {
             nextClean = getNextNoteClean(clean, lane);

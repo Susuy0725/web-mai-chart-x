@@ -3413,33 +3413,6 @@ export class SimaiVisualEditor {
         return { clientX, clientY };
     }
 
-    _hitTestHoldTail(mouseX, mouseY) {
-        if (!this._state || !this._state.visualBuckets || !this._state.visualBuckets.tapnhold) return null;
-        const tolerance = this.settings.noteBaseSize * 0.9;
-        const zoom = this.zoom;
-        const gt = this.globalTime;
-
-        for (const note of this._state.visualBuckets.tapnhold) {
-            if (note.type !== 'hold' || !note.holdDuration) continue;
-            let noteX = visualNoteRefPos[note.pos - 1]?.x;
-            if (note.touchPos && touchRefPos[note.touchPos]) {
-                const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
-                if (posInfo) noteX = posInfo.x;
-            }
-            if (noteX === undefined) continue;
-
-            const tailTime = note.time + note.holdDuration;
-            const tailY = (tailTime - gt) * -zoom;
-
-            const dx = Math.abs(mouseX - noteX);
-            const dy = Math.abs(mouseY - tailY);
-            if (dx <= tolerance && dy <= tolerance) {
-                return note;
-            }
-        }
-        return null;
-    }
-
     setTimeQuantizer(quantizer) {
         this.quantizeTime = quantizer;
     }
@@ -3577,49 +3550,10 @@ export class SimaiVisualEditor {
         // 繪製選擇高亮與拉框
         this._drawSelection();
 
-        // 繪製動態 Hold 拖曳/調整時長預覽
-        this._drawHoldDragPreview();
-
-        // 繪製 Ghost Note 預覽 (僅在編輯模式下且未拖曳 Hold 時)
-        if (this.editMode === 'edit' && !this.holdDragState) {
+        // 繪製 Ghost Note 預覽 (僅在編輯模式下)
+        if (this.editMode === 'edit') {
             this._drawMarker();
         }
-    }
-
-    _drawHoldDragPreview() {
-        if (!this.holdDragState || !this.holdDragState.lane) return;
-        const { lane, startTime, currentDuration } = this.holdDragState;
-        if (currentDuration <= 0) return;
-
-        const ctx = this.ctx;
-        const zoom = this.zoom;
-        const gt = this.globalTime;
-        const size = this.settings.noteBaseSize;
-
-        const noteX = visualNoteRefPos[lane - 1]?.x;
-        if (noteX === undefined) return;
-
-        const startY = (startTime - gt) * -zoom;
-        const endY = (startTime + currentDuration - gt) * -zoom;
-
-        ctx.save();
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = 2;
-
-        const left = noteX - size / 2;
-        const width = size;
-        const height = Math.max(4, Math.abs(endY - startY));
-        const topY = Math.min(startY, endY);
-
-        ctx.fillRect(left, topY, width, height);
-        ctx.strokeRect(left, topY, width, height);
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Hold (${currentDuration.toFixed(2)}s)`, noteX, topY - 6);
-        ctx.restore();
     }
 
     _upd() {
@@ -3956,43 +3890,14 @@ export class SimaiVisualEditor {
         } else { // 編輯模式 (Edit Mode)
             if (e.button === 0) { // 左鍵
                 this.markerPressed = true;
-                const clickedHoldTail = this._hitTestHoldTail(this.mouseX, this.mouseY);
-
-                if (clickedHoldTail !== null) {
+                const startT = (this.snappedTime !== null && this.snappedTime !== undefined) ? this.snappedTime : (this.globalTime - this.mouseY / this.zoom);
+                const laneToUse = lane || (clickedNote ? clickedNote.pos : null);
+                if (laneToUse !== null) {
                     e.stopPropagation();
-                    this.holdDragState = {
-                        isTailAdjust: true,
-                        targetNote: clickedHoldTail,
-                        lane: clickedHoldTail.pos,
-                        startTime: clickedHoldTail.time,
-                        initialMouseY: this.mouseY,
-                        currentDuration: clickedHoldTail.holdDuration
+                    this.pendingPlace = {
+                        lane: laneToUse,
+                        time: clickedNote ? clickedNote.time : startT
                     };
-                } else {
-                    const startT = this.snappedTime !== null ? this.snappedTime : (this.globalTime - this.mouseY / this.zoom);
-                    const laneToUse = lane || (clickedNote ? clickedNote.pos : null);
-                    if (laneToUse !== null) {
-                        e.stopPropagation();
-                        this.holdDragState = {
-                            isTailAdjust: false,
-                            lane: laneToUse,
-                            startTime: startT,
-                            initialMouseY: this.mouseY,
-                            clickedNote: clickedNote,
-                            currentDuration: 0,
-                            isLongPressTriggered: false
-                        };
-
-                        this.longPressTimer = setTimeout(() => {
-                            if (this.holdDragState && !this.holdDragState.isTailAdjust) {
-                                this.holdDragState.isLongPressTriggered = true;
-                                if (this.onPlaceHold) {
-                                    this.onPlaceHold(this.holdDragState.lane, this.holdDragState.startTime, 0, this.holdDragState.clickedNote);
-                                }
-                                this._upd();
-                            }
-                        }, 1000);
-                    }
                 }
             } else if (e.button === 2) { // 右鍵
                 if (clickedNote !== null) {
@@ -4019,11 +3924,6 @@ export class SimaiVisualEditor {
                 this._notifySelectionChange();
             }
 
-            if (this.longPressTimer) {
-                clearTimeout(this.longPressTimer);
-                this.longPressTimer = null;
-            }
-
             if (this.editMode === 'modifier') {
                 if (this.modifierClickedNote) {
                     if (this.onChangeNote) {
@@ -4037,30 +3937,11 @@ export class SimaiVisualEditor {
                 return;
             }
 
-            if (this.holdDragState) {
-                const { isTailAdjust, targetNote, lane, startTime, currentDuration, clickedNote, isLongPressTriggered } = this.holdDragState;
-                this.holdDragState = null;
-
-                if (!isLongPressTriggered) {
-                    if (isTailAdjust) {
-                        if (this.onPlaceHold) {
-                            this.onPlaceHold(lane, startTime, currentDuration, targetNote);
-                        }
-                    } else if (currentDuration > 0.05) {
-                        if (this.onPlaceHold) {
-                            this.onPlaceHold(lane, startTime, currentDuration, clickedNote);
-                        }
-                    } else {
-                        if (clickedNote !== null) {
-                            if (this.onChangeNote) {
-                                this.onChangeNote(clickedNote);
-                            }
-                        } else if (lane !== null) {
-                            if (this.onPlaceNote) {
-                                this.onPlaceNote(lane, startTime);
-                            }
-                        }
-                    }
+            if (this.pendingPlace) {
+                const { lane, time } = this.pendingPlace;
+                this.pendingPlace = null;
+                if (this.onPlaceNote) {
+                    this.onPlaceNote(lane, time);
                 }
             }
         }
@@ -4083,22 +3964,6 @@ export class SimaiVisualEditor {
     _onPointerMove(e) {
         this._updMousePos(e);
 
-        if (this.holdDragState) {
-            const deltaY = this.holdDragState.initialMouseY - this.mouseY;
-            if (Math.abs(deltaY) > 8 && this.longPressTimer) {
-                clearTimeout(this.longPressTimer);
-                this.longPressTimer = null;
-            }
-
-            const currentMouseTime = this.snappedTime !== null ? this.snappedTime : (this.globalTime - this.mouseY / this.zoom);
-            let duration = currentMouseTime - this.holdDragState.startTime;
-            if (duration < 0) duration = 0;
-            this.holdDragState.currentDuration = duration;
-            this.canvas.style.cursor = 'ns-resize';
-            if (!this._isLoopActive()) this._upd();
-            return;
-        }
-
         if ((this.editMode === 'select' || this.editMode === 'boxSelect') && this.isSelectingBox) {
             this.selectionEnd = { x: this.mouseX, y: this.mouseY };
             this._updateBoxSelection();
@@ -4108,11 +3973,7 @@ export class SimaiVisualEditor {
 
         this.hoverLane = this._hitTestLane(this.mouseX);
 
-        const hoveredHoldTail = this._hitTestHoldTail(this.mouseX, this.mouseY);
-
-        if (hoveredHoldTail !== null) {
-            this.canvas.style.cursor = 'ns-resize';
-        } else if (this.editMode === 'boxSelect') {
+        if (this.editMode === 'boxSelect') {
             const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
             this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'crosshair';
         } else if (this.editMode === 'select') {

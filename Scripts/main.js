@@ -529,7 +529,8 @@ const noteTypeSubMenu = new VisualSubMenu({
         hold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
         slide: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
         touch: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchSkins/touch.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
-        touchhold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' }
+        touchhold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
+        bpm: { render: () => '<span id="currentNoteIcon" class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: bold; color: var(--popup-accent, #00e5ff);">BPM</span>' }
     },
     onSelect: (noteType) => {
         settings.visualSelectedNoteType = noteType;

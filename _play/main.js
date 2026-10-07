@@ -48,6 +48,7 @@ const defaultSettings = {
     slideIllegalRed: false,
     showUI: false,
     simplayPerfect: true,
+    simplayUseButton: true,
     randomOffset: 0,
     // Sound & Playback
     notPlayHoldEnd: false,
@@ -582,14 +583,16 @@ if (autoPlayBtn) {
 updateAutoPlayUI();
 
 // 手動遊玩輸入與鍵盤/觸控對應 (Manual Play Controls)
+// 外鍵 (Buttons): K1~K8 (只能判定一般外圈 tap/hold/star，不能觸發觸控螢幕內部的 A 區 Touch 感應器)
+// 觸控感應區 (Touch Sensors): A1~A8, B1~B8, C, D1~D8, E1~E8
 const KEY_TO_SENSOR = {
-    '1': 'A1', '2': 'A2', '3': 'A3', '4': 'A4', '5': 'A5', '6': 'A6', '7': 'A7', '8': 'A8',
-    'a': 'A1', 's': 'A2', 'd': 'A3', 'f': 'A4', 'j': 'A5', 'k': 'A6', 'l': 'A7', ';': 'A8',
-    'A': 'A1', 'S': 'A2', 'D': 'A3', 'F': 'A4', 'J': 'A5', 'K': 'A6', 'L': 'A7',
-    'q': 'A8', 'w': 'A1', 'e': 'A2', 'r': 'A3', 'u': 'A4', 'i': 'A5', 'o': 'A6', 'p': 'A7',
+    '1': 'K1', '2': 'K2', '3': 'K3', '4': 'K4', '5': 'K5', '6': 'K6', '7': 'K7', '8': 'K8',
+    'a': 'K1', 's': 'K2', 'd': 'K3', 'f': 'K4', 'j': 'K5', 'k': 'K6', 'l': 'K7', ';': 'K8',
+    'A': 'K1', 'S': 'K2', 'D': 'K3', 'F': 'K4', 'J': 'K5', 'K': 'K6', 'L': 'K7',
+    'q': 'K8', 'w': 'K1', 'e': 'K2', 'r': 'K3', 'u': 'K4', 'i': 'K5', 'o': 'K6', 'p': 'K7',
     ' ': 'C', 'c': 'C', 'C': 'C',
-    'Numpad1': 'A5', 'Numpad2': 'A6', 'Numpad3': 'A7', 'Numpad4': 'A4',
-    'Numpad5': 'C', 'Numpad6': 'A8', 'Numpad7': 'A3', 'Numpad8': 'A2', 'Numpad9': 'A1'
+    'Numpad1': 'K5', 'Numpad2': 'K6', 'Numpad3': 'K7', 'Numpad4': 'K4',
+    'Numpad5': 'C', 'Numpad6': 'K8', 'Numpad7': 'K3', 'Numpad8': 'K2', 'Numpad9': 'K1'
 };
 
 function updateManualSensors() {
@@ -1038,15 +1041,45 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
 
         let matches = false;
         if (isTouch) {
+            // Touch 音符：只能由觸控感應區 (A1~A8, B1~B8, C, D1~D8, E1~E8) 觸發！
+            // 實體外鍵 (K1~K8) 絕對不能觸發 Touch 音符！
             const normSensor = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
             matches = sensorSet.has(normSensor);
         } else {
-            // 一般音符 (tap, hold, star)
-            // 外鍵與 A 區感應器 (A1~A8) 觸發
-            matches = sensorSet.has('A' + note.pos);
+            // 一般外圈音符 (tap, hold, star，譜面上的 1~8 號鍵)：
+            // 可由實體外鍵 (K1~K8) 觸發，也可由螢幕外圈 A 區觸摸感應 (A1~A8) 觸發！
+            matches = sensorSet.has('K' + note.pos) || sensorSet.has('A' + note.pos);
         }
 
         if (matches) {
+            // 檢查是否同鍵位正處於長按被佔用 (Holding Occupancy) 狀態
+            // 例如 {8}1h[4:1],1, 在 1h 進行期間，1 號鍵一直被壓著未放開，後續 Tap 1 不能被判定！
+            const isHoldNoteType = (note.holdDuration > 0 || note.isHold || note.type === 'hold');
+            if (!isHoldNoteType) {
+                let isPosOccupiedByHolding = false;
+                for (let k = 0; k < datas.notes.length; k++) {
+                    const other = datas.notes[k];
+                    if (other === note || !other.triggered || other.holdFinish) continue;
+                    if (!other.isHolding) continue;
+                    if (isTouch) {
+                        if (other.type === 'touch' && other.touchPos === note.touchPos && other.pos === note.pos) {
+                            isPosOccupiedByHolding = true;
+                            break;
+                        }
+                    } else {
+                        const otherIsHold = (other.holdDuration > 0 || other.isHold || other.type === 'hold');
+                        if (otherIsHold && other.pos === note.pos) {
+                            isPosOccupiedByHolding = true;
+                            break;
+                        }
+                    }
+                }
+                if (isPosOccupiedByHolding) {
+                    // 該按鍵/感應器正處於長按被佔用中，手指未曾抬起重按，無法觸發新點擊音符
+                    continue;
+                }
+            }
+
             // 統一差值定義：globalTime - note.time (提早擊中為負數 FAST，延後擊中為正數 LATE)
             const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - note.time);
             const evalRes = evaluateHitGrade(diffForEval, note);
@@ -1075,9 +1108,32 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                     const normSensor = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
                     matches = sensorSet.has(normSensor);
                 } else {
-                    matches = sensorSet.has('A' + note.pos);
+                    matches = sensorSet.has('K' + note.pos) || sensorSet.has('A' + note.pos);
                 }
                 if (matches) {
+                    const isHoldNoteType = (note.holdDuration > 0 || note.isHold || note.type === 'hold');
+                    if (!isHoldNoteType) {
+                        let isPosOccupiedByHolding = false;
+                        for (let k = 0; k < datas.notes.length; k++) {
+                            const other = datas.notes[k];
+                            if (other === note || !other.triggered || other.holdFinish) continue;
+                            if (!other.isHolding) continue;
+                            if (note.type === 'touch') {
+                                if (other.type === 'touch' && other.touchPos === note.touchPos && other.pos === note.pos) {
+                                    isPosOccupiedByHolding = true;
+                                    break;
+                                }
+                            } else {
+                                const otherIsHold = (other.holdDuration > 0 || other.isHold || other.type === 'hold');
+                                if (otherIsHold && other.pos === note.pos) {
+                                    isPosOccupiedByHolding = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (isPosOccupiedByHolding) continue;
+                    }
+
                     const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - note.time);
                     const evalRes = evaluateHitGrade(diffForEval, note);
                     if (evalRes && evalRes.grade !== 'MISS') {
@@ -2134,9 +2190,13 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
         // 1. Hold & TouchHold 按壓與結算判定
         // （註：Touch 音符與 Tap 一樣必須由玩家在窗口內主動按下 pointerdown/keydown 或剛劃入 newlyAdded 觸發，不支援按住自動判定）
         if (isHold) {
-            const rawSensorId = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
-            const sensorId = (rawSensorId === 'C1' || rawSensorId === 'C2') ? 'C' : rawSensorId;
-            const isSensorPressed = currentSensors.has(sensorId);
+            let isSensorPressed = false;
+            if (noteType === 'touch') {
+                const sensorId = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
+                isSensorPressed = currentSensors.has(sensorId);
+            } else {
+                isSensorPressed = currentSensors.has('K' + note.pos) || currentSensors.has('A' + note.pos);
+            }
 
             if (noteT <= 0.05 && -noteT <= note.holdDuration) {
                 // 支援任意時刻中途補按/續按：只要在 Hold 持續時間內按壓即可生效長按，非必須起手擊中
@@ -2669,6 +2729,7 @@ function draw() {
             onHit: triggerManualHit,
             forcePerfect: settings.simplayPerfect ?? true,
             randomOffset: (Math.random() - 0.5) * settings.randomOffset * 2,
+            useButton: settings.simplayUseButton ?? true,
         });
         activeSensors = new Set(simulatedPlayController.activeSensors);
         for (const s of manualInputSensors) {
@@ -3551,6 +3612,12 @@ function openSettings() {
                     id: 'simplayPerfect', type: 'checkbox', label: 'Auto Play 強制完美', def: defaultSettings.simplayPerfect,
                     apply: (val) => {
                         settings.simplayPerfect = val;
+                    }
+                },
+                {
+                    id: 'simplayUseButton', type: 'checkbox', label: t('settings.items.simplayUseButton') || 'Simplay 使用外框', def: defaultSettings.simplayUseButton ?? true,
+                    apply: (val) => {
+                        settings.simplayUseButton = val;
                     }
                 },
                 {

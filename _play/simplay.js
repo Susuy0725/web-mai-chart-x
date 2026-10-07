@@ -63,10 +63,12 @@ export class SimulatedPlayController {
         return queue;
     }
 
-    update({ globalTime, notes = [], renderer, playing, timeControlSliding, onHit = null, forcePerfect = true, randomOffset = 0 }) {
+    update({ globalTime, notes = [], renderer, playing, timeControlSliding, onHit = null, forcePerfect = true, randomOffset = 0, useButton = true }) {
         this.activeSensors.clear();
         this.slideQueue.length = 0;
         if (!playing || timeControlSliding) return;
+
+        const normalPrefix = useButton ? 'K' : 'A';
 
         for (let i = 0; i < notes.length; i++) {
             const note = notes[i];
@@ -82,12 +84,36 @@ export class SimulatedPlayController {
             if (!isHoldNote && (noteType === 'tap' || noteType === 'touch')) {
                 const sensorId = (noteType === 'touch')
                     ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
-                    : ('A' + note.pos);
+                    : (normalPrefix + note.pos);
                 if (noteT <= 0 && -noteT <= this._simulatTouchDuration) {
                     this.activeSensors.add(sensorId);
                 }
-                if (!note.triggered && noteT <= 0 && -noteT <= this._simulatTouchDuration && onHit) {
-                    onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
+
+                // 檢查是否有同鍵位的 Hold 正在進行長按 (手指被佔用，未曾抬手)
+                // 例如 {8}1h[4:1],1, 在 1h 進行期間，手指一直在長按 1 號鍵，無法在不抬手的情況下點擊 Tap 1！
+                let isOccupiedByHolding = false;
+                for (let k = 0; k < notes.length; k++) {
+                    const other = notes[k];
+                    if (other === note || !other.triggered || other.holdFinish) continue;
+                    if (!other.isHolding) continue;
+                    if (noteType === 'touch') {
+                        if (other.type === 'touch' && other.touchPos === note.touchPos && other.pos === note.pos) {
+                            isOccupiedByHolding = true;
+                            break;
+                        }
+                    } else {
+                        const otherIsHold = (other.holdDuration > 0 || other.isHold || other.type === 'hold');
+                        if (otherIsHold && other.pos === note.pos) {
+                            isOccupiedByHolding = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!isOccupiedByHolding) {
+                    if (!note.triggered && noteT <= 0 && -noteT <= this._simulatTouchDuration && onHit) {
+                        onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
+                    }
                 }
             }
 
@@ -96,7 +122,7 @@ export class SimulatedPlayController {
             if (isHoldNote) {
                 const sensorId = (noteType === 'touch')
                     ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
-                    : ('A' + note.pos);
+                    : (normalPrefix + note.pos);
                 const holdEnd = Math.max(note.holdDuration, this._simulatTouchDuration); // safe margin
 
                 if (noteT <= 0 && -noteT <= holdEnd) {
@@ -117,7 +143,7 @@ export class SimulatedPlayController {
                 const isHeadPart = note.firstSlide || !note.prevSlide;
                 const slideT = -noteT - slideDelay;
                 if (isHeadPart && noteT <= 0 && -noteT <= this._simulatTouchDuration) {
-                    this.activeSensors.add('A' + note.pos);
+                    this.activeSensors.add(normalPrefix + note.pos);
                     if (!note.headTriggered && !note.triggered) {
                         note.headTriggered = true;
                         note.triggered = true;
@@ -165,6 +191,12 @@ export class SimulatedPlayController {
                                         for (let s = 0; s < area.areas.length; s++) {
                                             this.activeSensors.add(area.areas[s]);
                                         }
+                                        if (!note._singleAreaTriggered && onHit) {
+                                            note._singleAreaTriggered = true;
+                                            for (let s = 0; s < area.areas.length; s++) {
+                                                onHit(area.areas[s]);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -172,6 +204,25 @@ export class SimulatedPlayController {
                             // 多步驟 Slide：以平滑手指軌跡推進各感應區
                             const floatIdx = progress * (totalCount - 1);
                             const curIdx = Math.min(totalCount - 1, Math.floor(floatIdx));
+
+                            // 當手指推進至新感應區時，觸發該感應區的剛劃入輸入事件 (真實影響同位置 Tap/Touch 判定)
+                            if (note._lastSimStepIdx !== curIdx) {
+                                note._lastSimStepIdx = curIdx;
+                                if (onHit) {
+                                    for (let b = 0; b < queues.length; b++) {
+                                        const queue = queues[b];
+                                        const fullQ = (note._fullJudgeQueues && note._fullJudgeQueues[b]) ? note._fullJudgeQueues[b] : (note._fullJudgeQueue || queue);
+                                        if (curIdx < fullQ.length) {
+                                            const stepArea = fullQ[curIdx];
+                                            if (stepArea && stepArea.areas) {
+                                                for (let s = 0; s < stepArea.areas.length; s++) {
+                                                    onHit(stepArea.areas[s]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             for (let b = 0; b < queues.length; b++) {
                                 const queue = queues[b];

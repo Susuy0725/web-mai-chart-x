@@ -182,6 +182,7 @@
       "autoPauseOnScroll": "Auto Pause on Scroll",
       "globalTimeline": "Show Global Timeline",
       "enableQuickPanel": "Enable Quick Panel",
+      "simplayUseButton": "Simplay Use Buttons",
       "lang": "Language",
       "langAuto": "Follow system",
       "drawHitEffect": "Render Hit Effects",

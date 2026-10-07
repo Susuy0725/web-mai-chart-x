@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.07 (1)]
+
+### Fixed
+- 修正 Simplay 與判定問題
+- 修正因 watchdog 導致播放越來越卡的問題
+
+### Changed
+- 改善使用者介面與操作體驗。
+
+### Added
+- 新增渲染品質，可調整影片輸出碼率。
+- 新增「Simplay 使用外框」設定選項，可切換模擬玩家時使用實體外鍵或螢幕 A 區觸控。
+
 ## [2026.10.05 (2)]
 
 ### Fixed

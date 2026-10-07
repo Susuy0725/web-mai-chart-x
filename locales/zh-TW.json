@@ -182,6 +182,7 @@
       "autoPauseOnScroll": "滾動時自動暫停",
       "globalTimeline": "顯示全域時間軸",
       "enableQuickPanel": "啟用快速面板",
+      "simplayUseButton": "Simplay 使用外框",
       "lang": "語言 / Language",
       "langAuto": "跟隨系統",
       "drawHitEffect": "渲染擊打特效",

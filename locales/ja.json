@@ -182,6 +182,7 @@
       "autoPauseOnScroll": "スクロール時に自動一時停止",
       "globalTimeline": "全体のタイムラインを表示",
       "enableQuickPanel": "クイックパネルを有効にする",
+      "simplayUseButton": "Simplay で外枠ボタンを使用",
       "lang": "言語",
       "langAuto": "システム設定",
       "lowRes": "低解像度モード (1x 解像度に制限して軽量化)",

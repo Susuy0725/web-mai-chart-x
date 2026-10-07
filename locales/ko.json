@@ -182,6 +182,7 @@
       "autoPauseOnScroll": "스크롤 시 자동 일시정지",
       "globalTimeline": "전체 타임라인 표시",
       "enableQuickPanel": "빠른 패널 활성화",
+      "simplayUseButton": "Simplay 외곽 버튼 사용",
       "lang": "언어 / Language",
       "langAuto": "시스템 설정 따르기",
       "drawHitEffect": "타격 효과 렌더링",

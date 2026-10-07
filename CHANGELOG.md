@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.07 (2)]
+
+### Changed
+- 改善使用者介面與操作體驗。
+
+### Added
+- 新增 Deluxe 皮膚，可在設定中調整
+
 ## [2026.10.07 (1)]
 
 ### Fixed

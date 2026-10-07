@@ -55,6 +55,7 @@ export class PlaybackEngine {
         this.playStartRealTime = 0;
         this.timeControlSliding = false;
         this.keepRenderingWhilePause = false;
+        this._dirty = false;
 
         // 幀排程相關
         this.animFrameId = null;
@@ -93,6 +94,13 @@ export class PlaybackEngine {
 
     get isPlaying() {
         return this._isPlaying;
+    }
+
+    requestRedraw() {
+        this._dirty = true;
+        if (!this._isPlaying && !this.keepRenderingWhilePause) {
+            this.opts.draw?.(0);
+        }
     }
 
     _setupVisibilityListener() {
@@ -288,8 +296,20 @@ export class PlaybackEngine {
         this.playStartRealTime = this.realTime;
         this.playStartTimestamp = performance.now();
 
-        // 同步啟動 BGM
-        this.audioManager?.playBGM(this.realTime);
+        // 同步啟動 BGM (若 BGM 仍在解碼中則待其就緒時自動啟動)
+        if (this.audioManager) {
+            if (this.audioManager.haveBGM()) {
+                this.audioManager.playBGM(this.realTime);
+            } else if (this.audioManager.bgmReady) {
+                this.audioManager.bgmReady.then(() => {
+                    if (this._isPlaying && this.audioManager?.haveBGM() && !this.audioManager.bgmSource) {
+                        this.audioManager.playBGM(this.realTime);
+                        this.playStartTimestamp = performance.now();
+                        this.playStartRealTime = this.realTime;
+                    }
+                });
+            }
+        }
 
         if (this.majdataWs?.isConnected()) {
             this.sendMajdataPlay();
@@ -621,7 +641,9 @@ export class PlaybackEngine {
             if (settings.cursorFollow && nowIndex !== this.lastCursorIndex && editorInput) {
                 this.lastCursorIndex = nowIndex;
                 this.cursorLastIndexTime = dataIndexToTime[nowIndex] || 0;
-                const point = rawData.slice(0, nowIndex + 1).join(',').length;
+                const point = this.opts.getCharOffsetAtIndex
+                    ? this.opts.getCharOffsetAtIndex(nowIndex)
+                    : rawData.slice(0, nowIndex + 1).join(',').length;
                 editorInput.selectionStart = point;
                 editorInput.selectionEnd = point;
             }
@@ -666,7 +688,19 @@ export class PlaybackEngine {
 
         // 渲染與幀調度
         if (isPlaying || this.keepRenderingWhilePause) {
-            this.opts.draw?.(dt);
+            let shouldDraw = isPlaying || this._dirty;
+            if (!shouldDraw && this.keepRenderingWhilePause) {
+                const renderer = this.opts.getRenderer?.();
+                if (renderer) {
+                    shouldDraw = (renderer.judgeEffects && renderer.judgeEffects.length > 0) ||
+                                 (renderer.hitEffects && renderer.hitEffects.length > 0) ||
+                                 (renderer.hanabiEffects && renderer.hanabiEffects.length > 0);
+                }
+            }
+            if (shouldDraw) {
+                this._dirty = false;
+                this.opts.draw?.(dt);
+            }
             this.requestNextFrame(this.update);
         } else {
             this.lastTimestamp = null;

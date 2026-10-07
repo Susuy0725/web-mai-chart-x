@@ -151,6 +151,7 @@
       "maintenance": "維護"
     },
     "items": {
+      "skin": "遊戲皮膚",
       "speed": " Tap/Hold 速度",
       "slideSpeed": " Slide 速度",
       "touchSpeed": " Touch 速度",
@@ -661,5 +662,8 @@
     "stepsChange": "拍數",
     "apply": "套用轉換",
     "appliedToast": "已成功套用切分細分與轉換"
+  },
+  "skinChange": {
+    "restart": "皮膚已套用！將在下次啟動時生效"
   }
 }

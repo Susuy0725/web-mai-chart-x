@@ -80,7 +80,7 @@ class AppContext {
         const oldVal = this.state.settings[key];
         this.state.settings[key] = value;
 
-        if (!silent && oldVal !== value) {
+        if (!silent) {
             eventBus.emit(EVENTS.SETTINGS_CHANGED, {
                 key,
                 value,
@@ -136,6 +136,20 @@ class AppContext {
 
     set isImagesLoaded(val) {
         this.state.isImagesLoaded = !!val;
+    }
+
+    get images() {
+        const getter = this.services.get('images');
+        if (typeof getter === 'function') return getter();
+        return this.state.images;
+    }
+
+    set images(val) {
+        this.state.images = val;
+    }
+
+    setState(key, value) {
+        this.state[key] = value;
     }
 
     get isInitComplete() {

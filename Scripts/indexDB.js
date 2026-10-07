@@ -2,13 +2,16 @@
 console.log("[IndexDB] 正在初始化 IndexedDB...");
 const dbName = "SimaiEditorDB";
 const storeName = "editorState";
+
+let _dbPromise = null;
+
 openDB().then(() => {
     console.log("[IndexDB] IndexedDB 初始化完成");
 }).catch((error) => {
     console.error("[IndexDB] IndexedDB 初始化失敗:", error);
 });
 
-export function openDB() {
+function _openDBInternal() {
     return new Promise((resolve, reject) => {
         // 先用不帶版本號的 open 取得目前 DB，若發現缺少 objectStore 再進行升級
         const request = indexedDB.open(dbName);
@@ -45,6 +48,24 @@ export function openDB() {
 
         request.onerror = () => reject(request.error);
     });
+}
+
+export function openDB() {
+    if (_dbPromise) return _dbPromise;
+    _dbPromise = _openDBInternal().then((db) => {
+        db.onversionchange = () => {
+            try { db.close(); } catch (_) { }
+            _dbPromise = null;
+        };
+        db.onclose = () => {
+            _dbPromise = null;
+        };
+        return db;
+    }).catch((e) => {
+        _dbPromise = null;
+        throw e;
+    });
+    return _dbPromise;
 }
 
 // 讀取資料
@@ -258,20 +279,31 @@ export async function projectUpdateName(projectId, name) {
  * 只在首次升級時執行一次
  * @returns {Promise<string|null>} 遷移後的專案 ID，若無需遷移則回傳 null
  */
-export async function migrateFromLegacy() {
+export async function migrateFromLegacy(existingList = null) {
     // 如果已經有專案清單了，代表已遷移過或已在新系統
-    const list = await projectList();
+    const list = existingList || await projectList();
     if (list.length > 0) return null;
 
-    // 檢查是否存在舊 key
-    const legacyMaidata = await idbGet('simai_maidata');
-    const legacyBgm = await idbGet('simai_resource_bgm');
-    const legacyBg = await idbGet('simai_background_image');
-    const legacyBgVideo = await idbGet('simai_background_video');
-    const legacyDiff = await idbGet('simai_now_difficulty');
-    const legacyTime = await idbGet('simai_timeControl');
-    const legacyReady = await idbGet('simai_ready_beat');
-    const legacyHide = await idbGet('simai_hide_editor');
+    // 平行檢查是否存在舊 key (Promise.all 替代序列 await)
+    const [
+        legacyMaidata,
+        legacyBgm,
+        legacyBg,
+        legacyBgVideo,
+        legacyDiff,
+        legacyTime,
+        legacyReady,
+        legacyHide
+    ] = await Promise.all([
+        idbGet('simai_maidata'),
+        idbGet('simai_resource_bgm'),
+        idbGet('simai_background_image'),
+        idbGet('simai_background_video'),
+        idbGet('simai_now_difficulty'),
+        idbGet('simai_timeControl'),
+        idbGet('simai_ready_beat'),
+        idbGet('simai_hide_editor'),
+    ]);
 
     const hasLegacy = legacyMaidata || legacyBgm || legacyBg || legacyBgVideo;
 

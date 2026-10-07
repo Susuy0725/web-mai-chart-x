@@ -7,6 +7,7 @@ import { PlaybackEngine } from './core/playbackEngine.js';
 import { initServiceWorker } from './core/swManager.js';
 import { runInitModal } from './core/init.js';
 import { SecondaryWindowManager } from './features/secondaryWindow.js';
+import { frameProfiler } from './core/frameProfiler.js';
 import { initFileHandlers } from './features/fileHandler.js';
 import { initQuickPanel } from './features/quickPanel.js';
 import { openHelpModal } from './modals/helpModal.js';
@@ -56,6 +57,9 @@ let
     nowDifficulty = 5,
     backgroundImage,
     backgroundVideo,
+    currentBgBlobUrl = null,
+    currentBgVideoBlobUrl = null,
+    loadGeneration = 0,
     renderer,
     visualEditorRenderer,
     previewRender,
@@ -67,6 +71,17 @@ let
     globalTime = 0,
     realTime = 0,
     lastStartTime = 0;
+
+function revokeBlobUrls() {
+    if (currentBgBlobUrl) {
+        try { URL.revokeObjectURL(currentBgBlobUrl); } catch (_) { }
+        currentBgBlobUrl = null;
+    }
+    if (currentBgVideoBlobUrl) {
+        try { URL.revokeObjectURL(currentBgVideoBlobUrl); } catch (_) { }
+        currentBgVideoBlobUrl = null;
+    }
+}
 
 // 專案命名空間化的讀寫包裝
 const projSet = (key, value) => idbSetProject(currentProjectId, key, value);
@@ -545,6 +560,38 @@ window.addEventListener('keydown', (e) => {
 });
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
+let rawCharOffsets = new Int32Array(0);
+
+const updateRawCharOffsets = () => {
+    const len = rawData.length;
+    if (rawCharOffsets.length !== len + 1) {
+        rawCharOffsets = new Int32Array(len + 1);
+    }
+    let acc = 0;
+    rawCharOffsets[0] = 0;
+    for (let i = 0; i < len; i++) {
+        acc += (rawData[i]?.length || 0);
+        rawCharOffsets[i + 1] = acc;
+        acc += 1;
+    }
+};
+
+const getCharOffsetAtIndex = (idx) => {
+    if (idx < 0) return 0;
+    const target = idx + 1;
+    if (target < rawCharOffsets.length) {
+        return rawCharOffsets[target];
+    }
+    return rawData.slice(0, idx + 1).join(',').length;
+};
+
+const getNoteRangeAtIndex = (idx) => {
+    if (idx < 0 || rawData.length === 0) return { start: 0, end: 0 };
+    const safeIdx = Math.min(idx, rawData.length - 1);
+    const start = safeIdx === 0 ? 0 : (rawCharOffsets[safeIdx] ?? 0) + 1;
+    const end = rawCharOffsets[safeIdx + 1] ?? start;
+    return { start, end };
+};
 
 let ctx = canvas.getContext('2d');
 
@@ -578,8 +625,14 @@ function applyAudioSettings(s) {
 
 
 function applyMovieBrightness(val) {
-    if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * val})`;
-    if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
+    const raw = (val !== undefined && val !== null) ? val : settings.moviebrightness;
+    const num = parseFloat(raw);
+    const b = Math.max(0, 1 + 0.1875 * (isNaN(num) ? -3 : num));
+    if (editorBackgroundImage) editorBackgroundImage.style.filter = `brightness(${b})`;
+    if (editorBackgroundVideo) editorBackgroundVideo.style.filter = `brightness(${b})`;
+    if (secondCtx && externalWindow && typeof syncSecondWindowBackground === 'function') {
+        syncSecondWindowBackground();
+    }
 }
 
 // 上次對影片進行 seek 的時間（秒），用來避免頻繁設定 currentTime
@@ -589,8 +642,9 @@ const VIDEO_SEEK_THRESHOLD = 0.3; // 當差距超過此值才執行 seek（秒�
 
 let clockBpm = 60;
 
+const playControlsElement = document.getElementById('playControls');
 const isVisualMode = () => settings.displayMode === 'visual';
-const previewVisible = () => (previewContainer.style.display !== 'none' && document.getElementById('playControls').style.display !== 'none');
+const previewVisible = () => (previewContainer.style.display !== 'none' && playControlsElement?.style.display !== 'none');
 
 const saveSettingsDebounce = debounce(() => {
     if (majdataWs.isConnected()) {
@@ -601,20 +655,34 @@ const saveSettingsDebounce = debounce(() => {
     });
 }, 300);
 
+let cachedTimelineMin = 0;
+let cachedTimelineMax = 100;
+let lastSliderRatio = -1;
+let lastSliderValue = -1;
+
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
-    timeline.max = endTime + musicDelay;
-    updateSlider(realTime);
+    cachedTimelineMax = endTime + musicDelay;
+    timeline.max = cachedTimelineMax;
+    updateSlider(realTime, true);
 };
 
-const updateSlider = (time) => {
-    const min = parseFloat(timeline.min) || 0;
-    const max = parseFloat(timeline.max) || 100;
+const updateSlider = (time, force = false) => {
+    if (!force && Math.abs(time - lastSliderValue) < 0.016) {
+        return;
+    }
+    lastSliderValue = time;
+    const min = cachedTimelineMin;
+    const max = cachedTimelineMax;
     const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
     timeline.value = time;
-    const thumbWidth = 16;
-    const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-    timeline.style.setProperty('--timeline-progress', stopPos);
+    const roundedRatio = Math.round(ratio * 10000);
+    if (force || roundedRatio !== lastSliderRatio) {
+        lastSliderRatio = roundedRatio;
+        const thumbWidth = 16;
+        const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
+        timeline.style.setProperty('--timeline-progress', stopPos);
+    }
 };
 
 if (manageResourcesButton) {
@@ -647,20 +715,26 @@ tapBpmButton.addEventListener('click', () => {
     });
 });
 
-function setDataEmpty() {
-    playButton.dataset.playing = 'false';
-    playButton.children[0].innerText = "play_arrow";
-    playStartTimestamp = null;
+function setDataEmpty(skipPersist = false) {
+    if (playbackEngine) {
+        playbackEngine.stop();
+    } else {
+        playButton.dataset.playing = 'false';
+        playButton.children[0].innerText = "play_arrow";
+        playStartTimestamp = null;
+    }
     maidata = {};
     nowDifficulty = 5;
     backgroundImage = null;
     backgroundVideo = null;
+    revokeBlobUrls();
     applyHighlight('');
     musicDelay = 0;
     playbackEngine?.setTime(0);
-    timeline.max = 1;
+    cachedTimelineMax = 1;
+    timeline.max = cachedTimelineMax;
     timeline.value = 0;
-    updateSlider(0);
+    updateSlider(0, true);
     offsetInput.value = 0;
     editorInput.value = '';
     // 清除編輯歷史（新譜面應該重新開始）
@@ -676,16 +750,12 @@ function setDataEmpty() {
     editorBackgroundVideo.src = "";
     editorBackgroundVideo.style.display = 'none';
     applyMovieBrightness(settings.moviebrightness);
-    inputDebounce();
-    saveMaidata();
+    if (!skipPersist) {
+        inputDebounce();
+        saveMaidata();
+    }
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
-
-    //projSet('background_image', null).catch(() => { });
-    //projSet('background_video', null).catch(() => { });
-    //projSet('now_difficulty', nowDifficulty).catch(() => { });
-    //projSet('resource_bgm', null).catch(() => { });
-    //projSet('timeControl', 0).catch(() => { });
 }
 
 fetchFromMainoteButton.addEventListener('click', () => {
@@ -735,49 +805,88 @@ const getres = ((simaiDataValue) => {
 
             setEndtime(result.endTime);
             clockBpm = result.bpm;
-            // 以逗號切分，但忽略落在以 '||' 開頭的單行註解內的逗號（同時保留註解文字）
-            const splitRespectingLineComments = (text) => {
+            // 以逗號切分，支援 Simai 新語法（多行註解、單行註解、屬性標籤 <SIZE*(1.5,2)> 等內部的逗號不分割，且完整保留所有字元）
+            const splitSimaiPreservingAll = (text) => {
+                if (!text) return [];
                 const out = [];
                 let cur = '';
-                for (let i = 0; i < text.length;) {
-                    const a = text[i];
-                    const b = text[i + 1];
+                let inBracket = 0;
+                let inParen = 0;
+                let inBrace = 0;
+                const len = text.length;
 
-                    // 若遇到單行註解開頭 '||'，將註解整行當成一般文字加入（註解內的逗號不分割）
-                    if (a === '|' && b === '|') {
+                for (let i = 0; i < len;) {
+                    const c = text[i];
+                    const next = text[i + 1];
+
+                    // 1. 單行註解 ||：保留直到行尾（註解內逗號不分割）
+                    if (c === '|' && next === '|') {
                         cur += '||';
                         i += 2;
-                        while (i < text.length && text[i] !== '\n' && text[i] !== '\r') {
+                        while (i < len && text[i] !== '\n' && text[i] !== '\r') {
                             cur += text[i++];
                         }
-                        // 保留換行符（支援 CRLF 與 LF）
-                        if (i < text.length && text[i] === '\r') {
+                        if (i < len && text[i] === '\r') {
                             cur += '\r';
                             i++;
-                            if (i < text.length && text[i] === '\n') { cur += '\n'; i++; }
-                        } else if (i < text.length && text[i] === '\n') {
+                            if (i < len && text[i] === '\n') { cur += '\n'; i++; }
+                        } else if (i < len && text[i] === '\n') {
                             cur += '\n';
                             i++;
                         }
                         continue;
                     }
 
-                    // 正常逗號：作為分隔符
-                    if (a === ',') {
+                    // 2. 多行註解 |* ... *|：保留完整內容（註解內逗號不分割）
+                    if (c === '|' && next === '*') {
+                        cur += '|*';
+                        i += 2;
+                        while (i < len) {
+                            if (text[i] === '*' && text[i + 1] === '|') {
+                                cur += '*|';
+                                i += 2;
+                                break;
+                            }
+                            cur += text[i++];
+                        }
+                        continue;
+                    }
+
+                    // 3. 屬性標籤 <[A-Za-z]+\*[^>]*> (例如 <SIZE*(1.5,2)>, <HS*1.25>, <COLOR*...>)：原子消費（內含逗號不分割）
+                    if (c === '<') {
+                        const rest = text.slice(i);
+                        const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+                        if (propMatch) {
+                            cur += propMatch[0];
+                            i += propMatch[0].length;
+                            continue;
+                        }
+                    }
+
+                    // 4. 括號巢狀層級追蹤
+                    if (c === '[') inBracket++;
+                    else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+                    else if (c === '(') inParen++;
+                    else if (c === ')') inParen = Math.max(0, inParen - 1);
+                    else if (c === '{') inBrace++;
+                    else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+                    // 5. 頂層逗號分隔符
+                    if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
                         out.push(cur);
                         cur = '';
                         i++;
                         continue;
                     }
 
-                    // 其他字元
-                    cur += a;
+                    cur += c;
                     i++;
                 }
+
                 out.push(cur);
-                // 移除因尾端逗號或連續逗號產生的空字串項
                 return out;
             };
+            const splitRespectingLineComments = splitSimaiPreservingAll;
             dataIndexToTime = result.indexToTime || [];
 
             playScoreRes = {
@@ -786,8 +895,12 @@ const getres = ((simaiDataValue) => {
             };
             playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
             playScoreRes.invScore = 1 / playScoreRes.score;
-            rawData = splitRespectingLineComments(simaiDataValue);
+            rawData = splitSimaiPreservingAll(simaiDataValue);
+            updateRawCharOffsets();
             lastCursorIndex = -1;
+
+            // 預先計算二分搜尋結構與前綴和，確保播放無冷啟動延遲
+            simaiLogicControler.prepare(notes, playScoreRes);
 
             warnings = result.warnings || [];
             warningPositions = result.errpositions || [];
@@ -837,7 +950,8 @@ warnEl.addEventListener('click', () => {
 });
 
 const offsetInputDebounce = debounce(() => {
-    timeline.max = endTime + musicDelay;
+    cachedTimelineMax = endTime + musicDelay;
+    timeline.max = cachedTimelineMax;
     updateSlider(realTime);
 
     globalTime = realTime - musicDelay;
@@ -1408,7 +1522,7 @@ const {
 } = createVisualNoteCallbacks({
     quantizeTime,
     getRawData: () => rawData,
-    setRawData: (v) => { rawData = v; },
+    setRawData: (v) => { rawData = v; updateRawCharOffsets(); },
     getDataIndexToTime: () => dataIndexToTime,
     setDataIndexToTime: (v) => { dataIndexToTime = v; },
     getClockBpm: () => clockBpm,
@@ -1439,14 +1553,15 @@ document.addEventListener('selectionchange', () => {
         const previewVisibleFlag = previewVisible();
         const isVisualModeFlag = isVisualMode();
         const visualHeight = (() => {
-            if (!previewVisibleFlag) {
-                return visualEditorRenderer.getCanvasWH().height;
-            } else {
-                return previewRender.getCanvasWH().width / 2;
+            if (isVisualModeFlag) {
+                return visualEditorRenderer?.getCanvasWH()?.height || 0;
+            } else if (previewVisibleFlag) {
+                return (previewRender?.getCanvasWH()?.width || 0) / 2;
             }
+            return 0;
         })();
         const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
-        const V = visualHeight / settings.visualZoom;
+        const V = (visualHeight || 0) / (settings.visualZoom || 1);
 
         for (let i = notes.length - 1; i >= 0; i--) {
             const note = notes[i];
@@ -2147,13 +2262,13 @@ editorInput.addEventListener('touchstart', () => {
  * 2. 核心更新與慣性邏輯 (Unified Time & Scroller Pipeline)
  */
 const updateVisualTime = (newTime) => {
-    const min = parseFloat(timeline.min) || 0;
-    const max = parseFloat(timeline.max) || 0;
+    const min = cachedTimelineMin;
+    const max = cachedTimelineMax;
     const clampedTime = Math.max(min, Math.min(max, newTime));
 
     playbackEngine.seekToRealTime(clampedTime);
     if (settings.cursorFollow && !playbackEngine.isPlaying) {
-        const point = rawData.slice(0, nowIndex + 1).join(',').length;
+        const point = getCharOffsetAtIndex(nowIndex);
         editorInput.selectionStart = point;
         editorInput.selectionEnd = point;
         cursorLastIndexTime = dataIndexToTime[nowIndex] ?? 0;
@@ -2240,9 +2355,8 @@ editorInput.addEventListener('keydown', (e) => {
 
 function applyHighlight(text) {
     const warningRanges = warningPositions.map(index => {
-        const start = rawData.slice(0, index).join(',').length + 1;
-        const end = rawData.slice(0, index + 1).join(',').length;
-        return { start, end };
+        const range = getNoteRangeAtIndex(index);
+        return { start: range.start, end: range.end };
     });
     highlightLayer.innerHTML = getHighlight(text, warningRanges);
     warningPositions = []; // 重置警告位置，等待下一次解析更新
@@ -2261,6 +2375,7 @@ const playbackEngine = new PlaybackEngine({
     getNowIndex: () => nowIndex,
     getRawData: () => rawData,
     getDataIndexToTime: () => dataIndexToTime,
+    getCharOffsetAtIndex,
     getSecondaryWindow: () => secondaryWindow,
     getSecondCtx: () => secondCtx,
     getBackgroundImage: () => backgroundImage,
@@ -2386,10 +2501,9 @@ hideButton.addEventListener('click', () => {
 });
 
 getNowNoteIndex.addEventListener('click', () => {
-    const point = rawData.slice(0, nowIndex + 1).join(',').length;
-    // 2. 設定游標位置
-    editorInput.selectionStart = point;
-    editorInput.selectionEnd = point;
+    const range = getNoteRangeAtIndex(nowIndex);
+    editorInput.selectionStart = range.start;
+    editorInput.selectionEnd = range.end;
     editorInput.focus();
 });
 
@@ -2398,35 +2512,144 @@ function seekToTime(targetTime) {
 }
 
 function findCommaCharIndex(text, commaIndex) {
+    if (!text || commaIndex <= 0) return 0;
     let count = 0;
     let i = 0;
-    while (i < text.length && count < commaIndex) {
-        const a = text[i];
-        const b = text[i + 1];
-        if (a === '|' && b === '|') {
+    let inBracket = 0;
+    let inParen = 0;
+    let inBrace = 0;
+    const len = text.length;
+
+    while (i < len && count < commaIndex) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        // 1. 單行註解 ||
+        if (c === '|' && next === '|') {
             i += 2;
-            while (i < text.length && text[i] !== '\n' && text[i] !== '\r') {
+            while (i < len && text[i] !== '\n' && text[i] !== '\r') i++;
+            if (i < len && text[i] === '\r') {
+                i++;
+                if (i < len && text[i] === '\n') i++;
+            } else if (i < len && text[i] === '\n') {
                 i++;
             }
             continue;
         }
-        if (a === ',') {
+
+        // 2. 多行註解 |* ... *|
+        if (c === '|' && next === '*') {
+            i += 2;
+            while (i < len) {
+                if (text[i] === '*' && text[i + 1] === '|') {
+                    i += 2;
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+
+        // 3. 屬性標籤 <[A-Za-z]+\*[^>]*> (例如 <SIZE*(1.5,2)>)
+        if (c === '<') {
+            const rest = text.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                i += propMatch[0].length;
+                continue;
+            }
+        }
+
+        // 4. 括號追蹤
+        if (c === '[') inBracket++;
+        else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (c === '(') inParen++;
+        else if (c === ')') inParen = Math.max(0, inParen - 1);
+        else if (c === '{') inBrace++;
+        else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+        // 5. 頂層逗號分隔符
+        if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
             count++;
         }
+
         i++;
     }
+
     return i;
 }
 
 function indexFromCursor(text, point) {
-    const textBefore = text.substring(0, point);
-    const cleanedText = textBefore.replace(/\|\|.*$/gm, "");
-    return (cleanedText.match(/,/g) || []).length;
+    if (!text || point <= 0) return 0;
+    const limit = Math.min(point, text.length);
+    let count = 0;
+    let inBracket = 0;
+    let inParen = 0;
+    let inBrace = 0;
+
+    for (let i = 0; i < limit;) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        // 1. 單行註解 ||
+        if (c === '|' && next === '|') {
+            i += 2;
+            while (i < limit && text[i] !== '\n' && text[i] !== '\r') i++;
+            if (i < limit && text[i] === '\r') {
+                i++;
+                if (i < limit && text[i] === '\n') i++;
+            } else if (i < limit && text[i] === '\n') {
+                i++;
+            }
+            continue;
+        }
+
+        // 2. 多行註解 |* ... *|
+        if (c === '|' && next === '*') {
+            i += 2;
+            while (i < limit) {
+                if (text[i] === '*' && text[i + 1] === '|') {
+                    i += 2;
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+
+        // 3. 屬性標籤 <[A-Za-z]+\*[^>]*>
+        if (c === '<') {
+            const rest = text.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                i += propMatch[0].length;
+                continue;
+            }
+        }
+
+        // 4. 括號追蹤
+        if (c === '[') inBracket++;
+        else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (c === '(') inParen++;
+        else if (c === ')') inParen = Math.max(0, inParen - 1);
+        else if (c === '{') inBrace++;
+        else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+        // 5. 頂層逗號分隔符
+        if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
+            count++;
+        }
+
+        i++;
+    }
+
+    return count;
 }
 
 getCursorNoteIndex.addEventListener('click', () => {
     const point = editorInput.selectionStart;
-    const targetTime = dataIndexToTime[indexFromCursor(editorInput.value, point)];
+    const noteIdx = indexFromCursor(editorInput.value, point);
+    const targetTime = dataIndexToTime[noteIdx] ?? 0;
     seekToTime(targetTime);
     editorInput.focus();
 });
@@ -2699,18 +2922,20 @@ function drawMainCanvasOpenedInExternalWindow() {
 
 function draw(dt = 0) {
     if (!renderer || !isImagesLoaded) return;
+    frameProfiler.beginFrame();
     if (secondCtx && externalWindow) {
         syncSecondWindowBackground();
     }
 
     // 早期初始化：提取常用值避免重複計算
-    const playing = playButton.dataset.playing === 'true';
+    const playing = playbackEngine.isPlaying;
     const previewVisibleFlag = previewVisible();
     const isVisualModeFlag = isVisualMode();
-    const visualHeight = !previewVisibleFlag
-        ? visualEditorRenderer.getCanvasWH().height
-        : previewRender.getCanvasWH().width / 2;
+    const visualHeight = isVisualModeFlag
+        ? (visualEditorRenderer?.getCanvasWH()?.height || 0)
+        : (previewVisibleFlag ? ((previewRender?.getCanvasWH()?.width || 0) / 2) : 0);
 
+    frameProfiler.start('1. logicGet');
     const { buckets, playCombo, playScore, visualBuckets, noteQuantity, nowIndex: nowIndexRender } = simaiLogicControler.get({
         renderer,
         globalTime,
@@ -2729,10 +2954,12 @@ function draw(dt = 0) {
         nowIndex,
         audioManager,
     });
+    frameProfiler.end('1. logicGet');
 
     nowIndex = nowIndexRender;
 
     // 渲染和更新
+    frameProfiler.start('2. rendererDraw');
     if (secondCtx !== null) {
         // 獨立外部視窗存在：在外部視窗 Context 上渲染遊戲圓盤，主視窗 Canvas 繪製 i18n 提示
         renderer.drawFrame({
@@ -2767,8 +2994,10 @@ function draw(dt = 0) {
             });
         }
     }
+    frameProfiler.end('2. rendererDraw');
 
     if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {
+        frameProfiler.start('3. previewDraw');
         previewRender.drawFrame({
             globalTime,
             visualBuckets,
@@ -2777,16 +3006,23 @@ function draw(dt = 0) {
             indexTime: (lastStartTime ?? 0) - musicDelay,
             cursorIndexTime: cursorLastIndexTime,
         });
+        frameProfiler.end('3. previewDraw');
     }
 
     audioManager.update(globalTime);
-    if (!isVisualModeFlag || editorContainer.style.display === 'none') return;
+    if (!isVisualModeFlag || editorContainer.style.display === 'none') {
+        frameProfiler.endFrame();
+        return;
+    }
+    frameProfiler.start('4. visualRender');
     visualEditorRenderer?.render(isVisualModeFlag, ensureVisualEditorContext, {
         globalTime,
         visualBuckets,
         audioBuffer: audioManager.bgmBuffer,
         offset: musicDelay,
     });
+    frameProfiler.end('4. visualRender');
+    frameProfiler.endFrame();
 }
 
 // ============================================================
@@ -2796,8 +3032,10 @@ function draw(dt = 0) {
 /**
  * 載入當前 currentProjectId 的專案資料到編輯器
  * @param {function} [step] - 進度回呼 (progress, message)
+ * @param {number|null} [expectedGen] - 預期的載入世代 (用於避免切換專案競爭)
  */
-async function loadProjectData(step) {
+async function loadProjectData(step, expectedGen = null) {
+    const myGen = expectedGen !== null ? expectedGen : loadGeneration;
     const s = step || (() => { });
     s(84, t('popup.init.loadingProjectData'));
 
@@ -2824,6 +3062,8 @@ async function loadProjectData(step) {
         projGet('tb1'),
         projGet('tb2'),
     ]);
+
+    if (myGen !== loadGeneration) return;
 
     restoreTimebase(tb1, tb2);
 
@@ -2853,7 +3093,9 @@ async function loadProjectData(step) {
 
         musicDelay = parseFloat(maidata.first) || 0;
         offsetInput.value = musicDelay;
-        offsetInputDebounce();
+        cachedTimelineMax = endTime + musicDelay;
+        timeline.max = cachedTimelineMax;
+        globalTime = targetRealTime - musicDelay;
     } else {
         maidata = {};
         editorInput.value = '';
@@ -2865,11 +3107,17 @@ async function loadProjectData(step) {
         updateUndoRedoUI();
         musicDelay = 0;
         offsetInput.value = 0;
+        cachedTimelineMax = 1;
+        timeline.max = cachedTimelineMax;
+        globalTime = 0;
     }
+
+    revokeBlobUrls();
 
     if (bgVideo) {
         backgroundVideo = bgVideo;
-        editorBackgroundVideo.src = URL.createObjectURL(bgVideo);
+        currentBgVideoBlobUrl = URL.createObjectURL(bgVideo);
+        editorBackgroundVideo.src = currentBgVideoBlobUrl;
         editorBackgroundVideo.style.display = 'none';
     } else {
         backgroundVideo = null;
@@ -2879,7 +3127,8 @@ async function loadProjectData(step) {
 
     if (bg) {
         backgroundImage = bg;
-        editorBackgroundImage.src = URL.createObjectURL(bg);
+        currentBgBlobUrl = URL.createObjectURL(bg);
+        editorBackgroundImage.src = currentBgBlobUrl;
     } else {
         backgroundImage = null;
         editorBackgroundImage.src = "";
@@ -2889,8 +3138,13 @@ async function loadProjectData(step) {
 
     if (savedBgm) {
         s(95, t('popup.init.restoringBgm'));
-        await audioManager.setBackgroundMusic(savedBgm);
-        setEndtime(endTime);
+        audioManager.setBackgroundMusic(savedBgm).then(() => {
+            if (myGen !== loadGeneration) return;
+            setEndtime(endTime);
+            draw();
+        }).catch((err) => {
+            console.warn('Failed to decode BGM:', err);
+        });
     } else {
         audioManager.removeBackgroundMusic().catch(() => { });
     }
@@ -2903,10 +3157,12 @@ async function loadProjectData(step) {
         delete editorContainer.dataset.hidden;
     }
 
+    if (myGen !== loadGeneration) return;
+
     playbackEngine.setTime(targetRealTime);
     playbackEngine.resetNotesPlaybackState(playbackEngine.globalTime);
     draw();
-    updateSlider(playbackEngine.realTime);
+    updateSlider(playbackEngine.realTime, true);
 }
 
 /**
@@ -2914,23 +3170,38 @@ async function loadProjectData(step) {
  * @param {string} projectId
  */
 async function loadProject(projectId) {
+    const currentGen = ++loadGeneration;
+
     // 停止播放
-    if (playButton.dataset.playing === 'true') {
+    if (playbackEngine) {
+        playbackEngine.stop();
+    } else if (playButton.dataset.playing === 'true') {
         playButton.dataset.playing = 'false';
         playButton.children[0].innerText = "play_arrow";
         playStartTimestamp = null;
         audioManager.stopBGM();
     }
 
+    // 在切換 currentProjectId 前，先 flush 舊專案未寫入的修改，並取消任何未執行的防抖
+    saveMaidata.flush?.();
+    inputDebounce.cancel?.();
+
     currentProjectId = projectId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
 
-    setDataEmpty();
+    // 清除狀態（傳入 skipPersist = true，避免覆蓋新選中的專案）
+    setDataEmpty(true);
 
-    // 載入專案資料
-    await loadProjectData();
+    // 載入專案資料與獲取專案清單平行化
+    const [, list] = await Promise.all([
+        loadProjectData(null, currentGen),
+        projectList()
+    ]);
 
-    const list = await projectList();
+    if (currentGen !== loadGeneration) {
+        return null;
+    }
+
     const proj = list.find(p => p.id === projectId);
     return proj;
 }
@@ -2985,7 +3256,7 @@ async function _init() {
         idbGet,
         idbSet,
         defaultSettings,
-        setSettings: (val) => { settings = val; appContext.settings = val; },
+        setSettings: (val) => { settings = val; appContext.settings = val; if (val && val.skin) currentSkin = val.skin; },
         playbackSpeedInput,
         applyAudioSettings,
         loadProjectData,
@@ -3061,6 +3332,47 @@ window.resize = resize;
 window.draw = draw;
 window.saveSettingsDebounce = saveSettingsDebounce;
 window.getRenderer = () => renderer;
+window.findCommaCharIndex = findCommaCharIndex;
+window.indexFromCursor = indexFromCursor;
+window.getNoteRangeAtIndex = getNoteRangeAtIndex;
+window.getCharOffsetAtIndex = getCharOffsetAtIndex;
+
+let currentSkin = settings?.skin || 'Default';
+let isSwitchingSkin = false;
+
+export async function switchSkin(newSkin) {
+    if (!newSkin || (newSkin === currentSkin && !isSwitchingSkin)) return;
+    if (isSwitchingSkin) return;
+    isSwitchingSkin = true;
+    try {
+        const newImages = await loadAllImages(null, newSkin);
+        images = newImages;
+        currentSkin = newSkin;
+        appContext.state.images = newImages;
+        if (renderer) renderer.setImages(newImages);
+        if (visualEditorRenderer) visualEditorRenderer.setImages(newImages);
+        if (previewRender && typeof previewRender.setImages === 'function') {
+            previewRender.setImages(newImages);
+        }
+        draw();
+        simpleToast({
+            content: t('skinChange.restart') || 'Skin changed successfully',
+            type: 'success',
+            timeout: 2000
+        });
+    } catch (err) {
+        console.error('Failed to switch skin:', err);
+        simpleToast({
+            content: 'Failed to load skin: ' + err.message,
+            type: 'error',
+            timeout: 3000
+        });
+    } finally {
+        isSwitchingSkin = false;
+    }
+}
+window.switchSkin = switchSkin;
+
 try {
     Object.defineProperty(window, 'renderer', {
         get: () => renderer,
@@ -3071,6 +3383,7 @@ try {
 }
 
 // === 註冊核心服務到 appContext (解耦 Props Drilling) ===
+appContext.register('switchSkin', switchSkin);
 appContext.register('audioManager', audioManager);
 appContext.register('getRenderer', () => renderer);
 appContext.register('getVisualEditorRenderer', () => visualEditorRenderer);
@@ -3149,6 +3462,11 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     ];
     if (redrawKeys.includes(key)) {
         draw();
+    }
+
+    // 7. 皮膚切換
+    if (key === 'skin') {
+        switchSkin(value);
     }
 });
 

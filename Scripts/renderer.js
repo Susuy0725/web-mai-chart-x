@@ -1377,16 +1377,19 @@ export class SimaiRenderer {
         this.drawMiddleDisplay();
 
         if (this.settings.drawHanabiEffect) {
-            for (const n of buckets.touch) this.getTouchHanabi(n);
+            const touchBucket = buckets.touch;
+            for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
             this.drawHanabiEffects();
         }
-        for (const n of buckets.slide) this.drawSlideTrack(n);
-        for (const n of buckets.slide) this.drawSlideStar(n);
+        const slideBucket = buckets.slide;
+        for (let i = 0; i < slideBucket.length; i++) this.drawSlideTrack(slideBucket[i]);
+        for (let i = 0; i < slideBucket.length; i++) this.drawSlideStar(slideBucket[i]);
 
         if (buckets.tapnhold && buckets.tapnhold.length > 0) {
             this.drawTapAndHoldList(buckets.tapnhold);
         }
-        for (const n of buckets.touch) this.drawTouch(n);
+        const touchBucket = buckets.touch;
+        for (let i = 0; i < touchBucket.length; i++) this.drawTouch(touchBucket[i]);
 
         // 獨立分離的打擊特效層 (Hit Effects Pass)
         this.drawHitEffects();
@@ -1869,11 +1872,21 @@ export class SimaiRenderer {
         const scoreValue = (mode === 3)
             ? (this.playScoreMinus !== undefined ? this.playScoreMinus : 101)
             : (this.playScore ?? 0);
+        const scoreInt = Math.round(scoreValue * 10000);
 
-        const cacheKey = `${mode === 1 ? `c_${combo}` : `s_${mode}_${scoreValue.toFixed(4)}`}_${pxW}x${pxH}`;
+        const isDirty = !this._middleDisplayCanvas ||
+            this._lastMiddleMode !== mode ||
+            this._lastMiddleCombo !== combo ||
+            this._lastMiddleScoreInt !== scoreInt ||
+            this._lastMiddlePxW !== pxW ||
+            this._lastMiddlePxH !== pxH;
 
-        if (this._lastMiddleCacheKey !== cacheKey || !this._middleDisplayCanvas) {
-            this._lastMiddleCacheKey = cacheKey;
+        if (isDirty) {
+            this._lastMiddleMode = mode;
+            this._lastMiddleCombo = combo;
+            this._lastMiddleScoreInt = scoreInt;
+            this._lastMiddlePxW = pxW;
+            this._lastMiddlePxH = pxH;
 
             if (!this._middleDisplayCanvas) {
                 this._middleDisplayCanvas = document.createElement('canvas');
@@ -2073,7 +2086,7 @@ export class SimaiRenderer {
         const rotateStars = this.settings.rotateStars;
         const pinkStars = this.settings.pinkStars;
 
-        const baseTransform = ctx.getTransform();
+        const { a, b, c, d, e, f } = ctx.getTransform();
 
         for (let i = 0; i < notes.length; i++) {
             const s = notes[i];
@@ -2115,14 +2128,14 @@ export class SimaiRenderer {
 
                 // 2. Hold 尾端
                 if (t1 > md && endimg) {
-                    ctx.setTransform(baseTransform);
+                    ctx.setTransform(a, b, c, d, e, f);
                     ctx.translate(posInfo.x * t1, posInfo.y * t1);
                     this.drawImgAtcenter(endimg, size * 0.65);
                 }
 
                 // 3. Hold 本體
                 if (img) {
-                    ctx.setTransform(baseTransform);
+                    ctx.setTransform(a, b, c, d, e, f);
                     ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
                     ctx.rotate(posInfo.rot);
 
@@ -2150,7 +2163,7 @@ export class SimaiRenderer {
                     }
                 }
 
-                ctx.setTransform(baseTransform);
+                ctx.setTransform(a, b, c, d, e, f);
             } else {
                 // 普通 Tap / Star
                 if (noteT <= 0) {
@@ -2178,7 +2191,7 @@ export class SimaiRenderer {
                 if (currentScale !== 1) ctx.setAlpha(1);
 
                 // 2. 音符本體 (Tap / Star)
-                ctx.setTransform(baseTransform);
+                ctx.setTransform(a, b, c, d, e, f);
                 ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
 
                 let rot = posInfo.rot;
@@ -2204,7 +2217,7 @@ export class SimaiRenderer {
                     }
                 }
 
-                ctx.setTransform(baseTransform);
+                ctx.setTransform(a, b, c, d, e, f);
             }
         }
     }
@@ -2544,21 +2557,21 @@ export class SimaiRenderer {
             const isWiFi = s.slideType === "w";
 
             if (isWiFi && wPaths) {
-                const baseTransform = this.ctx.getTransform();
+                const { a, b, c, d, e, f } = this.ctx.getTransform();
 
                 const w1Point = wPaths.w1.getPointAt(Math.min(1, displaySlideProgress));
                 this.ctx.translate(w1Point.x, w1Point.y);
                 this.ctx.rotate(w1Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, starSize);
 
-                this.ctx.setTransform(baseTransform);
+                this.ctx.setTransform(a, b, c, d, e, f);
 
                 const w2Point = wPaths.w2.getPointAt(Math.min(1, displaySlideProgress));
                 this.ctx.translate(w2Point.x, w2Point.y);
                 this.ctx.rotate(w2Point.rot + Math.PI * 0.5);
                 this.drawImgAtcenter(starImg, starSize);
 
-                this.ctx.setTransform(baseTransform);
+                this.ctx.setTransform(a, b, c, d, e, f);
             }
             this.ctx.translate(x, y);
             this.ctx.rotate(rot + Math.PI * 0.5);
@@ -2690,6 +2703,8 @@ export class SimaiRenderer {
                 x: pt.x,
                 y: pt.y,
                 rad,
+                cos: Math.cos(rad),
+                sin: Math.sin(rad),
                 dw,
                 dh,
                 imgIndex,
@@ -2731,7 +2746,7 @@ export class SimaiRenderer {
             if (!singleImg) return;
         }
 
-        const baseTransform = this.ctx.getTransform();
+        const { a, b, c, d, e, f } = this.ctx.getTransform();
 
         for (let i = 0; i < arrows.length; i++) {
             const arr = arrows[i];
@@ -2761,7 +2776,7 @@ export class SimaiRenderer {
             this.ctx.translate(arr.x, arr.y);
             this.ctx.rotate(arr.rad);
             this.drawImgAtcenter(img, 1, 0, 0, arr.dw, arr.dh);
-            this.ctx.setTransform(baseTransform);
+            this.ctx.setTransform(a, b, c, d, e, f);
         }
     }
 
@@ -3007,12 +3022,17 @@ export class SimaiVisualEditor {
     }
 
     getCanvasWH() {
-        const w = this.canvas.clientWidth;
-        const h = this.canvas.clientHeight;
-        const invP = scaleBase / Math.min(w, h) * 0.5;
+        const w = this.canvas.clientWidth || 0;
+        const h = this.canvas.clientHeight || 0;
         if (!this._canvasWH) {
             this._canvasWH = { width: 0, height: 0 };
         }
+        if (w <= 0 || h <= 0) {
+            this._canvasWH.width = 0;
+            this._canvasWH.height = 0;
+            return this._canvasWH;
+        }
+        const invP = scaleBase / Math.min(w, h) * 0.5;
         this._canvasWH.width = w * invP;
         this._canvasWH.height = h * invP;
         return this._canvasWH;

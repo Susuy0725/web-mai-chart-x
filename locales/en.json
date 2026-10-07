@@ -151,6 +151,7 @@
       "maintenance": "Maint."
     },
     "items": {
+      "skin": "Game Skin",
       "speed": "Tap/Hold Speed",
       "slideSpeed": "Slide Speed",
       "touchSpeed": "Touch Speed",
@@ -661,5 +662,8 @@
     "stepsChange": "Beats",
     "apply": "Apply",
     "appliedToast": "Beat subdivision & conversion applied successfully"
+  },
+  "skinChange": {
+    "restart": "Skin applied! Will take effect on next launch"
   }
 }

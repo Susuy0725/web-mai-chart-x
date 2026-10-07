@@ -151,6 +151,7 @@
       "maintenance": "维护"
     },
     "items": {
+      "skin": "游戏皮肤",
       "speed": " Tap/Hold 速度",
       "slideSpeed": " Slide 速度",
       "touchSpeed": " Touch 速度",
@@ -661,5 +662,8 @@
     "stepsChange": "拍数",
     "apply": "应用转换",
     "appliedToast": "已成功应用切分细分与转换"
+  },
+  "skinChange": {
+    "restart": "皮肤已应用！将在下次启动时生效"
   }
 }

@@ -151,6 +151,7 @@
       "maintenance": "관리"
     },
     "items": {
+      "skin": "게임 스킨",
       "speed": " Tap/Hold 속도",
       "slideSpeed": " Slide 속도",
       "touchSpeed": " Touch 속도",
@@ -661,5 +662,8 @@
     "stepsChange": "박자 수",
     "apply": "변환 적용",
     "appliedToast": "박자 세분화 및 변환을 적용했습니다"
+  },
+  "skinChange": {
+    "restart": "스킨이 적용되었습니다! 다음 실행 시 적용됩니다"
   }
 }

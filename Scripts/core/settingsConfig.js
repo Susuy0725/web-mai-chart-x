@@ -11,6 +11,7 @@ export const defaultSettings = {
     slideSpeed: 0,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數(101%+), 3: 分數(101%-)
     moviebrightness: -3,
+    skin: 'Default',
     showSensor: true,
     rotateStars: true,
     pinkStars: false,
@@ -90,7 +91,11 @@ export const settingsConfig = [
                     { value: '-2', label: 'settings.items.dark' },
                     { value: '-3', label: 'settings.items.veryDark' },
                 ],
-                def: defaultSettings.moviebrightness || 0,
+                def: defaultSettings.moviebrightness ?? -3,
+                apply: (val) => {
+                    const fn = window.applyMovieBrightness;
+                    if (fn) fn(val);
+                }
             },
             {
                 id: 'pinkStars',
@@ -122,6 +127,16 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.display',
         items: [
+            {
+                id: 'skin',
+                type: 'dropdown',
+                label: 'settings.items.skin',
+                options: [
+                    { value: 'Default', label: 'Default' },
+                    { value: 'Deluxe', label: 'Deluxe' },
+                ],
+                def: defaultSettings.skin || 'Default',
+            },
             {
                 id: 'showSensor',
                 type: 'checkbox',

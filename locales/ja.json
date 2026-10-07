@@ -151,6 +151,7 @@
       "maintenance": "メンテナンス"
     },
     "items": {
+      "skin": "ゲームスキン",
       "speed": "Tap/Hold速度",
       "slideSpeed": "Slide速度",
       "touchSpeed": "Touch速度",
@@ -661,5 +662,8 @@
     "stepsChange": "拍数",
     "apply": "変換を適用",
     "appliedToast": "拍の細分化・変換を適用しました"
+  },
+  "skinChange": {
+    "restart": "スキンが適用されました！次回起動時に有効になります"
   }
 }

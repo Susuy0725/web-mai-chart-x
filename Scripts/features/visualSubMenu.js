@@ -332,6 +332,6 @@ export class VisualSubMenu {
             if (!clickedInsideAny) {
                 VisualSubMenu.closeAll();
             }
-        });
+        }, true);
     }
 }

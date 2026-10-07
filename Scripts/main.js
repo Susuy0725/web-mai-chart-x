@@ -661,17 +661,39 @@ if (visualRedoBtn) {
 }
 
 // 最底端展開/收納按鈕 (通用控制所有 .visual-tool-group 群組)
+function setVisualToolCollapsed(isCollapsed) {
+    if (!visualToolCollapseBtn) return;
+    visualToolCollapseBtn.classList.toggle('collapsed', isCollapsed);
+    document.querySelectorAll('.visual-tool-group').forEach(group => {
+        group.classList.toggle('collapsed', isCollapsed);
+    });
+    if (isCollapsed) {
+        VisualSubMenu.closeAll();
+    }
+}
+
 if (visualToolCollapseBtn) {
     visualToolCollapseBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const isCollapsed = visualToolCollapseBtn.classList.toggle('collapsed');
-        document.querySelectorAll('.visual-tool-group').forEach(group => {
-            group.classList.toggle('collapsed', isCollapsed);
-        });
-        if (isCollapsed) {
-            VisualSubMenu.closeAll();
-        }
+        const willCollapse = !visualToolCollapseBtn.classList.contains('collapsed');
+        setVisualToolCollapsed(willCollapse);
     });
+
+    // 點擊到工具欄外的地方時把工具欄收起來
+    document.addEventListener('pointerdown', (e) => {
+        if (!visualToolBarEl || visualToolBarEl.style.display === 'none') return;
+        if (visualToolCollapseBtn.classList.contains('collapsed')) return;
+
+        // 若點擊目標在 visualToolBarEl 之內，不收合
+        if (visualToolBarEl.contains(e.target)) return;
+
+        // 若點擊目標為彈窗或上下文選單相關元素，避免誤關閉
+        if (e.target.closest && (e.target.closest('.wmc-floating-note-menu') || e.target.closest('.wmc-box-floating-menu') || e.target.closest('.popup-container') || e.target.closest('.popup-window'))) {
+            return;
+        }
+
+        setVisualToolCollapsed(true);
+    }, true);
 }
 
 if (visualToolModeSelect) {

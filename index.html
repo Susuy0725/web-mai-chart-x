@@ -58,9 +58,9 @@
     </noscript>
 
     <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,drag_indicator,edit,error,file_open,find_replace,folder_zip,fullscreen,fullscreen_exit,help,ink_eraser,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning"
         media="print" onload="this.media='all'">
     <noscript>
         <link rel="stylesheet"
@@ -321,6 +321,13 @@
                         style="display: none;">
                     <label for="tool-mode-select" class="switch-item" title="選取工具 (S)">
                         <span class="material-symbols-outlined" translate="no">arrow_selector_tool</span>
+                    </label>
+
+                    <!-- 框選工具 -->
+                    <input type="radio" id="tool-mode-boxselect" name="visualTool" value="boxSelect" aria-label="框選工具"
+                        style="display: none;">
+                    <label for="tool-mode-boxselect" class="switch-item" title="框選工具 (B)">
+                        <span class="material-symbols-outlined" translate="no">select_all</span>
                     </label>
 
                     <!-- 橡皮擦工具 -->

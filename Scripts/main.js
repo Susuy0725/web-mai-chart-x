@@ -746,6 +746,12 @@ window.addEventListener('keydown', (e) => {
             if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
                 visualEditorRenderer.setEditMode('select');
             }
+        } else if (e.key === 'b' || e.key === 'B') {
+            settings.visualToolMode = 'boxSelect';
+            setVisualToolUI('boxSelect');
+            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+                visualEditorRenderer.setEditMode('boxSelect');
+            }
             saveSettingsDebounce();
             draw();
         }

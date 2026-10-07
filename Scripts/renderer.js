@@ -3647,7 +3647,7 @@ export class SimaiVisualEditor {
             ctx.restore();
         }
 
-        if (this.editMode === 'select' && this.isSelectingBox) {
+        if ((this.editMode === 'select' || this.editMode === 'boxSelect') && this.isSelectingBox) {
             const minX = Math.min(this.selectionStart.x, this.selectionEnd.x);
             const maxX = Math.max(this.selectionStart.x, this.selectionEnd.x);
             const minY = Math.min(this.selectionStart.y, this.selectionEnd.y);
@@ -3737,15 +3737,14 @@ export class SimaiVisualEditor {
                             this.selectedNotes.add(clickedNote);
                         }
                     }
+                    e.stopPropagation(); // 點擊音符時阻斷事件，專注於選取，不拖拽軌道
                 } else {
+                    // 點擊空白處：若無修飾鍵則清除選取，且不呼叫 e.stopPropagation()，
+                    // 讓事件冒泡到 visualScroller 啟動滑鼠/觸控拖拽軌道
                     if (!e.ctrlKey && !e.shiftKey) {
                         this.selectedNotes.clear();
                     }
-                    this.isSelectingBox = true;
-                    this.selectionStart = { x: this.mouseX, y: this.mouseY };
-                    this.selectionEnd = { x: this.mouseX, y: this.mouseY };
                 }
-                e.stopPropagation();
             } else if (e.button === 2) { // 右鍵在選擇模式：刪除選取音符
                 if (clickedNote !== null && !this.selectedNotes.has(clickedNote)) {
                     this.selectedNotes.add(clickedNote);
@@ -3758,6 +3757,64 @@ export class SimaiVisualEditor {
                     this.selectedNotes.clear();
                 }
             }
+            if (!this._isLoopActive()) this._upd();
+            return;
+        }
+
+        if (this.editMode === 'boxSelect') {
+            if (e.button === 0) { // 左鍵在框選模式
+                if (clickedNote !== null) {
+                    if (e.ctrlKey || e.shiftKey) {
+                        if (this.selectedNotes.has(clickedNote)) {
+                            this.selectedNotes.delete(clickedNote);
+                        } else {
+                            this.selectedNotes.add(clickedNote);
+                        }
+                    } else {
+                        if (!this.selectedNotes.has(clickedNote)) {
+                            this.selectedNotes.clear();
+                            this.selectedNotes.add(clickedNote);
+                        }
+                    }
+                } else {
+                    if (!e.ctrlKey && !e.shiftKey) {
+                        this.selectedNotes.clear();
+                    }
+                    this.isSelectingBox = true;
+                    this.selectionStart = { x: this.mouseX, y: this.mouseY };
+                    this.selectionEnd = { x: this.mouseX, y: this.mouseY };
+                }
+                e.stopPropagation();
+            } else if (e.button === 2) { // 右鍵在框選模式：刪除選取音符
+                if (clickedNote !== null && !this.selectedNotes.has(clickedNote)) {
+                    this.selectedNotes.add(clickedNote);
+                }
+                if (this.selectedNotes.size > 0) {
+                    e.stopPropagation();
+                    if (this.onDeleteNote) {
+                        this.onDeleteNote(Array.from(this.selectedNotes));
+                    }
+                    this.selectedNotes.clear();
+                }
+            }
+            if (!this._isLoopActive()) this._upd();
+            return;
+        } else if (this.editMode === 'modifier') {
+            if (e.button === 0) { // 左鍵套用效果
+                if (clickedNote !== null) {
+                    e.stopPropagation();
+                    this.modifierClickedNote = clickedNote;
+                }
+            } else if (e.button === 2) { // 右鍵刪除音符
+                if (clickedNote !== null) {
+                    e.stopPropagation();
+                    if (this.onDeleteNote) {
+                        this.onDeleteNote(clickedNote);
+                    }
+                }
+            }
+            if (!this._isLoopActive()) this._upd();
+            return;
         } else { // 編輯模式 (Edit Mode)
             if (e.button === 0) { // 左鍵
                 this.markerPressed = true;
@@ -3828,6 +3885,19 @@ export class SimaiVisualEditor {
                 this.longPressTimer = null;
             }
 
+            if (this.editMode === 'modifier') {
+                if (this.modifierClickedNote) {
+                    if (this.onChangeNote) {
+                        this.onChangeNote(this.modifierClickedNote);
+                    }
+                    this.modifierClickedNote = null;
+                }
+                if (!this._isLoopActive()) {
+                    this._upd();
+                }
+                return;
+            }
+
             if (this.holdDragState) {
                 const { isTailAdjust, targetNote, lane, startTime, currentDuration, clickedNote, isLongPressTriggered } = this.holdDragState;
                 this.holdDragState = null;
@@ -3865,7 +3935,7 @@ export class SimaiVisualEditor {
         this.markerPressed = false;
         this.hoverLane = null;
         this.isSelectingBox = false;
-        this.canvas.style.cursor = this.editMode === 'select' ? 'default' : 'grab';
+        this.canvas.style.cursor = (this.editMode === 'boxSelect') ? 'crosshair' : ((this.editMode === 'eraser' || this.editMode === 'modifier') ? 'default' : 'grab');
         if (!this._isLoopActive()) {
             this._upd();
         }
@@ -3890,7 +3960,7 @@ export class SimaiVisualEditor {
             return;
         }
 
-        if (this.editMode === 'select' && this.isSelectingBox) {
+        if ((this.editMode === 'select' || this.editMode === 'boxSelect') && this.isSelectingBox) {
             this.selectionEnd = { x: this.mouseX, y: this.mouseY };
             this._updateBoxSelection();
             if (!this._isLoopActive()) this._upd();
@@ -3903,13 +3973,18 @@ export class SimaiVisualEditor {
 
         if (hoveredHoldTail !== null) {
             this.canvas.style.cursor = 'ns-resize';
-        } else if (this.editMode === 'select' || this.editMode === 'eraser') {
+        } else if (this.editMode === 'boxSelect') {
             const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
-            if (hoveredNote !== null) {
-                this.canvas.style.cursor = 'pointer';
-            } else {
-                this.canvas.style.cursor = this.editMode === 'eraser' ? 'not-allowed' : 'default';
-            }
+            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'crosshair';
+        } else if (this.editMode === 'select') {
+            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
+            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'grab';
+        } else if (this.editMode === 'eraser') {
+            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
+            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'not-allowed';
+        } else if (this.editMode === 'modifier') {
+            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
+            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'default';
         } else {
             if (this.hoverLane !== null) {
                 this.canvas.style.cursor = 'crosshair';

@@ -1708,6 +1708,9 @@ const onVisualSelectionChange = (selectedNotes) => {
                         openSlideEditorModal({
                             note,
                             rawPart: props.part,
+                            renderer,
+                            settings,
+                            images,
                             onApply: (newSlideStr) => {
                                 visualUpdateNoteProperty(note, { fullSlideString: newSlideStr });
                                 draw();

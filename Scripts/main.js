@@ -1,6 +1,7 @@
 import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags } from './features/visualEditor.js';
 import { showFloatingMenu, hideFloatingMenu } from './features/visualFloatingMenu.js';
 import { openNoteDurationModal } from './modals/noteDurationModal.js';
+import { openSlideEditorModal } from './modals/slideEditorModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
 export { defaultSettings };
@@ -1703,7 +1704,15 @@ const onVisualSelectionChange = (selectedNotes) => {
                         });
                     },
                     onChangePattern: () => {
-                        // 改變軌跡 (保留供後續串接)
+                        hideFloatingMenu();
+                        openSlideEditorModal({
+                            note,
+                            rawPart: props.part,
+                            onApply: (newSlideStr) => {
+                                visualUpdateNoteProperty(note, { fullSlideString: newSlideStr });
+                                draw();
+                            }
+                        });
                     }
                 });
                 return;

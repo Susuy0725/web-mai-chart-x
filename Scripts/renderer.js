@@ -2904,48 +2904,6 @@ export class SimaiVisualEditor {
         if (minDiff <= this.settings.noteBaseSize * 0.5) {
             return closestLane;
         }
-        return null;
-    }
-
-    _hitTestNote(mouseX, mouseY) {
-        if (!this._state || !this._state.visualBuckets) return null;
-        const tolerance = this.settings.noteBaseSize * 0.7;
-        const zoom = this.zoom;
-        const gt = this.globalTime;
-
-        // Helper check for a candidate note
-        const checkCandidate = (note, noteX) => {
-            const noteY = (note.time - gt) * -zoom;
-            const dx = Math.abs(mouseX - noteX);
-            const dy = Math.abs(mouseY - noteY);
-            return dx <= tolerance && dy <= tolerance;
-        };
-
-        // 1. Check tapnhold
-        for (const note of this._state.visualBuckets.tapnhold) {
-            const noteX = visualNoteRefPos[note.pos - 1].x;
-            if (checkCandidate(note, noteX)) {
-                return note;
-            }
-        }
-
-        // 2. Check slide
-        for (const note of this._state.visualBuckets.slide) {
-            const noteX = visualNoteRefPos[note.pos - 1].x;
-            if (checkCandidate(note, noteX)) {
-                return note;
-            }
-        }
-
-        // 3. Check touch
-        for (const note of this._state.visualBuckets.touch) {
-            const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
-            if (checkCandidate(note, posInfo.x)) {
-                return note;
-            }
-        }
-
-        return null;
     }
 
     getMemoizedTintedImage(imgKey, opacity, config) {
@@ -3435,7 +3393,11 @@ export class SimaiVisualEditor {
         if (noteX === undefined) return null;
 
         const gt = this.globalTime;
-        const noteY = (note.time - gt) * -this.zoom;
+        let targetTime = note.time;
+        if (note.hitPart === 'track') {
+            targetTime = note.time + (note.slideDelay || 0) + (note.slideDuration || 0) / 2;
+        }
+        const noteY = (targetTime - gt) * -this.zoom;
 
         const rect = this.canvas.getBoundingClientRect();
         const dpr = this.settings?.lowRes ? 1 : (window.devicePixelRatio || 1);
@@ -3504,7 +3466,7 @@ export class SimaiVisualEditor {
         const zoom = this.zoom;
         const gt = this.globalTime;
 
-        // Helper check for a candidate note
+        // Helper check for a candidate note head
         const checkCandidate = (note, noteX) => {
             const noteY = (note.time - gt) * -zoom;
             const dx = Math.abs(mouseX - noteX);
@@ -3512,26 +3474,55 @@ export class SimaiVisualEditor {
             return dx <= tolerance && dy <= tolerance;
         };
 
-        // 1. Check tapnhold
+        // 1. 優先檢查星星頭與普通音符頭部 (tapnhold)
         for (const note of this._state.visualBuckets.tapnhold) {
             const noteX = visualNoteRefPos[note.pos - 1]?.x;
-            if (noteX !== undefined && checkCandidate(note, noteX)) return note;
+            if (noteX !== undefined && checkCandidate(note, noteX)) {
+                note.hitPart = note.isStar ? 'head' : 'note';
+                return note;
+            }
         }
 
-        // 2. Check slide
+        // 2. 檢查滑星 (slide) - 區分點擊星星頭還是軌跡
         for (const note of this._state.visualBuckets.slide) {
             const noteX = visualNoteRefPos[note.pos - 1]?.x;
-            if (noteX !== undefined && checkCandidate(note, noteX)) return note;
+            if (noteX === undefined) continue;
+
+            const dx = Math.abs(mouseX - noteX);
+            if (dx <= tolerance) {
+                const headY = (note.time - gt) * -zoom;
+                // A. 落在星星頭附近
+                if (Math.abs(mouseY - headY) <= tolerance) {
+                    note.hitPart = 'head';
+                    return note;
+                }
+
+                // B. 落在滑星箭頭軌跡區間內 (僅在修飾模式下供點擊套用效果，非修飾模式不可選取)
+                if (this.editMode === 'modifier') {
+                    const startY = (note.time + (note.slideDelay || 0) - gt) * -zoom;
+                    const endY = (note.time + (note.slideDelay || 0) + (note.slideDuration || 0) - gt) * -zoom;
+                    const minY = Math.min(startY, endY) - tolerance;
+                    const maxY = Math.max(startY, endY) + tolerance;
+
+                    if (mouseY >= minY && mouseY <= maxY) {
+                        note.hitPart = 'track';
+                        return note;
+                    }
+                }
+            }
         }
 
-        // 3. Check touch
+        // 3. 檢查 touch
         for (const note of this._state.visualBuckets.touch) {
             let noteX = visualNoteRefPos[note.pos - 1]?.x;
             if (note.touchPos && touchRefPos[note.touchPos]) {
                 const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
                 if (posInfo) noteX = posInfo.x;
             }
-            if (noteX !== undefined && checkCandidate(note, noteX)) return note;
+            if (noteX !== undefined && checkCandidate(note, noteX)) {
+                note.hitPart = 'note';
+                return note;
+            }
         }
 
         return null;
@@ -3686,7 +3677,16 @@ export class SimaiVisualEditor {
                 }
                 if (noteX === undefined) continue;
 
-                const noteY = (note.time - gt) * -zoom;
+                let noteY = (note.time - gt) * -zoom;
+                let boxW = size;
+                let boxH = size;
+
+                if (note.hitPart === 'track') {
+                    const startY = (note.time + (note.slideDelay || 0) - gt) * -zoom;
+                    const endY = (note.time + (note.slideDelay || 0) + (note.slideDuration || 0) - gt) * -zoom;
+                    noteY = (startY + endY) / 2;
+                    boxH = Math.max(size, Math.abs(endY - startY));
+                }
 
                 ctx.save();
                 ctx.translate(noteX, noteY);
@@ -3695,9 +3695,9 @@ export class SimaiVisualEditor {
                 ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
                 ctx.beginPath();
                 if (typeof ctx.roundRect === 'function') {
-                    ctx.roundRect(-size / 2, -size / 2, size, size, r);
+                    ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, r);
                 } else {
-                    ctx.rect(-size / 2, -size / 2, size, size);
+                    ctx.rect(-boxW / 2, -boxH / 2, boxW, boxH);
                 }
                 ctx.fill();
 
@@ -3713,34 +3713,35 @@ export class SimaiVisualEditor {
                 ctx.strokeStyle = '#FFFFFF';
                 ctx.lineWidth = 2;
                 const bracketLen = 6;
-                const half = size / 2;
+                const halfW = boxW / 2;
+                const halfH = boxH / 2;
 
                 // 左上角
                 ctx.beginPath();
-                ctx.moveTo(-half, -half + bracketLen);
-                ctx.lineTo(-half, -half);
-                ctx.lineTo(-half + bracketLen, -half);
+                ctx.moveTo(-halfW, -halfH + bracketLen);
+                ctx.lineTo(-halfW, -halfH);
+                ctx.lineTo(-halfW + bracketLen, -halfH);
                 ctx.stroke();
 
                 // 右上角
                 ctx.beginPath();
-                ctx.moveTo(half - bracketLen, -half);
-                ctx.lineTo(half, -half);
-                ctx.lineTo(half, -half + bracketLen);
+                ctx.moveTo(halfW - bracketLen, -halfH);
+                ctx.lineTo(halfW, -halfH);
+                ctx.lineTo(halfW, -halfH + bracketLen);
                 ctx.stroke();
 
                 // 左下角
                 ctx.beginPath();
-                ctx.moveTo(-half, half - bracketLen);
-                ctx.lineTo(-half, half);
-                ctx.lineTo(-half + bracketLen, half);
+                ctx.moveTo(-halfW, halfH - bracketLen);
+                ctx.lineTo(-halfW, halfH);
+                ctx.lineTo(-halfW + bracketLen, halfH);
                 ctx.stroke();
 
                 // 右下角
                 ctx.beginPath();
-                ctx.moveTo(half - bracketLen, half);
-                ctx.lineTo(half, half);
-                ctx.lineTo(half, half - bracketLen);
+                ctx.moveTo(halfW - bracketLen, halfH);
+                ctx.lineTo(halfW, halfH);
+                ctx.lineTo(halfW, halfH - bracketLen);
                 ctx.stroke();
 
                 ctx.restore();
@@ -3805,13 +3806,21 @@ export class SimaiVisualEditor {
                 if (posInfo) noteX = posInfo.x;
             }
 
-            const t = hoveredNote.time - this.globalTime;
-
             ctx.save();
-            ctx.translate(noteX, t * -this.zoom);
             ctx.strokeStyle = '#FF4444';
             ctx.lineWidth = 1.5;
-            ctx.strokeRect(-size / 2, -size / 2, size, size);
+
+            if (hoveredNote.hitPart === 'track') {
+                const startY = (hoveredNote.time + (hoveredNote.slideDelay || 0) - this.globalTime) * -this.zoom;
+                const endY = (hoveredNote.time + (hoveredNote.slideDelay || 0) + (hoveredNote.slideDuration || 0) - this.globalTime) * -this.zoom;
+                const topY = Math.min(startY, endY);
+                const height = Math.max(size, Math.abs(endY - startY));
+                ctx.strokeRect(noteX - size / 2, topY, size, height);
+            } else {
+                const t = hoveredNote.time - this.globalTime;
+                ctx.translate(noteX, t * -this.zoom);
+                ctx.strokeRect(-size / 2, -size / 2, size, size);
+            }
             ctx.restore();
         } else if (this.hoverLane !== null) {
             // 若為空白位置，顯示對齊網格的預覽標記

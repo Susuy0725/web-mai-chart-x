@@ -200,19 +200,23 @@ export function createVisualNoteCallbacks(ctx) {
 
         if (effectiveType === 'slide') {
             const endLane = ((lane + 3) % 8) + 1;
-            noteString = `${lane}-${endLane}${modChar}[4:1]`;
+            const headMod = (selectedModifier === 'firework') ? '' : modChar;
+            noteString = `${lane}${headMod}-${endLane}[4:1]`;
             noteLabel = 'Slide';
         } else if (effectiveType === 'touch') {
-            const touchMod = (selectedModifier === 'break') ? '' : modChar;
+            const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
             noteString = `B${lane}${touchMod}`;
             noteLabel = 'Touch';
         } else if (effectiveType === 'touchhold') {
-            const touchMod = (selectedModifier === 'break') ? '' : modChar;
+            const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
             noteString = `B${lane}h${touchMod}[4:1]`;
             noteLabel = 'TouchHold';
         } else if (effectiveType === 'hold') {
-            const holdMod = (selectedModifier === 'firework') ? '' : modChar;
-            noteString = `${lane}h${holdMod}[4:1]`;
+            let holdTag = 'h';
+            if (selectedModifier === 'break') holdTag = 'bh';
+            else if (selectedModifier === 'ex') holdTag = 'hx';
+            else if (selectedModifier === 'mine') holdTag = 'hm';
+            noteString = `${lane}${holdTag}[4:1]`;
             noteLabel = 'Hold';
         } else {
             const tapMod = (selectedModifier === 'firework') ? '' : modChar;
@@ -230,7 +234,11 @@ export function createVisualNoteCallbacks(ctx) {
         const newContent = rawData.join(',');
         updateEditorAndSave(newContent);
 
-        simpleToast({ content: `已在軌道 ${lane} 放置 ${noteLabel} 音符`, type: 'success', timeout: 1000 });
+        const modName = (selectedModifier === 'ex') ? 'EX ' :
+                        (selectedModifier === 'break') ? 'Break ' :
+                        (selectedModifier === 'mine') ? '地雷 ' :
+                        (selectedModifier === 'firework') ? '煙火 ' : '';
+        simpleToast({ content: `已在軌道 ${lane} 放置 ${modName}${noteLabel} 音符`, type: 'success', timeout: 1000 });
     };
 
     const visualPlaceHoldNote = (lane, clickTime, durationTime, originalNote = null) => {
@@ -248,20 +256,25 @@ export function createVisualNoteCallbacks(ctx) {
         }
 
         const settings = getSettings();
+        const selectedModifier = settings?.visualSelectedModifier || 'none';
         const gridDiv = settings.gridDivision || 4;
         const tickPeriod = (240 / currentBpm) / gridDiv;
 
         let numTicks = Math.max(0, Math.round(durationTime / tickPeriod));
-        let noteStr = `${lane}h[${gridDiv}:${numTicks}]`;
+        let holdTag = 'h';
+        if (selectedModifier === 'break') holdTag = 'bh';
+        else if (selectedModifier === 'ex') holdTag = 'hx';
+        else if (selectedModifier === 'mine') holdTag = 'hm';
 
-        if (numTicks == 0) {
-            noteStr = `${lane}h`;
-        }
+        let noteStr = numTicks === 0 ? `${lane}${holdTag}` : `${lane}${holdTag}[${gridDiv}:${numTicks}]`;
 
-        if (originalNote && originalNote.isBreak) {
-            noteStr = `${lane}bh[${gridDiv}:${numTicks}]`;
-            if (numTicks == 0) {
-                noteStr = `${lane}bh`;
+        if (originalNote) {
+            if (originalNote.isBreak) {
+                noteStr = numTicks === 0 ? `${lane}bh` : `${lane}bh[${gridDiv}:${numTicks}]`;
+            } else if (originalNote.isMine) {
+                noteStr = numTicks === 0 ? `${lane}hm` : `${lane}hm[${gridDiv}:${numTicks}]`;
+            } else if (originalNote.isEx) {
+                noteStr = numTicks === 0 ? `${lane}hx` : `${lane}hx[${gridDiv}:${numTicks}]`;
             }
         }
 
@@ -396,7 +409,56 @@ export function createVisualNoteCallbacks(ctx) {
                 return;
             }
 
-            if (clean.includes('h[')) {
+            const REGEX_SLIDE_SYM = /((?:pp)|(?:qq)|[-<>^vpqszVw])/;
+            const isSlide = REGEX_SLIDE_SYM.test(clean);
+
+            if (isSlide) {
+                const isTrackClick = (note.hitPart === 'track') || (note.type === 'slide' && note.hitPart !== 'head');
+                const slideMatch = clean.match(/^([1-8])([bxm]?)([-<>^vpqszVw].*?)(\[[^\]]*\])?$/);
+
+                if (slideMatch) {
+                    const headLane = slideMatch[1];
+                    const headMod = slideMatch[2] || '';
+                    const slideBody = slideMatch[3];
+                    const duration = slideMatch[4] || '';
+
+                    if (isTrackClick) {
+                        // 點擊軌跡修改軌跡的屬性
+                        if (selectedModifier === 'ex') {
+                            simpleToast({ content: '滑星軌跡不支援 EX 效果（僅星星頭支援）', type: 'warning', timeout: 1500 });
+                            return;
+                        }
+                        if (selectedModifier === 'firework') {
+                            simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                            return;
+                        }
+                        const cleanBody = slideBody.replace(/[bm]/g, '');
+                        const newTrackMod = selectedModifier === 'break' ? 'b' :
+                                            selectedModifier === 'mine' ? 'm' : '';
+                        const newSlideBody = `${cleanBody}${newTrackMod}`;
+                        nextClean = `${headLane}${headMod}${newSlideBody}${duration}`;
+
+                        const modLabel = selectedModifier === 'break' ? 'Break' :
+                                         selectedModifier === 'mine' ? '地雷' : '無效果';
+                        simpleToast({ content: `已為滑星軌跡套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
+                    } else {
+                        // 點擊星星頭修改頭的屬性
+                        if (selectedModifier === 'firework') {
+                            simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                            return;
+                        }
+                        const newHeadMod = selectedModifier === 'ex' ? 'x' :
+                                           selectedModifier === 'break' ? 'b' :
+                                           selectedModifier === 'mine' ? 'm' : '';
+                        nextClean = `${headLane}${newHeadMod}${slideBody}${duration}`;
+
+                        const modLabel = selectedModifier === 'ex' ? 'EX' :
+                                         selectedModifier === 'break' ? 'Break' :
+                                         selectedModifier === 'mine' ? '地雷' : '無效果';
+                        simpleToast({ content: `已為星星頭套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
+                    }
+                }
+            } else if (clean.includes('h[')) {
                 const match = clean.match(/^([A-E]?\d+h)([xbmf]?)((\[\d+:\d+\])?)/);
                 if (match) {
                     const head = match[1];
@@ -407,6 +469,11 @@ export function createVisualNoteCallbacks(ctx) {
                                 selectedModifier === 'firework' ? 'f' : '';
                     nextClean = `${head}${mod}${tail}`;
                 }
+                const modLabel = selectedModifier === 'ex' ? 'EX' :
+                                 selectedModifier === 'break' ? 'Break' :
+                                 selectedModifier === 'mine' ? '地雷' :
+                                 selectedModifier === 'firework' ? 'FW' : '無效果';
+                simpleToast({ content: `已為音符套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
             } else {
                 const base = clean.replace(/[xbmf]/g, '');
                 const mod = selectedModifier === 'ex' ? 'x' :
@@ -414,12 +481,12 @@ export function createVisualNoteCallbacks(ctx) {
                             selectedModifier === 'mine' ? 'm' :
                             selectedModifier === 'firework' ? 'f' : '';
                 nextClean = `${base}${mod}`;
+                const modLabel = selectedModifier === 'ex' ? 'EX' :
+                                 selectedModifier === 'break' ? 'Break' :
+                                 selectedModifier === 'mine' ? '地雷' :
+                                 selectedModifier === 'firework' ? 'FW' : '無效果';
+                simpleToast({ content: `已為音符套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
             }
-            const modLabel = selectedModifier === 'ex' ? 'EX' :
-                             selectedModifier === 'break' ? 'Break' :
-                             selectedModifier === 'mine' ? '地雷' :
-                             selectedModifier === 'firework' ? 'FW' : '無效果';
-            simpleToast({ content: `已為音符套用 ${modLabel} 效果: ${nextClean}`, type: 'success', timeout: 1000 });
         } else {
             nextClean = getNextNoteClean(clean, lane);
             simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
@@ -472,11 +539,12 @@ export function createVisualNoteCallbacks(ctx) {
             duration,
             slidePattern,
             isSlide,
-            isHold
+            isHold,
+            hitPart: note.hitPart || (note.type === 'slide' ? 'track' : 'head')
         };
     };
 
-    const visualUpdateNoteProperty = (note, { duration, slidePattern }) => {
+    const visualUpdateNoteProperty = (note, { duration, slidePattern, fullSlideString }) => {
         const commaIndex = note?.index;
         if (commaIndex === undefined || commaIndex === null) return;
         const lane = note.pos;
@@ -503,19 +571,23 @@ export function createVisualNoteCallbacks(ctx) {
 
         let nextClean = clean;
 
-        if (duration !== undefined && duration !== null) {
-            const durFormatted = `[${duration.replace(/[\[\]]/g, '')}]`;
-            if (nextClean.includes('[')) {
-                nextClean = nextClean.replace(/\[[^\]]*\]/, durFormatted);
-            } else {
-                nextClean = nextClean + durFormatted;
+        if (fullSlideString !== undefined && fullSlideString !== null) {
+            nextClean = fullSlideString;
+        } else {
+            if (duration !== undefined && duration !== null) {
+                const durFormatted = `[${duration.replace(/[\[\]]/g, '')}]`;
+                if (nextClean.includes('[')) {
+                    nextClean = nextClean.replace(/\[[^\]]*\]/, durFormatted);
+                } else {
+                    nextClean = nextClean + durFormatted;
+                }
             }
-        }
 
-        if (slidePattern !== undefined && slidePattern !== null) {
-            const REGEX_SLIDE_SYM = /((?:pp)|(?:qq)|[-<>^vpqszVw])/;
-            if (REGEX_SLIDE_SYM.test(nextClean)) {
-                nextClean = nextClean.replace(REGEX_SLIDE_SYM, slidePattern);
+            if (slidePattern !== undefined && slidePattern !== null) {
+                const REGEX_SLIDE_SYM = /((?:pp)|(?:qq)|[-<>^vpqszVw])/;
+                if (REGEX_SLIDE_SYM.test(nextClean)) {
+                    nextClean = nextClean.replace(REGEX_SLIDE_SYM, slidePattern);
+                }
             }
         }
 

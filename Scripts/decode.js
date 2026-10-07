@@ -127,7 +127,7 @@ const QQ_C_FACTORS = [0.3, 0.35, 0.2, 0, -0.02, 0, 0.15, 0.2];
  * @param {number|null} mid Middle position for V slides
  * @returns {{ path: PathRecorder, additional: Object, illegal: boolean }}
  */
-function getSlidePath(start, end, type, mid = null) {
+export function getSlidePath(start, end, type, mid = null) {
     const r = new PathRecorder();
     const startInfo = noteRefPos[start - 1];
     const endInfo = noteRefPos[end - 1];
@@ -875,6 +875,7 @@ export function simaiDecode(data = "", baseOffset = true) {
 
                             notes.push({
                                 type: 'slide',
+                                index: noteObj.index,
                                 props: noteObj.props,
                                 hispeed: noteObj.hispeed,
                                 size: noteObj.size,

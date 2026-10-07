@@ -340,6 +340,21 @@ export function createVisualNoteCallbacks(ctx) {
     };
 
     const visualPlaceNote = (lane, clickTime) => {
+        const settings = getSettings();
+        const selectedType = settings?.visualSelectedNoteType || 'tap';
+
+        const isTouchLane = (lane === 'T' || lane === 9);
+        const isTouchType = (selectedType === 'touch' || selectedType === 'touchhold');
+
+        if (isTouchLane && !isTouchType) {
+            simpleToast({ content: 'Touch 軌道僅能放置 Touch 類音符', type: 'warning', timeout: 1500 });
+            return;
+        }
+        if (!isTouchLane && isTouchType) {
+            simpleToast({ content: 'Touch 音符只能放置於 Touch 軌道', type: 'warning', timeout: 1500 });
+            return;
+        }
+
         const snappedTime = quantizeTime(clickTime);
         if (snappedTime === null || snappedTime === undefined) {
             simpleToast({ content: '點擊位置離最近的節拍線太遠，無法放置音符', type: 'warning', timeout: 1500 });
@@ -358,9 +373,6 @@ export function createVisualNoteCallbacks(ctx) {
             simpleToast({ content: '無法在註解行內放置音符', type: 'warning', timeout: 1500 });
             return;
         }
-
-        const settings = getSettings();
-        const selectedType = settings?.visualSelectedNoteType || 'tap';
 
         // 放置 BPM 標籤模式
         if (selectedType === 'bpm') {
@@ -398,6 +410,9 @@ export function createVisualNoteCallbacks(ctx) {
         const parts = segment === "" ? [] : segment.split('/');
         const existingIndex = parts.findIndex(p => {
             const clean = stripLeadingTags(p);
+            if (isTouchLane) {
+                return /^[A-E]\d|C/i.test(clean);
+            }
             return clean.startsWith(String(lane));
         });
 
@@ -444,11 +459,11 @@ export function createVisualNoteCallbacks(ctx) {
                 newLabel = 'Slide';
             } else if (effectiveType === 'touch') {
                 const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
-                newNoteStr = `B${lane}${touchMod}`;
+                newNoteStr = `C${touchMod}`;
                 newLabel = 'Touch';
             } else if (effectiveType === 'touchhold') {
                 const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
-                newNoteStr = `B${lane}h${touchMod}[4:1]`;
+                newNoteStr = `Ch${touchMod}[4:1]`;
                 newLabel = 'TouchHold';
             } else if (effectiveType === 'hold') {
                 let holdTag = 'h';
@@ -467,7 +482,8 @@ export function createVisualNoteCallbacks(ctx) {
             rawData[closestIndex] = parts.join('/');
             updateEditorAndSave(rawData.join(','));
 
-            simpleToast({ content: `已將軌道 ${lane} 的音符替換為 ${newLabel} 音符`, type: 'info', timeout: 1000 });
+            const laneLabel = isTouchLane ? 'Touch 軌道' : `軌道 ${lane}`;
+            simpleToast({ content: `已將 ${laneLabel} 的音符替換為 ${newLabel} 音符`, type: 'info', timeout: 1000 });
             return;
         }
 
@@ -483,11 +499,11 @@ export function createVisualNoteCallbacks(ctx) {
             noteLabel = 'Slide';
         } else if (effectiveType === 'touch') {
             const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
-            noteString = `B${lane}${touchMod}`;
+            noteString = `C${touchMod}`;
             noteLabel = 'Touch';
         } else if (effectiveType === 'touchhold') {
             const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
-            noteString = `B${lane}h${touchMod}[4:1]`;
+            noteString = `Ch${touchMod}[4:1]`;
             noteLabel = 'TouchHold';
         } else if (effectiveType === 'hold') {
             let holdTag = 'h';
@@ -516,7 +532,8 @@ export function createVisualNoteCallbacks(ctx) {
                         (selectedModifier === 'break') ? 'Break ' :
                         (selectedModifier === 'mine') ? '地雷 ' :
                         (selectedModifier === 'firework') ? '煙火 ' : '';
-        simpleToast({ content: `已在軌道 ${lane} 放置 ${modName}${noteLabel} 音符`, type: 'success', timeout: 1000 });
+        const targetLabel = isTouchLane ? 'Touch 軌道' : `軌道 ${lane}`;
+        simpleToast({ content: `已在 ${targetLabel} 放置 ${modName}${noteLabel} 音符`, type: 'success', timeout: 1000 });
     };
 
     const visualPlaceHoldNote = (lane, clickTime, durationTime, originalNote = null) => {
@@ -599,7 +616,8 @@ export function createVisualNoteCallbacks(ctx) {
             const commaIndex = note.index;
             if (commaIndex === undefined || commaIndex === null) continue;
             const lane = note.pos;
-            if (!lane) continue;
+            const isTouch = (note.type === 'touch' || Boolean(note.touchPos));
+            if (!lane && !isTouch) continue;
 
             const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
             if (segment === "" || segment.startsWith("||")) continue;
@@ -607,6 +625,11 @@ export function createVisualNoteCallbacks(ctx) {
             const parts = segment.split('/');
             const partIndex = parts.findIndex(p => {
                 const clean = stripLeadingTags(p);
+                if (isTouch) {
+                    if (note.touchPos === 'C') return clean.startsWith('C');
+                    if (note.touchPos && note.pos) return clean.startsWith(note.touchPos + note.pos);
+                    return /^[A-E]\d|C/i.test(clean);
+                }
                 return clean.startsWith(String(lane));
             });
 
@@ -638,8 +661,10 @@ export function createVisualNoteCallbacks(ctx) {
             const newContent = rawData.join(',');
             updateEditorAndSave(newContent);
             if (deletedCount === 1) {
-                const firstLane = list[0]?.pos;
-                simpleToast({ content: `已刪除軌道 ${firstLane || ''} 的音符`, type: 'info', timeout: 1000 });
+                const firstNote = list[0];
+                const isTouch = (firstNote?.type === 'touch' || Boolean(firstNote?.touchPos));
+                const label = isTouch ? 'Touch' : `軌道 ${firstNote?.pos || ''}`;
+                simpleToast({ content: `已刪除 ${label} 的音符`, type: 'info', timeout: 1000 });
             } else {
                 simpleToast({ content: `已刪除 ${deletedCount} 個音符`, type: 'info', timeout: 1000 });
             }
@@ -650,7 +675,8 @@ export function createVisualNoteCallbacks(ctx) {
         const commaIndex = note.index;
         if (commaIndex === undefined || commaIndex === null) return;
         const lane = note.pos;
-        if (!lane) return;
+        const isTouch = (note.type === 'touch' || Boolean(note.touchPos));
+        if (!lane && !isTouch) return;
 
         const rawData = getRawData();
         const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
@@ -659,6 +685,11 @@ export function createVisualNoteCallbacks(ctx) {
         const parts = segment.split('/');
         const partIndex = parts.findIndex(p => {
             const clean = stripLeadingTags(p);
+            if (isTouch) {
+                if (note.touchPos === 'C') return clean.startsWith('C');
+                if (note.touchPos && note.pos) return clean.startsWith(note.touchPos + note.pos);
+                return /^[A-E]\d|C/i.test(clean);
+            }
             return clean.startsWith(String(lane));
         });
 
@@ -799,7 +830,8 @@ export function createVisualNoteCallbacks(ctx) {
         const commaIndex = note?.index;
         if (commaIndex === undefined || commaIndex === null) return null;
         const lane = note.pos;
-        if (!lane) return null;
+        const isTouch = (note.type === 'touch' || Boolean(note.touchPos));
+        if (!lane && !isTouch) return null;
 
         const rawData = getRawData();
         const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
@@ -808,8 +840,10 @@ export function createVisualNoteCallbacks(ctx) {
         const parts = segment.split('/');
         const partIndex = parts.findIndex(p => {
             const clean = stripLeadingTags(p);
-            if (note.touchPos) {
-                return clean.startsWith(note.touchPos + (note.pos || ''));
+            if (isTouch) {
+                if (note.touchPos === 'C') return clean.startsWith('C');
+                if (note.touchPos && note.pos) return clean.startsWith(note.touchPos + note.pos);
+                return /^[A-E]\d|C/i.test(clean);
             }
             return clean.startsWith(String(lane));
         });
@@ -827,6 +861,7 @@ export function createVisualNoteCallbacks(ctx) {
 
         const isSlide = !!slideMatch || note.type === 'slide' || !!note.slideType;
         const isHold = clean.includes('h') || !!note.isHold || !!note.isTouchHold;
+        const isTouchNote = note.type === 'touch' || Boolean(note.touchPos) || /^[A-E]\d|C/i.test(clean);
 
         return {
             part: clean,
@@ -834,6 +869,7 @@ export function createVisualNoteCallbacks(ctx) {
             slidePattern,
             isSlide,
             isHold,
+            isTouch: isTouchNote,
             hitPart: note.hitPart || (note.type === 'slide' ? 'track' : 'head')
         };
     };
@@ -842,7 +878,8 @@ export function createVisualNoteCallbacks(ctx) {
         const commaIndex = note?.index;
         if (commaIndex === undefined || commaIndex === null) return;
         const lane = note.pos;
-        if (!lane) return;
+        const isTouch = (note.type === 'touch' || Boolean(note.touchPos));
+        if (!lane && !isTouch) return;
 
         const rawData = getRawData();
         const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
@@ -851,8 +888,10 @@ export function createVisualNoteCallbacks(ctx) {
         const parts = segment.split('/');
         const partIndex = parts.findIndex(p => {
             const clean = stripLeadingTags(p);
-            if (note.touchPos) {
-                return clean.startsWith(note.touchPos + (note.pos || ''));
+            if (isTouch) {
+                if (note.touchPos === 'C') return clean.startsWith('C');
+                if (note.touchPos && note.pos) return clean.startsWith(note.touchPos + note.pos);
+                return /^[A-E]\d|C/i.test(clean);
             }
             return clean.startsWith(String(lane));
         });

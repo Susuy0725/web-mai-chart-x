@@ -2767,6 +2767,7 @@ export class SimaiVisualEditor {
         this.settings = settings;
         this.images = null;
         this.globalTime = 0;
+        this.scaleBase = 114; // 視覺編輯器 9 軌基準寬度（適度保留左右 padding 避免截斷）
 
         this.audioWaveformWidthRatio = 0.3;
         this.zoom = 200;
@@ -2930,7 +2931,7 @@ export class SimaiVisualEditor {
     getCanvasWH() {
         const w = this.canvas.clientWidth;
         const h = this.canvas.clientHeight;
-        const invP = scaleBase / Math.min(w, h) * 0.5;
+        const invP = this.scaleBase / Math.min(w, h) * 0.5;
         if (!this._canvasWH) {
             this._canvasWH = { width: 0, height: 0 };
         }
@@ -2965,7 +2966,7 @@ export class SimaiVisualEditor {
         this.canvas.width = w;
         this.canvas.height = h;
 
-        const p = Math.min(w, h) / scaleBase;
+        const p = Math.min(w, h) / this.scaleBase;
         this.ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
         this._canvasWH = null;
         return true;
@@ -3032,7 +3033,7 @@ export class SimaiVisualEditor {
     drawTouch(s) {
         const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration } = s;
         const t = (noteTime - this.globalTime);
-        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+        const touchX = visualNoteRefPos[8]?.x ?? 0;
 
         if (holdDuration) {
             const imgs = [];
@@ -3047,7 +3048,7 @@ export class SimaiVisualEditor {
 
             const size = this.settings.noteBaseSize * 0.6;
 
-            this.ctx.translate(posInfo.x, t * -this.zoom);
+            this.ctx.translate(touchX, t * -this.zoom);
             this.ctx.lineWidth = size * 0.6;
             let hp = (holdDuration / 4) * -this.zoom;
 
@@ -3109,7 +3110,7 @@ export class SimaiVisualEditor {
         const size = this.settings.noteBaseSize * 0.6;
         const a = 1.5;
 
-        this.ctx.translate(posInfo.x, t * -this.zoom);
+        this.ctx.translate(touchX, t * -this.zoom);
         if (t <= 0) {
             this.ctx.globalAlpha = this.passOpacity;
         }
@@ -3386,9 +3387,8 @@ export class SimaiVisualEditor {
     getNoteScreenPos(note) {
         if (!note) return null;
         let noteX = visualNoteRefPos[note.pos - 1]?.x;
-        if (note.touchPos && touchRefPos[note.touchPos]) {
-            const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
-            if (posInfo) noteX = posInfo.x;
+        if (note.type === 'touch' || note.touchPos) {
+            noteX = visualNoteRefPos[8]?.x;
         }
         if (noteX === undefined) return null;
 
@@ -3403,7 +3403,7 @@ export class SimaiVisualEditor {
         const dpr = this.settings?.lowRes ? 1 : (window.devicePixelRatio || 1);
         const w = this.canvas.width;
         const h = this.canvas.height;
-        const p = Math.min(w, h) / scaleBase;
+        const p = Math.min(w, h) / this.scaleBase;
 
         const physicalX = noteX * p + w / 2;
         const physicalY = noteY * p + h / 2;
@@ -3420,11 +3420,11 @@ export class SimaiVisualEditor {
     _hitTestLane(mouseX) {
         let closestLane = null;
         let minDiff = Infinity;
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 9; i++) {
             const diff = Math.abs(mouseX - visualNoteRefPos[i].x);
             if (diff < minDiff) {
                 minDiff = diff;
-                closestLane = i + 1;
+                closestLane = (i === 8) ? 'T' : (i + 1);
             }
         }
         if (minDiff <= this.settings.noteBaseSize * 0.5) {
@@ -3485,13 +3485,9 @@ export class SimaiVisualEditor {
             }
         }
 
-        // 3. 檢查 touch
+        // 3. 檢查 touch (位於 Touch 軌道，索引 8)
         for (const note of this._state.visualBuckets.touch) {
-            let noteX = visualNoteRefPos[note.pos - 1]?.x;
-            if (note.touchPos && touchRefPos[note.touchPos]) {
-                const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
-                if (posInfo) noteX = posInfo.x;
-            }
+            const noteX = visualNoteRefPos[8]?.x;
             if (noteX !== undefined && checkCandidate(note, noteX)) {
                 note.hitPart = 'note';
                 return note;
@@ -3503,15 +3499,30 @@ export class SimaiVisualEditor {
 
     drawBackground(w, h) {
         const ctx = this.ctx;
+        const p = Math.min(w, h) / this.scaleBase;
+        const bottomY = (h / 2) / p;
+
         ctx.save();
         ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = "4px Arial";
-        for (let i = 0; i < 8; i++) {
-            ctx.fillStyle = i % 2 === 0 ? '#555' : '#333';
-            ctx.fillRect(visualNoteRefPos[i].x - this.settings.noteBaseSize / 2, -h, this.settings.noteBaseSize, h * 2);
-            ctx.fillStyle = "gray";
-            ctx.fillText(i + 1, visualNoteRefPos[i].x, h - 2);
+        ctx.textBaseline = "bottom";
+
+        for (let i = 0; i < 9; i++) {
+            const laneX = visualNoteRefPos[i].x;
+            const laneW = this.settings.noteBaseSize;
+
+            if (i === 8) {
+                ctx.fillStyle = '#22202c';
+                ctx.fillRect(laneX - laneW / 2, -h, laneW, h * 2);
+                ctx.fillStyle = "#b0b0b0";
+                ctx.font = "bold 3.8px Arial";
+                ctx.fillText("TOH", laneX, bottomY - 3);
+            } else {
+                ctx.fillStyle = (i % 2 === 0) ? '#555' : '#333';
+                ctx.fillRect(laneX - laneW / 2, -h, laneW, h * 2);
+                ctx.fillStyle = "#b0b0b0";
+                ctx.font = "bold 4.5px Arial";
+                ctx.fillText(String(i + 1), laneX, bottomY - 3);
+            }
         }
         ctx.restore();
     }
@@ -3573,7 +3584,7 @@ export class SimaiVisualEditor {
         const h = this.canvas.height;
 
         // 3. 計算與渲染器一致的縮放比例 p
-        const p = Math.min(w, h) / scaleBase;
+        const p = Math.min(w, h) / this.scaleBase;
 
         // 4. 逆向轉換：(物理座標 - 畫布中心) / 縮放比例
         this.mouseX = (physicalX - w / 2) / p;
@@ -3605,9 +3616,8 @@ export class SimaiVisualEditor {
 
             for (const note of this.selectedNotes) {
                 let noteX = visualNoteRefPos[note.pos - 1]?.x;
-                if (note.touchPos && touchRefPos[note.touchPos]) {
-                    const posInfo = touchRefPos[note.touchPos][note.touchPos === "C" ? 0 : note.pos - 1];
-                    if (posInfo) noteX = posInfo.x;
+                if (note.type === 'touch' || note.touchPos) {
+                    noteX = visualNoteRefPos[8]?.x;
                 }
                 if (noteX === undefined) continue;
 
@@ -3683,11 +3693,15 @@ export class SimaiVisualEditor {
             ctx.restore();
         }
 
-        if ((this.editMode === 'select' || this.editMode === 'boxSelect') && this.isSelectingBox) {
-            const minX = Math.min(this.selectionStart.x, this.selectionEnd.x);
-            const maxX = Math.max(this.selectionStart.x, this.selectionEnd.x);
-            const minY = Math.min(this.selectionStart.y, this.selectionEnd.y);
-            const maxY = Math.max(this.selectionStart.y, this.selectionEnd.y);
+        const boxToDraw = this.isSelectingBox ? {
+            minX: Math.min(this.selectionStart.x, this.selectionEnd.x),
+            maxX: Math.max(this.selectionStart.x, this.selectionEnd.x),
+            minY: Math.min(this.selectionStart.y, this.selectionEnd.y),
+            maxY: Math.max(this.selectionStart.y, this.selectionEnd.y)
+        } : this.activeBoxRect;
+
+        if ((this.editMode === 'select' || this.editMode === 'boxSelect') && boxToDraw) {
+            const { minX, maxX, minY, maxY } = boxToDraw;
             const boxW = maxX - minX;
             const boxH = maxY - minY;
 
@@ -3725,6 +3739,37 @@ export class SimaiVisualEditor {
         }
     }
 
+    getBoxScreenRect() {
+        if (!this.activeBoxRect) return null;
+        const { minX, maxX, minY, maxY } = this.activeBoxRect;
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = this.settings?.lowRes ? 1 : (window.devicePixelRatio || 1);
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const p = Math.min(w, h) / this.scaleBase;
+
+        const leftPhys = minX * p + w / 2;
+        const rightPhys = maxX * p + w / 2;
+        const topPhys = minY * p + h / 2;
+        const bottomPhys = maxY * p + h / 2;
+
+        return {
+            left: rect.left + leftPhys / dpr,
+            right: rect.left + rightPhys / dpr,
+            top: rect.top + topPhys / dpr,
+            bottom: rect.top + bottomPhys / dpr,
+            width: (rightPhys - leftPhys) / dpr,
+            height: (bottomPhys - topPhys) / dpr
+        };
+    }
+
+    clearActiveBox() {
+        this.activeBoxRect = null;
+        this.selectedNotes.clear();
+        this._notifySelectionChange();
+        if (!this._isLoopActive()) this._upd();
+    }
+
     _drawMarker() {
         const ctx = this.ctx;
         const size = this.settings.noteBaseSize;
@@ -3735,9 +3780,8 @@ export class SimaiVisualEditor {
         if (hoveredNote !== null) {
             // 若命中現有音符，Marker 精確對齊該音符的位置與時間
             let noteX = visualNoteRefPos[hoveredNote.pos - 1]?.x;
-            if (hoveredNote.touchPos && touchRefPos[hoveredNote.touchPos]) {
-                const posInfo = touchRefPos[hoveredNote.touchPos][hoveredNote.touchPos === "C" ? 0 : hoveredNote.pos - 1];
-                if (posInfo) noteX = posInfo.x;
+            if (hoveredNote.type === 'touch' || hoveredNote.touchPos) {
+                noteX = visualNoteRefPos[8]?.x;
             }
 
             ctx.save();
@@ -3760,13 +3804,16 @@ export class SimaiVisualEditor {
             // 若為空白位置，顯示對齊網格的預覽標記
             const snappedTime = this.snappedTime;
             const t = snappedTime - this.globalTime;
+            const targetX = (this.hoverLane === 'T') ? visualNoteRefPos[8]?.x : visualNoteRefPos[this.hoverLane - 1]?.x;
 
-            ctx.save();
-            ctx.translate(visualNoteRefPos[this.hoverLane - 1].x, t * -this.zoom);
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(-size / 2, -size / 2, size, size);
-            ctx.restore();
+            if (targetX !== undefined) {
+                ctx.save();
+                ctx.translate(targetX, t * -this.zoom);
+                ctx.strokeStyle = (this.hoverLane === 'T') ? '#ffb74d' : '#FFFFFF';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-size / 2, -size / 2, size, size);
+                ctx.restore();
+            }
         }
     }
 
@@ -3849,6 +3896,7 @@ export class SimaiVisualEditor {
                 } else {
                     if (!e.ctrlKey && !e.shiftKey) {
                         this.selectedNotes.clear();
+                        this.activeBoxRect = null;
                         this._notifySelectionChange();
                     }
                     this.isSelectingBox = true;
@@ -3921,6 +3969,15 @@ export class SimaiVisualEditor {
             this.markerPressed = false;
             if (this.isSelectingBox) {
                 this.isSelectingBox = false;
+                const minX = Math.min(this.selectionStart.x, this.selectionEnd.x);
+                const maxX = Math.max(this.selectionStart.x, this.selectionEnd.x);
+                const minY = Math.min(this.selectionStart.y, this.selectionEnd.y);
+                const maxY = Math.max(this.selectionStart.y, this.selectionEnd.y);
+                if (maxX - minX > 8 && maxY - minY > 8 && this.selectedNotes.size > 0) {
+                    this.activeBoxRect = { minX, maxX, minY, maxY };
+                } else {
+                    this.activeBoxRect = null;
+                }
                 this._notifySelectionChange();
             }
 

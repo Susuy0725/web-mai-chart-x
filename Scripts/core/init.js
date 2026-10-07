@@ -164,6 +164,9 @@ async function loadAndRestoreSettings(ctx, step) {
         await ctx.idbSet('simai_settings', JSON.stringify(settings));
     }
 
+    // 效果修飾屬性於初始化時重設為預設值 'none'，避免重新整理後殘留地雷或 Break 造成誤放
+    settings.visualSelectedModifier = 'none';
+
     ctx.setSettings(settings);
     ctx.applyAudioSettings(settings);
     window.settings = settings;
@@ -201,6 +204,10 @@ async function setupEditorUIAndData(ctx, settings, step) {
 
     ctx.setGridDivisionUI(settings.gridDivision ?? 4);
     ctx.updateGridDivisionVisibility();
+
+    if (typeof ctx.syncVisualSubMenus === 'function') {
+        ctx.syncVisualSubMenus();
+    }
 }
 
 /**

@@ -88,6 +88,53 @@ function ensureFloatingMenuStyles() {
             color: var(--popup-accent, #00e5ff) !important;
             flex-shrink: 0 !important;
         }
+
+        .wmc-box-floating-menu {
+            position: fixed !important;
+            z-index: 99998 !important;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(26, 26, 32, 0.92) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(0, 229, 255, 0.4) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 229, 255, 0.2) !important;
+            padding: 4px 8px !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif !important;
+        }
+
+        .wmc-box-floating-menu.active {
+            display: flex !important;
+            animation: wmcFloatingMenuFadeIn 0.12s cubic-bezier(0, 0, 0.2, 1) !important;
+        }
+
+        .wmc-box-fnm-btn {
+            background: #ef4444 !important;
+            color: #ffffff !important;
+            border: none !important;
+            border-radius: 6px !important;
+            padding: 6px 12px !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3) !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            transition: background 0.15s ease, transform 0.1s ease !important;
+        }
+
+        .wmc-box-fnm-btn:hover {
+            background: #dc2626 !important;
+        }
+
+        .wmc-box-fnm-btn:active {
+            transform: scale(0.96) !important;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -128,7 +175,7 @@ function ensureMenuElement() {
  * @param {Object} callbacks 回呼函式 { onChangeDuration, onChangePattern }
  */
 export function showFloatingMenu(note, screenPos, props, callbacks) {
-    if (!note || !screenPos || !props || (!props.isHold && !props.isSlide)) {
+    if (!note || !screenPos || !props || (!props.isHold && !props.isSlide && !props.isTouch)) {
         hideFloatingMenu();
         return;
     }
@@ -137,16 +184,28 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     currentNote = note;
     currentCallbacks = callbacks;
 
-    let html = `
-        <button type="button" class="wmc-fnm-item" data-action="change-duration">
-            <span>改變時長</span>
-        </button>
-    `;
+    let html = '';
+
+    if (props.isHold || props.isSlide) {
+        html += `
+            <button type="button" class="wmc-fnm-item" data-action="change-duration">
+                <span>改變時長</span>
+            </button>
+        `;
+    }
 
     if (props.isSlide) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="change-pattern">
                 <span>改變軌跡</span>
+            </button>
+        `;
+    }
+
+    if (props.isTouch) {
+        html += `
+            <button type="button" class="wmc-fnm-item" data-action="edit-touch-group">
+                <span>編輯Touch群組</span>
             </button>
         `;
     }
@@ -168,6 +227,15 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
         patternBtn.addEventListener('click', () => {
             if (currentCallbacks?.onChangePattern) {
                 currentCallbacks.onChangePattern();
+            }
+        });
+    }
+
+    const touchGroupBtn = menu.querySelector('[data-action="edit-touch-group"]');
+    if (touchGroupBtn) {
+        touchGroupBtn.addEventListener('click', () => {
+            if (currentCallbacks?.onEditTouchGroup) {
+                currentCallbacks.onEditTouchGroup();
             }
         });
     }
@@ -208,5 +276,83 @@ export function hideFloatingMenu() {
         menuEl.style.visibility = 'hidden';
         currentNote = null;
         currentCallbacks = null;
+    }
+}
+
+let boxMenuEl = null;
+
+function ensureBoxMenuElement() {
+    ensureFloatingMenuStyles();
+    if (boxMenuEl) return boxMenuEl;
+
+    boxMenuEl = document.createElement('div');
+    boxMenuEl.className = 'wmc-box-floating-menu';
+    document.body.appendChild(boxMenuEl);
+
+    boxMenuEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    boxMenuEl.addEventListener('click', (e) => e.stopPropagation());
+
+    return boxMenuEl;
+}
+
+/**
+ * 於選取大框內顯示操作按鈕（例如刪除）
+ * @param {Object} boxRect 螢幕座標 { left, right, top, bottom, width, height }
+ * @param {number} count 選取的音符數量
+ * @param {Object} callbacks 回呼 { onDelete }
+ */
+export function showBoxFloatingMenu(boxRect, count, callbacks) {
+    if (!boxRect) {
+        hideBoxFloatingMenu();
+        return;
+    }
+
+    const menu = ensureBoxMenuElement();
+    menu.innerHTML = `
+        <button type="button" class="wmc-box-fnm-btn" data-action="delete">
+            <span>刪除 (${count})</span>
+        </button>
+    `;
+
+    const delBtn = menu.querySelector('[data-action="delete"]');
+    if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (callbacks?.onDelete) {
+                callbacks.onDelete();
+            }
+            hideBoxFloatingMenu();
+        });
+    }
+
+    menu.style.visibility = 'hidden';
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    menu.classList.add('active');
+
+    const menuW = menu.offsetWidth || 110;
+    const menuH = menu.offsetHeight || 38;
+
+    const pad = 10;
+    let posX = boxRect.right - menuW - pad;
+    let posY = boxRect.top + pad;
+
+    if (posX < boxRect.left + pad) posX = boxRect.left + pad;
+    if (posX < 8) posX = 8;
+    if (posX + menuW > window.innerWidth - 8) posX = window.innerWidth - menuW - 8;
+    if (posY < 8) posY = 8;
+
+    menu.style.left = `${Math.round(posX)}px`;
+    menu.style.top = `${Math.round(posY)}px`;
+    menu.style.visibility = 'visible';
+}
+
+/**
+ * 隱藏選取大框操作列
+ */
+export function hideBoxFloatingMenu() {
+    if (boxMenuEl && boxMenuEl.classList.contains('active')) {
+        boxMenuEl.classList.remove('active');
+        boxMenuEl.style.visibility = 'hidden';
     }
 }

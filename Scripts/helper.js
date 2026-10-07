@@ -399,9 +399,9 @@ export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
         sinRot: Math.sin(rot)
     };
 });
-export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
+export const visualNoteRefPos = Array.from({ length: 9 }, (_, i) => {
     return {
-        x: (3.5 - i) * innerCirleBase / 4,
+        x: (4 - i) * innerCirleBase / 4,
     };
 });
 

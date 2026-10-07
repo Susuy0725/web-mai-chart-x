@@ -1,5 +1,5 @@
 import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags } from './features/visualEditor.js';
-import { showFloatingMenu, hideFloatingMenu } from './features/visualFloatingMenu.js';
+import { showFloatingMenu, hideFloatingMenu, showBoxFloatingMenu, hideBoxFloatingMenu } from './features/visualFloatingMenu.js';
 import { openNoteDurationModal } from './modals/noteDurationModal.js';
 import { openSlideEditorModal } from './modals/slideEditorModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
@@ -607,18 +607,21 @@ const divisionSubMenu = new VisualSubMenu({
 });
 
 // 根據目前設定初始化子選單項目與主按鈕外觀
-if (settings.visualSelectedNoteType === 'break') {
-    settings.visualSelectedNoteType = 'tap';
-}
-if (settings.visualSelectedNoteType) {
-    noteTypeSubMenu.setValue(settings.visualSelectedNoteType, true);
-}
-if (settings.visualSelectedModifier) {
-    modifierSubMenu.setValue(settings.visualSelectedModifier, true);
-}
-const currentGridDiv = settings.gridDivision || 4;
-ensureDivisionOption(currentGridDiv);
-divisionSubMenu.setValue(String(currentGridDiv), true);
+const syncVisualSubMenus = () => {
+    if (settings.visualSelectedNoteType === 'break') {
+        settings.visualSelectedNoteType = 'tap';
+    }
+    if (settings.visualSelectedNoteType) {
+        noteTypeSubMenu.setValue(settings.visualSelectedNoteType, true);
+    }
+    if (settings.visualSelectedModifier) {
+        modifierSubMenu.setValue(settings.visualSelectedModifier, true);
+    }
+    const currentGridDiv = settings.gridDivision || 4;
+    ensureDivisionOption(currentGridDiv);
+    divisionSubMenu.setValue(String(currentGridDiv), true);
+};
+syncVisualSubMenus();
 
 // 縮放按鈕 (+ / -)
 const handleVisualZoom = (factor) => {
@@ -1685,10 +1688,26 @@ const {
 });
 
 const onVisualSelectionChange = (selectedNotes) => {
+    // 1. 若處於框選模式且有作用中大框
+    const boxRect = visualEditorRenderer?.getBoxScreenRect();
+    if (boxRect && selectedNotes && selectedNotes.size > 0) {
+        hideFloatingMenu();
+        showBoxFloatingMenu(boxRect, selectedNotes.size, {
+            onDelete: () => {
+                visualDeleteNote(Array.from(selectedNotes));
+                visualEditorRenderer?.clearActiveBox();
+                draw();
+            }
+        });
+        return;
+    }
+    hideBoxFloatingMenu();
+
+    // 2. 單一音符選取
     if (selectedNotes && selectedNotes.size === 1) {
         const note = Array.from(selectedNotes)[0];
         const props = getNoteCurrentProperties(note);
-        if (props && (props.isHold || props.isSlide)) {
+        if (props && (props.isHold || props.isSlide || props.isTouch)) {
             const screenPos = visualEditorRenderer?.getNoteScreenPos(note);
             if (screenPos) {
                 showFloatingMenu(note, screenPos, props, {
@@ -1717,6 +1736,10 @@ const onVisualSelectionChange = (selectedNotes) => {
                                 draw();
                             }
                         });
+                    },
+                    onEditTouchGroup: () => {
+                        hideFloatingMenu();
+                        simpleToast({ content: 'Touch群組編輯功能開發中', type: 'info', timeout: 1500 });
                     }
                 });
                 return;
@@ -3386,7 +3409,11 @@ async function _init() {
         idbGet,
         idbSet,
         defaultSettings,
-        setSettings: (val) => { settings = val; },
+        setSettings: (val) => {
+            settings = val;
+            syncVisualSubMenus();
+        },
+        syncVisualSubMenus,
         playbackSpeedInput,
         applyAudioSettings,
         loadProjectData,

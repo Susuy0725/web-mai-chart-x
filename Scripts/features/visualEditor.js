@@ -11,6 +11,39 @@ export function stripLeadingTags(str) {
 }
 
 /**
+ * 組合段落的前綴標籤，嚴格保證 () 永遠在 {} 前面，即 (BPM){SPLIT}REMAINDER
+ * @param {string} segment 原始段落文字
+ * @param {Object} updates { bpm?: number|string, split?: number|string }
+ * @returns {string} 重新格式化後的段落文字
+ */
+export function formatSegmentTags(segment, updates = {}) {
+    let cur = segment ? segment.trim() : "";
+    let bpmVal = updates.bpm !== undefined ? updates.bpm : null;
+    let splitVal = updates.split !== undefined ? updates.split : null;
+
+    if (bpmVal === null) {
+        const bpmMatch = cur.match(/\(([0-9]+(?:\.[0-9]+)?)\)/);
+        if (bpmMatch) bpmVal = bpmMatch[1];
+    }
+    if (splitVal === null) {
+        const splitMatch = cur.match(/\{([^\}]+)\}/);
+        if (splitMatch) splitVal = splitMatch[1];
+    }
+
+    const remainder = cur.replace(/\([0-9]+(?:\.[0-9]+)?\)/g, '').replace(/\{[^\}]+\}/g, '').trim();
+
+    let result = "";
+    if (bpmVal !== null && bpmVal !== undefined && bpmVal !== "") {
+        result += `(${bpmVal})`;
+    }
+    if (splitVal !== null && splitVal !== undefined && splitVal !== "") {
+        result += `{${splitVal}}`;
+    }
+    result += remainder;
+    return result;
+}
+
+/**
  * 輔助判斷音符變換邏輯
  */
 export function getNextNoteClean(clean, L) {
@@ -303,7 +336,7 @@ export function createVisualNoteCallbacks(ctx) {
         updateEditorAndSave
     } = ctx;
 
-    const getOrCreateCommaIndex = (snappedTime) => {
+    const getOrCreateCommaIndex = (targetTime) => {
         let rawData = getRawData();
         let dataIndexToTime = getDataIndexToTime();
 
@@ -315,118 +348,46 @@ export function createVisualNoteCallbacks(ctx) {
             return 0;
         }
 
-        // 1. 檢查是否有現成的拍點可以直接使用 (誤差在 0.02 秒內)
-        for (let idx = 0; idx < dataIndexToTime.length; idx++) {
-            if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.02) {
-                return idx;
-            }
-        }
-
         const lastIndex = dataIndexToTime.length - 1;
         const lastTime = dataIndexToTime[lastIndex];
 
-        // 2. 如果點擊的時間在現有音符之後，在尾端擴充逗號
-        if (snappedTime > lastTime + 0.02) {
-            let currentBpm = getClockBpm() || 60;
-            const decodedTags = getDecodedTags();
-            if (decodedTags) {
-                const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
-                if (bpmTag) currentBpm = bpmTag.value;
+        // 1. 如果點擊的時間落在現有譜面範圍內，直接吸附對齊距離最近的真實既有逗號拍點（絕不改寫切分、不插入任何 {} 標籤）
+        if (targetTime <= lastTime + 0.02) {
+            let bestIdx = 0;
+            let minDiff = Infinity;
+            for (let idx = 0; idx < dataIndexToTime.length; idx++) {
+                const diff = Math.abs(dataIndexToTime[idx] - targetTime);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestIdx = idx;
+                }
             }
-            const currentGrid = getSettings().gridDivision || 4;
-            const timeStep = (240 / currentBpm) / currentGrid;
-
-            const numCommas = Math.round((snappedTime - lastTime) / timeStep);
-            if (numCommas > 0) {
-                let lastActiveDiv = 4;
-                if (decodedTags) {
-                    const splitTag = decodedTags.filter(t => t.type === 'split' && t.time <= lastTime + 0.001).sort((a, b) => b.time - a.time)[0];
-                    if (splitTag) lastActiveDiv = splitTag.value;
-                }
-
-                for (let k = 0; k < numCommas; k++) {
-                    if (k === 0 && lastActiveDiv !== currentGrid) {
-                        rawData.push(`{${currentGrid}}`);
-                    } else {
-                        rawData.push("");
-                    }
-                }
-                for (let k = 1; k <= numCommas; k++) {
-                    dataIndexToTime[lastIndex + k] = lastTime + k * timeStep;
-                }
-                const newContent = rawData.join(',');
-                updateEditorAndSave(newContent);
-                return lastIndex + numCommas;
-            }
-            return null;
+            return bestIdx;
         }
 
-        // 3. 如果點擊的時間在現有音符中間 (中間插拍/細分拍數)
-        let k = -1;
-        for (let i = 0; i < dataIndexToTime.length - 1; i++) {
-            if (snappedTime > dataIndexToTime[i] + 0.005 && snappedTime < dataIndexToTime[i + 1] - 0.005) {
-                k = i;
-                break;
-            }
+        // 2. 如果點擊的時間在現有音符之後，依據當前末端生效的切分步長，在尾端純粹追加空逗號（絕不寫入 {} 標籤）
+        let currentBpm = getClockBpm() || 60;
+        let lastActiveDiv = getSettings()?.gridDivision || 4;
+        const decodedTags = getDecodedTags();
+        if (decodedTags) {
+            const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= targetTime + 0.001).sort((a, b) => b.time - a.time)[0];
+            if (bpmTag) currentBpm = bpmTag.value;
+            const splitTag = decodedTags.filter(t => t.type === 'split' && t.time <= targetTime + 0.001).sort((a, b) => b.time - a.time)[0];
+            if (splitTag) lastActiveDiv = splitTag.value;
         }
 
-        if (k !== -1) {
-            const tK = dataIndexToTime[k];
-            const tKNext = dataIndexToTime[k + 1];
-
-            let currentBpm = getClockBpm() || 60;
-            const decodedTags = getDecodedTags();
-            if (decodedTags) {
-                const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= tK + 0.001).sort((a, b) => b.time - a.time)[0];
-                if (bpmTag) currentBpm = bpmTag.value;
+        const timeStep = (240 / currentBpm) / lastActiveDiv;
+        const numCommas = Math.max(1, Math.round((targetTime - lastTime) / timeStep));
+        if (numCommas > 0) {
+            for (let k = 0; k < numCommas; k++) {
+                rawData.push("");
             }
-
-            const origDuration = tKNext - tK;
-            if (origDuration <= 0.001) return null;
-            const origDiv = Math.max(1, Math.round((240 / currentBpm) / origDuration));
-
-            const targetDiv = getSettings().gridDivision || 4;
-            const stepDuration = (240 / currentBpm) / targetDiv;
-            if (stepDuration <= 0.001) return null;
-
-            // 該區間內按照 targetDiv 劃分需要幾步
-            let totalSteps = Math.max(2, Math.round(origDuration / stepDuration));
-            let targetStep = Math.round((snappedTime - tK) / stepDuration);
-            targetStep = Math.max(1, Math.min(totalSteps - 1, targetStep));
-
-            let segK = rawData[k] ? rawData[k].trim() : "";
-            if (segK.includes('{')) {
-                segK = segK.replace(/\{[^\}]*\}/g, `{${targetDiv}}`);
-            } else {
-                const match = segK.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
-                if (match) {
-                    segK = match[1] + `{${targetDiv}}` + match[2];
-                } else {
-                    segK = `{${targetDiv}}` + segK;
-                }
+            for (let k = 1; k <= numCommas; k++) {
+                dataIndexToTime[lastIndex + k] = lastTime + k * timeStep;
             }
-            rawData[k] = segK;
-
-            // 插入 totalSteps - 1 個空拍逗號
-            const insertArray = new Array(totalSteps - 1).fill("");
-            rawData.splice(k + 1, 0, ...insertArray);
-
-            // 在區間結尾 (原 k+1，現為 k + totalSteps) 還原原切分
-            let segEnd = rawData[k + totalSteps] ? rawData[k + totalSteps].trim() : "";
-            if (!segEnd.includes('{') && origDiv > 0 && origDiv !== targetDiv) {
-                const match = segEnd.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
-                if (match) {
-                    segEnd = match[1] + `{${origDiv}}` + match[2];
-                } else {
-                    segEnd = `{${origDiv}}` + segEnd;
-                }
-                rawData[k + totalSteps] = segEnd;
-            }
-
             const newContent = rawData.join(',');
             updateEditorAndSave(newContent);
-
-            return k + targetStep;
+            return lastIndex + numCommas;
         }
 
         return null;
@@ -486,12 +447,7 @@ export function createVisualNoteCallbacks(ctx) {
                 onApply: (bpmVal) => {
                     const raw = getRawData();
                     let curSegment = raw[closestIndex] ? raw[closestIndex].trim() : "";
-                    if (curSegment.match(/\([0-9]+(?:\.[0-9]+)?\)/)) {
-                        curSegment = curSegment.replace(/\([0-9]+(?:\.[0-9]+)?\)/, `(${bpmVal})`);
-                    } else {
-                        curSegment = `(${bpmVal})` + curSegment;
-                    }
-                    raw[closestIndex] = curSegment;
+                    raw[closestIndex] = formatSegmentTags(curSegment, { bpm: bpmVal });
                     const newContent = raw.join(',');
                     updateEditorAndSave(newContent);
                     simpleToast({ content: t('visualEditor.bpmSetSuccess', { bpm: bpmVal }), type: 'success', timeout: 1000 });
@@ -1148,24 +1104,16 @@ export function createVisualNoteCallbacks(ctx) {
             const applyBpm = (bpmVal) => {
                 const raw = getRawData();
                 let curSegment = raw[closestIndex] ? raw[closestIndex].trim() : "";
-                if (curSegment.match(/\([0-9]+(?:\.[0-9]+)?\)/)) {
-                    curSegment = curSegment.replace(/\([0-9]+(?:\.[0-9]+)?\)/, `(${bpmVal})`);
-                } else {
-                    curSegment = `(${bpmVal})` + curSegment;
-                }
-                raw[closestIndex] = curSegment;
+                raw[closestIndex] = formatSegmentTags(curSegment, { bpm: bpmVal });
                 updateEditorAndSave(raw.join(','));
                 simpleToast({ content: t('visualEditor.bpmSetSuccess', { bpm: bpmVal }), type: 'success', timeout: 1000 });
             };
 
-            if (!originalTag) {
-                applyBpm(currentBpm);
-            } else {
-                openBpmInputModal({
-                    currentBpm,
-                    onApply: applyBpm
-                });
-            }
+            // 放置或編輯時皆彈窗詢問該點要設定的 BPM 數值
+            openBpmInputModal({
+                currentBpm,
+                onApply: applyBpm
+            });
         } else if (type === 'split') {
             let currentDiv = originalTag ? originalTag.value : (getSettings().gridDivision || 4);
             const decodedTags = getDecodedTags();
@@ -1182,12 +1130,7 @@ export function createVisualNoteCallbacks(ctx) {
             const applyDiv = (divVal) => {
                 const raw = getRawData();
                 let curSegment = raw[closestIndex] ? raw[closestIndex].trim() : "";
-                if (curSegment.match(/\{[^\}]+\}/)) {
-                    curSegment = curSegment.replace(/\{[^\}]+\}/, `{${divVal}}`);
-                } else {
-                    curSegment = `{${divVal}}` + curSegment;
-                }
-                raw[closestIndex] = curSegment;
+                raw[closestIndex] = formatSegmentTags(curSegment, { split: divVal });
                 updateEditorAndSave(raw.join(','));
                 simpleToast({ content: t('visualEditor.divisionSetSuccess', { division: divVal }), type: 'success', timeout: 1000 });
             };
@@ -1207,10 +1150,25 @@ export function createVisualNoteCallbacks(ctx) {
         if (!dataIndexToTime || dataIndexToTime.length === 0) return;
 
         let targetIdx = -1;
+        let minDiff = Infinity;
         for (let idx = 0; idx < dataIndexToTime.length; idx++) {
-            if (Math.abs(dataIndexToTime[idx] - tag.time) < 0.02) {
-                targetIdx = idx;
-                break;
+            const diff = Math.abs(dataIndexToTime[idx] - tag.time);
+            if (diff < 0.02) {
+                const seg = rawData[idx] || "";
+                const hasMatch = (tag.type === 'bpm') ? /\([0-9]+(?:\.[0-9]+)?\)/.test(seg) : /\{[^\}]+\}/.test(seg);
+                if (hasMatch && diff < minDiff) {
+                    minDiff = diff;
+                    targetIdx = idx;
+                }
+            }
+        }
+        if (targetIdx === -1) {
+            for (let idx = 0; idx < dataIndexToTime.length; idx++) {
+                const diff = Math.abs(dataIndexToTime[idx] - tag.time);
+                if (diff < 0.02 && diff < minDiff) {
+                    minDiff = diff;
+                    targetIdx = idx;
+                }
             }
         }
         if (targetIdx === -1) return;
@@ -1234,6 +1192,24 @@ export function createVisualNoteCallbacks(ctx) {
         visualPlaceTimingTag(tag.type, tag.time, tag);
     };
 
+    const visualUpdateHoldDuration = (note, durationSec) => {
+        if (!note || durationSec <= 0) return;
+        let currentBpm = getClockBpm() || 120;
+        const decodedTags = getDecodedTags();
+        if (decodedTags) {
+            const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= note.time + 0.001).sort((a, b) => b.time - a.time)[0];
+            if (bpmTag) currentBpm = bpmTag.value;
+        }
+
+        const settings = getSettings();
+        const gridDiv = settings?.gridDivision || 4;
+        const tickPeriod = (240 / currentBpm) / gridDiv;
+        const numTicks = Math.max(1, Math.round(durationSec / tickPeriod));
+
+        const durationStr = `${gridDiv}:${numTicks}`;
+        visualUpdateNoteProperty(note, { duration: durationStr });
+    };
+
     return {
         getOrCreateCommaIndex,
         stripLeadingTags,
@@ -1247,7 +1223,8 @@ export function createVisualNoteCallbacks(ctx) {
         visualUpdateTouchGroup,
         visualPlaceTimingTag,
         visualDeleteTag,
-        visualEditTag
+        visualEditTag,
+        visualUpdateHoldDuration
     };
 }
 

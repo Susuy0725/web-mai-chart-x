@@ -238,7 +238,8 @@ function initRenderers(ctx, settings, loadedImages) {
         ctx.visualPlaceNote,
         ctx.visualDeleteNote,
         ctx.visualChangeNote,
-        ctx.visualPlaceHoldNote
+        ctx.visualPlaceHoldNote,
+        ctx.visualUpdateHoldDuration
     );
     visualEditorRenderer.setTimeQuantizer(ctx.quantizeTime);
     if (typeof ctx.onSelectionChange === 'function') {
@@ -254,6 +255,12 @@ function initRenderers(ctx, settings, loadedImages) {
             ctx.visualEditTag,
             ctx.onVisualTagSelect
         );
+    }
+    if (typeof ctx.updateVisualTime === 'function' && typeof visualEditorRenderer.setTimeScrollCallback === 'function') {
+        visualEditorRenderer.setTimeScrollCallback((deltaSec) => {
+            const current = (typeof ctx.getRealTime === 'function' ? ctx.getRealTime() : visualEditorRenderer.globalTime) || 0;
+            ctx.updateVisualTime(current + deltaSec);
+        });
     }
 
     // 安全讀取拍號輸入值

@@ -1764,22 +1764,24 @@ if (aboutButton) {
 
 function getGridSlots(maxTime) {
     const slots = [];
-    let gridDiv = parseInt(settings.gridDivision, 10);
-    if (isNaN(gridDiv) || gridDiv <= 0) gridDiv = 4;
+    let toolbarGridDiv = parseInt(settings.gridDivision, 10);
+    if (isNaN(toolbarGridDiv) || toolbarGridDiv <= 0) toolbarGridDiv = 4;
 
     if (maxTime === null || maxTime === undefined || isNaN(maxTime) || !isFinite(maxTime) || maxTime < 0) {
         maxTime = (endTime && isFinite(endTime) && endTime > 0) ? endTime + 2.0 : 100.0;
     }
 
     const limitMaxTime = Math.min(maxTime, 7200.0);
+    const lastCommaTime = (dataIndexToTime && dataIndexToTime.length > 0) ? (dataIndexToTime[dataIndexToTime.length - 1] || 0) : 0;
+    const fallbackEndTime = Math.max(endTime || 0, limitMaxTime, lastCommaTime + 10.0);
 
     if (!decodedTags || decodedTags.length === 0) {
         const bpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
-        const beatPeriod = (240 / bpm) / gridDiv;
+        const beatPeriod = (240 / bpm) / toolbarGridDiv;
         if (!isFinite(beatPeriod) || beatPeriod <= 0.0001) return [0];
 
         let count = 0;
-        for (let t = 0; t <= limitMaxTime + 0.001 && count < 20000; t += beatPeriod) {
+        for (let t = 0; t <= fallbackEndTime + 0.001 && count < 20000; t += beatPeriod) {
             slots.push(t);
             count++;
         }
@@ -1787,41 +1789,77 @@ function getGridSlots(maxTime) {
     }
 
     const bpmTags = decodedTags.filter(t => t.type === 'bpm' && t.value > 0).sort((a, b) => a.time - b.time);
-    if (bpmTags.length === 0) {
-        bpmTags.push({ time: 0, value: (clockBpm && clockBpm > 0) ? clockBpm : 60 });
+    const splitTags = decodedTags.filter(t => t.type === 'split' && t.value > 0).sort((a, b) => a.time - b.time);
+
+    const boundarySet = new Set([0]);
+    boundarySet.add(fallbackEndTime);
+    for (const tag of bpmTags) {
+        if (tag.time <= fallbackEndTime) boundarySet.add(tag.time);
+    }
+    for (const tag of splitTags) {
+        if (tag.time <= fallbackEndTime) boundarySet.add(tag.time);
     }
 
-    const fallbackEndTime = (endTime && isFinite(endTime) && endTime > 0) ? Math.max(endTime, limitMaxTime) : limitMaxTime;
+    const boundaries = Array.from(boundarySet).sort((a, b) => a - b);
 
-    for (let i = 0; i < bpmTags.length; i++) {
-        const tag = bpmTags[i];
-        const nextTag = bpmTags[i + 1];
-        let endTimeForTag = nextTag ? nextTag.time : fallbackEndTime;
+    let currentBpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
+    let currentSplit = 4;
 
-        if (!isFinite(endTimeForTag) || isNaN(endTimeForTag) || endTimeForTag > fallbackEndTime) {
-            endTimeForTag = fallbackEndTime;
+    for (let k = 0; k < boundaries.length - 1; k++) {
+        const tStart = boundaries[k];
+        const tEnd = boundaries[k + 1];
+        if (tEnd <= tStart) continue;
+
+        const effectiveBpmTag = bpmTags.filter(t => t.time <= tStart + 0.001).sort((a, b) => b.time - a.time)[0];
+        if (effectiveBpmTag) currentBpm = effectiveBpmTag.value;
+
+        const effectiveSplitTag = splitTags.filter(t => t.time <= tStart + 0.001).sort((a, b) => b.time - a.time)[0];
+        if (effectiveSplitTag) currentSplit = effectiveSplitTag.value;
+
+        const splitPeriod = (240 / currentBpm) / currentSplit;
+        if (isFinite(splitPeriod) && splitPeriod > 0.0001) {
+            let t = tStart;
+            let count = 0;
+            while (t < tEnd - 0.0001 && count < 20000) {
+                slots.push(t);
+                t += splitPeriod;
+                count++;
+            }
         }
 
-        const bpmVal = (tag.value && tag.value > 0) ? tag.value : 60;
-        const beatPeriod = (240 / bpmVal) / gridDiv;
-
-        if (!isFinite(beatPeriod) || beatPeriod <= 0.0001) continue;
-
-        let t = tag.time;
-        let count = 0;
-        while (t < endTimeForTag - 0.001 && count < 20000) {
-            slots.push(t);
-            t += beatPeriod;
-            count++;
+        if (toolbarGridDiv && toolbarGridDiv !== currentSplit) {
+            const gridPeriod = (240 / currentBpm) / toolbarGridDiv;
+            if (isFinite(gridPeriod) && gridPeriod > 0.0001) {
+                let t = tStart;
+                let count = 0;
+                while (t < tEnd - 0.0001 && count < 20000) {
+                    slots.push(t);
+                    t += gridPeriod;
+                    count++;
+                }
+            }
         }
-        if (slots.length > 50000) break;
     }
 
-    if (slots.length === 0 || slots[slots.length - 1] < fallbackEndTime - 0.001) {
-        slots.push(fallbackEndTime);
+    if (dataIndexToTime && dataIndexToTime.length > 0) {
+        for (let i = 0; i < dataIndexToTime.length; i++) {
+            const t = dataIndexToTime[i];
+            if (t !== undefined && t !== null && isFinite(t) && t <= fallbackEndTime) {
+                slots.push(t);
+            }
+        }
     }
 
-    return slots;
+    slots.sort((a, b) => a - b);
+    const uniqueSlots = [];
+    for (let i = 0; i < slots.length; i++) {
+        const val = slots[i];
+        if (uniqueSlots.length === 0 || Math.abs(val - uniqueSlots[uniqueSlots.length - 1]) > 0.0005) {
+            uniqueSlots.push(val);
+        }
+    }
+
+    return uniqueSlots;
 }
 
 const quantizeTime = (time) => {
@@ -1829,17 +1867,22 @@ const quantizeTime = (time) => {
     const slots = getGridSlots(time + 2.0);
     if (!slots || slots.length === 0) return null;
 
-    let closestTime = 0;
-    let minDiff = Infinity;
-    for (const t of slots) {
-        const diff = Math.abs(t - time);
-        if (diff < minDiff) {
-            minDiff = diff;
-            closestTime = t;
-        }
+    let low = 0;
+    let high = slots.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (slots[mid] === time) return slots[mid];
+        if (slots[mid] < time) low = mid + 1;
+        else high = mid - 1;
     }
-    if (minDiff > 2.0) return null;
-    return closestTime;
+
+    const idx1 = Math.max(0, high);
+    const idx2 = Math.min(slots.length - 1, low);
+    const diff1 = Math.abs(slots[idx1] - time);
+    const diff2 = Math.abs(slots[idx2] - time);
+    const closest = (diff1 <= diff2) ? slots[idx1] : slots[idx2];
+    if (Math.abs(closest - time) > 2.0) return null;
+    return closest;
 };
 
 function updateEditorAndSave(newContent) {
@@ -1866,7 +1909,8 @@ const {
     visualUpdateTouchGroup,
     visualPlaceTimingTag,
     visualDeleteTag,
-    visualEditTag
+    visualEditTag,
+    visualUpdateHoldDuration
 } = createVisualNoteCallbacks({
     quantizeTime,
     getRawData: () => rawData,
@@ -3729,6 +3773,7 @@ async function _init() {
         visualDeleteNote,
         visualChangeNote,
         visualPlaceHoldNote,
+        visualUpdateHoldDuration,
         visualPlaceTimingTag,
         visualDeleteTag,
         visualEditTag,
@@ -3741,6 +3786,7 @@ async function _init() {
         applyMovieBrightness,
         draw,
         updateSlider,
+        updateVisualTime,
         getRealTime: () => playbackEngine.realTime,
         projGet,
         setEditorCss,

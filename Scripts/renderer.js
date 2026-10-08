@@ -2854,21 +2854,29 @@ export class SimaiVisualEditor {
         this.onPlaceNote = null;
         this.onDeleteNote = null;
         this.onChangeNote = null;
+        this.onPlaceHold = null;
+        this.onUpdateHoldDuration = null;
+        this.draggingHold = null;
         this.quantizeTime = null;
         this.hoverLane = null;
+        this.onScrollTime = null;
+        this._autoScrollTimer = null;
+        this._autoScrollSpeed = 0;
+        this._lastPointerMoveEvent = null;
 
         // 綁定滑鼠事件以切換方塊顏色並更新位置
         if (this.canvas && this.canvas.addEventListener) {
             this._onPointerDown = this._onPointerDown.bind(this);
             this._onPointerUp = this._onPointerUp.bind(this);
             this._onPointerLeave = this._onPointerLeave.bind(this);
+            this._onPointerCancel = this._onPointerCancel.bind(this);
             this._onPointerMove = this._onPointerMove.bind(this);
             this._onContextMenu = this._onContextMenu.bind(this);
 
             // use capture to ensure marker events are detected before other handlers
             this.canvas.addEventListener('pointerdown', this._onPointerDown, { capture: true, passive: false });
             this.canvas.addEventListener('pointerup', this._onPointerUp, { capture: true });
-            this.canvas.addEventListener('pointercancel', this._onPointerLeave, { capture: true });
+            this.canvas.addEventListener('pointercancel', this._onPointerCancel, { capture: true });
             this.canvas.addEventListener('pointerleave', this._onPointerLeave, { capture: true });
             this.canvas.addEventListener('pointermove', this._onPointerMove, { capture: true, passive: false });
             this.canvas.addEventListener('contextmenu', this._onContextMenu);
@@ -2895,6 +2903,10 @@ export class SimaiVisualEditor {
         this.onDeleteTag = onDeleteTag;
         this.onEditTag = onEditTag;
         this.onSelectTag = onSelectTag;
+    }
+
+    setTimeScrollCallback(onScrollTime) {
+        this.onScrollTime = onScrollTime;
     }
 
     setTimebase(tb1, tb2) {
@@ -3220,7 +3232,10 @@ export class SimaiVisualEditor {
     }
 
     drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration } = s;
+        let { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration } = s;
+        if (this.draggingHold && this.draggingHold.note === s) {
+            holdDuration = this.draggingHold.currentDuration;
+        }
         const t = (noteTime - this.globalTime);
         const posInfo = visualNoteRefPos[pos - 1];
 
@@ -3340,13 +3355,14 @@ export class SimaiVisualEditor {
                 const y = (delta + i * period) * -zoom;
 
                 if (tag.type === 'bpm') {
-                    ctx.strokeStyle = '#ffe865c0';
+                    ctx.strokeStyle = '#ffe865';
                     ctx.setLineDash([]);
 
                     // 自動填充小節內的拍號線(以 N 分音符為一拍)
                     const parts = Math.round((tb1 * gridDiv) / 4);
                     if (parts > 1) {
                         ctx.save();
+                        const midW = lineWidth / 3;
                         for (let b = 1; b < parts; b++) {
                             const subY = (delta + i * period + b * beatPeriod) * -zoom;
 
@@ -3355,12 +3371,12 @@ export class SimaiVisualEditor {
                             if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
 
                             const isMajorBeat = (gridDiv > 4 && (b % Math.round(gridDiv / 4) === 0));
-                            ctx.strokeStyle = isMajorBeat ? '#ffe86580' : '#ffe86530';
-                            ctx.lineWidth = isMajorBeat ? 0.8 : 0.4;
+                            ctx.strokeStyle = isMajorBeat ? '#ffe865' : '#ffe865cc';
+                            ctx.lineWidth = isMajorBeat ? 1.0 : 0.6;
 
                             ctx.beginPath();
-                            ctx.moveTo(-lineWidth, subY);
-                            ctx.lineTo(lineWidth, subY);
+                            ctx.moveTo(-midW, subY);
+                            ctx.lineTo(midW, subY);
                             ctx.stroke();
                         }
                         ctx.restore();
@@ -3402,24 +3418,26 @@ export class SimaiVisualEditor {
                     ctx.strokeStyle = '#ffffff';
                     if (i === 0) {
                         if (this.layerMode === 'bpm') {
-                            // BPM 圖層下：繪製右半側深紅色膠囊標籤
-                            ctx.globalAlpha = 1;
-                            const capsuleH = Math.max(10, bs * 0.7);
-                            const capsuleY = y - capsuleH / 2;
-                            const capW = lineWidth - 1;
-                            const capX = 1;
+                            // BPM 圖層下：僅在非內部衍生標籤 (!tag.synthetic) 時繪製右半側深紅色膠囊標籤
+                            if (!tag.synthetic) {
+                                ctx.globalAlpha = 1;
+                                const capsuleH = Math.max(10, bs * 0.7);
+                                const capsuleY = y - capsuleH / 2;
+                                const capW = lineWidth - 1;
+                                const capX = 1;
 
-                            ctx.save();
-                            ctx.fillStyle = '#8a0014';
-                            this._drawRoundRect(ctx, capX, capsuleY, capW, capsuleH, 3);
-                            ctx.fill();
+                                ctx.save();
+                                ctx.fillStyle = '#8a0014';
+                                this._drawRoundRect(ctx, capX, capsuleY, capW, capsuleH, 3);
+                                ctx.fill();
 
-                            ctx.fillStyle = '#ffffff';
-                            ctx.font = 'bold 4.5px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillText(`{${tag.value}}`, capX + capW / 2, y);
-                            ctx.restore();
+                                ctx.fillStyle = '#ffffff';
+                                ctx.font = 'bold 4.5px Arial';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillText(`{${tag.value}}`, capX + capW / 2, y);
+                                ctx.restore();
+                            }
                         } else {
                             // 音符圖層下：完全還原原版右側邊緣旋轉小字
                             if (!tag.nohead) {
@@ -3519,11 +3537,14 @@ export class SimaiVisualEditor {
         ctx.restore();
     }
 
-    setNoteEditCallbacks(onPlace, onDelete, onChange, onPlaceHold) {
+    setNoteEditCallbacks(onPlace, onDelete, onChange, onPlaceHold, onUpdateHoldDuration) {
         this.onPlaceNote = onPlace;
         this.onDeleteNote = onDelete;
         this.onChangeNote = onChange;
         this.onPlaceHold = onPlaceHold;
+        if (onUpdateHoldDuration) {
+            this.onUpdateHoldDuration = onUpdateHoldDuration;
+        }
     }
 
     setSelectionCallback(cb) {
@@ -3603,6 +3624,16 @@ export class SimaiVisualEditor {
         for (const note of this._state.visualBuckets.tapnhold) {
             const noteX = visualNoteRefPos[note.pos - 1]?.x;
             if (noteX !== undefined) {
+                // 優先檢測 Hold 尾部膠囊狀手把 (Tail handle)
+                if (note.type === 'hold' && (note.holdDuration !== undefined && note.holdDuration !== null)) {
+                    const dx = Math.abs(mouseX - noteX);
+                    const effectiveDur = (this.draggingHold && this.draggingHold.note === note) ? this.draggingHold.currentDuration : (note.holdDuration || 0);
+                    const endY = (note.time + effectiveDur - gt) * -zoom;
+                    if (dx <= tolerance * 1.2 && Math.abs(mouseY - endY) <= Math.max(tolerance * 0.7, 4)) {
+                        note.hitPart = 'tail';
+                        return note;
+                    }
+                }
                 if (checkCandidate(note, noteX)) {
                     note.hitPart = note.isStar ? 'head' : 'note';
                     return note;
@@ -3610,8 +3641,9 @@ export class SimaiVisualEditor {
                 if (note.type === 'hold' && note.holdDuration) {
                     const dx = Math.abs(mouseX - noteX);
                     if (dx <= tolerance) {
+                        const effectiveDur = (this.draggingHold && this.draggingHold.note === note) ? this.draggingHold.currentDuration : (note.holdDuration || 0);
                         const startY = (note.time - gt) * -zoom;
-                        const endY = (note.time + note.holdDuration - gt) * -zoom;
+                        const endY = (note.time + effectiveDur - gt) * -zoom;
                         const minY = Math.min(startY, endY) - tolerance;
                         const maxY = Math.max(startY, endY) + tolerance;
                         if (mouseY >= minY && mouseY <= maxY) {
@@ -3691,8 +3723,8 @@ export class SimaiVisualEditor {
                         bestTag = tag;
                     }
                 }
-                // 右側明確點中 Split 時值膠囊 (0, lineWidth]
-                else if (tag.type === 'split' && mouseX > 0 && mouseX <= lineWidth) {
+                // 右側明確點中 Split 時值膠囊 (0, lineWidth] (排除內部衍生之虛擬標籤)
+                else if (tag.type === 'split' && !tag.synthetic && mouseX > 0 && mouseX <= lineWidth) {
                     if (dy < minDy) {
                         minDy = dy;
                         bestTag = tag;
@@ -3750,7 +3782,9 @@ export class SimaiVisualEditor {
         ctx.clearRect(-w, -h, w * 2, h * 2);
         this.drawBackground(w, h);
         this.drawAudioWaveform(audioBuffer, offset);
-        visualBuckets.tags.forEach(t => this.drawTag(t));
+        // 先繪製譜面切分線 (split tags)，再繪製 BPM 與黃節拍線 (bpm tags，疊在切分線之上)
+        visualBuckets.tags.filter(t => t.type === 'split').forEach(t => this.drawTag(t));
+        visualBuckets.tags.filter(t => t.type !== 'split').forEach(t => this.drawTag(t));
         ctx.strokeStyle = '#ff0000ce';
         ctx.beginPath();
         ctx.moveTo(-w, 0);
@@ -3770,9 +3804,14 @@ export class SimaiVisualEditor {
         // 繪製選擇高亮與拉框
         this._drawSelection();
 
-        // 繪製 Ghost Note 預覽 (僅在編輯模式下)
-        if (this.editMode === 'edit') {
+        // 繪製 Ghost Note 預覽 (僅在編輯模式下且未處於拖曳中)
+        if (this.editMode === 'edit' && !this.draggingHold) {
             this._drawMarker();
+        }
+
+        // 若正處於拖曳 Hold 狀態，繪製拉伸藍框與尾部膠囊手把
+        if (this.draggingHold) {
+            this._drawHoldBoxAndHandle(this.draggingHold.note, this.draggingHold.currentDuration, true);
         }
     }
 
@@ -3903,6 +3942,13 @@ export class SimaiVisualEditor {
                 ctx.stroke();
 
                 ctx.restore();
+
+                // 若為選取中的 Hold 音符，於尾端繪製膠囊狀手把
+                if (note.type === 'hold' || (note.holdDuration && note.holdDuration > 0)) {
+                    const effDur = (this.draggingHold && this.draggingHold.note === note) ? this.draggingHold.currentDuration : (note.holdDuration || 0);
+                    const endY = (note.time + effDur - gt) * -zoom;
+                    this._drawHoldCapsuleHandle(noteX, endY, false);
+                }
             }
             ctx.restore();
         }
@@ -3953,7 +3999,7 @@ export class SimaiVisualEditor {
         }
 
         // BPM 圖層：繪製選取標籤 (BPM / 時值膠囊) 的發光外框與 Material 角標
-        if (this.layerMode === 'bpm' && this.selectedTag) {
+        if (this.layerMode === 'bpm' && this.selectedTag && !(this.selectedTag.type === 'split' && this.selectedTag.synthetic)) {
             ctx.save();
             const tag = this.selectedTag;
             const bs = this.settings?.noteBaseSize || 11;
@@ -4060,6 +4106,134 @@ export class SimaiVisualEditor {
         if (!this._isLoopActive()) this._upd();
     }
 
+    _getCurrentBpmAt(time) {
+        if (this._state && this._state.visualBuckets && this._state.visualBuckets.tags) {
+            const bpmTag = this._state.visualBuckets.tags
+                .filter(t => t.type === 'bpm' && t.time <= time + 0.001)
+                .sort((a, b) => b.time - a.time)[0];
+            if (bpmTag && bpmTag.value) return bpmTag.value;
+        }
+        return 120;
+    }
+
+    _drawHoldCapsuleHandle(noteX, endY, isHoveredTail = false) {
+        const ctx = this.ctx;
+        const size = this.settings?.noteBaseSize || 11;
+        const boxW = size * 1.05;
+        // 等比縮小膠囊，比例保持不變，且絕對不突出左右藍框 (寬度約佔藍框 62%)
+        const capsuleW = Math.round(boxW * 0.62 * 10) / 10;
+        const capsuleH = Math.round(capsuleW * 0.48 * 10) / 10;
+        const capsuleR = capsuleH / 2;
+        const capsuleX = noteX - capsuleW / 2;
+        const capsuleY = endY - capsuleH / 2;
+
+        ctx.save();
+        ctx.shadowColor = isHoveredTail ? 'rgba(56, 189, 248, 0.8)' : 'rgba(0, 0, 0, 0.35)';
+        ctx.shadowBlur = isHoveredTail ? 3 : 1;
+        ctx.fillStyle = '#FFFFFF';
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(capsuleX, capsuleY, capsuleW, capsuleH, capsuleR);
+        } else {
+            ctx.rect(capsuleX, capsuleY, capsuleW, capsuleH);
+        }
+        ctx.fill();
+        ctx.restore();
+    }
+
+    _drawHoldBoxAndHandle(note, holdDuration, isHoveredTail = false) {
+        const ctx = this.ctx;
+        const gt = this.globalTime;
+        const zoom = this.zoom;
+        let noteX = visualNoteRefPos[note.pos - 1]?.x;
+        if (note.type === 'touch' || note.touchPos) {
+            noteX = visualNoteRefPos[8]?.x;
+        }
+        if (noteX === undefined) return;
+
+        const startY = (note.time - gt) * -zoom;
+        const endY = (note.time + holdDuration - gt) * -zoom;
+        const size = this.settings?.noteBaseSize || 11;
+        const boxW = size * 1.05;
+        const topY = Math.min(startY, endY);
+        const bottomY = Math.max(startY, endY) + size * 0.25;
+        const boxH = bottomY - topY;
+
+        ctx.save();
+        // 1. 藍框包覆 (簡約緊湊青藍框)
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.04)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        ctx.rect(noteX - boxW / 2, topY, boxW, boxH);
+        ctx.fill();
+        ctx.stroke();
+
+        // 2. 尾部白色極簡膠囊狀手把 (縮小且不突出藍框左右邊緣)
+        this._drawHoldCapsuleHandle(noteX, endY, isHoveredTail);
+
+        // 3. 拍數文字顯示區 (與膠囊 1:1 一模一樣大，純黑底色 + 白色文字，顯示在左邊)
+        if (this.draggingHold && this.draggingHold.note === note) {
+            // 橫向對齊輔助虛線
+            ctx.save();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(-this.canvas.width / 2, endY);
+            ctx.lineTo(this.canvas.width / 2, endY);
+            ctx.stroke();
+            ctx.restore();
+
+            const bpm = this._getCurrentBpmAt(note.time);
+            const gridDiv = this.settings?.gridDivision || 4;
+            const tickPeriod = (240 / bpm) / gridDiv;
+            const numTicks = Math.max(1, Math.round(holdDuration / tickPeriod));
+            const labelText = `${gridDiv}:${numTicks}`;
+
+            // 與膠囊手把完全 1:1 一樣大的黑底膠囊
+            const capsuleW = Math.round(boxW * 0.62 * 10) / 10;
+            const capsuleH = Math.round(capsuleW * 0.48 * 10) / 10;
+            const capsuleR = capsuleH / 2;
+            const badgeW = capsuleW;
+            const badgeH = capsuleH;
+
+            // 顯示在藍框左側 (距藍框左邊界 1.5 單位)
+            const badgeX = (noteX - boxW / 2) - badgeW - 1.5;
+            const badgeY = endY - badgeH / 2;
+
+            ctx.save();
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(badgeX, badgeY, badgeW, badgeH, capsuleR);
+            } else {
+                ctx.rect(badgeX, badgeY, badgeW, badgeH);
+            }
+            ctx.fill();
+
+            // 自適應字體大小，保證文字不溢出黑底膠囊
+            let fontSize = 2.2;
+            ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+            const textMetrics = ctx.measureText(labelText);
+            if (textMetrics.width > badgeW - 1.2) {
+                fontSize = Math.max(1.3, fontSize * ((badgeW - 1.2) / textMetrics.width));
+                ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+            }
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, badgeX + badgeW / 2, badgeY + badgeH / 2);
+            ctx.restore();
+        }
+
+        ctx.restore();
+    }
+
     _drawMarker() {
         const ctx = this.ctx;
         const size = this.settings.noteBaseSize;
@@ -4073,6 +4247,12 @@ export class SimaiVisualEditor {
         const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
 
         if (hoveredNote !== null) {
+            // 若命中 Hold 音符，改為藍框包覆與尾部膠囊狀手把
+            if (hoveredNote.type === 'hold' || (hoveredNote.holdDuration && hoveredNote.holdDuration > 0)) {
+                const effDur = (this.draggingHold && this.draggingHold.note === hoveredNote) ? this.draggingHold.currentDuration : (hoveredNote.holdDuration || 0);
+                this._drawHoldBoxAndHandle(hoveredNote, effDur, hoveredNote.hitPart === 'tail' || this.draggingHold?.note === hoveredNote);
+                return;
+            }
             // 若命中現有音符，Marker 精確對齊該音符的位置與時間
             let noteX = visualNoteRefPos[hoveredNote.pos - 1]?.x;
             if (hoveredNote.type === 'touch' || hoveredNote.touchPos) {
@@ -4182,6 +4362,23 @@ export class SimaiVisualEditor {
 
         const clickedNote = this._hitTestNote(this.mouseX, this.mouseY);
         const lane = this._hitTestLane(this.mouseX);
+
+        // 優先檢查是否點擊在 Hold 尾部膠囊狀手把上
+        if (e.button === 0 && clickedNote && clickedNote.type === 'hold' && clickedNote.hitPart === 'tail') {
+            e.stopPropagation();
+            this.draggingHold = {
+                note: clickedNote,
+                originalDuration: clickedNote.holdDuration || 0,
+                currentDuration: clickedNote.holdDuration || 0,
+                pointerId: e.pointerId
+            };
+            this._lastPointerMoveEvent = e;
+            if (this.canvas.setPointerCapture) {
+                try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+            }
+            if (!this._isLoopActive()) this._upd();
+            return;
+        }
 
         if (this.editMode === 'eraser') {
             if (e.button === 0 && clickedNote !== null) {
@@ -4324,6 +4521,25 @@ export class SimaiVisualEditor {
     _onPointerUp(e) {
         if (e.button === 0) {
             this.markerPressed = false;
+
+            if (this.draggingHold) {
+                e.stopPropagation();
+                this._stopAutoScroll();
+                const { note, currentDuration, originalDuration, pointerId } = this.draggingHold;
+                this.draggingHold = null;
+                this._lastPointerMoveEvent = null;
+                if (pointerId !== undefined && this.canvas.releasePointerCapture) {
+                    try { this.canvas.releasePointerCapture(pointerId); } catch (_) {}
+                }
+                if (Math.abs(currentDuration - originalDuration) > 1e-4) {
+                    if (this.onUpdateHoldDuration) {
+                        this.onUpdateHoldDuration(note, currentDuration);
+                    }
+                }
+                if (!this._isLoopActive()) this._upd();
+                return;
+            }
+
             if (this.isSelectingBox) {
                 this.isSelectingBox = false;
                 const minX = Math.min(this.selectionStart.x, this.selectionEnd.x);
@@ -4365,18 +4581,162 @@ export class SimaiVisualEditor {
         }
     }
 
-    _onPointerLeave() {
+    _onPointerLeave(e) {
         this.markerPressed = false;
-        this.hoverLane = null;
-        this.isSelectingBox = false;
-        this.canvas.style.cursor = (this.editMode === 'boxSelect') ? 'crosshair' : ((this.editMode === 'eraser' || this.editMode === 'modifier') ? 'default' : 'grab');
-        if (!this._isLoopActive()) {
-            this._upd();
+        if (!this.draggingHold) {
+            this.hoverLane = null;
+            this.isSelectingBox = false;
+            this.canvas.style.cursor = (this.editMode === 'boxSelect') ? 'crosshair' : ((this.editMode === 'eraser' || this.editMode === 'modifier') ? 'default' : 'grab');
+            if (!this._isLoopActive()) {
+                this._upd();
+            }
         }
+    }
+
+    _onPointerCancel(e) {
+        this._stopAutoScroll();
+        if (this.draggingHold) {
+            const { pointerId } = this.draggingHold;
+            this.draggingHold = null;
+            this._lastPointerMoveEvent = null;
+            if (pointerId !== undefined && this.canvas.releasePointerCapture) {
+                try { this.canvas.releasePointerCapture(pointerId); } catch (_) {}
+            }
+        }
+        this._onPointerLeave(e);
+    }
+
+    _updateDraggingHoldDuration(e) {
+        if (!this.draggingHold) return;
+        if (e) {
+            this._updMousePos(e);
+        }
+        const note = this.draggingHold.note;
+        const mouseTime = (this.snappedTime !== null && this.snappedTime !== undefined)
+            ? this.snappedTime
+            : (this.globalTime - this.mouseY / this.zoom);
+
+        const currentBpm = this._getCurrentBpmAt(note.time);
+        const gridDiv = this.settings?.gridDivision || 4;
+        const tickPeriod = (240 / currentBpm) / gridDiv;
+
+        // 計算離起點最近的第一個吸附點作為最小值下限
+        let minEndTime = note.time + tickPeriod;
+        if (typeof this.quantizeTime === 'function') {
+            const candidate = this.quantizeTime(note.time + tickPeriod * 0.6);
+            if (candidate !== null && candidate > note.time + 1e-4) {
+                minEndTime = candidate;
+            }
+        }
+        const safeMinEndTime = Math.max(minEndTime, note.time + 0.001);
+
+        let targetEndTime = mouseTime;
+        if (targetEndTime < safeMinEndTime) {
+            targetEndTime = safeMinEndTime;
+        }
+
+        let newDuration = targetEndTime - note.time;
+        if (newDuration < (safeMinEndTime - note.time)) {
+            newDuration = safeMinEndTime - note.time;
+        }
+
+        this.draggingHold.currentDuration = newDuration;
+        this.canvas.style.cursor = 'ns-resize';
+        if (!this._isLoopActive()) this._upd();
+    }
+
+    _checkAutoScroll(e) {
+        if (!this.draggingHold || !this.onScrollTime) {
+            this._stopAutoScroll();
+            return;
+        }
+        const rect = this.canvas.getBoundingClientRect();
+        const topEdge = rect.top + 45;
+        const bottomEdge = rect.bottom - 45;
+
+        let speed = 0;
+        if (e.clientY < topEdge) {
+            // 向上拖曳超出或靠近頂端：時間往前推進 (未來方向，deltaSec > 0)
+            const dist = topEdge - e.clientY;
+            const pxPerSec = Math.min(800, dist * 8 + 40);
+            speed = pxPerSec / (this.zoom || 100);
+        } else if (e.clientY > bottomEdge) {
+            // 向下拖曳超出或靠近底端：時間往回倒退 (過去方向，deltaSec < 0)
+            const note = this.draggingHold.note;
+            const currentBpm = this._getCurrentBpmAt(note.time);
+            const gridDiv = this.settings?.gridDivision || 4;
+            const tickPeriod = (240 / currentBpm) / gridDiv;
+            let minEndTime = note.time + tickPeriod;
+            if (typeof this.quantizeTime === 'function') {
+                const candidate = this.quantizeTime(note.time + tickPeriod * 0.6);
+                if (candidate !== null && candidate > note.time + 1e-4) {
+                    minEndTime = candidate;
+                }
+            }
+            const safeMinEndTime = Math.max(minEndTime, note.time + 0.001);
+            const mouseTime = this.globalTime - this.mouseY / this.zoom;
+
+            // 若長度已縮到最小吸附點且滑鼠已在該吸附點下方，停止繼續向下回溯滾動
+            if (this.draggingHold.currentDuration <= (safeMinEndTime - note.time) + 1e-4 && mouseTime <= safeMinEndTime) {
+                speed = 0;
+            } else {
+                const dist = e.clientY - bottomEdge;
+                const pxPerSec = Math.min(800, dist * 8 + 40);
+                speed = -pxPerSec / (this.zoom || 100);
+            }
+        }
+
+        if (speed !== 0) {
+            this._autoScrollSpeed = speed;
+            if (!this._autoScrollTimer) {
+                this._startAutoScroll();
+            }
+        } else {
+            this._stopAutoScroll();
+        }
+    }
+
+    _startAutoScroll() {
+        if (this._autoScrollTimer) return;
+        let lastTime = performance.now();
+        const step = (now) => {
+            if (!this.draggingHold || !this._autoScrollSpeed) {
+                this._stopAutoScroll();
+                return;
+            }
+            const dt = (now - lastTime) / 1000;
+            lastTime = now;
+            const deltaSec = this._autoScrollSpeed * Math.min(0.1, dt);
+            if (this.onScrollTime) {
+                this.onScrollTime(deltaSec);
+            }
+            if (this.draggingHold && this._lastPointerMoveEvent) {
+                this._updateDraggingHoldDuration(this._lastPointerMoveEvent);
+                this._checkAutoScroll(this._lastPointerMoveEvent);
+            }
+            this._autoScrollTimer = requestAnimationFrame(step);
+        };
+        this._autoScrollTimer = requestAnimationFrame(step);
+    }
+
+    _stopAutoScroll() {
+        if (this._autoScrollTimer) {
+            cancelAnimationFrame(this._autoScrollTimer);
+            this._autoScrollTimer = null;
+        }
+        this._autoScrollSpeed = 0;
     }
 
     _onPointerMove(e) {
         this._updMousePos(e);
+        this._lastPointerMoveEvent = e;
+
+        if (this.draggingHold) {
+            e.stopPropagation();
+            this._updateDraggingHoldDuration(e);
+            this._checkAutoScroll(e);
+            return;
+        }
 
         if ((this.editMode === 'select' || this.editMode === 'boxSelect') && this.isSelectingBox) {
             this.selectionEnd = { x: this.mouseX, y: this.mouseY };
@@ -4396,23 +4756,28 @@ export class SimaiVisualEditor {
             } else {
                 this.canvas.style.cursor = 'crosshair';
             }
-        } else if (this.editMode === 'boxSelect') {
-            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
-            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'crosshair';
-        } else if (this.editMode === 'select') {
-            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
-            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'grab';
-        } else if (this.editMode === 'eraser') {
-            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
-            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'not-allowed';
-        } else if (this.editMode === 'modifier') {
-            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
-            this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'default';
         } else {
-            if (this.hoverLane !== null) {
-                this.canvas.style.cursor = 'crosshair';
+            const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
+            if (hoveredNote && hoveredNote.type === 'hold' && hoveredNote.hitPart === 'tail') {
+                this.canvas.style.cursor = 'ns-resize';
+                if (!this._isLoopActive()) this._upd();
+                return;
+            }
+
+            if (this.editMode === 'boxSelect') {
+                this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'crosshair';
+            } else if (this.editMode === 'select') {
+                this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'grab';
+            } else if (this.editMode === 'eraser') {
+                this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'not-allowed';
+            } else if (this.editMode === 'modifier') {
+                this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'default';
             } else {
-                this.canvas.style.cursor = 'grab';
+                if (this.hoverLane !== null) {
+                    this.canvas.style.cursor = 'crosshair';
+                } else {
+                    this.canvas.style.cursor = 'grab';
+                }
             }
         }
 
@@ -4564,16 +4929,18 @@ export class SimaiPreviewRenderer {
             const parts = (this.tb1 * this.tb2) / 4;
 
             if (parts > 1) {
-                ctx.strokeStyle = 'rgba(255, 217, 0, 0.3)';
+                ctx.strokeStyle = '#ffe865';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
+                const midY1 = h / 3;
+                const midY2 = (2 * h) / 3;
                 for (let i = minI; i <= maxI; i++) {
                     for (let b = 1; b < parts; b++) {
                         const subTime = tag.time + i * period + b * beatPeriod;
                         if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
                         const subPosX = (delta + i * period + b * beatPeriod) * zoom + hw;
-                        ctx.moveTo(subPosX, h);
-                        ctx.lineTo(subPosX, hh);
+                        ctx.moveTo(subPosX, midY1);
+                        ctx.lineTo(subPosX, midY2);
                     }
                 }
                 ctx.stroke();
@@ -4865,8 +5232,9 @@ export class SimaiPreviewRenderer {
         const { globalTime, visualBuckets, audioBuffer, offset, indexTime, cursorIndexTime } = state;
         this.globalTime = globalTime;
         this.indexTime = indexTime ?? 0;
-        this.drawAudioWaveform(audioBuffer, offset);
-        visualBuckets.tags.forEach(t => this.drawTag(t));
+        // 先繪製譜面切分線 (split tags)，再繪製 BPM 與黃節拍線 (bpm tags，疊在切分線之上)
+        visualBuckets.tags.filter(t => t.type === 'split').forEach(t => this.drawTag(t));
+        visualBuckets.tags.filter(t => t.type !== 'split').forEach(t => this.drawTag(t));
         visualBuckets.slide.forEach(n => this.drawSlide(n));
         visualBuckets.tapnhold.forEach(n => {
             if (n.type === "hold") this.drawHold(n);

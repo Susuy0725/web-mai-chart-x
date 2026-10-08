@@ -457,7 +457,7 @@ export function simaiDecode(data = "", baseOffset = true) {
                     lastBpmTag = tags.length - 1;
 
                     if (lastSplitTag !== -1 && tags[lastSplitTag].time !== nowTime && tg && tg.bpm !== nowBpm) {
-                        tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime, nohead: true });
+                        tags.push({ type: 'split', value: nowSplit, bpm: nowBpm, time: nowTime, nohead: true, synthetic: true });
                         tags[lastSplitTag].renderTimes = noteCommaIndex - lastSplitTagCommIndex + 1;
                         lastSplitTag = tags.length - 1;
                         lastSplitTagCommIndex = noteCommaIndex;

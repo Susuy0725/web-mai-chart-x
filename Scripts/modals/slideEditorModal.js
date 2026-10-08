@@ -38,8 +38,8 @@ export function isSlideLegal(start, end, type, mid = null) {
             return !(c === 4 || e);
         case '>':
         case '<':
-            // 圓弧：不可為自身
-            return !e;
+            // 圓弧：允許同鍵 (繞圓 360 度一整圈回到自身鍵位)
+            return true;
         case 'v':
             // V 字形：不可為對向鍵 (距離 4) 或自身
             return !(c === 4 || e);

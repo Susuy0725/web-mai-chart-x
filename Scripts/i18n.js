@@ -223,31 +223,45 @@ export function t(key, params = {}, targetLang = null) {
 
 export function applyI18nToDOM() {
     if (typeof document === 'undefined') return;
-    const elements = document.querySelectorAll('[data-i18n]');
+    const elements = document.querySelectorAll('[data-i18n], [data-i18n-title], [data-i18n-aria-label], [data-i18n-placeholder]');
     elements.forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        const translation = t(key);
+        // 處理特定屬性多語系
+        if (el.hasAttribute('data-i18n-title')) {
+            el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+        }
+        if (el.hasAttribute('data-i18n-aria-label')) {
+            el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
+        }
+        if (el.hasAttribute('data-i18n-placeholder')) {
+            el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+        }
 
-        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-            if (el.hasAttribute('placeholder')) {
-                el.placeholder = translation;
-            } else if (el.type === 'button' || el.type === 'submit') {
-                el.value = translation;
-            }
-        } else if (el.tagName === 'OPTION') {
-            el.textContent = translation;
-        } else {
-            const attr = el.getAttribute('data-i18n-attr');
-            if (attr) {
-                el.setAttribute(attr, translation);
+        // 處理主要文字 / 傳統 data-i18n
+        if (el.hasAttribute('data-i18n')) {
+            const key = el.getAttribute('data-i18n');
+            const translation = t(key);
+
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                if (el.hasAttribute('placeholder')) {
+                    el.placeholder = translation;
+                } else if (el.type === 'button' || el.type === 'submit') {
+                    el.value = translation;
+                }
+            } else if (el.tagName === 'OPTION') {
+                el.textContent = translation;
             } else {
-                let textNode = Array.from(el.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
-                if (textNode) {
-                    textNode.nodeValue = translation;
-                } else if (el.children.length === 0) {
-                    el.textContent = translation;
+                const attr = el.getAttribute('data-i18n-attr');
+                if (attr) {
+                    el.setAttribute(attr, translation);
                 } else {
-                    el.appendChild(document.createTextNode(translation));
+                    let textNode = Array.from(el.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
+                    if (textNode) {
+                        textNode.nodeValue = translation;
+                    } else if (el.children.length === 0) {
+                        el.textContent = translation;
+                    } else {
+                        el.appendChild(document.createTextNode(translation));
+                    }
                 }
             }
         }

@@ -9,6 +9,7 @@
 import { popupWindow, simpleToast } from '../helper.js';
 import { SimaiRenderer } from '../renderer.js';
 import { simaiDecode } from '../decode.js';
+import { t } from '../i18n.js';
 
 /**
  * 軌跡形狀符號清單 (純 simai 連接符，無多餘描述)
@@ -665,11 +666,11 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <!-- 上方區間顯示與導航條 -->
             <div class="sem-chain-container">
                 <div class="sem-chain-label">
-                    <span>軌跡鏈（點擊切換編輯區間）</span>
-                    <span class="sem-status-indicator">正在編輯第 ${activeIndex + 1} / ${segCount} 段 (${segStart} ➔ ${currentSeg.end})</span>
+                    <span>${t('slideEditorModal.trackChain')}</span>
+                    <span class="sem-status-indicator">${t('slideEditorModal.editingSeg', { current: activeIndex + 1, total: segCount, start: segStart, end: currentSeg.end })}</span>
                 </div>
                 <div class="sem-chain-track">
-                    <div class="sem-head-node" title="起點">${slideData.head}</div>
+                    <div class="sem-head-node" title="${t('slideEditorModal.headNode')}">${slideData.head}</div>
                     ${slideData.segments.map((seg, idx) => {
                         const isActive = (idx === activeIndex);
                         const label = seg.type === 'V'
@@ -684,13 +685,13 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                     ${slideData.duration ? `<div class="sem-duration-tag">${slideData.duration}</div>` : ''}
                 </div>
                 <div class="sem-actions-bar">
-                    <span style="font-size: 12px; color: #64748b;">語法預覽: ${buildSlideString(slideData)}</span>
+                    <span style="font-size: 12px; color: #64748b;">${t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) })}</span>
                     <div class="sem-seg-btn-group">
-                        <button type="button" class="sem-icon-btn" id="sem-add-seg" title="在末端新增一段軌跡">
-                            <span>＋ 新增區間</span>
+                        <button type="button" class="sem-icon-btn" id="sem-add-seg" title="${t('slideEditorModal.addSeg')}">
+                            <span>＋ ${t('slideEditorModal.addSeg')}</span>
                         </button>
-                        <button type="button" class="sem-icon-btn" id="sem-del-seg" ${segCount <= 1 ? 'disabled' : ''} title="刪除此段落">
-                            <span>－ 刪除區間</span>
+                        <button type="button" class="sem-icon-btn" id="sem-del-seg" ${segCount <= 1 ? 'disabled' : ''} title="${t('slideEditorModal.delSeg')}">
+                            <span>－ ${t('slideEditorModal.delSeg')}</span>
                         </button>
                     </div>
                 </div>
@@ -699,8 +700,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <!-- 軌跡形狀選擇器 (純 simai 連接符) -->
             <div class="sem-card">
                 <div class="sem-card-title">
-                    <span>軌跡形狀選擇</span>
-                    <span style="font-size: 11px; color: #64748b;">起點: ${segStart} 號鍵</span>
+                    <span>${t('slideEditorModal.shapeSelect')}</span>
+                    <span style="font-size: 11px; color: #64748b;">${t('slideEditorModal.startKey', { key: segStart })}</span>
                 </div>
                 <div class="sem-pattern-grid">
                     ${SLIDE_PATTERNS.map(pat => {
@@ -718,8 +719,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             ${currentSeg.type === 'V' ? `
                 <div class="sem-card">
                     <div class="sem-card-title">
-                        <span>折角中繼鍵位 (Mid)</span>
-                        <span style="font-size: 11px; color: #eab308;">中繼點僅限起點 ±2 鍵位</span>
+                        <span>${t('slideEditorModal.midKey')}</span>
+                        <span style="font-size: 11px; color: #eab308;">${t('slideEditorModal.midKeyHint')}</span>
                     </div>
                     <div class="sem-key-row">
                         ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
@@ -739,8 +740,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <!-- 目標鍵位選擇器 (1-8 鍵) -->
             <div class="sem-card">
                 <div class="sem-card-title">
-                    <span>終點鍵位選擇 (目標鍵)</span>
-                    <span style="font-size: 11px; color: #eab308;">不允許的終點已自動禁用</span>
+                    <span>${t('slideEditorModal.endKey')}</span>
+                    <span style="font-size: 11px; color: #eab308;">${t('slideEditorModal.endKeyHint')}</span>
                 </div>
                 <div class="sem-key-row">
                     ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
@@ -889,7 +890,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
     }
 
     modalInstance = popupWindow({
-        title: '編輯滑星軌跡',
+        title: t('slideEditorModal.title'),
         customContent: container,
         width: 500,
         height: 680,
@@ -915,13 +916,13 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         },
         buttons: [
             {
-                text: '取消',
+                text: t('common.cancel'),
                 onClick: () => {
                     modalInstance?.close();
                 }
             },
             {
-                text: '確認套用',
+                text: t('common.apply'),
                 isPrimary: true,
                 onClick: () => {
                     const finalStr = buildSlideString(slideData);
@@ -929,7 +930,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                         onApply(finalStr);
                     }
                     modalInstance?.close();
-                    simpleToast({ content: `已套用滑星軌跡: ${finalStr}`, type: 'success', timeout: 1200 });
+                    simpleToast({ content: t('slideEditorModal.appliedToast', { slide: finalStr }), type: 'success', timeout: 1200 });
                 }
             }
         ]

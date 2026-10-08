@@ -1,4 +1,5 @@
 import { simpleToast, popupWindow } from '../helper.js';
+import { t } from '../i18n.js';
 
 /**
  * 去除字串開頭的 BPM、拍號等前綴標籤
@@ -143,7 +144,7 @@ export function openBpmInputModal({ currentBpm = 120, onApply }) {
     container.style.cssText = 'display: flex; flex-direction: column; gap: 14px; color: #e2e8f0; font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif; user-select: none; -webkit-user-select: none;';
 
     container.innerHTML = `
-        <div style="font-size: 13px; color: #94a3b8;">設定此拍點的 BPM 變更標籤：</div>
+        <div style="font-size: 13px; color: #94a3b8;">${t('visualEditor.setBpmPrompt')}</div>
         <div style="display: flex; align-items: center; gap: 8px;">
             <input type="number" id="wmc-bpm-input" step="0.1" min="1" max="999" value="${currentBpm}" 
                 style="flex: 1; height: 42px; padding: 0 14px; font-size: 18px; font-weight: bold; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none; transition: border-color 0.15s ease;">
@@ -171,7 +172,7 @@ export function openBpmInputModal({ currentBpm = 120, onApply }) {
     const handleApply = () => {
         const val = parseFloat(input.value);
         if (isNaN(val) || val <= 0) {
-            simpleToast({ content: '請輸入有效的 BPM 數值', type: 'warning', timeout: 1500 });
+            simpleToast({ content: t('visualEditor.bpmInvalid'), type: 'warning', timeout: 1500 });
             return;
         }
         if (typeof onApply === 'function') {
@@ -188,16 +189,16 @@ export function openBpmInputModal({ currentBpm = 120, onApply }) {
     });
 
     modal = popupWindow({
-        title: '設定拍點 BPM',
+        title: t('visualEditor.setBpmTitle'),
         customContent: container,
         width: 340,
         buttons: [
             {
-                text: '取消',
+                text: t('common.cancel'),
                 onClick: () => modal?.close()
             },
             {
-                text: '確認套用',
+                text: t('common.apply'),
                 isPrimary: true,
                 onClick: handleApply
             }
@@ -348,30 +349,30 @@ export function createVisualNoteCallbacks(ctx) {
         const isTouchType = (selectedType === 'touch' || selectedType === 'touchhold');
 
         if (isTouchLane && !isTouchType) {
-            simpleToast({ content: 'Touch 軌道僅能放置 Touch 類音符', type: 'warning', timeout: 1500 });
+            simpleToast({ content: t('visualEditor.touchLaneOnlyTouch'), type: 'warning', timeout: 1500 });
             return;
         }
         if (!isTouchLane && isTouchType) {
-            simpleToast({ content: 'Touch 音符只能放置於 Touch 軌道', type: 'warning', timeout: 1500 });
+            simpleToast({ content: t('visualEditor.touchNoteOnlyTouchLane'), type: 'warning', timeout: 1500 });
             return;
         }
 
         const snappedTime = quantizeTime(clickTime);
         if (snappedTime === null || snappedTime === undefined) {
-            simpleToast({ content: '點擊位置離最近的節拍線太遠，無法放置音符', type: 'warning', timeout: 1500 });
+            simpleToast({ content: t('visualEditor.tooFarFromBeat'), type: 'warning', timeout: 1500 });
             return;
         }
 
         const closestIndex = getOrCreateCommaIndex(snappedTime);
         if (closestIndex === null || closestIndex === undefined) {
-            simpleToast({ content: '無法定位或擴充該時間位置的拍子', type: 'warning', timeout: 1500 });
+            simpleToast({ content: t('visualEditor.cannotLocateBeat'), type: 'warning', timeout: 1500 });
             return;
         }
 
         const rawData = getRawData();
         const segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
         if (segment.startsWith("||")) {
-            simpleToast({ content: '無法在註解行內放置音符', type: 'warning', timeout: 1500 });
+            simpleToast({ content: t('visualEditor.cannotPlaceInComment'), type: 'warning', timeout: 1500 });
             return;
         }
 
@@ -402,7 +403,7 @@ export function createVisualNoteCallbacks(ctx) {
                     raw[closestIndex] = curSegment;
                     const newContent = raw.join(',');
                     updateEditorAndSave(newContent);
-                    simpleToast({ content: `已在此拍點設定 BPM: ${bpmVal}`, type: 'success', timeout: 1000 });
+                    simpleToast({ content: t('visualEditor.bpmSetSuccess', { bpm: bpmVal }), type: 'success', timeout: 1000 });
                 }
             });
             return;
@@ -483,8 +484,8 @@ export function createVisualNoteCallbacks(ctx) {
             rawData[closestIndex] = parts.join('/');
             updateEditorAndSave(rawData.join(','));
 
-            const laneLabel = isTouchLane ? 'Touch 軌道' : `軌道 ${lane}`;
-            simpleToast({ content: `已將 ${laneLabel} 的音符替換為 ${newLabel} 音符`, type: 'info', timeout: 1000 });
+            const laneLabel = isTouchLane ? t('visualEditor.touchLane') : t('visualEditor.laneLabel', { lane });
+            simpleToast({ content: t('visualEditor.noteReplaced', { lane: laneLabel, note: newLabel }), type: 'info', timeout: 1000 });
             return;
         }
 
@@ -531,10 +532,10 @@ export function createVisualNoteCallbacks(ctx) {
 
         const modName = (selectedModifier === 'ex') ? 'EX ' :
                         (selectedModifier === 'break') ? 'Break ' :
-                        (selectedModifier === 'mine') ? '地雷 ' :
-                        (selectedModifier === 'firework') ? '煙火 ' : '';
-        const targetLabel = isTouchLane ? 'Touch 軌道' : `軌道 ${lane}`;
-        simpleToast({ content: `已在 ${targetLabel} 放置 ${modName}${noteLabel} 音符`, type: 'success', timeout: 1000 });
+                        (selectedModifier === 'mine') ? `${t('visualToolbar.modMine')} ` :
+                        (selectedModifier === 'firework') ? `${t('visualToolbar.modFirework')} ` : '';
+        const targetLabel = isTouchLane ? t('visualEditor.touchLane') : t('visualEditor.laneLabel', { lane });
+        simpleToast({ content: t('visualEditor.notePlaced', { lane: targetLabel, note: `${modName}${noteLabel}` }), type: 'success', timeout: 1000 });
     };
 
     const visualPlaceHoldNote = (lane, clickTime, durationTime, originalNote = null) => {
@@ -602,7 +603,7 @@ export function createVisualNoteCallbacks(ctx) {
         const newContent = rawData.join(',');
         updateEditorAndSave(newContent);
 
-        simpleToast({ content: `已將軌道 ${lane} 設定為 Hold [${gridDiv}:${numTicks}]`, type: 'success', timeout: 1000 });
+        simpleToast({ content: t('visualEditor.holdSetSuccess', { lane, division: gridDiv, ticks: numTicks }), type: 'success', timeout: 1000 });
     };
 
     const visualDeleteNote = (noteOrNotes) => {
@@ -664,10 +665,10 @@ export function createVisualNoteCallbacks(ctx) {
             if (deletedCount === 1) {
                 const firstNote = list[0];
                 const isTouch = (firstNote?.type === 'touch' || Boolean(firstNote?.touchPos));
-                const label = isTouch ? 'Touch' : `軌道 ${firstNote?.pos || ''}`;
-                simpleToast({ content: `已刪除 ${label} 的音符`, type: 'info', timeout: 1000 });
+                const label = isTouch ? t('visualToolbar.noteTouch') : t('visualEditor.laneLabel', { lane: firstNote?.pos || '' });
+                simpleToast({ content: t('visualEditor.noteDeleted', { lane: label }), type: 'info', timeout: 1000 });
             } else {
-                simpleToast({ content: `已刪除 ${deletedCount} 個音符`, type: 'info', timeout: 1000 });
+                simpleToast({ content: t('visualEditor.notesDeleted', { count: deletedCount }), type: 'info', timeout: 1000 });
             }
         }
     };
@@ -714,14 +715,14 @@ export function createVisualNoteCallbacks(ctx) {
                     const isTrackClick = (note.hitPart === 'track') || (note.type === 'slide' && note.hitPart !== 'head');
                     if (isTrackClick) {
                         peeled.trackFlags.clear();
-                        simpleToast({ content: '已清除滑星軌跡的修飾效果', type: 'info', timeout: 1000 });
+                        simpleToast({ content: t('visualEditor.clearSlideModifier'), type: 'info', timeout: 1000 });
                     } else {
                         peeled.headFlags.clear();
-                        simpleToast({ content: '已清除星星頭的修飾效果', type: 'info', timeout: 1000 });
+                        simpleToast({ content: t('visualEditor.clearStarModifier'), type: 'info', timeout: 1000 });
                     }
                 } else {
                     peeled.flags.clear();
-                    simpleToast({ content: '已清除音符的所有修飾效果', type: 'info', timeout: 1000 });
+                    simpleToast({ content: t('visualEditor.clearAllModifiers'), type: 'info', timeout: 1000 });
                 }
                 nextClean = rebuildPeeledNote(peeled);
             } else {
@@ -732,16 +733,16 @@ export function createVisualNoteCallbacks(ctx) {
                                    selectedModifier === 'firework' ? 'f' : '';
                 const modLabel = selectedModifier === 'ex' ? 'EX' :
                                  selectedModifier === 'break' ? 'Break' :
-                                 selectedModifier === 'mine' ? '地雷' :
-                                 selectedModifier === 'firework' ? '煙火' : '';
+                                 selectedModifier === 'mine' ? t('visualToolbar.modMine') :
+                                 selectedModifier === 'firework' ? t('visualToolbar.modFirework') : '';
 
                 // 相容性防呆校驗 (參考 decode.js)
                 if (targetFlag === 'b' && peeled.isTouch) {
-                    simpleToast({ content: 'Touch 類音符不支援 Break 效果', type: 'warning', timeout: 1500 });
+                    simpleToast({ content: t('visualEditor.touchNoBreak'), type: 'warning', timeout: 1500 });
                     return;
                 }
                 if (targetFlag === 'f' && !peeled.isTouch) {
-                    simpleToast({ content: '煙火效果僅限 Touch / TouchHold 音符', type: 'warning', timeout: 1500 });
+                    simpleToast({ content: t('visualEditor.fireworkTouchOnly'), type: 'warning', timeout: 1500 });
                     return;
                 }
 
@@ -750,36 +751,36 @@ export function createVisualNoteCallbacks(ctx) {
                     if (isTrackClick) {
                         // 點擊軌跡：支援 b 與 m
                         if (targetFlag === 'x') {
-                            simpleToast({ content: '滑星軌跡不支援 EX 效果（僅星星頭支援）', type: 'warning', timeout: 1500 });
+                            simpleToast({ content: t('visualEditor.slideNoEx'), type: 'warning', timeout: 1500 });
                             return;
                         }
                         if (targetFlag === 'f') {
-                            simpleToast({ content: '煙火效果僅限 Touch 音符', type: 'warning', timeout: 1500 });
+                            simpleToast({ content: t('visualEditor.fireworkTouchOnly'), type: 'warning', timeout: 1500 });
                             return;
                         }
 
                         if (peeled.trackFlags.has(targetFlag)) {
                             // 已存在 -> 剝除 (Toggle off)
                             peeled.trackFlags.delete(targetFlag);
-                            simpleToast({ content: `已移除軌跡的 ${modLabel} 效果`, type: 'info', timeout: 1000 });
+                            simpleToast({ content: t('visualEditor.modRemoved', { target: t('visualEditor.targetTrack'), mod: modLabel }), type: 'info', timeout: 1000 });
                         } else {
                             // 不存在 -> 注入 (Toggle on)，互斥處理
                             if (targetFlag === 'm') peeled.trackFlags.delete('b');
                             if (targetFlag === 'b') peeled.trackFlags.delete('m');
                             peeled.trackFlags.add(targetFlag);
-                            simpleToast({ content: `已為軌跡套用 ${modLabel} 效果`, type: 'success', timeout: 1000 });
+                            simpleToast({ content: t('visualEditor.modApplied', { target: t('visualEditor.targetTrack'), mod: modLabel }), type: 'success', timeout: 1000 });
                         }
                     } else {
                         // 點擊星星頭：支援 b, x, m (x 與 b 完美共存)
                         if (targetFlag === 'f') {
-                            simpleToast({ content: '煙火效果僅限 Touch 音符', type: 'warning', timeout: 1500 });
+                            simpleToast({ content: t('visualEditor.fireworkTouchOnly'), type: 'warning', timeout: 1500 });
                             return;
                         }
 
                         if (peeled.headFlags.has(targetFlag)) {
                             // 已存在 -> 剝除 (Toggle off)
                             peeled.headFlags.delete(targetFlag);
-                            simpleToast({ content: `已移除星星頭的 ${modLabel} 效果`, type: 'info', timeout: 1000 });
+                            simpleToast({ content: t('visualEditor.modRemoved', { target: t('visualEditor.targetStarHead'), mod: modLabel }), type: 'info', timeout: 1000 });
                         } else {
                             // 不存在 -> 注入 (Toggle on)
                             if (targetFlag === 'm') {
@@ -789,7 +790,7 @@ export function createVisualNoteCallbacks(ctx) {
                                 peeled.headFlags.delete('m');
                             }
                             peeled.headFlags.add(targetFlag);
-                            simpleToast({ content: `已為星星頭套用 ${modLabel} 效果`, type: 'success', timeout: 1000 });
+                            simpleToast({ content: t('visualEditor.modApplied', { target: t('visualEditor.targetStarHead'), mod: modLabel }), type: 'success', timeout: 1000 });
                         }
                     }
                 } else {
@@ -797,7 +798,7 @@ export function createVisualNoteCallbacks(ctx) {
                     if (peeled.flags.has(targetFlag)) {
                         // 已存在 -> 剝除 (Toggle off)
                         peeled.flags.delete(targetFlag);
-                        simpleToast({ content: `已移除音符的 ${modLabel} 效果`, type: 'info', timeout: 1000 });
+                        simpleToast({ content: t('visualEditor.modRemoved', { target: t('visualEditor.targetNote'), mod: modLabel }), type: 'info', timeout: 1000 });
                     } else {
                         // 不存在 -> 注入 (Toggle on)
                         if (targetFlag === 'm') {
@@ -807,7 +808,7 @@ export function createVisualNoteCallbacks(ctx) {
                             peeled.flags.delete('m');
                         }
                         peeled.flags.add(targetFlag);
-                        simpleToast({ content: `已為音符套用 ${modLabel} 效果`, type: 'success', timeout: 1000 });
+                        simpleToast({ content: t('visualEditor.modApplied', { target: t('visualEditor.targetNote'), mod: modLabel }), type: 'success', timeout: 1000 });
                     }
                 }
 
@@ -815,7 +816,7 @@ export function createVisualNoteCallbacks(ctx) {
             }
         } else {
             nextClean = getNextNoteClean(clean, lane);
-            simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
+            simpleToast({ content: t('visualEditor.noteTypeChanged', { note: nextClean }), type: 'success', timeout: 1000 });
         }
 
         const newPart = prefix + nextClean;
@@ -931,7 +932,7 @@ export function createVisualNoteCallbacks(ctx) {
 
         const newContent = rawData.join(',');
         updateEditorAndSave(newContent);
-        simpleToast({ content: `已更新音符: ${nextClean}`, type: 'success', timeout: 1000 });
+        simpleToast({ content: t('visualEditor.noteUpdated', { note: nextClean }), type: 'success', timeout: 1000 });
     };
 
     const getNoteTouchGroup = (note) => {

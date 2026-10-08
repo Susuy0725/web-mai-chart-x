@@ -3,6 +3,8 @@
  * 當選中單個 Hold 或 Slide 音符時，於音符頭部左側或右側彈出選項選單
  */
 
+import { t } from '../i18n.js';
+
 let menuEl = null;
 let currentNote = null;
 let currentCallbacks = null;
@@ -189,7 +191,7 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     if (props.isHold || props.isSlide) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="change-duration">
-                <span>改變時長</span>
+                <span>${t('visualMenu.editDuration')}</span>
             </button>
         `;
     }
@@ -197,7 +199,7 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     if (props.isSlide) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="change-pattern">
-                <span>改變軌跡</span>
+                <span>${t('visualMenu.editSlideTrack')}</span>
             </button>
         `;
     }
@@ -205,7 +207,7 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     if (props.isTouch) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="edit-touch-group">
-                <span>編輯Touch群組</span>
+                <span>${t('visualMenu.editTouchGroup')}</span>
             </button>
         `;
     }
@@ -310,7 +312,7 @@ export function showBoxFloatingMenu(boxRect, count, callbacks) {
     const menu = ensureBoxMenuElement();
     menu.innerHTML = `
         <button type="button" class="wmc-box-fnm-btn" data-action="delete">
-            <span>刪除 (${count})</span>
+            <span>${t('visualMenu.deleteSelected')} ${count}</span>
         </button>
     `;
 

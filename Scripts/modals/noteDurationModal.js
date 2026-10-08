@@ -13,6 +13,7 @@
  */
 
 import { popupWindow, simpleToast } from '../helper.js';
+import { t } from '../i18n.js';
 
 function ensureNoteDurationModalStyles() {
     const styleId = 'wmc-note-duration-modal-styles';
@@ -362,37 +363,37 @@ export function openNoteDurationModal({
             holdCard.innerHTML = `
                 <div class="ndm-section-header">
                     <div class="ndm-section-title">
-                        <span>Hold 持續時長</span>
+                        <span>${t('noteDurationModal.holdDuration')}</span>
                     </div>
                     <div class="ndm-tab-row">
-                        <button type="button" class="ndm-tab-btn ${state.mode === 'beat' ? 'active' : ''}" data-action="set-mode-beat">節拍模式</button>
-                        <button type="button" class="ndm-tab-btn ${state.mode === 'seconds' ? 'active' : ''}" data-action="set-mode-seconds">直接秒數</button>
+                        <button type="button" class="ndm-tab-btn ${state.mode === 'beat' ? 'active' : ''}" data-action="set-mode-beat">${t('noteDurationModal.modeBeat')}</button>
+                        <button type="button" class="ndm-tab-btn ${state.mode === 'seconds' ? 'active' : ''}" data-action="set-mode-seconds">${t('noteDurationModal.modeSeconds')}</button>
                     </div>
                 </div>
 
                 ${state.mode === 'beat' ? `
                     <div class="ndm-row">
                         <div class="ndm-field">
-                            <input type="number" class="ndm-input" id="ndm-time" value="${state.time}" min="1" max="128" style="width: 60px;" placeholder="切分">
-                            <span class="ndm-label">切分 ×</span>
-                            <input type="number" class="ndm-input" id="ndm-beat" value="${state.beat}" min="1" max="512" style="width: 60px;" placeholder="個數">
-                            <span class="ndm-label">個</span>
+                            <input type="number" class="ndm-input" id="ndm-time" value="${state.time}" min="1" max="128" style="width: 60px;">
+                            <span class="ndm-label">${t('noteDurationModal.divisionTimes')}</span>
+                            <input type="number" class="ndm-input" id="ndm-beat" value="${state.beat}" min="1" max="512" style="width: 60px;">
+                            <span class="ndm-label">${t('noteDurationModal.beatCount')}</span>
                         </div>
                         <div class="ndm-field" style="margin-left: auto;">
-                            <span class="ndm-label">指定 BPM (選填)：</span>
-                            <input type="number" class="ndm-input" id="ndm-hold-bpm" value="${state.holdBpm}" step="0.1" style="width: 80px;" placeholder="當前 BPM">
+                            <span class="ndm-label">${t('noteDurationModal.specifyBpm')}</span>
+                            <input type="number" class="ndm-input" id="ndm-hold-bpm" value="${state.holdBpm}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 ` : `
                     <div class="ndm-row">
                         <div class="ndm-field">
-                            <span class="ndm-label">持續秒數：</span>
+                            <span class="ndm-label">${t('noteDurationModal.durationSeconds')}</span>
                             <input type="number" class="ndm-input" id="ndm-hold-seconds" value="${state.holdSeconds}" step="0.001" min="0.001" style="width: 100px;">
-                            <span>秒</span>
+                            <span>${t('noteDurationModal.secondsUnit')}</span>
                         </div>
                         <div class="ndm-checkbox-wrapper" style="margin-left: auto;">
                             <input type="checkbox" id="ndm-hold-hash" class="ndm-checkbox" ${state.holdUseHash ? 'checked' : ''}>
-                            <label for="ndm-hold-hash" class="ndm-checkbox-label">附加 # 前綴 (如 [#5.678])</label>
+                            <label for="ndm-hold-hash" class="ndm-checkbox-label">${t('noteDurationModal.useHash')}</label>
                         </div>
                     </div>
                 `}
@@ -407,30 +408,30 @@ export function openNoteDurationModal({
             waitCard.innerHTML = `
                 <div class="ndm-section-header">
                     <div class="ndm-section-title">
-                        <span>等候時間</span>
+                        <span>${t('noteDurationModal.waitTime')}</span>
                     </div>
                     <div class="ndm-checkbox-wrapper">
                         <input type="checkbox" id="ndm-slide-custom-wait" class="ndm-checkbox" ${state.useCustomWait ? 'checked' : ''}>
-                        <label for="ndm-slide-custom-wait" class="ndm-checkbox-label">自訂等候設定</label>
+                        <label for="ndm-slide-custom-wait" class="ndm-checkbox-label">${t('noteDurationModal.customWait')}</label>
                     </div>
                 </div>
 
                 <div id="ndm-wait-content" style="display: ${state.useCustomWait ? 'flex' : 'none'}; flex-direction: column; gap: 10px; margin-top: 4px;">
                     <div class="ndm-row">
                         <div class="ndm-tab-row">
-                            <button type="button" class="ndm-tab-btn ${state.waitMode === 'seconds' ? 'active' : ''}" data-action="set-wait-mode-seconds">指定秒數 (##)</button>
-                            <button type="button" class="ndm-tab-btn ${state.waitMode === 'bpm' ? 'active' : ''}" data-action="set-wait-mode-bpm">指定 BPM (#)</button>
+                            <button type="button" class="ndm-tab-btn ${state.waitMode === 'seconds' ? 'active' : ''}" data-action="set-wait-mode-seconds">${t('noteDurationModal.specifySeconds')}</button>
+                            <button type="button" class="ndm-tab-btn ${state.waitMode === 'bpm' ? 'active' : ''}" data-action="set-wait-mode-bpm">${t('noteDurationModal.specifyBpmWait')}</button>
                         </div>
 
                         <div class="ndm-field" id="ndm-wait-sec-field" style="margin-left: auto; display: ${state.waitMode === 'seconds' ? 'flex' : 'none'};">
-                            <span class="ndm-label">等候秒數：</span>
+                            <span class="ndm-label">${t('noteDurationModal.waitSeconds')}</span>
                             <input type="number" class="ndm-input" id="ndm-slide-wait-sec" value="${state.waitSec}" step="0.1" min="0.01" style="width: 80px;">
-                            <span>秒</span>
+                            <span>${t('noteDurationModal.secondsUnit')}</span>
                         </div>
 
                         <div class="ndm-field" id="ndm-wait-bpm-field" style="margin-left: auto; display: ${state.waitMode === 'bpm' ? 'flex' : 'none'};">
-                            <span class="ndm-label">等候 BPM：</span>
-                            <input type="number" class="ndm-input" id="ndm-slide-wait-bpm" value="${state.slideWaitBpm}" step="0.1" style="width: 80px;" placeholder="例如 160">
+                            <span class="ndm-label">${t('noteDurationModal.waitBpm')}</span>
+                            <input type="number" class="ndm-input" id="ndm-slide-wait-bpm" value="${state.slideWaitBpm}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 </div>
@@ -443,33 +444,33 @@ export function openNoteDurationModal({
             tracingCard.innerHTML = `
                 <div class="ndm-section-header">
                     <div class="ndm-section-title">
-                        <span>劃動時長</span>
+                        <span>${t('noteDurationModal.slideDuration')}</span>
                     </div>
                     <div class="ndm-tab-row">
-                        <button type="button" class="ndm-tab-btn ${state.slideTracingMode === 'beat' ? 'active' : ''}" data-action="set-slide-tracing-beat">節拍模式</button>
-                        <button type="button" class="ndm-tab-btn ${state.slideTracingMode === 'seconds' ? 'active' : ''}" data-action="set-slide-tracing-seconds">直接秒數</button>
+                        <button type="button" class="ndm-tab-btn ${state.slideTracingMode === 'beat' ? 'active' : ''}" data-action="set-slide-tracing-beat">${t('noteDurationModal.modeBeat')}</button>
+                        <button type="button" class="ndm-tab-btn ${state.slideTracingMode === 'seconds' ? 'active' : ''}" data-action="set-slide-tracing-seconds">${t('noteDurationModal.modeSeconds')}</button>
                     </div>
                 </div>
 
                 ${state.slideTracingMode === 'beat' ? `
                     <div class="ndm-row">
                         <div class="ndm-field">
-                            <input type="number" class="ndm-input" id="ndm-time" value="${state.time}" min="1" max="128" style="width: 60px;" placeholder="切分">
-                            <span class="ndm-label">切分 ×</span>
-                            <input type="number" class="ndm-input" id="ndm-beat" value="${state.beat}" min="1" max="512" style="width: 60px;" placeholder="個數">
-                            <span class="ndm-label">個</span>
+                            <input type="number" class="ndm-input" id="ndm-time" value="${state.time}" min="1" max="128" style="width: 60px;">
+                            <span class="ndm-label">${t('noteDurationModal.divisionTimes')}</span>
+                            <input type="number" class="ndm-input" id="ndm-beat" value="${state.beat}" min="1" max="512" style="width: 60px;">
+                            <span class="ndm-label">${t('noteDurationModal.beatCount')}</span>
                         </div>
                         <div class="ndm-field" id="ndm-slide-tracing-bpm-field" style="margin-left: auto; display: ${(state.useCustomWait && state.waitMode === 'seconds') ? 'flex' : 'none'};">
-                            <span class="ndm-label">劃動 BPM (選填)：</span>
-                            <input type="number" class="ndm-input" id="ndm-slide-tracing-bpm" value="${state.slideBpm}" step="0.1" style="width: 80px;" placeholder="當前 BPM">
+                            <span class="ndm-label">${t('noteDurationModal.slideBpm')}</span>
+                            <input type="number" class="ndm-input" id="ndm-slide-tracing-bpm" value="${state.slideBpm}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 ` : `
                     <div class="ndm-row">
                         <div class="ndm-field">
-                            <span class="ndm-label">劃動秒數：</span>
+                            <span class="ndm-label">${t('noteDurationModal.slideSeconds')}</span>
                             <input type="number" class="ndm-input" id="ndm-slide-seconds" value="${state.slideSeconds}" step="0.05" min="0.01" style="width: 90px;">
-                            <span>秒</span>
+                            <span>${t('noteDurationModal.secondsUnit')}</span>
                         </div>
                     </div>
                 `}
@@ -481,7 +482,7 @@ export function openNoteDurationModal({
         const previewCard = document.createElement('div');
         previewCard.className = 'ndm-preview-card';
         previewCard.innerHTML = `
-            <span class="ndm-preview-label">生成時長標籤：</span>
+            <span class="ndm-preview-label">${t('noteDurationModal.previewLabel')}</span>
             <span class="ndm-preview-code" id="ndmResultCode">[${buildResultString()}]</span>
         `;
         container.appendChild(previewCard);
@@ -577,18 +578,18 @@ export function openNoteDurationModal({
     // 建立通用無邊框彈窗
     let modalInstance = null;
     modalInstance = popupWindow({
-        title: isSlide ? '修改 Slide 時長' : '修改 Hold 時長',
+        title: isSlide ? t('noteDurationModal.titleSlide') : t('noteDurationModal.titleHold'),
         customContent: container,
         width: 480,
         buttons: [
             {
-                text: '取消',
+                text: t('common.cancel'),
                 onClick: () => {
                     modalInstance?.close();
                 }
             },
             {
-                text: '確認套用',
+                text: t('common.apply'),
                 isPrimary: true,
                 onClick: () => {
                     const finalCode = buildResultString();
@@ -596,7 +597,7 @@ export function openNoteDurationModal({
                         onApply(finalCode);
                     }
                     modalInstance?.close();
-                    simpleToast({ content: `已套用時長標籤: [${finalCode}]`, type: 'success', timeout: 1200 });
+                    simpleToast({ content: t('noteDurationModal.appliedToast', { code: finalCode }), type: 'success', timeout: 1200 });
                 }
             }
         ]

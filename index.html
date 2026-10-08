@@ -172,28 +172,28 @@
                 contenteditable="false"></div>
             <textarea id="editor-input" class="editor-layer" spellcheck="false" data-i18n="textarea.placeholder"
                 aria-label="譜面資料編輯區" placeholder="在此輸入譜面資料..."></textarea>
-            <canvas id="visualEditor" class="visualEditor-layer" style="display: none;" aria-label="視覺化編輯器畫布"></canvas>
+            <canvas id="visualEditor" class="visualEditor-layer" style="display: none;" aria-label="視覺化編輯器畫布" data-i18n-aria-label="menu.displayModeVisual"></canvas>
             <!-- 視覺編輯工具欄容器 (僅在視覺編輯模式下顯示) -->
             <div id="visualToolBar" class="visual-toolbar"
                 style="display: none; position: absolute; right: 16px; bottom: 16px; z-index: 10;">
                 <!-- 左側音符選擇子面板 -->
                 <div id="visualNotePalette" class="visual-sub-palette visual-note-palette" style="display: none;">
-                    <div class="palette-item active" data-note-type="tap" title="Tap 音符">
+                    <div class="palette-item active" data-note-type="tap" data-i18n-title="visualToolbar.noteTap" title="Tap">
                         <img src="./Skin/Default/TapSkins/tap.png" alt="Tap">
                     </div>
-                    <div class="palette-item" data-note-type="hold" title="Hold 音符">
+                    <div class="palette-item" data-note-type="hold" data-i18n-title="visualToolbar.noteHold" title="Hold">
                         <img src="./Skin/Default/HoldSkins/hold.png" alt="Hold">
                     </div>
-                    <div class="palette-item" data-note-type="slide" title="Slide / Star 音符">
+                    <div class="palette-item" data-note-type="slide" data-i18n-title="visualToolbar.noteSlide" title="Slide">
                         <img src="./Skin/Default/StarSkins/star.png" alt="Slide">
                     </div>
-                    <div class="palette-item" data-note-type="touch" title="Touch 音符">
+                    <div class="palette-item" data-note-type="touch" data-i18n-title="visualToolbar.noteTouch" title="Touch">
                         <img src="./Skin/Default/TouchSkins/touch.png" alt="Touch">
                     </div>
-                    <div class="palette-item" data-note-type="touchhold" title="TouchHold 音符">
+                    <div class="palette-item" data-note-type="touchhold" data-i18n-title="visualToolbar.noteTouchHold" title="TouchHold">
                         <img src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="TouchHold">
                     </div>
-                    <div class="palette-item" data-note-type="bpm" title="BPM 變更標籤">
+                    <div class="palette-item" data-note-type="bpm" data-i18n-title="visualToolbar.noteBpm" title="BPM 標籤">
                         <span class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: bold;">BPM</span>
                     </div>
                 </div>
@@ -201,19 +201,19 @@
                 <!-- 左側效果附加子面板 -->
                 <div id="visualModifierPalette" class="visual-sub-palette visual-modifier-palette"
                     style="display: none;">
-                    <div class="palette-item active" data-modifier-type="none" title="無效果">
+                    <div class="palette-item active" data-modifier-type="none" data-i18n-title="visualToolbar.modNone" title="無效果">
                         <span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>
                     </div>
-                    <div class="palette-item" data-modifier-type="ex" title="EX 效果">
+                    <div class="palette-item" data-modifier-type="ex" data-i18n-title="visualToolbar.modEx" title="EX">
                         <span class="modifier-text-btn" translate="no">EX</span>
                     </div>
-                    <div class="palette-item" data-modifier-type="break" title="Break 效果">
+                    <div class="palette-item" data-modifier-type="break" data-i18n-title="visualToolbar.modBreak" title="Break">
                         <img src="./Skin/Default/TapSkins/tap_break.png" alt="Break">
                     </div>
-                    <div class="palette-item" data-modifier-type="mine" title="地雷效果">
+                    <div class="palette-item" data-modifier-type="mine" data-i18n-title="visualToolbar.modMine" title="地雷">
                         <img src="./Skin/Default/TapSkins/tap_mine.png" alt="地雷">
                     </div>
-                    <div class="palette-item" data-modifier-type="firework" title="煙火效果 (FW)">
+                    <div class="palette-item" data-modifier-type="firework" data-i18n-title="visualToolbar.modFirework" title="煙火">
                         <span class="modifier-text-btn" translate="no">FW</span>
                     </div>
                 </div>
@@ -245,18 +245,18 @@
                     <div class="palette-item" data-division-val="64" title="1/64 切分">
                         <span class="division-text-btn" translate="no">1/64</span>
                     </div>
-                    <div class="palette-item custom-item" data-division-val="custom" title="自訂切分...">
+                    <div class="palette-item custom-item" data-division-val="custom" data-i18n-title="visualToolbar.divisionCustom" title="自訂切分">
                         <span class="division-text-btn" translate="no">...</span>
                     </div>
                 </div>
 
                 <!-- 1. 歷史操作群組 (撤銷 / 重作) -->
                 <div id="visualHistoryGroup" class="visual-tool-group visual-history-group">
-                    <div id="visualUndoBtn" class="switch-item disabled" role="button" tabindex="0" title="復原 (Ctrl+Z)"
+                    <div id="visualUndoBtn" class="switch-item disabled" role="button" tabindex="0" data-i18n-title="visualToolbar.undo" data-i18n-aria-label="visualToolbar.undo" title="復原"
                         aria-label="復原">
                         <span class="material-symbols-outlined" translate="no">undo</span>
                     </div>
-                    <div id="visualRedoBtn" class="switch-item disabled" role="button" tabindex="0" title="重作 (Ctrl+Y)"
+                    <div id="visualRedoBtn" class="switch-item disabled" role="button" tabindex="0" data-i18n-title="visualToolbar.redo" data-i18n-aria-label="visualToolbar.redo" title="重作"
                         aria-label="重作">
                         <span class="material-symbols-outlined" translate="no">redo</span>
                     </div>
@@ -264,11 +264,11 @@
 
                 <!-- 2. 縮放群組 (+ / -) -->
                 <div id="visualZoomGroup" class="visual-tool-group visual-zoom-group">
-                    <div id="visualZoomInBtn" class="switch-item" role="button" tabindex="0" title="放大時間軸"
+                    <div id="visualZoomInBtn" class="switch-item" role="button" tabindex="0" data-i18n-title="visualToolbar.zoomIn" data-i18n-aria-label="visualToolbar.zoomIn" title="放大時間軸"
                         aria-label="放大時間軸">
                         <span class="material-symbols-outlined" translate="no">add</span>
                     </div>
-                    <div id="visualZoomOutBtn" class="switch-item" role="button" tabindex="0" title="縮小時間軸"
+                    <div id="visualZoomOutBtn" class="switch-item" role="button" tabindex="0" data-i18n-title="visualToolbar.zoomOut" data-i18n-aria-label="visualToolbar.zoomOut" title="縮小時間軸"
                         aria-label="縮小時間軸">
                         <span class="material-symbols-outlined" translate="no">remove</span>
                     </div>
@@ -277,7 +277,7 @@
                 <!-- 3. 網格切分群組 (單鍵，帶子選單) -->
                 <div id="visualDivisionGroup" class="visual-tool-group visual-division-group">
                     <div id="visualDivisionBtn" class="switch-item tool-division-item sub-menu-trigger" role="button"
-                        tabindex="0" title="網格切分 (點擊展開選單)" aria-label="網格切分">
+                        tabindex="0" data-i18n-title="visualToolbar.gridDivision" data-i18n-aria-label="visualToolbar.gridDivision" title="網格切分" aria-label="網格切分">
                         <span class="trigger-icon-slot" id="currentDivisionText">
                             <span class="division-text-btn" translate="no">1/4</span>
                         </span>
@@ -291,10 +291,10 @@
                 <!-- 4. 主垂直工具欄 -->
                 <div id="visualToolGroup" class="visual-tool-group">
                     <!-- 音符放置 (編輯模式) -->
-                    <input type="radio" id="tool-mode-place" name="visualTool" value="place" checked aria-label="放置音符"
+                    <input type="radio" id="tool-mode-place" name="visualTool" value="place" checked data-i18n-aria-label="visualToolbar.toolPlace" aria-label="放置音符"
                         style="display: none;">
                     <label for="tool-mode-place" id="toolPlaceLabel"
-                        class="switch-item tool-place-item sub-menu-trigger" title="放置音符 (點擊展開選單)">
+                        class="switch-item tool-place-item sub-menu-trigger" data-i18n-title="visualToolbar.toolPlace" title="放置音符">
                         <span class="trigger-icon-slot" id="currentNoteIconContainer">
                             <img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="目前音符"
                                 class="current-note-img">
@@ -306,10 +306,10 @@
                     </label>
 
                     <!-- 效果附加工具 (點擊展開選單，與其他工具互斥) -->
-                    <input type="radio" id="tool-mode-modifier" name="visualTool" value="modifier" aria-label="套用效果工具"
+                    <input type="radio" id="tool-mode-modifier" name="visualTool" value="modifier" data-i18n-aria-label="visualToolbar.toolModifier" aria-label="套用效果"
                         style="display: none;">
                     <label for="tool-mode-modifier" id="toolModifierLabel"
-                        class="switch-item tool-modifier-item sub-menu-trigger" title="套用效果 (點擊展開選單)">
+                        class="switch-item tool-modifier-item sub-menu-trigger" data-i18n-title="visualToolbar.toolModifier" title="套用效果">
                         <span class="trigger-icon-slot" id="currentModifierIcon">
                             <span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>
                         </span>
@@ -320,30 +320,30 @@
                     </label>
 
                     <!-- 選取工具 -->
-                    <input type="radio" id="tool-mode-select" name="visualTool" value="select" aria-label="選取工具"
+                    <input type="radio" id="tool-mode-select" name="visualTool" value="select" data-i18n-aria-label="visualToolbar.toolSelect" aria-label="選取工具"
                         style="display: none;">
-                    <label for="tool-mode-select" class="switch-item" title="選取工具 (S)">
+                    <label for="tool-mode-select" class="switch-item" data-i18n-title="visualToolbar.toolSelect" title="選取工具">
                         <span class="material-symbols-outlined" translate="no">arrow_selector_tool</span>
                     </label>
 
                     <!-- 框選工具 -->
-                    <input type="radio" id="tool-mode-boxselect" name="visualTool" value="boxSelect" aria-label="框選工具"
+                    <input type="radio" id="tool-mode-boxselect" name="visualTool" value="boxSelect" data-i18n-aria-label="visualToolbar.toolBoxSelect" aria-label="框選工具"
                         style="display: none;">
-                    <label for="tool-mode-boxselect" class="switch-item" title="框選工具 (B)">
+                    <label for="tool-mode-boxselect" class="switch-item" data-i18n-title="visualToolbar.toolBoxSelect" title="框選工具">
                         <span class="material-symbols-outlined" translate="no">select_all</span>
                     </label>
 
                     <!-- 橡皮擦工具 -->
-                    <input type="radio" id="tool-mode-eraser" name="visualTool" value="eraser" aria-label="橡皮擦工具"
+                    <input type="radio" id="tool-mode-eraser" name="visualTool" value="eraser" data-i18n-aria-label="visualToolbar.toolEraser" aria-label="橡皮擦"
                         style="display: none;">
-                    <label for="tool-mode-eraser" class="switch-item" title="橡皮擦工具">
+                    <label for="tool-mode-eraser" class="switch-item" data-i18n-title="visualToolbar.toolEraser" title="橡皮擦">
                         <span class="material-symbols-outlined" translate="no">ink_eraser</span>
                     </label>
                 </div>
 
                 <!-- 底端展開/收納按鈕 (方形且永遠純黑、無白邊) -->
-                <div id="visualToolCollapseBtn" class="visual-collapse-btn" role="button" tabindex="0" title="收納/展開工具列"
-                    aria-label="收納/展開工具列" style="width: 32px; height: 32px; background: #000000; border: none;">
+                <div id="visualToolCollapseBtn" class="visual-collapse-btn" role="button" tabindex="0" data-i18n-title="visualToolbar.collapseToolbar"
+                    data-i18n-aria-label="visualToolbar.collapseToolbar" title="收納工具列" aria-label="收納工具列" style="width: 32px; height: 32px; background: #000000; border: none;">
                     <span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span>
                 </div>
             </div>
@@ -485,8 +485,8 @@
                                 data-i18n="menu.editSubdivision" role="button" tabindex="0" aria-label="切分細分與轉換">切分細分與轉換
                             </div>
                             <div class="utilityButton" data-buttonAction="formatDocument"
-                                data-i18n="menu.editFormatDocument" role="button" tabindex="0"
-                                aria-label="格式化文件 (Shift+Alt+F)">格式化文件 (Format)
+                                data-i18n="menu.editFormatDocument" data-i18n-aria-label="menu.editFormatDocument" role="button" tabindex="0"
+                                aria-label="格式化文件">格式化文件
                             </div>
                             <hr>
                             <div class="utilityButton" data-buttonAction="toggleBk" data-i18n="menu.toolsToggleBk"

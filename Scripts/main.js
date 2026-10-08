@@ -473,7 +473,7 @@ function ensureDivisionOption(val) {
     if (typeof divisionSubMenu !== 'undefined') {
         divisionSubMenu.ensureItem({
             value: strVal,
-            title: `1/${strVal} 切分`,
+            title: t('visualToolbar.divisionFraction', { division: strVal }),
             render: () => `<span class="division-text-btn" translate="no">1/${strVal}</span>`
         }, 'custom');
     }
@@ -526,11 +526,11 @@ const noteTypeSubMenu = new VisualSubMenu({
     iconContainerEl: currentNoteIconContainer || toolPlaceLabel,
     defaultValue: 'tap',
     itemDefinitions: {
-        tap: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
-        hold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
-        slide: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
-        touch: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchSkins/touch.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
-        touchhold: { render: () => '<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="目前音符" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">' },
+        tap: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        hold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        slide: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        touch: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchSkins/touch.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        touchhold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
         bpm: { render: () => '<span id="currentNoteIcon" class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: bold; color: var(--popup-accent, #00e5ff);">BPM</span>' }
     },
     onSelect: (noteType) => {
@@ -555,7 +555,7 @@ const modifierSubMenu = new VisualSubMenu({
         none: { render: () => '<span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>' },
         ex: { render: () => '<span class="modifier-text-btn" translate="no">EX</span>' },
         break: { render: () => '<img src="./Skin/Default/TapSkins/tap_break.png" alt="Break" style="width: 20px; height: 20px; object-fit: contain;">' },
-        mine: { render: () => '<img src="./Skin/Default/TapSkins/tap_mine.png" alt="地雷" style="width: 20px; height: 20px; object-fit: contain;">' },
+        mine: { render: () => `<img src="./Skin/Default/TapSkins/tap_mine.png" alt="${t('visualToolbar.modMine')}" style="width: 20px; height: 20px; object-fit: contain;">` },
         firework: { render: () => '<span class="modifier-text-btn" translate="no">FW</span>' }
     },
     onSelect: (modType) => {
@@ -585,14 +585,14 @@ const divisionSubMenu = new VisualSubMenu({
             render: () => `<span class="division-text-btn" translate="no">1/${settings.gridDivision || 4}</span>`,
             isAction: true,
             action: () => {
-                const input = prompt('請輸入切分數值 (正整數，例如 7, 14, 42 等)：', settings.gridDivision || 4);
+                const input = prompt(t('visualEditor.divisionPrompt'), settings.gridDivision || 4);
                 if (input === null) return;
                 const val = parseInt(input.trim(), 10);
                 if (!isNaN(val) && val > 0) {
                     ensureDivisionOption(val);
                     divisionSubMenu.setValue(String(val));
                 } else {
-                    alert('請輸入有效的正整數切分數值。');
+                    simpleToast({ content: t('visualEditor.divisionInvalid'), type: 'warning' });
                 }
             }
         }
@@ -1766,7 +1766,7 @@ const onVisualSelectionChange = (selectedNotes) => {
                         hideFloatingMenu();
                         const groupData = getNoteTouchGroup(note);
                         if (!groupData) {
-                            simpleToast({ content: '無法取得該拍點 Touch 群組', type: 'error', timeout: 1500 });
+                            simpleToast({ content: t('visualEditor.touchGroupLoadFailed'), type: 'error', timeout: 1500 });
                             return;
                         }
                         openTouchGroupModal({

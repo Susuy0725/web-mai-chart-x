@@ -9,6 +9,7 @@
 import { popupWindow, simpleToast } from '../helper.js';
 import { SimaiRenderer } from '../renderer.js';
 import { simaiDecode } from '../decode.js';
+import { t } from '../i18n.js';
 
 // maimai 所有 33 個 Touch 感應區清單
 export const ALL_TOUCH_POSITIONS = [
@@ -705,8 +706,8 @@ export function openTouchGroupModal({
     function updateSyntaxBar() {
         const groupStr = buildTouchGroupString(touchNotes);
         syntaxBar.innerHTML = `
-            <span>群組語法預覽:</span>
-            <span class="tgm-syntax-val">${groupStr || '(無音符)'}</span>
+            <span>${t('touchGroupModal.syntaxPreview')}</span>
+            <span class="tgm-syntax-val">${groupStr || t('touchGroupModal.noNotes')}</span>
         `;
     }
 
@@ -731,24 +732,24 @@ export function openTouchGroupModal({
             <div class="tgm-card">
                 <div class="tgm-card-title">
                     <div class="tgm-card-title-left">
-                        <span>Touch 群組音符列表 (${touchNotes.length})</span>
+                        <span>${t('touchGroupModal.noteList')}</span>
                     </div>
                     <button type="button" class="tgm-btn-add" id="tgm-add-note-btn">
-                        <span>＋ 新增音符</span>
+                        <span>＋ ${t('touchGroupModal.addNote')}</span>
                     </button>
                 </div>
                 <div class="tgm-notes-row">
                     ${touchNotes.map((tn, idx) => {
                         const isActive = (idx === activeIndex);
-                        const label = tn.pos + (tn.isHold ? ' [Hold]' : '') + (tn.flags.has('f') ? ' [花火]' : '') + (tn.flags.has('m') ? ' [地雷]' : '');
+                        const label = tn.pos + (tn.isHold ? ' [Hold]' : '') + (tn.flags.has('f') ? ` [${t('touchGroupModal.effectHanabi')}]` : '') + (tn.flags.has('m') ? ` [${t('touchGroupModal.effectMine')}]` : '');
                         return `
                             <div class="tgm-note-chip ${isActive ? 'active' : ''}" data-index="${idx}">
                                 <span>${label}</span>
-                                <button type="button" class="tgm-chip-del-btn" data-del-index="${idx}" title="刪除此音符">✕</button>
+                                <button type="button" class="tgm-chip-del-btn" data-del-index="${idx}" title="${t('touchGroupModal.delNote')}">✕</button>
                             </div>
                         `;
                     }).join('')}
-                    ${touchNotes.length === 0 ? '<div style="color: #64748b; font-size: 12px;">此拍點目前無 Touch 音符，點擊「新增音符」或點擊下方感應區新增</div>' : ''}
+                    ${touchNotes.length === 0 ? `<div style="color: #64748b; font-size: 12px;">${t('touchGroupModal.emptyHint')}</div>` : ''}
                 </div>
             </div>
 
@@ -756,14 +757,14 @@ export function openTouchGroupModal({
             <div class="tgm-card">
                 <div class="tgm-card-title">
                     <div class="tgm-card-title-left">
-                        <span>感應區位置選擇</span>
+                        <span>${t('touchGroupModal.sensorPosition')}</span>
                     </div>
-                    <span style="font-size: 11px; color: #94a3b8;">當前位置: ${currentItem ? currentItem.pos : '-'}</span>
+                    <span style="font-size: 11px; color: #94a3b8;">${t('touchGroupModal.currentPosition', { pos: currentItem ? currentItem.pos : '-' })}</span>
                 </div>
                 <div class="tgm-comb-container">
                     <!-- 選區: A B C D E -->
                     <div class="tgm-comb-row">
-                        <span class="tgm-comb-label">區</span>
+                        <span class="tgm-comb-label">${t('touchGroupModal.zoneLabel')}</span>
                         <div class="tgm-comb-btn-group">
                             ${['A', 'B', 'C', 'D', 'E'].map(z => {
                                 const isAct = (z === selectedZone);
@@ -774,7 +775,7 @@ export function openTouchGroupModal({
 
                     <!-- 選位: 若選 C 則顯示 C，若選 A/B/D/E 則顯示 1-8 -->
                     <div class="tgm-comb-row">
-                        <span class="tgm-comb-label">位</span>
+                        <span class="tgm-comb-label">${t('touchGroupModal.keyLabel')}</span>
                         <div class="tgm-comb-btn-group">
                             ${selectedZone === 'C' ? `
                                 ${(() => {
@@ -800,14 +801,14 @@ export function openTouchGroupModal({
                 <div class="tgm-card">
                     <div class="tgm-card-title">
                         <div class="tgm-card-title-left">
-                            <span>音符種類與效果 (${currentItem.pos})</span>
+                            <span>${t('touchGroupModal.noteTypeEffect')}</span>
                         </div>
                     </div>
                     
                     <!-- 種類切換 Segmented Control -->
                     <div class="tgm-seg-control">
                         <button type="button" class="tgm-seg-btn ${!currentItem.isHold ? 'active' : ''}" id="tgm-type-touch">
-                            <span>普通 Touch</span>
+                            <span>${t('touchGroupModal.typeNormal')}</span>
                         </button>
                         <button type="button" class="tgm-seg-btn ${currentItem.isHold ? 'active' : ''}" id="tgm-type-hold">
                             <span>Touch Hold</span>
@@ -817,13 +818,13 @@ export function openTouchGroupModal({
                     <!-- 效果旗標 Chips -->
                     <div class="tgm-effects-row">
                         <button type="button" class="tgm-effect-chip ${currentItem.flags.has('f') ? 'active' : ''}" data-flag="f">
-                            <span>花火 (Hanabi / f)</span>
+                            <span>${t('touchGroupModal.effectHanabi')}</span>
                         </button>
                         <button type="button" class="tgm-effect-chip ${currentItem.flags.has('m') ? 'active' : ''}" data-flag="m">
-                            <span>地雷 (Mine / m)</span>
+                            <span>${t('touchGroupModal.effectMine')}</span>
                         </button>
                         <button type="button" class="tgm-effect-chip ${currentItem.flags.has('x') ? 'active' : ''}" data-flag="x">
-                            <span>EX 判定 (x)</span>
+                            <span>${t('touchGroupModal.effectEx')}</span>
                         </button>
                     </div>
 
@@ -832,8 +833,8 @@ export function openTouchGroupModal({
                         <div class="tgm-duration-card">
                             <div class="tgm-dur-header">
                                 <div class="tgm-tab-row">
-                                    <button type="button" class="tgm-tab-btn ${durState.mode === 'beat' ? 'active' : ''}" id="tgm-dur-mode-beat">節拍模式</button>
-                                    <button type="button" class="tgm-tab-btn ${durState.mode === 'seconds' ? 'active' : ''}" id="tgm-dur-mode-seconds">直接秒數</button>
+                                    <button type="button" class="tgm-tab-btn ${durState.mode === 'beat' ? 'active' : ''}" id="tgm-dur-mode-beat">${t('noteDurationModal.modeBeat')}</button>
+                                    <button type="button" class="tgm-tab-btn ${durState.mode === 'seconds' ? 'active' : ''}" id="tgm-dur-mode-seconds">${t('noteDurationModal.modeSeconds')}</button>
                                 </div>
                             </div>
 
@@ -841,25 +842,25 @@ export function openTouchGroupModal({
                                 <div class="tgm-dur-row">
                                     <div class="tgm-field">
                                         <input type="number" class="tgm-input" id="tgm-dur-time" value="${durState.time}" min="1" max="128" style="width: 55px; text-align: center;">
-                                        <span class="tgm-label">切分 ×</span>
+                                        <span class="tgm-label">${t('noteDurationModal.divisionTimes')}</span>
                                         <input type="number" class="tgm-input" id="tgm-dur-beat" value="${durState.beat}" min="1" max="512" style="width: 55px; text-align: center;">
-                                        <span class="tgm-label">個</span>
+                                        <span class="tgm-label">${t('noteDurationModal.beatCount')}</span>
                                     </div>
                                     <div class="tgm-field" style="margin-left: auto;">
-                                        <span class="tgm-label">指定 BPM (選填)：</span>
-                                        <input type="number" class="tgm-input" id="tgm-dur-bpm" value="${durState.holdBpm}" step="0.1" style="width: 80px; text-align: center;" placeholder="當前 BPM">
+                                        <span class="tgm-label">${t('noteDurationModal.specifyBpm')}</span>
+                                        <input type="number" class="tgm-input" id="tgm-dur-bpm" value="${durState.holdBpm}" step="0.1" style="width: 80px; text-align: center;">
                                     </div>
                                 </div>
                             ` : `
                                 <div class="tgm-dur-row">
                                     <div class="tgm-field">
-                                        <span class="tgm-label">持續秒數：</span>
+                                        <span class="tgm-label">${t('noteDurationModal.durationSeconds')}</span>
                                         <input type="number" class="tgm-input" id="tgm-dur-seconds" value="${durState.holdSeconds}" step="0.001" min="0.001" style="width: 90px; text-align: center;">
-                                        <span class="tgm-label">秒</span>
+                                        <span class="tgm-label">${t('noteDurationModal.secondsUnit')}</span>
                                     </div>
                                     <div class="tgm-checkbox-wrapper" style="margin-left: auto;">
                                         <input type="checkbox" id="tgm-dur-hash" class="tgm-checkbox" ${durState.holdUseHash ? 'checked' : ''}>
-                                        <label for="tgm-dur-hash" class="tgm-checkbox-label">附加 # 前綴 (如 [#1.5])</label>
+                                        <label for="tgm-dur-hash" class="tgm-checkbox-label">${t('noteDurationModal.useHash')}</label>
                                     </div>
                                 </div>
                             `}
@@ -1088,7 +1089,7 @@ export function openTouchGroupModal({
     }
 
     modalInstance = popupWindow({
-        title: '編輯 Touch 群組',
+        title: t('touchGroupModal.title'),
         customContent: container,
         width: 520,
         height: 680,
@@ -1114,20 +1115,20 @@ export function openTouchGroupModal({
         },
         buttons: [
             {
-                text: '取消',
+                text: t('common.cancel'),
                 onClick: () => {
                     modalInstance?.close();
                 }
             },
             {
-                text: '確認套用',
+                text: t('common.apply'),
                 isPrimary: true,
                 onClick: () => {
                     if (typeof onApply === 'function') {
                         onApply({ touchNotes });
                     }
                     modalInstance?.close();
-                    simpleToast({ content: '已成功套用 Touch 群組', type: 'success', timeout: 1200 });
+                    simpleToast({ content: t('touchGroupModal.appliedToast'), type: 'success', timeout: 1200 });
                 }
             }
         ]

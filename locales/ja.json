@@ -766,6 +766,8 @@
         "midKeyHint": "中継点は始点 ±2 キー限定",
         "endKey": "終点キー",
         "endKeyHint": "無効な終点は無効化されています",
+        "wCannotChain": "Wスライドは単一区間のみ対応しており、連結できません",
+        "cannotAddAfterW": "Wスライドの後ろに新規区間を追加できません",
         "appliedToast": "スライド軌道を適用しました: {slide}"
     },
     "touchGroupModal": {

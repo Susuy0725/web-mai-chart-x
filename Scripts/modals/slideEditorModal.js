@@ -495,6 +495,15 @@ function ensureSlideEditorStyles() {
             box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45);
         }
 
+        .sem-pattern-btn:disabled {
+            opacity: 0.22 !important;
+            background: rgba(255, 255, 255, 0.02) !important;
+            border-color: rgba(255, 255, 255, 0.04) !important;
+            color: #64748b !important;
+            cursor: not-allowed !important;
+            pointer-events: none;
+        }
+
         /* 鍵位按鈕群組 (1 到 8 號鍵) */
         .sem-key-row {
             display: grid;
@@ -650,6 +659,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
 
         const currentSeg = slideData.segments[activeIndex];
         const segCount = slideData.segments.length;
+        const lastSeg = slideData.segments[segCount - 1];
+        const isAddDisabled = (lastSeg?.type === 'w');
 
         // 計算當前段落的起點
         const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
@@ -687,7 +698,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 <div class="sem-actions-bar">
                     <span style="font-size: 12px; color: #64748b;">${t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) })}</span>
                     <div class="sem-seg-btn-group">
-                        <button type="button" class="sem-icon-btn" id="sem-add-seg" title="${t('slideEditorModal.addSeg')}">
+                        <button type="button" class="sem-icon-btn" id="sem-add-seg" ${isAddDisabled ? 'disabled' : ''} title="${isAddDisabled ? t('slideEditorModal.cannotAddAfterW') : t('slideEditorModal.addSeg')}">
                             <span>＋ ${t('slideEditorModal.addSeg')}</span>
                         </button>
                         <button type="button" class="sem-icon-btn" id="sem-del-seg" ${segCount <= 1 ? 'disabled' : ''} title="${t('slideEditorModal.delSeg')}">
@@ -706,8 +717,10 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 <div class="sem-pattern-grid">
                     ${SLIDE_PATTERNS.map(pat => {
                         const isSelected = (currentSeg.type === pat);
+                        const isPatternDisabled = (pat === 'w' && segCount > 1);
+                        const patTitle = isPatternDisabled ? t('slideEditorModal.wCannotChain') : pat;
                         return `
-                            <button type="button" class="sem-pattern-btn ${isSelected ? 'active' : ''}" data-pattern="${pat}" title="${pat}">
+                            <button type="button" class="sem-pattern-btn ${isSelected ? 'active' : ''}" data-pattern="${pat}" ${isPatternDisabled ? 'disabled' : ''} title="${patTitle}">
                                 <span>${pat}</span>
                             </button>
                         `;
@@ -779,6 +792,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         if (addBtn) {
             addBtn.addEventListener('click', () => {
                 const lastSeg = slideData.segments[slideData.segments.length - 1];
+                if (lastSeg?.type === 'w') return;
                 const newStart = lastSeg.end;
                 const newType = '-';
                 const newEnd = findLegalEnd(newStart, newType, ((newStart + 3) % 8) + 1);
@@ -821,6 +835,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         scrollBody.querySelectorAll('[data-pattern]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const newPattern = btn.dataset.pattern;
+                if (newPattern === 'w' && slideData.segments.length > 1) return;
                 const seg = slideData.segments[activeIndex];
                 const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
 

@@ -766,6 +766,8 @@
         "midKeyHint": "중간점은 시작점 ±2 키로 제한됩니다",
         "endKey": "끝 키",
         "endKeyHint": "비활성화된 끝점은 비활성화되었습니다",
+        "wCannotChain": "W 슬라이드는 단일 구간만 지원되며 다른 구간과 연결할 수 없습니다",
+        "cannotAddAfterW": "W 슬라이드 뒤에는 새 구간을 추가할 수 없습니다",
         "appliedToast": "슬라이드 궤적 적용 완료: {slide}"
     },
     "touchGroupModal": {

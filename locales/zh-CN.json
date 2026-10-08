@@ -766,6 +766,8 @@
         "midKeyHint": "中继点仅限起点 ±2 键位",
         "endKey": "终点键位",
         "endKeyHint": "无效终点已禁用",
+        "wCannotChain": "W 轨迹仅限单段滑星，不可与其他区间串接",
+        "cannotAddAfterW": "W 轨迹后方不可新增区间",
         "appliedToast": "已应用滑星轨迹: {slide}"
     },
     "touchGroupModal": {

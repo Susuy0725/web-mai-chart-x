@@ -766,6 +766,8 @@
         "midKeyHint": "Mid key limited to start ±2 keys",
         "endKey": "End Key",
         "endKeyHint": "Invalid ends disabled",
+        "wCannotChain": "W slide is only supported as a single segment and cannot be chained",
+        "cannotAddAfterW": "Cannot add segment after W slide",
         "appliedToast": "Applied slide track: {slide}"
     },
     "touchGroupModal": {

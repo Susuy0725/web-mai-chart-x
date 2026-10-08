@@ -1395,7 +1395,7 @@ export class SimaiRenderer {
         this.drawHitEffects();
         this.drawJudgeEffects();
 
-        this.drawStaticBackground();
+        if (!this.settings.noBorder) this.drawStaticBackground();
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
         if (this.settings.showUI) this.drawUI(dt, globalTime);
     }
@@ -2095,6 +2095,7 @@ export class SimaiRenderer {
             const posInfo = noteRefPos[s.pos - 1];
 
             if (isHold) {
+                // drawHold
                 if (-noteT > s.holdDuration) {
                     if (drawHitEffect) {
                         this.queueHitEffect(s.pos, s.holdDuration + noteT);
@@ -2112,9 +2113,8 @@ export class SimaiRenderer {
                 const displayT = Math.min(1, Math.max(md, t));
                 const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
                 const size = baseSize * currentScale;
-                const sizeOffset = t < md ? 0 :
-                    Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) * 0.98 - md) * 2.5;
-
+                const sizeOffset = (t < md || s.holdDuration < 0.1) ? 0 :
+                    Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * (20.35 / baseSize);
                 const isOn = noteT <= -0.1 && !s.isMine;
                 const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
@@ -2152,6 +2152,10 @@ export class SimaiRenderer {
                             ctx.drawImage(ex, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
                         }
                     }
+                    //ctx.globalAlpha = 1;
+                    //ctx.fillStyle = "white";
+                    //ctx.font = "3px mono";
+                    //ctx.fillText(`t1:${(t1).toFixed(2)}, 1-t1:${(1 - t1).toFixed(2)}, t-md:${(t - md).toFixed(2)}`, 0, 10);
                 }
 
                 if (drawHitEffect) {
@@ -2165,6 +2169,7 @@ export class SimaiRenderer {
 
                 ctx.setTransform(a, b, c, d, e, f);
             } else {
+                // drawtap drawstar
                 // 普通 Tap / Star
                 if (noteT <= 0) {
                     if (drawHitEffect) {

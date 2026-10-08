@@ -201,7 +201,8 @@
       "showCriticalPerfect": "Show Critical Perfect",
       "showBreakCriticalPerfect": "Show Break Critical Perfect",
       "showFastLate": "Show Fast / Late",
-      "autoPlay": "Play Mode"
+      "autoPlay": "Play Mode",
+      "noBorder": "No borders"
     },
     "middleDisplayOpts": {
       "off": "Off",

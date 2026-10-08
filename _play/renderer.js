@@ -2083,8 +2083,8 @@ export class SimaiRenderer {
         const displayT = Math.min(1, Math.max(md, t));
         const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
-        const sizeOffset = t < md ? 0 :
-            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) * 0.98 - md) * 2.5;
+        const sizeOffset = (t < md || s.holdDuration < 0.1) ? 0 :
+            Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * (20.35 / this.settings.noteBaseSize);
 
         this.ctx.save();
         const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];

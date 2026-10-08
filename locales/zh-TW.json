@@ -201,7 +201,8 @@
       "showCriticalPerfect": "顯示 critical perfect",
       "showBreakCriticalPerfect": "顯示 break critical perfect",
       "showFastLate": "顯示 fast / late",
-      "autoPlay": "遊玩模式"
+      "autoPlay": "遊玩模式",
+      "noBorder": "無邊框"
     },
     "middleDisplayOpts": {
       "off": "關閉",

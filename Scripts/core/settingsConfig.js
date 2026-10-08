@@ -72,7 +72,8 @@ export const defaultSettings = {
     cursorFollow: true, // 游標跟隨
     globalTimeline: true, // 全局時間軸
     drawHitEffect: true,
-    drawHanabiEffect: true
+    drawHanabiEffect: true,
+    noBorder: false
 };
 
 export const settingsConfig = [
@@ -284,6 +285,11 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.autoConnectMajdataView',
                 def: defaultSettings.autoConnectMajdataView || false
+            }, {
+                id: 'noBorder',
+                type: 'checkbox',
+                label: 'settings.items.noBorder',
+                def: defaultSettings.noBorder || false
             },
         ]
     },

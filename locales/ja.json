@@ -669,7 +669,8 @@
   },
   "common": {
     "apply": "適用",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "optional": "任意"
   },
   "visualToolbar": {
     "noteTap": "Tap",
@@ -701,7 +702,7 @@
   },
   "visualMenu": {
     "editDuration": "長さ設定",
-    "editSlideTrack": "軌道設定",
+    "editSlideTrack": "スライド設定",
     "editTouchGroup": "Touch グループ編集",
     "deleteNote": "ノーツ削除",
     "deleteSelected": "選択ノーツ削除"
@@ -744,8 +745,8 @@
     "titleHold": "Hold 長さ変更",
     "titleSlide": "Slide 長さ変更",
     "holdDuration": "Hold 継続時間",
-    "modeBeat": "拍モード",
-    "modeSeconds": "秒数モード",
+    "modeBeat": "拍子",
+    "modeSeconds": "秒",
     "divisionTimes": "分割 ×",
     "beatCount": "個数",
     "specifyBpm": "指定 BPM：",
@@ -767,6 +768,7 @@
   "slideEditorModal": {
     "title": "スライド軌道編集",
     "trackChain": "軌道チェーン",
+    "segCount": "計 {count} 区間",
     "editingSeg": "第 {current} / {total} 区間編集中: {start} ➔ {end}",
     "headNode": "始点",
     "syntaxPreview": "構文プレビュー: {syntax}",
@@ -794,9 +796,9 @@
     "headEffect": "始点効果",
     "headEx": "EX ノーツ",
     "branchEffect": "分岐効果",
-    "effectNone": "通常",
-    "effectBreak": "Break (bk)",
-    "effectMine": "地雷 (Mine)"
+    "effectNone": "属性なし",
+    "effectBreak": "Break",
+    "effectMine": "地雷"
   },
   "touchGroupModal": {
     "title": "Touch グループ編集",

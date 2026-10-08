@@ -159,10 +159,19 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-note-chip.active {
-            background: rgba(0, 229, 255, 0.18);
-            border-color: #00e5ff;
-            color: #ffffff;
-            box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
+        }
+
+        .tgm-note-chip.active .tgm-chip-del-btn {
+            color: #475569;
+        }
+
+        .tgm-note-chip.active .tgm-chip-del-btn:hover {
+            color: #000000 !important;
+            background: rgba(0, 0, 0, 0.15);
         }
 
         .tgm-chip-del-btn {
@@ -183,15 +192,15 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-chip-del-btn:hover {
-            color: #ef4444;
-            background: rgba(239, 68, 68, 0.15);
+            color: #ffffff !important;
+            background: rgba(0, 0, 0, 0.35);
         }
 
         .tgm-btn-add {
-            border: 1px dashed rgba(0, 229, 255, 0.5);
-            background: rgba(0, 229, 255, 0.05);
-            color: #00e5ff;
-            padding: 6px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.05);
+            color: #f1f5f9;
+            padding: 5px 12px;
             border-radius: 20px;
             font-size: 12px;
             font-weight: 600;
@@ -202,9 +211,10 @@ function ensureTouchGroupStyles() {
             transition: all 0.15s ease;
         }
 
-        .tgm-btn-add:hover {
-            background: rgba(0, 229, 255, 0.15);
-            border-color: #00e5ff;
+        .tgm-btn-add:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #ffffff;
+            color: #ffffff;
         }
 
         /* 選區與選位組合式樣式 */
@@ -256,16 +266,16 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-comb-btn.active {
-            background: #00e5ff;
-            color: #000000;
-            border-color: #00e5ff;
-            box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+            background: #ffffff !important;
+            color: #000000 !important;
+            border-color: #ffffff !important;
+            box-shadow: none !important;
         }
 
         .tgm-comb-btn.has-note:not(.active) {
-            border-color: rgba(0, 229, 255, 0.45);
-            background: rgba(0, 229, 255, 0.1);
-            color: #67e8f9;
+            border-color: rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
         }
 
         /* 音符種類切換 (Segmented Control) */
@@ -296,9 +306,9 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-seg-btn.active {
-            background: rgba(255, 255, 255, 0.14);
-            color: #ffffff;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
         /* 效果開關 (Effect Chips) */
@@ -328,22 +338,11 @@ function ensureTouchGroupStyles() {
             color: #e2e8f0;
         }
 
-        .tgm-effect-chip.active[data-flag="f"] {
-            border-color: #f59e0b;
-            background: rgba(245, 158, 11, 0.15);
-            color: #fbbf24;
-        }
-
-        .tgm-effect-chip.active[data-flag="m"] {
-            border-color: #ef4444;
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-        }
-
-        .tgm-effect-chip.active[data-flag="x"] {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.15);
-            color: #60a5fa;
+        .tgm-effect-chip.active {
+            border-color: #ffffff !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
         /* 時長設定面板 (比照 noteDurationModal 標準) */
@@ -384,12 +383,11 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-tab-btn.active {
-            background: rgba(255, 255, 255, 0.12);
-            color: #ffffff;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
             font-weight: 600;
         }
-
-
 
         .tgm-dur-row {
             display: flex;
@@ -424,7 +422,12 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-input:focus {
-            border-color: #00e5ff;
+            border-color: #ffffff;
+        }
+
+        .tgm-input::placeholder {
+            color: #64748b;
+            font-size: 11px;
         }
 
         .tgm-checkbox-wrapper {
@@ -442,7 +445,7 @@ function ensureTouchGroupStyles() {
             -webkit-appearance: checkbox;
             width: 16px !important;
             height: 16px !important;
-            accent-color: #00e5ff !important;
+            accent-color: #ffffff !important;
             cursor: pointer !important;
             margin: 0 !important;
             flex-shrink: 0 !important;
@@ -471,7 +474,7 @@ function ensureTouchGroupStyles() {
         }
 
         .tgm-syntax-val {
-            color: #38bdf8;
+            color: #ffffff;
             font-weight: bold;
         }
     `;
@@ -848,7 +851,7 @@ export function openTouchGroupModal({
                                     </div>
                                     <div class="tgm-field" style="margin-left: auto;">
                                         <span class="tgm-label">${t('noteDurationModal.specifyBpm')}</span>
-                                        <input type="number" class="tgm-input" id="tgm-dur-bpm" value="${durState.holdBpm}" step="0.1" style="width: 80px; text-align: center;">
+                                        <input type="number" class="tgm-input" id="tgm-dur-bpm" value="${durState.holdBpm}" placeholder="${t('common.optional')}" step="0.1" style="width: 80px; text-align: center;">
                                     </div>
                                 </div>
                             ` : `

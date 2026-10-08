@@ -669,7 +669,8 @@
   },
   "common": {
     "apply": "Apply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "optional": "Optional"
   },
   "visualToolbar": {
     "noteTap": "Tap",
@@ -701,7 +702,7 @@
   },
   "visualMenu": {
     "editDuration": "Duration Settings",
-    "editSlideTrack": "Track Settings",
+    "editSlideTrack": "Slide settings",
     "editTouchGroup": "Edit Touch Group",
     "deleteNote": "Delete Note",
     "deleteSelected": "Delete Selected"
@@ -744,8 +745,8 @@
     "titleHold": "Edit Hold Duration",
     "titleSlide": "Edit Slide Duration",
     "holdDuration": "Hold Duration",
-    "modeBeat": "Beat Mode",
-    "modeSeconds": "Seconds Mode",
+    "modeBeat": "Beat",
+    "modeSeconds": "seconds",
     "divisionTimes": "Division ×",
     "beatCount": "Count",
     "specifyBpm": "Specify BPM:",
@@ -767,6 +768,7 @@
   "slideEditorModal": {
     "title": "Edit Slide Track",
     "trackChain": "Track Chain",
+    "segCount": "{count} Segments",
     "editingSeg": "Editing segment {current} / {total}: {start} ➔ {end}",
     "headNode": "Start",
     "syntaxPreview": "Syntax Preview: {syntax}",
@@ -794,8 +796,8 @@
     "headEffect": "Start Effect",
     "headEx": "EX Note",
     "branchEffect": "Branch Effect",
-    "effectNone": "Normal",
-    "effectBreak": "Break (bk)",
+    "effectNone": "None",
+    "effectBreak": "Break",
     "effectMine": "Mine"
   },
   "touchGroupModal": {

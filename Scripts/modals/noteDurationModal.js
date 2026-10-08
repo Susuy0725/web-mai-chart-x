@@ -142,6 +142,11 @@ function ensureNoteDurationModalStyles() {
             box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
         }
 
+        .ndm-input::placeholder {
+            color: #64748b;
+            font-size: 11px;
+        }
+
         .ndm-checkbox-wrapper {
             display: inline-flex;
             align-items: center;
@@ -398,7 +403,7 @@ export function openNoteDurationModal({
                         </div>
                         <div class="ndm-field" style="margin-left: auto;">
                             <span class="ndm-label">${t('noteDurationModal.specifyBpm')}</span>
-                            <input type="number" class="ndm-input" id="ndm-hold-bpm" value="${state.holdBpm}" step="0.1" style="width: 80px;">
+                            <input type="number" class="ndm-input" id="ndm-hold-bpm" value="${state.holdBpm}" placeholder="${t('common.optional')}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 ` : `
@@ -479,7 +484,7 @@ export function openNoteDurationModal({
                         </div>
                         <div class="ndm-field" id="ndm-slide-tracing-bpm-field" style="margin-left: auto; display: ${(state.useCustomWait && state.waitMode === 'seconds') ? 'flex' : 'none'};">
                             <span class="ndm-label">${t('noteDurationModal.slideBpm')}</span>
-                            <input type="number" class="ndm-input" id="ndm-slide-tracing-bpm" value="${state.slideBpm}" step="0.1" style="width: 80px;">
+                            <input type="number" class="ndm-input" id="ndm-slide-tracing-bpm" value="${state.slideBpm}" placeholder="${t('common.optional')}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 ` : `

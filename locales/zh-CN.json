@@ -669,7 +669,8 @@
   },
   "common": {
     "apply": "应用",
-    "cancel": "取消"
+    "cancel": "取消",
+    "optional": "选填"
   },
   "visualToolbar": {
     "noteTap": "Tap",
@@ -701,7 +702,7 @@
   },
   "visualMenu": {
     "editDuration": "时长设置",
-    "editSlideTrack": "轨迹设置",
+    "editSlideTrack": "Slide设定",
     "editTouchGroup": "编辑 Touch 组",
     "deleteNote": "删除音符",
     "deleteSelected": "删除所选"
@@ -744,8 +745,8 @@
     "titleHold": "修改 Hold 时长",
     "titleSlide": "修改 Slide 时长",
     "holdDuration": "Hold 持续时长",
-    "modeBeat": "节拍模式",
-    "modeSeconds": "秒数模式",
+    "modeBeat": "节拍",
+    "modeSeconds": "秒数",
     "divisionTimes": "切分 ×",
     "beatCount": "个数",
     "specifyBpm": "指定 BPM：",
@@ -767,6 +768,7 @@
   "slideEditorModal": {
     "title": "编辑滑星轨迹",
     "trackChain": "轨迹链",
+    "segCount": "共 {count} 段",
     "editingSeg": "编辑第 {current} / {total} 段: {start} ➔ {end}",
     "headNode": "起点",
     "syntaxPreview": "语法预览: {syntax}",
@@ -779,7 +781,7 @@
     "endKey": "终点键位",
     "endKeyHint": "无效终点已禁用",
     "wCannotChain": "W 轨迹仅限单段滑星，不可与其他区间串接",
-    "cannotAddAfterW": "W 轨迹后方不可新增区间",
+    "cannotAddAfterW": "W 滑星后不可新增区间",
     "appliedToast": "已应用滑星轨迹: {slide}",
     "branchTitle": "滑线分支",
     "branchLabel": "分支 {index}",
@@ -794,9 +796,9 @@
     "headEffect": "起点效果",
     "headEx": "EX 音符",
     "branchEffect": "分支效果",
-    "effectNone": "普通",
-    "effectBreak": "Break (bk)",
-    "effectMine": "地雷 (Mine)"
+    "effectNone": "无属性",
+    "effectBreak": "Break",
+    "effectMine": "地雷"
   },
   "touchGroupModal": {
     "title": "编辑 Touch 组",

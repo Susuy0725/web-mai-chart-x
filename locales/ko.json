@@ -669,7 +669,8 @@
   },
   "common": {
     "apply": "적용",
-    "cancel": "취소"
+    "cancel": "취소",
+    "optional": "선택"
   },
   "visualToolbar": {
     "noteTap": "Tap",
@@ -701,7 +702,7 @@
   },
   "visualMenu": {
     "editDuration": "지속 시간 설정",
-    "editSlideTrack": "궤적 설정",
+    "editSlideTrack": "슬라이드 설정",
     "editTouchGroup": "Touch 그룹 편집",
     "deleteNote": "노트 삭제",
     "deleteSelected": "선택 항목 삭제"
@@ -744,8 +745,8 @@
     "titleHold": "Hold 지속 시간 수정",
     "titleSlide": "Slide 지속 시간 수정",
     "holdDuration": "Hold 지속 시간",
-    "modeBeat": "박자 모드",
-    "modeSeconds": "초 모드",
+    "modeBeat": "이기다",
+    "modeSeconds": "초",
     "divisionTimes": "분할 ×",
     "beatCount": "개수",
     "specifyBpm": "지정 BPM:",
@@ -767,6 +768,7 @@
   "slideEditorModal": {
     "title": "슬라이드 궤적 편집",
     "trackChain": "궤적 체인",
+    "segCount": "총 {count} 구간",
     "editingSeg": "{current} / {total}번째 구간 편집 중: {start} ➔ {end}",
     "headNode": "시작점",
     "syntaxPreview": "구문 미리보기: {syntax}",
@@ -794,9 +796,9 @@
     "headEffect": "시작 효과",
     "headEx": "EX 노츠",
     "branchEffect": "분기 효과",
-    "effectNone": "일반",
-    "effectBreak": "Break (bk)",
-    "effectMine": "지뢰 (Mine)"
+    "effectNone": "속성 없음",
+    "effectBreak": "Break",
+    "effectMine": "지뢰"
   },
   "touchGroupModal": {
     "title": "Touch 그룹 편집",

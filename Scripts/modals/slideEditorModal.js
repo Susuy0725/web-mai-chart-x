@@ -172,13 +172,11 @@ export function parseSlideDuration(rawDur) {
     const cleanDur = (rawDur || '').replace(/[\[\]]/g, '').trim();
     const state = {
         useCustomWait: false,      // 是否自訂等候時間 (預設 1 拍等候)
-        waitMode: 'seconds',       // 'seconds' (語法 ##) | 'bpm' (語法 #)
         waitSec: 1.0,              // 自訂等候秒數
-        slideWaitBpm: '',          // 指定等候 BPM
         slideTracingMode: 'beat',  // 'beat' | 'seconds'
         time: 4,                   // 幾分音符
         beat: 1,                   // 拍數
-        slideBpm: '',              // 劃動 BPM (自訂等候秒數模式下)
+        slideBpm: '',              // 指定 BPM (選填)
         slideSeconds: 1.0          // 劃動秒數
     };
 
@@ -186,18 +184,10 @@ export function parseSlideDuration(rawDur) {
 
     if (cleanDur.includes('##')) {
         state.useCustomWait = true;
-        state.waitMode = 'seconds';
         const parts = cleanDur.split('##');
         state.waitSec = parseFloat(parts[0]) || 1.0;
         const residue = parts[1] || '';
-        if (residue.includes('#') && residue.includes(':')) {
-            state.slideTracingMode = 'beat';
-            const [bStr, tbStr] = residue.split('#');
-            state.slideBpm = bStr;
-            const [tStr, btStr] = tbStr.split(':');
-            state.time = parseInt(tStr, 10) || 4;
-            state.beat = parseInt(btStr, 10) || 1;
-        } else if (residue.includes(':')) {
+        if (residue.includes(':')) {
             state.slideTracingMode = 'beat';
             const [tStr, btStr] = residue.split(':');
             state.time = parseInt(tStr, 10) || 4;
@@ -206,34 +196,34 @@ export function parseSlideDuration(rawDur) {
             state.slideTracingMode = 'seconds';
             state.slideSeconds = parseFloat(residue) || 1.0;
         }
-    } else if (cleanDur.includes('#')) {
-        state.useCustomWait = true;
-        state.waitMode = 'bpm';
-        if (cleanDur.includes(':')) {
-            state.slideTracingMode = 'beat';
-            const [bStr, tbStr] = cleanDur.split('#');
-            state.slideWaitBpm = bStr;
-            const [tStr, btStr] = tbStr.split(':');
-            state.time = parseInt(tStr, 10) || 4;
-            state.beat = parseInt(btStr, 10) || 1;
-        } else {
-            state.slideTracingMode = 'seconds';
-            const [bStr, sStr] = cleanDur.split('#');
-            state.slideWaitBpm = bStr;
-            state.slideSeconds = parseFloat(sStr) || 1.0;
-        }
-    } else {
+    } else if (cleanDur.includes('#') && cleanDur.includes(':')) {
+        // [bpm#t:b]
         state.useCustomWait = false;
-        state.waitMode = 'seconds';
-        if (cleanDur.includes(':')) {
-            state.slideTracingMode = 'beat';
-            const [tStr, btStr] = cleanDur.split(':');
-            state.time = parseInt(tStr, 10) || 4;
-            state.beat = parseInt(btStr, 10) || 1;
-        } else {
-            state.slideTracingMode = 'seconds';
-            state.slideSeconds = parseFloat(cleanDur) || 1.0;
-        }
+        state.slideTracingMode = 'beat';
+        const [bStr, tbStr] = cleanDur.split('#');
+        state.slideBpm = bStr;
+        const [tStr, btStr] = tbStr.split(':');
+        state.time = parseInt(tStr, 10) || 4;
+        state.beat = parseInt(btStr, 10) || 1;
+    } else if (cleanDur.includes('#')) {
+        // [bpm#seconds]
+        state.useCustomWait = false;
+        state.slideTracingMode = 'seconds';
+        const [bStr, sStr] = cleanDur.split('#');
+        state.slideBpm = bStr;
+        state.slideSeconds = parseFloat(sStr) || 1.0;
+    } else if (cleanDur.includes(':')) {
+        // [t:b]
+        state.useCustomWait = false;
+        state.slideTracingMode = 'beat';
+        const [tStr, btStr] = cleanDur.split(':');
+        state.time = parseInt(tStr, 10) || 4;
+        state.beat = parseInt(btStr, 10) || 1;
+    } else {
+        // [seconds]
+        state.useCustomWait = false;
+        state.slideTracingMode = 'seconds';
+        state.slideSeconds = parseFloat(cleanDur) || 1.0;
     }
     return state;
 }
@@ -246,26 +236,21 @@ export function parseSlideDuration(rawDur) {
 export function buildSlideDurationString(state) {
     if (!state) return '[4:1]';
     let inner = '';
-    // 當滑動時長為秒數模式時，依 simai 規範必須包含 delay，語法為 [dly##dur] 或 [bpm#dur]
+    const dly = (state.waitSec !== undefined && state.waitSec !== null && state.waitSec !== '') ? state.waitSec : 1.0;
+
     if (state.slideTracingMode === 'seconds') {
-        const dly = (state.waitSec !== undefined && state.waitSec !== null && state.waitSec !== '') ? state.waitSec : 1.0;
         const dur = (state.slideSeconds !== undefined && state.slideSeconds !== null && state.slideSeconds !== '') ? state.slideSeconds : 1.0;
-        if (state.useCustomWait && state.waitMode === 'bpm' && state.slideWaitBpm) {
-            inner = `${state.slideWaitBpm}#${dur}`;
+        if (state.slideBpm) {
+            inner = `${state.slideBpm}#${dur}`;
         } else {
             inner = `${dly}##${dur}`;
         }
     } else {
         // 拍數模式
         if (state.useCustomWait) {
-            if (state.waitMode === 'seconds') {
-                const dly = (state.waitSec !== undefined && state.waitSec !== null && state.waitSec !== '') ? state.waitSec : 1.0;
-                const bpmPart = state.slideBpm ? `${state.slideBpm}#` : '';
-                inner = `${dly}##${bpmPart}${state.time}:${state.beat}`;
-            } else {
-                const bpmPart = state.slideWaitBpm ? `${state.slideWaitBpm}#` : '';
-                inner = `${bpmPart}${state.time}:${state.beat}`;
-            }
+            inner = `${dly}##${state.time}:${state.beat}`;
+        } else if (state.slideBpm) {
+            inner = `${state.slideBpm}#${state.time}:${state.beat}`;
         } else {
             inner = `${state.time}:${state.beat}`;
         }
@@ -535,8 +520,8 @@ function ensureSlideEditorStyles() {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            background: rgba(0, 0, 0, 0.35);
-            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 10px;
             padding: 10px 14px;
         }
@@ -554,28 +539,18 @@ function ensureSlideEditorStyles() {
             display: flex;
             align-items: center;
             gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 4px;
-            scrollbar-width: thin;
+            flex-wrap: wrap;
         }
 
-        .sem-chain-track::-webkit-scrollbar {
-            height: 4px;
-        }
-        .sem-chain-track::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-        }
-
-        /* 分支管理列 */
+        /* 分支管理列 (比照 Touch 編輯器排版) */
         .sem-branch-container {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.035);
-            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 10px;
-            padding: 10px 14px;
+            padding: 12px;
         }
 
         .sem-branch-header {
@@ -590,153 +565,165 @@ function ensureSlideEditorStyles() {
             gap: 6px;
             font-size: 13px;
             font-weight: 600;
-            color: #94a3b8;
+            color: #f1f5f9;
         }
 
         .sem-branch-count-badge {
             font-size: 11px;
-            background: var(--popup-accent-glow, rgba(56, 189, 248, 0.15));
-            color: var(--popup-accent-hover, #38bdf8);
+            background: rgba(255, 255, 255, 0.1);
+            color: #cbd5e1;
             padding: 2px 6px;
             border-radius: 4px;
             font-weight: 600;
         }
 
+        /* 膠囊新增按鈕 (純黑白線條，實線框，無泛光) */
+        .sem-btn-add {
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.05);
+            color: #f1f5f9;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s ease;
+        }
+
+        .sem-btn-add:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #ffffff;
+            color: #ffffff;
+        }
+
+        .sem-btn-add:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 分支列表 (膠囊型排版) */
         .sem-branch-tab-track {
             display: flex;
             align-items: center;
             gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 4px;
-            scrollbar-width: thin;
-        }
-
-        .sem-branch-tab-track::-webkit-scrollbar {
-            height: 4px;
-        }
-
-        .sem-branch-tab-track::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
+            flex-wrap: wrap;
         }
 
         .sem-branch-chip {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 86px;
-            height: 34px;
-            padding: 0 8px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 8px;
-            color: #cbd5e1;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.06);
+            color: #e2e8f0;
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
             box-sizing: border-box;
-            flex-shrink: 0;
             font-family: monospace, sans-serif;
+            box-shadow: none !important;
         }
 
         .sem-branch-chip:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.3);
             color: #ffffff;
-            border-color: rgba(255, 255, 255, 0.2);
         }
 
         .sem-branch-chip.active {
-            background: var(--popup-accent, var(--accent-color, #49e)) !important;
-            border-color: var(--popup-accent-hover, #38bdf8) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
-        .sem-branch-chip-text {
-            width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            text-align: center;
-            display: block;
+        .sem-chip-del-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            padding: 0;
+            font-size: 13px;
+            cursor: pointer;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            transition: color 0.12s ease, background 0.12s ease;
+        }
+
+        .sem-branch-chip.active .sem-chip-del-btn,
+        .sem-segment-chip.active .sem-chip-del-btn {
+            color: #475569;
+        }
+
+        .sem-chip-del-btn:hover {
+            color: #ffffff !important;
+            background: rgba(0, 0, 0, 0.35);
+        }
+
+        .sem-branch-chip.active .sem-chip-del-btn:hover,
+        .sem-segment-chip.active .sem-chip-del-btn:hover {
+            color: #000000 !important;
+            background: rgba(0, 0, 0, 0.15);
         }
 
         .sem-head-node {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-width: 38px;
-            height: 38px;
+            min-width: 30px;
+            height: 30px;
             padding: 0 10px;
             background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 20px;
             color: #f8fafc;
-            font-size: 17px;
-            font-weight: 700;
-        }
-
-        .sem-duration-editor {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-left: auto;
-        }
-
-        .sem-dur-badge {
-            font-family: monospace;
             font-size: 13px;
             font-weight: 700;
-            color: var(--popup-accent-hover, #38bdf8);
-            background: var(--popup-accent-glow, rgba(56, 189, 248, 0.12));
-            padding: 3px 8px;
-            border-radius: 6px;
-            border: 1px solid rgba(56, 189, 248, 0.25);
-            display: inline-block;
+            font-family: monospace, sans-serif;
+            box-sizing: border-box;
         }
 
-        /* 區間晶片 (Material Chip) */
+        /* 區間膠囊晶片 (完全比照分支膠囊排版，純黑白無光) */
         .sem-segment-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            height: 38px;
-            padding: 0 14px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
             background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-radius: 8px;
-            color: #cbd5e1;
-            font-size: 16px;
+            color: #e2e8f0;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+            box-sizing: border-box;
+            font-family: monospace, sans-serif;
+            box-shadow: none !important;
         }
 
         .sem-segment-chip:hover {
             background: rgba(255, 255, 255, 0.12);
             color: #ffffff;
-            border-color: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
-        /* 正在編輯的選取區間 */
         .sem-segment-chip.active {
-            background: var(--popup-accent, var(--accent-color, #49e)) !important;
-            border-color: var(--popup-accent-hover, #38bdf8) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
-            font-weight: 700;
-        }
-
-        .sem-duration-tag {
-            font-size: 14px;
-            color: #64748b;
-            font-weight: 500;
-            padding: 0 4px;
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
         /* 區間操作條 */
@@ -749,7 +736,7 @@ function ensureSlideEditorStyles() {
 
         .sem-status-indicator {
             font-size: 13px;
-            color: var(--popup-accent-hover, #38bdf8);
+            color: #cbd5e1;
             font-weight: 500;
         }
 
@@ -763,12 +750,12 @@ function ensureSlideEditorStyles() {
             align-items: center;
             gap: 4px;
             background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.16);
             color: #e2e8f0;
-            padding: 5px 10px;
-            border-radius: 6px;
+            padding: 5px 12px;
+            border-radius: 16px;
             font-size: 12px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.15s ease;
         }
@@ -776,6 +763,7 @@ function ensureSlideEditorStyles() {
         .sem-icon-btn:hover:not(:disabled) {
             background: rgba(255, 255, 255, 0.14);
             color: #ffffff;
+            border-color: #ffffff;
         }
 
         .sem-icon-btn:disabled {
@@ -785,25 +773,26 @@ function ensureSlideEditorStyles() {
 
         /* 卡片分組 */
         .sem-card {
-            background: rgba(255, 255, 255, 0.035);
-            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 10px;
             padding: 12px;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            box-sizing: border-box;
         }
 
         .sem-card-title {
             font-size: 13px;
             font-weight: 600;
-            color: #94a3b8;
+            color: #f1f5f9;
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
 
-        /* 軌跡形狀按鈕網格 (純 simai 連接符，無多餘文字) */
+        /* 軌跡形狀按鈕網格 (黑白無泛光) */
         .sem-pattern-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
@@ -813,31 +802,32 @@ function ensureSlideEditorStyles() {
         .sem-pattern-btn {
             height: 44px;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: 8px;
             padding: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
             color: #cbd5e1;
             font-size: 18px;
             font-weight: 700;
             font-family: monospace, sans-serif;
+            box-shadow: none !important;
         }
 
         .sem-pattern-btn:hover {
             background: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.3);
             color: #ffffff;
         }
 
         .sem-pattern-btn.active {
-            background: var(--popup-accent, var(--accent-color, #49e)) !important;
-            border-color: var(--popup-accent-hover, #38bdf8) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
         .sem-pattern-btn:disabled {
@@ -849,7 +839,7 @@ function ensureSlideEditorStyles() {
             pointer-events: none;
         }
 
-        /* 鍵位按鈕群組 (1 到 8 號鍵) */
+        /* 鍵位按鈕群組 (1 到 8 號鍵，黑白無泛光) */
         .sem-key-row {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
@@ -857,18 +847,19 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-key-btn {
-            height: 42px;
-            border-radius: 8px;
+            height: 40px;
+            border-radius: 6px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.12);
             color: #f1f5f9;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
+            box-shadow: none !important;
         }
 
         .sem-key-btn:hover:not(:disabled) {
@@ -877,13 +868,12 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-key-btn.active {
-            background: var(--popup-accent, var(--accent-color, #49e)) !important;
-            border-color: var(--popup-accent-hover, #38bdf8) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
-        /* 被禁用的不合法終點鍵位按鈕 */
         .sem-key-btn:disabled {
             opacity: 0.16 !important;
             background: rgba(255, 255, 255, 0.02) !important;
@@ -893,15 +883,16 @@ function ensureSlideEditorStyles() {
             pointer-events: none;
         }
 
-        /* 時長設定卡片 (Material Design 原生風格) */
+        /* 時長設定卡片 (黑白灰色調) */
         .sem-dur-card {
-            background: rgba(255, 255, 255, 0.035);
-            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 10px;
             padding: 12px;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            box-sizing: border-box;
         }
 
         .sem-dur-header {
@@ -919,7 +910,7 @@ function ensureSlideEditorStyles() {
             gap: 6px;
             font-size: 13px;
             font-weight: 600;
-            color: #94a3b8;
+            color: #f1f5f9;
         }
 
         .sem-dur-tab-row {
@@ -927,8 +918,8 @@ function ensureSlideEditorStyles() {
             gap: 4px;
             background: rgba(0, 0, 0, 0.35);
             padding: 3px;
-            border-radius: 8px;
-            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             width: fit-content;
         }
 
@@ -936,12 +927,12 @@ function ensureSlideEditorStyles() {
             border: none;
             background: transparent;
             color: #94a3b8;
-            padding: 6px 14px;
-            border-radius: 6px;
+            padding: 5px 12px;
+            border-radius: 4px;
             font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
             user-select: none;
             -webkit-user-select: none;
             outline: none;
@@ -954,9 +945,9 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-dur-tab-btn.active {
-            background: var(--popup-accent, var(--accent-color, #49e)) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 8px var(--popup-accent-glow, rgba(56, 189, 248, 0.25)) !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
         .sem-dur-row {
@@ -979,22 +970,26 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-dur-input {
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             background: rgba(0, 0, 0, 0.45);
             border-radius: 6px;
             color: #ffffff;
             padding: 6px 8px;
             font-size: 13px;
-            font-family: monospace;
+            font-family: inherit;
             text-align: center;
             outline: none;
             box-sizing: border-box;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            transition: border-color 0.15s ease;
         }
 
         .sem-dur-input:focus {
-            border-color: var(--popup-accent-hover, #38bdf8);
-            box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
+            border-color: #ffffff;
+        }
+
+        .sem-dur-input::placeholder {
+            color: #64748b;
+            font-size: 11px;
         }
 
         .sem-dur-checkbox-wrapper {
@@ -1010,9 +1005,9 @@ function ensureSlideEditorStyles() {
         .sem-dur-checkbox {
             appearance: auto;
             -webkit-appearance: checkbox;
-            width: 17px !important;
-            height: 17px !important;
-            accent-color: var(--popup-accent, var(--accent-color, #49e)) !important;
+            width: 16px !important;
+            height: 16px !important;
+            accent-color: #ffffff !important;
             cursor: pointer !important;
             margin: 0 !important;
             flex-shrink: 0 !important;
@@ -1027,14 +1022,14 @@ function ensureSlideEditorStyles() {
             line-height: 1;
         }
 
-        /* Material Design 分段按鈕群組 (Segmented Buttons) */
+        /* Material Design 分段按鈕群組 (黑白無泛光) */
         .sem-segmented-btn-group {
             display: inline-flex;
             gap: 4px;
             background: rgba(0, 0, 0, 0.35);
             padding: 3px;
-            border-radius: 8px;
-            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             box-sizing: border-box;
             width: fit-content;
         }
@@ -1044,11 +1039,11 @@ function ensureSlideEditorStyles() {
             background: transparent;
             color: #94a3b8;
             padding: 6px 14px;
-            border-radius: 6px;
-            font-size: 13px;
+            border-radius: 4px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
             user-select: none;
             -webkit-user-select: none;
             outline: none;
@@ -1061,77 +1056,75 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-segmented-btn.active {
-            background: var(--popup-accent, var(--accent-color, #49e));
-            color: #ffffff;
-            box-shadow: 0 2px 8px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
         .sem-segmented-btn.active.break {
-            background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.45) !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-weight: 700;
         }
 
         .sem-segmented-btn.active.mine {
-            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.45) !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-weight: 700;
         }
 
-        /* EX 切換按鈕 (Toggle Chip) */
+        /* EX 切換按鈕 (黑白無泛光) */
         .sem-toggle-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             background: rgba(255, 255, 255, 0.05);
             color: #94a3b8;
-            padding: 6px 14px;
-            border-radius: 8px;
-            font-size: 13px;
+            padding: 5px 14px;
+            border-radius: 6px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
             user-select: none;
             -webkit-user-select: none;
             outline: none;
+            box-shadow: none !important;
         }
 
         .sem-toggle-btn:hover:not(.active) {
             background: rgba(255, 255, 255, 0.1);
             color: #ffffff;
-            border-color: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
         .sem-toggle-btn.active {
-            background: linear-gradient(135deg, #06b6d4, #0284c7) !important;
-            border-color: #38bdf8 !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 10px rgba(6, 182, 212, 0.45) !important;
+            background: #ffffff !important;
+            border-color: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
         }
 
-        /* 分支晶片中的效果標籤徽章 */
+        /* 分支膠囊中的效果標記 (純文字黑白標籤) */
         .sem-branch-effect-badge {
             font-size: 10px;
             font-weight: 700;
             padding: 1px 4px;
-            border-radius: 4px;
-            margin-left: 4px;
-            line-height: 1.2;
+            border-radius: 3px;
+            margin-left: 2px;
+            line-height: 1.1;
             vertical-align: middle;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.1);
+            color: #cbd5e1;
         }
 
-        .sem-branch-effect-badge.break {
-            background: rgba(245, 158, 11, 0.25);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.4);
-        }
-
-        .sem-branch-effect-badge.mine {
-            background: rgba(239, 68, 68, 0.25);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.4);
+        .sem-branch-chip.active .sem-branch-effect-badge {
+            border-color: #000000;
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
         }
     `;
     document.head.appendChild(style);
@@ -1286,7 +1279,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <div class="sem-card">
                 <div class="sem-card-title">
                     <span>${t('slideEditorModal.headSettings')}</span>
-                    <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.headKey')}: ${slideData.head} 號鍵</span>
                 </div>
                 <div class="sem-key-row">
                     ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
@@ -1321,21 +1313,16 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 </div>
             </div>
 
-            <!-- 分支管理列 (Branch Navigation Bar) -->
-            <div class="sem-branch-container">
-                <div class="sem-branch-header">
-                    <div class="sem-branch-title">
+            <!-- 分支管理卡片 (比照 Touch 編輯器排版) -->
+            <div class="sem-card">
+                <div class="sem-card-title">
+                    <div style="display: flex; align-items: center; gap: 6px;">
                         <span>${t('slideEditorModal.branchTitle')}</span>
                         <span class="sem-branch-count-badge">${t('slideEditorModal.branchCount', { count: branchCount })}</span>
                     </div>
-                    <div class="sem-seg-btn-group">
-                        <button type="button" class="sem-icon-btn" id="sem-add-branch" title="${t('slideEditorModal.addBranch')}">
-                            <span>＋ ${t('slideEditorModal.addBranch')}</span>
-                        </button>
-                        <button type="button" class="sem-icon-btn" id="sem-del-branch" ${branchCount <= 1 ? 'disabled' : ''} title="${t('slideEditorModal.delBranch')}">
-                            <span>－ ${t('slideEditorModal.delBranch')}</span>
-                        </button>
-                    </div>
+                    <button type="button" class="sem-btn-add" id="sem-add-branch">
+                        <span>＋ ${t('slideEditorModal.addBranch')}</span>
+                    </button>
                 </div>
                 <div class="sem-branch-tab-track">
                     ${slideData.branches.map((b, bIdx) => {
@@ -1346,20 +1333,26 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                             ? `<span class="sem-branch-effect-badge break">BK</span>`
                             : (b.effect === 'mine' ? `<span class="sem-branch-effect-badge mine">MINE</span>` : '');
                         return `
-                            <button type="button" class="sem-branch-chip ${isBActive ? 'active' : ''}" data-branch-index="${bIdx}" title="${bSummary}">
+                            <div class="sem-branch-chip ${isBActive ? 'active' : ''}" data-branch-index="${bIdx}" title="${bSummary}">
                                 <span class="sem-branch-chip-text">${bSummary}</span>
                                 ${effectBadge}
-                            </button>
+                                ${branchCount > 1 ? `<button type="button" class="sem-chip-del-btn" data-del-branch="${bIdx}" title="${t('slideEditorModal.delBranch')}">✕</button>` : ''}
+                            </div>
                         `;
                     }).join('')}
                 </div>
             </div>
 
-            <!-- 上方區間顯示與導航條 (當前分支) -->
-            <div class="sem-chain-container">
-                <div class="sem-chain-label">
-                    <span>${t('slideEditorModal.trackChain')}</span>
-                    <span class="sem-status-indicator">${t('slideEditorModal.editingSeg', { current: activeSegIndex + 1, total: segCount, start: segStart, end: currentSeg.end })}</span>
+            <!-- 軌跡鏈卡片 (排版完全比照滑線分支) -->
+            <div class="sem-card">
+                <div class="sem-card-title">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span>${t('slideEditorModal.trackChain')}</span>
+                        <span class="sem-branch-count-badge">${t('slideEditorModal.segCount', { count: segCount })}</span>
+                    </div>
+                    <button type="button" class="sem-btn-add" id="sem-add-seg" ${isAddDisabled ? 'disabled' : ''} title="${isAddDisabled ? t('slideEditorModal.cannotAddAfterW') : t('slideEditorModal.addSeg')}">
+                        <span>＋ ${t('slideEditorModal.addSeg')}</span>
+                    </button>
                 </div>
                 <div class="sem-chain-track">
                     <div class="sem-head-node" title="${t('slideEditorModal.headNode')}">${slideData.head}</div>
@@ -1369,26 +1362,12 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                             ? `${seg.type}${seg.mid ?? ''}${seg.end}`
                             : `${seg.type} ${seg.end}`;
                         return `
-                            <button type="button" class="sem-segment-chip ${isActive ? 'active' : ''}" data-seg-index="${idx}">
+                            <div class="sem-segment-chip ${isActive ? 'active' : ''}" data-seg-index="${idx}">
                                 <span>${label}</span>
-                            </button>
+                                ${segCount > 1 ? `<button type="button" class="sem-chip-del-btn" data-del-seg="${idx}" title="${t('slideEditorModal.delSeg')}">✕</button>` : ''}
+                            </div>
                         `;
                     }).join('')}
-                    <div class="sem-duration-editor">
-                        <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.branchDuration')}:</span>
-                        <span class="sem-dur-badge" id="sem-branch-dur-badge">${currentBranch.duration || '[4:1]'}</span>
-                    </div>
-                </div>
-                <div class="sem-actions-bar">
-                    <span id="sem-syntax-text" style="font-size: 12px; color: #64748b;">${t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) })}</span>
-                    <div class="sem-seg-btn-group">
-                        <button type="button" class="sem-icon-btn" id="sem-add-seg" ${isAddDisabled ? 'disabled' : ''} title="${isAddDisabled ? t('slideEditorModal.cannotAddAfterW') : t('slideEditorModal.addSeg')}">
-                            <span>＋ ${t('slideEditorModal.addSeg')}</span>
-                        </button>
-                        <button type="button" class="sem-icon-btn" id="sem-del-seg" ${segCount <= 1 ? 'disabled' : ''} title="${t('slideEditorModal.delSeg')}">
-                            <span>－ ${t('slideEditorModal.delSeg')}</span>
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -1396,7 +1375,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <div class="sem-card">
                 <div class="sem-card-title">
                     <span>${t('slideEditorModal.branchEffect')}</span>
-                    <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.branchLabel', { index: activeBranchIndex + 1 })}</span>
                 </div>
                 <div class="sem-segmented-btn-group">
                     <button type="button" class="sem-segmented-btn ${currentBranch.effect === 'none' ? 'active' : ''}" data-branch-effect="none">
@@ -1415,7 +1393,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <div class="sem-card">
                 <div class="sem-card-title">
                     <span>${t('slideEditorModal.shapeSelect')}</span>
-                    <span style="font-size: 11px; color: #64748b;">${t('slideEditorModal.startKey', { key: segStart })}</span>
                 </div>
                 <div class="sem-pattern-grid">
                     ${SLIDE_PATTERNS.map(pat => {
@@ -1436,7 +1413,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 <div class="sem-card">
                     <div class="sem-card-title">
                         <span>${t('slideEditorModal.midKey')}</span>
-                        <span style="font-size: 11px; color: #eab308;">${t('slideEditorModal.midKeyHint')}</span>
+                        <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.midKeyHint')}</span>
                     </div>
                     <div class="sem-key-row">
                         ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
@@ -1457,7 +1434,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             <div class="sem-card">
                 <div class="sem-card-title">
                     <span>${t('slideEditorModal.endKey')}</span>
-                    <span style="font-size: 11px; color: #eab308;">${t('slideEditorModal.endKeyHint')}</span>
+                    <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.endKeyHint')}</span>
                 </div>
                 <div class="sem-key-row">
                     ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
@@ -1487,20 +1464,10 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
 
                 <div id="sem-wait-content" style="display: ${currentDurState.useCustomWait ? 'flex' : 'none'}; flex-direction: column; gap: 10px; margin-top: 4px;">
                     <div class="sem-dur-row">
-                        <div class="sem-dur-tab-row">
-                            <button type="button" class="sem-dur-tab-btn ${currentDurState.waitMode === 'seconds' ? 'active' : ''}" data-action="set-wait-mode-seconds">${t('noteDurationModal.specifySeconds')}</button>
-                            <button type="button" class="sem-dur-tab-btn ${currentDurState.waitMode === 'bpm' ? 'active' : ''}" data-action="set-wait-mode-bpm">${t('noteDurationModal.specifyBpmWait')}</button>
-                        </div>
-
-                        <div class="sem-dur-field" id="sem-wait-sec-field" style="margin-left: auto; display: ${currentDurState.waitMode === 'seconds' ? 'flex' : 'none'};">
+                        <div class="sem-dur-field">
                             <span class="sem-dur-label">${t('noteDurationModal.waitSeconds')}</span>
                             <input type="number" class="sem-dur-input" id="sem-slide-wait-sec" value="${currentDurState.waitSec}" step="0.1" min="0.01" style="width: 80px;">
                             <span>${t('noteDurationModal.secondsUnit')}</span>
-                        </div>
-
-                        <div class="sem-dur-field" id="sem-wait-bpm-field" style="margin-left: auto; display: ${currentDurState.waitMode === 'bpm' ? 'flex' : 'none'};">
-                            <span class="sem-dur-label">${t('noteDurationModal.waitBpm')}</span>
-                            <input type="number" class="sem-dur-input" id="sem-slide-wait-bpm" value="${currentDurState.slideWaitBpm}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 </div>
@@ -1526,9 +1493,9 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                             <input type="number" class="sem-dur-input" id="sem-dur-beat" value="${currentDurState.beat}" min="1" max="512" style="width: 60px;">
                             <span class="sem-dur-label">${t('noteDurationModal.beatCount')}</span>
                         </div>
-                        <div class="sem-dur-field" id="sem-slide-tracing-bpm-field" style="margin-left: auto; display: ${(currentDurState.useCustomWait && currentDurState.waitMode === 'seconds') ? 'flex' : 'none'};">
-                            <span class="sem-dur-label">${t('noteDurationModal.slideBpm')}</span>
-                            <input type="number" class="sem-dur-input" id="sem-slide-tracing-bpm" value="${currentDurState.slideBpm}" step="0.1" style="width: 80px;">
+                        <div class="sem-dur-field" id="sem-slide-tracing-bpm-field" style="margin-left: auto;">
+                            <span class="sem-dur-label">${t('noteDurationModal.specifyBpm')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-slide-tracing-bpm" value="${currentDurState.slideBpm}" placeholder="${t('common.optional')}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 ` : `
@@ -1537,6 +1504,10 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                             <span class="sem-dur-label">${t('noteDurationModal.slideSeconds')}</span>
                             <input type="number" class="sem-dur-input" id="sem-slide-seconds" value="${currentDurState.slideSeconds}" step="0.05" min="0.01" style="width: 90px;">
                             <span>${t('noteDurationModal.secondsUnit')}</span>
+                        </div>
+                        <div class="sem-dur-field" style="margin-left: auto;">
+                            <span class="sem-dur-label">${t('noteDurationModal.specifyBpm')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-slide-tracing-bpm" value="${currentDurState.slideBpm}" placeholder="${t('common.optional')}" step="0.1" style="width: 80px;">
                         </div>
                     </div>
                 `}
@@ -1557,14 +1528,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         // 時長同步更新函式
         function syncBranchDuration() {
             currentBranch.duration = buildSlideDurationString(currentDurState);
-            const syntaxElem = scrollBody.querySelector('#sem-syntax-text');
-            if (syntaxElem) {
-                syntaxElem.textContent = t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) });
-            }
-            const durBadge = scrollBody.querySelector('#sem-branch-dur-badge');
-            if (durBadge) {
-                durBadge.textContent = currentBranch.duration;
-            }
             // 更新分支晶片文字與提示
             const chipBtn = scrollBody.querySelector(`.sem-branch-chip[data-branch-index="${activeBranchIndex}"]`);
             if (chipBtn) {
@@ -1624,16 +1587,37 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             });
         });
 
-        // 切換編輯分支
-        scrollBody.querySelectorAll('[data-branch-index]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                activeBranchIndex = parseInt(btn.dataset.branchIndex, 10);
-                activeSegIndex = 0;
-                renderUI();
+        // 切換編輯分支 (點擊分支膠囊)
+        scrollBody.querySelectorAll('.sem-branch-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                if (e.target.closest('.sem-chip-del-btn')) return;
+                const bIdx = parseInt(chip.getAttribute('data-branch-index'), 10);
+                if (!isNaN(bIdx) && bIdx !== activeBranchIndex) {
+                    activeBranchIndex = bIdx;
+                    activeSegIndex = 0;
+                    renderUI();
+                }
             });
         });
 
-        // 新增分支 (使用標準預設值建立)
+        // 刪除分支 (點擊分支膠囊上的 ✕ 按鈕)
+        scrollBody.querySelectorAll('.sem-chip-del-btn[data-del-branch]').forEach(delBtn => {
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (slideData.branches.length <= 1) return;
+                const delIdx = parseInt(delBtn.getAttribute('data-del-branch'), 10);
+                if (!isNaN(delIdx)) {
+                    slideData.branches.splice(delIdx, 1);
+                    if (activeBranchIndex >= slideData.branches.length) {
+                        activeBranchIndex = Math.max(0, slideData.branches.length - 1);
+                    }
+                    activeSegIndex = 0;
+                    renderUI();
+                }
+            });
+        });
+
+        // 新增分支按鈕 (膠囊按鈕 ＋ 新增分支)
         const addBranchBtn = scrollBody.querySelector('#sem-add-branch');
         if (addBranchBtn) {
             addBranchBtn.addEventListener('click', () => {
@@ -1656,20 +1640,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             });
         }
 
-        // 刪除分支
-        const delBranchBtn = scrollBody.querySelector('#sem-del-branch');
-        if (delBranchBtn) {
-            delBranchBtn.addEventListener('click', () => {
-                if (slideData.branches.length <= 1) return;
-                slideData.branches.splice(activeBranchIndex, 1);
-                if (activeBranchIndex >= slideData.branches.length) {
-                    activeBranchIndex = slideData.branches.length - 1;
-                }
-                activeSegIndex = 0;
-                renderUI();
-            });
-        }
-
         // 自訂等候時間勾選
         const customWaitCheckbox = scrollBody.querySelector('#sem-slide-custom-wait');
         if (customWaitCheckbox) {
@@ -1679,16 +1649,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 renderUI();
             });
         }
-
-        // 等候時間模式按鈕 (秒數 / BPM)
-        scrollBody.querySelectorAll('[data-action^="set-wait-mode-"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const mode = btn.dataset.action.replace('set-wait-mode-', '');
-                currentDurState.waitMode = mode;
-                syncBranchDuration();
-                renderUI();
-            });
-        });
 
         // 劃動時間模式按鈕 (節拍 / 秒數)
         scrollBody.querySelectorAll('[data-action^="set-slide-tracing-"]').forEach(btn => {
@@ -1716,17 +1676,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             };
             waitSecInput.addEventListener('input', onWaitSec);
             waitSecInput.addEventListener('change', onWaitSec);
-        }
-
-        // 等候 BPM 輸入
-        const waitBpmInput = scrollBody.querySelector('#sem-slide-wait-bpm');
-        if (waitBpmInput) {
-            const onWaitBpm = () => {
-                currentDurState.slideWaitBpm = waitBpmInput.value.trim();
-                syncBranchDuration();
-            };
-            waitBpmInput.addEventListener('input', onWaitBpm);
-            waitBpmInput.addEventListener('change', onWaitBpm);
         }
 
         // 拍數分母 (time)
@@ -1776,15 +1725,45 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             slideSecInput.addEventListener('change', onSlideSec);
         }
 
-        // 切換編輯區間
-        scrollBody.querySelectorAll('[data-seg-index]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                activeSegIndex = parseInt(btn.dataset.segIndex, 10);
-                renderUI();
+        // 切換編輯區間 (點擊區間膠囊)
+        scrollBody.querySelectorAll('.sem-segment-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                if (e.target.closest('.sem-chip-del-btn')) return;
+                const sIdx = parseInt(chip.getAttribute('data-seg-index'), 10);
+                if (!isNaN(sIdx) && sIdx !== activeSegIndex) {
+                    activeSegIndex = sIdx;
+                    renderUI();
+                }
             });
         });
 
-        // 新增區間
+        // 刪除特定區間 (點擊區間膠囊上的 ✕ 按鈕)
+        scrollBody.querySelectorAll('.sem-chip-del-btn[data-del-seg]').forEach(delBtn => {
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (currentBranch.segments.length <= 1) return;
+                const delIdx = parseInt(delBtn.getAttribute('data-del-seg'), 10);
+                if (!isNaN(delIdx)) {
+                    currentBranch.segments.splice(delIdx, 1);
+                    if (activeSegIndex >= currentBranch.segments.length) {
+                        activeSegIndex = Math.max(0, currentBranch.segments.length - 1);
+                    }
+                    for (let i = 0; i < currentBranch.segments.length; i++) {
+                        const sStart = i === 0 ? slideData.head : currentBranch.segments[i - 1].end;
+                        const sSeg = currentBranch.segments[i];
+                        if (sSeg.type === 'V' && !isLegalVMid(sStart, sSeg.mid)) {
+                            sSeg.mid = getLegalVMid(sStart, sSeg.mid);
+                        }
+                        if (!isSlideLegal(sStart, sSeg.end, sSeg.type, sSeg.mid)) {
+                            sSeg.end = findLegalEnd(sStart, sSeg.type, sSeg.end, sSeg.mid);
+                        }
+                    }
+                    renderUI();
+                }
+            });
+        });
+
+        // 新增區間 (實線膠囊按鈕 ＋ 新增區間)
         const addBtn = scrollBody.querySelector('#sem-add-seg');
         if (addBtn) {
             addBtn.addEventListener('click', () => {
@@ -1801,29 +1780,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 });
 
                 activeSegIndex = currentBranch.segments.length - 1;
-                renderUI();
-            });
-        }
-
-        // 刪除區間
-        const delBtn = scrollBody.querySelector('#sem-del-seg');
-        if (delBtn) {
-            delBtn.addEventListener('click', () => {
-                if (currentBranch.segments.length <= 1) return;
-                currentBranch.segments.splice(activeSegIndex, 1);
-                if (activeSegIndex >= currentBranch.segments.length) {
-                    activeSegIndex = currentBranch.segments.length - 1;
-                }
-                for (let i = 0; i < currentBranch.segments.length; i++) {
-                    const sStart = i === 0 ? slideData.head : currentBranch.segments[i - 1].end;
-                    const sSeg = currentBranch.segments[i];
-                    if (sSeg.type === 'V' && !isLegalVMid(sStart, sSeg.mid)) {
-                        sSeg.mid = getLegalVMid(sStart, sSeg.mid);
-                    }
-                    if (!isSlideLegal(sStart, sSeg.end, sSeg.type, sSeg.mid)) {
-                        sSeg.end = findLegalEnd(sStart, sSeg.type, sSeg.end, sSeg.mid);
-                    }
-                }
                 renderUI();
             });
         }

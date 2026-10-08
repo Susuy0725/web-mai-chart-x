@@ -667,7 +667,7 @@ export function openTouchGroupModal({
             },
             dt: 0,
             showSensor: true,
-            showSensorText: false,
+            showSensorText: true,
             playCombo: 0,
             playScore: 0,
             isPlaying: false

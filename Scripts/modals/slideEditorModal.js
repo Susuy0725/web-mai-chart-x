@@ -51,8 +51,8 @@ export function isSlideLegal(start, end, type, mid = null) {
         case 'q':
         case 'pp':
         case 'qq':
-            // 大圓弧、雙圓弧：不可為自身
-            return !e;
+            // 大圓弧、雙圓弧：允許自身鍵 (繞圈回到原鍵)
+            return true;
         case 'V': {
             if (mid === null || mid === undefined) {
                 for (let testMid = 1; testMid <= 8; testMid++) {
@@ -78,6 +78,29 @@ export function isSlideLegal(start, end, type, mid = null) {
 }
 
 /**
+ * 判定給定起點與中繼點是否為合法大 V 中繼點位 (起點 +2 或 -2)
+ * @param {number} start 起點鍵位 (1-8)
+ * @param {number} mid 中繼點鍵位 (1-8)
+ * @returns {boolean} 是否為合法中繼點
+ */
+export function isLegalVMid(start, mid) {
+    if (!start || !mid || start < 1 || start > 8 || mid < 1 || mid > 8) return false;
+    const diff = (start - mid + 8) % 8;
+    return diff === 2 || diff === 6;
+}
+
+/**
+ * 取得指定起點的合法中繼點，若 fallbackMid 為合法點位則回傳 fallbackMid，否則預設回傳起點 +2
+ * @param {number} start 起點鍵位 (1-8)
+ * @param {number|null} [fallbackMid=null] 備選中繼點
+ * @returns {number} 合法中繼點 (1-8)
+ */
+export function getLegalVMid(start, fallbackMid = null) {
+    if (fallbackMid && isLegalVMid(start, fallbackMid)) return fallbackMid;
+    return ((start - 1 + 2) % 8) + 1;
+}
+
+/**
  * 尋找指定起點與形狀的第一個合法終點
  * @param {number} start 起點鍵位
  * @param {string} type 軌跡形狀
@@ -86,9 +109,10 @@ export function isSlideLegal(start, end, type, mid = null) {
  * @returns {number} 合法終點鍵位
  */
 function findLegalEnd(start, type, fallback = 1, mid = null) {
-    if (isSlideLegal(start, fallback, type, mid)) return fallback;
+    const validMid = (type === 'V') ? getLegalVMid(start, mid) : mid;
+    if (isSlideLegal(start, fallback, type, validMid)) return fallback;
     for (let test = 1; test <= 8; test++) {
-        if (isSlideLegal(start, test, type, mid)) return test;
+        if (isSlideLegal(start, test, type, validMid)) return test;
     }
     return fallback;
 }
@@ -136,11 +160,12 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         let end = 1;
 
         if (type === 'V') {
+            const segStart = segments.length === 0 ? head : segments[segments.length - 1].end;
             if (numStr.length >= 2) {
                 mid = parseInt(numStr[0], 10);
                 end = parseInt(numStr.slice(1), 10);
             } else {
-                mid = (head + 1) % 8 + 1;
+                mid = getLegalVMid(segStart);
                 end = parseInt(numStr, 10);
             }
         } else {
@@ -582,7 +607,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             },
             dt: 0,
             showSensor: true,
-            showSensorText: false,
+            showSensorText: true,
             playCombo: 0,
             playScore: 0,
             isPlaying: false
@@ -602,6 +627,14 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
 
         // 計算當前段落的起點
         const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
+
+        // 若當前段落為 V 字形狀且中繼點不合法，自動校正
+        if (currentSeg.type === 'V' && !isLegalVMid(segStart, currentSeg.mid)) {
+            currentSeg.mid = getLegalVMid(segStart, currentSeg.mid);
+            if (!isSlideLegal(segStart, currentSeg.end, 'V', currentSeg.mid)) {
+                currentSeg.end = findLegalEnd(segStart, 'V', currentSeg.end, currentSeg.mid);
+            }
+        }
 
         scrollBody.innerHTML = `
             <!-- 上方區間顯示與導航條 -->
@@ -661,11 +694,12 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 <div class="sem-card">
                     <div class="sem-card-title">
                         <span>折角中繼鍵位 (Mid)</span>
+                        <span style="font-size: 11px; color: #eab308;">中繼點僅限起點 ±2 鍵位</span>
                     </div>
                     <div class="sem-key-row">
                         ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
                             const isMidActive = (currentSeg.mid === k);
-                            const isLegalMid = (k !== segStart && k !== currentSeg.end);
+                            const isLegalMid = isLegalVMid(segStart, k);
                             return `
                                 <button type="button" class="sem-key-btn ${isMidActive ? 'active' : ''}" 
                                     data-mid-key="${k}" ${!isLegalMid ? 'disabled' : ''}>
@@ -743,6 +777,16 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 if (activeIndex >= slideData.segments.length) {
                     activeIndex = slideData.segments.length - 1;
                 }
+                for (let i = 0; i < slideData.segments.length; i++) {
+                    const sStart = i === 0 ? slideData.head : slideData.segments[i - 1].end;
+                    const sSeg = slideData.segments[i];
+                    if (sSeg.type === 'V' && !isLegalVMid(sStart, sSeg.mid)) {
+                        sSeg.mid = getLegalVMid(sStart, sSeg.mid);
+                    }
+                    if (!isSlideLegal(sStart, sSeg.end, sSeg.type, sSeg.mid)) {
+                        sSeg.end = findLegalEnd(sStart, sSeg.type, sSeg.end, sSeg.mid);
+                    }
+                }
                 renderUI();
             });
         }
@@ -755,9 +799,11 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
 
                 seg.type = newPattern;
-                if (newPattern === 'V' && (seg.mid === undefined || seg.mid === null)) {
-                    seg.mid = (segStart + 1) % 8 + 1;
-                } else if (newPattern !== 'V') {
+                if (newPattern === 'V') {
+                    if (!isLegalVMid(segStart, seg.mid)) {
+                        seg.mid = getLegalVMid(segStart, seg.mid);
+                    }
+                } else {
                     seg.mid = undefined;
                 }
 
@@ -776,6 +822,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 const midVal = parseInt(btn.dataset.midKey, 10);
                 const seg = slideData.segments[activeIndex];
                 const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
+
+                if (!isLegalVMid(segStart, midVal)) return;
 
                 seg.mid = midVal;
                 if (!isSlideLegal(segStart, seg.end, 'V', seg.mid)) {
@@ -802,6 +850,9 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 for (let i = activeIndex + 1; i < slideData.segments.length; i++) {
                     const sStart = slideData.segments[i - 1].end;
                     const sSeg = slideData.segments[i];
+                    if (sSeg.type === 'V' && !isLegalVMid(sStart, sSeg.mid)) {
+                        sSeg.mid = getLegalVMid(sStart, sSeg.mid);
+                    }
                     if (!isSlideLegal(sStart, sSeg.end, sSeg.type, sSeg.mid)) {
                         sSeg.end = findLegalEnd(sStart, sSeg.type, sSeg.end, sSeg.mid);
                     }

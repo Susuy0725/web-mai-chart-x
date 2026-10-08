@@ -593,8 +593,15 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     }
 
     .utility-row-1 {
+        position: relative;
+        z-index: 10;
         border-bottom: 1px solid var(--button-ouline);
         padding-bottom: 4px;
+    }
+
+    .utility-row-2 {
+        position: relative;
+        z-index: 5;
     }
 
     .utility-row-1 .utilitySeparator.utility-break {
@@ -885,7 +892,7 @@ body.resizing-panels #canvasContainer canvas {
     background-color: var(--main-color);
     min-width: 120px;
     box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
-    z-index: 10;
+    z-index: 1000;
     border: 1px solid var(--button-ouline);
     border-radius: 10px;
     padding: 5px;

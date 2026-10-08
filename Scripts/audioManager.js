@@ -80,6 +80,8 @@ class AudioManager {
         this.bgmStartTime = 0;
         this.bgmOffset = 0;
         this.playbackRate = 1.0;
+        this.bgmReady = Promise.resolve();
+        this._bgmLoadId = 0;
 
         // 模式標記：預設為主編輯器模式 (false)，在 _play 模式下啟用 (true)
         const isBrowserPlay = (typeof window !== 'undefined' && (window.location?.pathname?.includes('/_play') || window.location?.href?.includes('/_play')));
@@ -263,31 +265,50 @@ class AudioManager {
      */
     async setBackgroundMusic(source, originalFile = null) {
         this.ensureContextSync();
-        try {
-            this.bgmFile = originalFile || source;
+        const currentLoadId = ++this._bgmLoadId;
+        this.bgmFile = originalFile || source;
 
-            let arrayBuffer;
-            if (source instanceof Blob) {
-                arrayBuffer = await source.arrayBuffer();
-            } else {
-                const response = await fetch(source);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch BGM: HTTP ${response.status}`);
+        const loadPromise = (async () => {
+            try {
+                let arrayBuffer;
+                if (source instanceof Blob) {
+                    arrayBuffer = await source.arrayBuffer();
+                } else {
+                    const response = await fetch(source);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch BGM: HTTP ${response.status}`);
+                    }
+                    arrayBuffer = await response.arrayBuffer();
                 }
-                arrayBuffer = await response.arrayBuffer();
-            }
 
-            this.bgmBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-            console.log(`[Audio] BGM 載入完成，長度: ${this.bgmBuffer.duration.toFixed(2)}s`);
-        } catch (e) {
-            console.error(`[Audio] BGM 載入失敗`, e);
-        }
+                if (this._bgmLoadId !== currentLoadId) {
+                    return;
+                }
+
+                const decoded = await this.ctx.decodeAudioData(arrayBuffer);
+                if (this._bgmLoadId !== currentLoadId) {
+                    return;
+                }
+
+                this.bgmBuffer = decoded;
+                console.log(`[Audio] BGM 載入完成，長度: ${this.bgmBuffer.duration.toFixed(2)}s`);
+            } catch (e) {
+                if (this._bgmLoadId === currentLoadId) {
+                    console.error(`[Audio] BGM 載入失敗`, e);
+                }
+            }
+        })();
+
+        this.bgmReady = loadPromise;
+        return loadPromise;
     }
 
     async removeBackgroundMusic() {
+        this._bgmLoadId++;
         this.stopBGM();
         this.bgmBuffer = null;
         this.bgmFile = null;
+        this.bgmReady = Promise.resolve();
     }
 
     haveBGM() {
@@ -802,6 +823,10 @@ class AudioManager {
         const lookAhead = 0.1; // 100ms look-ahead
         while (this.soundQueue.length > 0 && globalTime + lookAhead >= this.soundQueue[0].targetTime) {
             const { key, isMono, volume, targetTime, detune = 0 } = this.soundQueue.shift();
+            // 若音效落後超過 50ms（例如跳轉 seek 後殘留），果斷丟棄避免音爆與主線程卡頓
+            if (targetTime < globalTime - 0.05) {
+                continue;
+            }
             const playTime = this.ctx.currentTime + (targetTime - globalTime) / this.playbackRate;
             this.play(key, isMono, volume, playTime, detune);
         }
@@ -954,6 +979,7 @@ class AudioManager {
 
     clearSoundQueue() {
         this.soundQueue = [];
+        this.lastQueuedTimes.clear();
     }
 }
 

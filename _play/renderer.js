@@ -376,6 +376,7 @@ export class SimaiRenderer {
      */
     queueHitEffect(pos, noteT, judge = null, x = null, y = null) {
         if (this.settings.drawHitEffect === false) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
         const decayTime = this.settings.effectDecayTime || 0.4;
         if (noteT / decayTime < -1 || noteT > 0.05) return;
 
@@ -449,6 +450,7 @@ export class SimaiRenderer {
      */
     queueHoldEffect(pos, noteT, judge = null, x = null, y = null) {
         if (this.settings.drawHitEffect === false) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
 
         let px = x;
         let py = y;
@@ -1899,11 +1901,11 @@ export class SimaiRenderer {
                 }
                 ctx.restore();
 
-                // 2. 外鍵延伸區域高亮 (紅色發光區域 1~8)
+                // 2. 外鍵延伸區域高亮 (外圈發光區域 1~8)
                 const outerR1 = innerCirleBase * 1.05;
                 const outerR2 = innerCirleBase * 1.28;
                 for (let i = 1; i <= 8; i++) {
-                    if (activeSensors.has('A' + i)) {
+                    if (activeSensors.has('K' + i) || activeSensors.has('A' + i)) {
                         const startAng = -Math.PI / 2 + (i - 1) * (Math.PI / 4);
                         const endAng = -Math.PI / 2 + i * (Math.PI / 4);
                         ctx.save();
@@ -1933,7 +1935,9 @@ export class SimaiRenderer {
         const ctx = this.ctx;
 
         if (triggered) {
-            this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            if (!s.judgeResult || s.judgeResult.grade !== 'MISS') {
+                this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            }
             return;
         }
 
@@ -1982,7 +1986,9 @@ export class SimaiRenderer {
         const ctx = this.ctx;
 
         if (triggered) {
-            this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            if (!s.judgeResult || s.judgeResult.grade !== 'MISS') {
+                this.queueHitEffect(pos, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            }
             return;
         }
 
@@ -2206,7 +2212,9 @@ export class SimaiRenderer {
         }
 
         if (triggered) {
-            this.queueHitEffect(null, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            if (!s.judgeResult || s.judgeResult.grade !== 'MISS') {
+                this.queueHitEffect(null, triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            }
             return;
         }
 
@@ -2361,7 +2369,7 @@ export class SimaiRenderer {
             if (normAngle < 0) normAngle += Math.PI * 2;
             const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
             if (keyNum >= 1 && keyNum <= 8) {
-                const outerKeyId = 'A' + keyNum;
+                const outerKeyId = 'K' + keyNum;
                 if (this._sensorPointCache.size > 1000) this._sensorPointCache.clear();
                 this._sensorPointCache.set(cacheKey, outerKeyId);
                 return outerKeyId;
@@ -2407,7 +2415,7 @@ export class SimaiRenderer {
             if (normAngle < 0) normAngle += Math.PI * 2;
             const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
             if (keyNum >= 1 && keyNum <= 8) {
-                resultId = 'A' + keyNum;
+                resultId = (r >= innerCirleBase * 1.05) ? ('K' + keyNum) : ('A' + keyNum);
             }
         }
 

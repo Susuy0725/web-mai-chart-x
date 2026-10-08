@@ -8,6 +8,9 @@ export class SecondaryWindowManager {
         this.externalWindow = null;
         this.secondCtx = null;
         this.syncBackground = () => { };
+        this._checkCloseTimer = null;
+        this._isCleaningUp = false;
+        this._ctxConfig = null;
     }
 
     isActive() {
@@ -20,8 +23,71 @@ export class SecondaryWindowManager {
                 this.externalWindow.close();
             } catch (_) { }
         }
-        this.externalWindow = null;
+        this.handleClose();
+    }
+
+    handleClose() {
+        if (this._isCleaningUp) return;
+        this._isCleaningUp = true;
+
+        if (this._checkCloseTimer) {
+            clearInterval(this._checkCloseTimer);
+            this._checkCloseTimer = null;
+        }
+
+        this.syncBackground = () => { };
         this.secondCtx = null;
+        this.externalWindow = null;
+
+        if (typeof this._ctxConfig?.onClose === 'function') {
+            try { this._ctxConfig.onClose(); } catch (e) { }
+        }
+
+        const {
+            canvas,
+            renderer,
+            backgroundContainer,
+            canvasOutline,
+            getSettings,
+            resize,
+            draw,
+            updatePauseBackgroundDisplay,
+            updateVideoBackgroundDisplay
+        } = this._ctxConfig || {};
+
+        if (canvas && renderer) {
+            try {
+                const mainCtx = canvas.getContext('2d');
+                renderer.setContext(mainCtx);
+            } catch (e) { }
+        }
+
+        const settings = typeof getSettings === 'function' ? getSettings() : {};
+
+        if (backgroundContainer) {
+            backgroundContainer.style.display = '';
+        }
+        if (canvasOutline) {
+            canvasOutline.style.display = settings.hideOutline ? 'none' : '';
+        }
+
+        if (typeof updatePauseBackgroundDisplay === 'function') {
+            try { updatePauseBackgroundDisplay(); } catch (_) { }
+        }
+        if (typeof updateVideoBackgroundDisplay === 'function') {
+            try { updateVideoBackgroundDisplay(); } catch (_) { }
+        }
+
+        if (typeof resize === 'function') {
+            try { resize(true); } catch (_) { }
+        }
+
+        if (typeof draw === 'function') {
+            try { draw(); } catch (_) { }
+        }
+
+        this._ctxConfig = null;
+        this._isCleaningUp = false;
     }
 
     open(ctxConfig) {
@@ -29,6 +95,9 @@ export class SecondaryWindowManager {
             this.externalWindow.focus();
             return;
         }
+
+        this._ctxConfig = ctxConfig;
+        this._isCleaningUp = false;
 
         const {
             canvas,
@@ -47,9 +116,16 @@ export class SecondaryWindowManager {
 
         this.externalWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
 
+        if (!this.externalWindow) {
+            console.warn("開啟外部視窗失敗，可能被瀏覽器彈出視窗攔截器阻止");
+            return;
+        }
+
         // 複製主視窗的 style 與 link 標籤（含字型定義）
         Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach(node => {
-            this.externalWindow.document.head.appendChild(node.cloneNode(true));
+            try {
+                this.externalWindow.document.head.appendChild(node.cloneNode(true));
+            } catch (_) { }
         });
 
         // 注入基礎樣式與 Canvas 結構
@@ -118,6 +194,47 @@ export class SecondaryWindowManager {
                 pointer-events: none;
                 -webkit-touch-callout: none;
             }
+            #secControls {
+                position: absolute;
+                bottom: 24px;
+                right: 24px;
+                z-index: 100;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                opacity: 0.75;
+                transition: opacity 0.25s ease, transform 0.2s ease;
+                pointer-events: auto;
+            }
+            #secControls:hover {
+                opacity: 1;
+            }
+            #secPlayBtn {
+                background: rgba(30, 136, 229, 0.88);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                color: #fff;
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                outline: none;
+                padding: 0;
+            }
+            #secPlayBtn:hover {
+                background: rgba(33, 150, 243, 0.98);
+                transform: scale(1.08);
+                box-shadow: 0 6px 20px rgba(33, 150, 243, 0.5);
+            }
+            #secPlayBtn:active {
+                transform: scale(0.95);
+            }
         `;
         this.externalWindow.document.head.appendChild(style);
         this.externalWindow.document.body.innerHTML = `
@@ -126,8 +243,13 @@ export class SecondaryWindowManager {
                     <img id="secBackgroundImage" src="" alt="" onerror="this.style.display='none'">
                     <video id="secBackgroundVideo" src="" alt="" onerror="this.style.display='none'" muted playsinline webkit-playsinline x5-playsinline disablePictureInPicture disableRemotePlayback></video>
                 </div>
-                <img src="./Skin/outline.png" alt="" id="secOutline" onerror="this.style.display='none'">
+                <img src="./Skin/Shared/outline.png" alt="" id="secOutline" onerror="this.style.display='none'">
                 <canvas id="secondary"></canvas>
+            </div>
+            <div id="secControls">
+                <button id="secPlayBtn" title="播放 / 暫停 (Space)" aria-label="Play/Pause">
+                    <svg id="secPlaySvg" width="22" height="22" viewBox="0 0 24 24" fill="#ffffff" style="display:block;margin-left:2px;"><path d="M8 5v14l11-7z"/></svg>
+                </button>
             </div>
         `;
 
@@ -135,6 +257,44 @@ export class SecondaryWindowManager {
         const secBgImg = this.externalWindow.document.getElementById('secBackgroundImage');
         const secBgVideo = this.externalWindow.document.getElementById('secBackgroundVideo');
         const secBgContainer = this.externalWindow.document.getElementById('secBackgroundContainer');
+        const secPlayBtn = this.externalWindow.document.getElementById('secPlayBtn');
+
+        const PLAY_SVG_HTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff" style="display:block;margin-left:2px;"><path d="M8 5v14l11-7z"/></svg>`;
+        const PAUSE_SVG_HTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff" style="display:block;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+
+        let lastIsPlaying = null;
+        const updatePlayBtnState = (force = false) => {
+            if (!secPlayBtn) return;
+            const isPlaying = playButton && playButton.dataset.playing === 'true';
+            if (!force && lastIsPlaying === isPlaying) return;
+            lastIsPlaying = isPlaying;
+            secPlayBtn.innerHTML = isPlaying ? PAUSE_SVG_HTML : PLAY_SVG_HTML;
+            secPlayBtn.title = isPlaying ? '暫停 (Space)' : '播放 (Space)';
+        };
+
+        if (secPlayBtn) {
+            secPlayBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (playButton) {
+                    playButton.click();
+                    updatePlayBtnState(true);
+                }
+            });
+        }
+
+        // 空白鍵快捷鍵控制
+        this.externalWindow.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !e.repeat) {
+                const targetTag = e.target?.tagName?.toLowerCase();
+                if (targetTag !== 'input' && targetTag !== 'textarea') {
+                    e.preventDefault();
+                    if (playButton) {
+                        playButton.click();
+                        updatePlayBtnState(true);
+                    }
+                }
+            }
+        });
 
         if (secBgVideo) {
             secBgVideo.playsInline = true;
@@ -213,6 +373,8 @@ export class SecondaryWindowManager {
                     secBgVideo.playbackRate = settings.playbackSpeed || 1;
                 }
             }
+
+            updatePlayBtnState();
         };
 
         // 隱藏主視窗的背景 Containers 與 Canvas Outline (Skin)
@@ -222,24 +384,27 @@ export class SecondaryWindowManager {
             try { editorBackgroundVideo.pause(); } catch (_) { }
         }
 
-        this.externalWindow.addEventListener('beforeunload', () => {
-            console.log("警告：外部視窗即將關閉");
-            this.syncBackground = () => { };
-            this.secondCtx = null;
-            if (typeof ctxConfig.onClose === 'function') {
-                ctxConfig.onClose();
+        // 註冊可靠關閉監聽（beforeunload, pagehide, unload，加上輪詢 watchdog）
+        const onWindowClose = () => {
+            this.handleClose();
+        };
+
+        this.externalWindow.addEventListener('beforeunload', onWindowClose);
+        this.externalWindow.addEventListener('pagehide', onWindowClose);
+        this.externalWindow.addEventListener('unload', onWindowClose);
+
+        // 每 200ms 輪詢檢查副視窗是否已關閉（防止跨進程關閉未觸發事件回呼）
+        if (this._checkCloseTimer) clearInterval(this._checkCloseTimer);
+        this._checkCloseTimer = setInterval(() => {
+            if (!this.externalWindow || this.externalWindow.closed) {
+                this.handleClose();
             }
-            const mainCtx = canvas.getContext('2d');
-            renderer.setContext(mainCtx);
-            const settings = typeof getSettings === 'function' ? getSettings() : {};
-            if (backgroundContainer) backgroundContainer.style.display = '';
-            if (canvasOutline) canvasOutline.style.display = settings.hideOutline ? 'none' : '';
-            resize(true);
-        });
+        }, 200);
 
         renderer.setContext(this.secondCtx);
 
         const syncResize = () => {
+            if (!this.externalWindow || this.externalWindow.closed) return;
             const dpr = getDPR(this.externalWindow);
             renderer.resize(this.externalWindow.innerWidth, this.externalWindow.innerHeight, dpr, true);
             this.syncBackground();

@@ -1,36 +1,26 @@
 import { simpleToast, popupWindow, createLabeledInput1, ensureJsMediaTags } from '../helper.js';
 import { t } from '../i18n.js';
+import { appContext } from '../core/appContext.js';
 
 /**
  * 開啟譜面資訊編輯彈窗
- * @param {Object} options
- * @param {Function} options.getMaidata
- * @param {Function} options.setMaidata
- * @param {Function} options.getBackgroundImage
- * @param {Function} options.setBackgroundImage
- * @param {Object} options.images
- * @param {HTMLElement} options.editorBackgroundImage
- * @param {Object} options.audioManager
- * @param {Function} options.getNowDifficulty
- * @param {Function} options.setNowDifficulty
- * @param {HTMLSelectElement} options.changeDifficulty
- * @param {Function} options.saveMaidata
- * @param {Function} [options.projSet]
+ * @param {Object} [options={}]
  */
-export function openChartInfoModal({
-    getMaidata,
-    setMaidata,
-    getBackgroundImage,
-    setBackgroundImage,
-    images,
-    editorBackgroundImage,
-    audioManager,
-    getNowDifficulty,
-    setNowDifficulty,
-    changeDifficulty,
-    saveMaidata,
-    projSet
-}) {
+export function openChartInfoModal(options = {}) {
+    const getMaidata = options.getMaidata || appContext.get('getMaidata');
+    const setMaidata = options.setMaidata || appContext.get('setMaidata');
+    const getBackgroundImage = options.getBackgroundImage || appContext.get('getBackgroundImage');
+    const setBackgroundImage = options.setBackgroundImage || appContext.get('setBackgroundImage');
+    const rawImages = options.images !== undefined ? options.images : appContext.get('images');
+    const images = typeof rawImages === 'function' ? rawImages() : rawImages;
+    const editorBackgroundImage = options.editorBackgroundImage || appContext.get('editorBackgroundImage') || document.getElementById('editorBackgroundImage');
+    const audioManager = options.audioManager || appContext.audioManager;
+    const getNowDifficulty = options.getNowDifficulty || appContext.get('getNowDifficulty');
+    const setNowDifficulty = options.setNowDifficulty || appContext.get('setNowDifficulty');
+    const changeDifficulty = options.changeDifficulty || appContext.get('changeDifficulty') || document.getElementById('changeDifficulty');
+    const saveMaidata = options.saveMaidata || appContext.get('saveMaidata');
+    const projSet = options.projSet || appContext.get('projSet');
+    const projGet = options.projGet || appContext.get('projGet');
     const maidata = getMaidata();
     const tempData = { ...(maidata || {}) };
     const inputRefs = {};
@@ -108,17 +98,52 @@ export function openChartInfoModal({
         };
 
         // 左側：圖片更換
+        const defaultCoverUrl = images?.['no_image']?.src || 'Skin/Shared/no_image.png';
         const imgContainer = document.createElement('div');
         imgContainer.className = 'chart-info-img-container';
         const img = document.createElement('img');
         img.className = 'chart-info-img';
         img.onerror = () => {
             img.onerror = null;
-            img.src = 'Skin/Shared/no_image.png';
+            img.src = defaultCoverUrl;
         };
-        img.src = (backgroundImage && backgroundImage.size > 0)
-            ? URL.createObjectURL(backgroundImage)
-            : (images?.['no_image']?.src || 'Skin/Shared/no_image.png');
+
+        const currentBg = typeof getBackgroundImage === 'function' ? getBackgroundImage() : null;
+        let isImageSet = false;
+
+        if (currentBg instanceof Blob && currentBg.size > 0) {
+            try {
+                img.src = URL.createObjectURL(currentBg);
+                isImageSet = true;
+            } catch (_) {}
+        } else if (typeof currentBg === 'string' && currentBg.trim()) {
+            img.src = currentBg;
+            isImageSet = true;
+        } else if (editorBackgroundImage && editorBackgroundImage.src && !editorBackgroundImage.src.endsWith('no_image.png')) {
+            img.src = editorBackgroundImage.src;
+            isImageSet = true;
+        }
+
+        if (!isImageSet) {
+            img.src = defaultCoverUrl;
+            if (typeof projGet === 'function') {
+                projGet('background_image').then((bgFile) => {
+                    if (!isImageSet && bgFile instanceof Blob && bgFile.size > 0) {
+                        try {
+                            const url = URL.createObjectURL(bgFile);
+                            img.src = url;
+                            isImageSet = true;
+                            if (typeof setBackgroundImage === 'function') {
+                                setBackgroundImage(bgFile);
+                            }
+                            if (editorBackgroundImage) {
+                                editorBackgroundImage.src = url;
+                            }
+                        } catch (_) {}
+                    }
+                }).catch(() => {});
+            }
+        }
 
         const imgWrapper = document.createElement('div');
         imgWrapper.className = 'chart-info-img-wrapper';
@@ -138,12 +163,19 @@ export function openChartInfoModal({
                 if (file) {
                     const objectUrl = URL.createObjectURL(file);
                     img.src = objectUrl;
-                    setBackgroundImage(file);
+                    isImageSet = true;
+                    if (typeof setBackgroundImage === 'function') {
+                        setBackgroundImage(file);
+                    }
                     if (editorBackgroundImage) {
                         editorBackgroundImage.src = objectUrl;
                         editorBackgroundImage.style.display = 'block';
                     }
-                    if (typeof projSet === 'function') projSet('background_image', file);
+                    if (typeof projSet === 'function') {
+                        projSet('background_image', file).catch((err) => {
+                            console.error('儲存封面至 IndexedDB 失敗:', err);
+                        });
+                    }
                 }
             };
             fileInput.click();

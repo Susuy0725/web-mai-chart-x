@@ -10,7 +10,16 @@ export function runInitModal(ctx) {
     // 1. 背景非同步啟動圖片素材與音效載入（不阻塞使用者檢視與操作編輯器）
     (async () => {
         try {
-            const loadedImages = await ctx.loadAllImages();
+            let initSkin = 'Default';
+            try {
+                const sStr = await ctx.idbGet('simai_settings');
+                if (sStr) {
+                    const parsed = JSON.parse(sStr);
+                    if (parsed && parsed.skin) initSkin = parsed.skin;
+                }
+            } catch (_) { }
+
+            const loadedImages = await ctx.loadAllImages(null, initSkin);
             ctx.setImages(loadedImages);
             if (typeof ctx.getRenderer === 'function' && ctx.getRenderer()) {
                 ctx.getRenderer().setImages(loadedImages);
@@ -46,11 +55,11 @@ export function runInitModal(ctx) {
         try {
             const step = () => {};
 
-            // 確定並建立當前專案
-            await setupCurrentProject(ctx, step);
-
-            // 讀取並自動補齊全域設定
-            const settings = await loadAndRestoreSettings(ctx, step);
+            // 平行確定專案與讀取設定（兩者互不相依），縮短首屏啟動時間
+            const [, settings] = await Promise.all([
+                setupCurrentProject(ctx, step),
+                loadAndRestoreSettings(ctx, step),
+            ]);
 
             // 載入專案譜面資料與設定編輯器 UI
             await setupEditorUIAndData(ctx, settings, step);
@@ -104,9 +113,9 @@ async function loadAssets(ctx, step) {
 async function setupCurrentProject(ctx, step) {
     step(78, t('popup.init.initProjects'));
 
-    const migratedId = await ctx.migrateFromLegacy();
-    const lastId = localStorage.getItem('simai_lastProjectId');
     const list = await ctx.projectList();
+    const migratedId = await ctx.migrateFromLegacy(list);
+    const lastId = localStorage.getItem('simai_lastProjectId');
     const isDatabaseEmpty = (!migratedId && (!list || list.length === 0));
     if (typeof ctx.setIsDatabaseEmpty === 'function') {
         ctx.setIsDatabaseEmpty(isDatabaseEmpty);

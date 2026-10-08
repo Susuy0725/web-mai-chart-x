@@ -295,21 +295,27 @@ export const sharedAssetKeys = new Set([
 
 /**
  * 取得指定 key 的所有可能皮膚候選路徑 (依優先序排列)
- * 1. Skin/Default/{type}/{fileName}
- * 2. Skin/Shared/{type}/{fileName} 或 Skin/Shared/{fileName}
- * 3. Skin/{fileName} (根目錄 fallback)
+ * 1. Skin/{skinName}/{type}/{fileName} (若指定如 Deluxe 則優先嘗試)
+ * 2. Skin/Default/{type}/{fileName} (若 skinName 非 Default 則作為備用)
+ * 3. Skin/Shared/{type}/{fileName} 或 Skin/Shared/{fileName}
+ * 4. Skin/{fileName} (根目錄 fallback)
  * @param {string} key 
  * @param {string} baseURL 
+ * @param {string} [skinName='Default']
  * @returns {string[]}
  */
-export function getSkinCandidateUrls(key, baseURL) {
-    // 若該素材屬於純共用素材 (Shared)，優先從 Shared 載入以避免不必要的 Default 404 紀錄
+export function getSkinCandidateUrls(key, baseURL, skinName = 'Default') {
+    const skin = (skinName && typeof skinName === 'string') ? skinName : 'Default';
+
+    // 若該素材屬於純共用素材 (Shared)，優先從 Shared 載入以避免不必要的 404 紀錄
     if (sharedAssetKeys.has(key)) {
-        return [
+        const list = [
             `${baseURL}Shared/${key}.png`,
-            `${baseURL}Default/${key}.png`,
-            `${baseURL}${key}.png`
+            `${baseURL}${skin}/${key}.png`,
         ];
+        if (skin !== 'Default') list.push(`${baseURL}Default/${key}.png`);
+        list.push(`${baseURL}${key}.png`);
+        return Array.from(new Set(list));
     }
 
     const urls = [];
@@ -317,17 +323,20 @@ export function getSkinCandidateUrls(key, baseURL) {
 
     if (rel) {
         // rel 形如 "TapSkins/tap.png"
-        urls.push(`${baseURL}Default/${rel}`);
+        urls.push(`${baseURL}${skin}/${rel}`);
+        if (skin !== 'Default') urls.push(`${baseURL}Default/${rel}`);
         urls.push(`${baseURL}Shared/${rel}`);
         urls.push(`${baseURL}Shared/${key}.png`);
         urls.push(`${baseURL}${key}.png`);
     } else {
         const type = inferSkinType(key);
         if (type) {
-            urls.push(`${baseURL}Default/${type}/${key}.png`);
+            urls.push(`${baseURL}${skin}/${type}/${key}.png`);
+            if (skin !== 'Default') urls.push(`${baseURL}Default/${type}/${key}.png`);
             urls.push(`${baseURL}Shared/${type}/${key}.png`);
         }
-        urls.push(`${baseURL}Default/${key}.png`);
+        urls.push(`${baseURL}${skin}/${key}.png`);
+        if (skin !== 'Default') urls.push(`${baseURL}Default/${key}.png`);
         urls.push(`${baseURL}Shared/${key}.png`);
         urls.push(`${baseURL}${key}.png`);
     }
@@ -337,17 +346,20 @@ export function getSkinCandidateUrls(key, baseURL) {
     if (alias && alias !== key) {
         const aliasRel = defaultSkinMap[alias] || defaultSkinMap[alias.toLowerCase()];
         if (aliasRel) {
-            urls.push(`${baseURL}Default/${aliasRel}`);
+            urls.push(`${baseURL}${skin}/${aliasRel}`);
+            if (skin !== 'Default') urls.push(`${baseURL}Default/${aliasRel}`);
             urls.push(`${baseURL}Shared/${aliasRel}`);
             urls.push(`${baseURL}Shared/${alias}.png`);
             urls.push(`${baseURL}${alias}.png`);
         } else {
             const aliasType = inferSkinType(alias);
             if (aliasType) {
-                urls.push(`${baseURL}Default/${aliasType}/${alias}.png`);
+                urls.push(`${baseURL}${skin}/${aliasType}/${alias}.png`);
+                if (skin !== 'Default') urls.push(`${baseURL}Default/${aliasType}/${alias}.png`);
                 urls.push(`${baseURL}Shared/${aliasType}/${alias}.png`);
             }
-            urls.push(`${baseURL}Default/${alias}.png`);
+            urls.push(`${baseURL}${skin}/${alias}.png`);
+            if (skin !== 'Default') urls.push(`${baseURL}Default/${alias}.png`);
             urls.push(`${baseURL}Shared/${alias}.png`);
             urls.push(`${baseURL}${alias}.png`);
         }
@@ -355,8 +367,12 @@ export function getSkinCandidateUrls(key, baseURL) {
 
     // 針對 judge_text_break 與 no_image 特殊回退保護
     if (key === 'judge_text_break') {
-        urls.push(`${baseURL}Default/JudgeTextSkins/judge_text_cPerfect_break.png`);
-        urls.push(`${baseURL}Default/JudgeTextSkins/judge_text_perfect_break.png`);
+        urls.push(`${baseURL}${skin}/JudgeTextSkins/judge_text_cPerfect_break.png`);
+        urls.push(`${baseURL}${skin}/JudgeTextSkins/judge_text_perfect_break.png`);
+        if (skin !== 'Default') {
+            urls.push(`${baseURL}Default/JudgeTextSkins/judge_text_cPerfect_break.png`);
+            urls.push(`${baseURL}Default/JudgeTextSkins/judge_text_perfect_break.png`);
+        }
         urls.push(`${baseURL}Shared/JudgeTextSkins/judge_text_cPerfect_break.png`);
         urls.push(`${baseURL}Shared/JudgeTextSkins/judge_text_perfect_break.png`);
     } else if (key === 'no_image') {

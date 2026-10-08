@@ -2,24 +2,26 @@ import { popupWindow, clamp, createCustomSlider, simpleToast } from '../helper.j
 import { settingsConfig } from '../core/settingsConfig.js';
 import { t, setLang } from '../i18n.js';
 import { idbSet } from '../indexDB.js';
+import { appContext } from '../core/appContext.js';
+import { eventBus, EVENTS } from '../core/eventBus.js';
 
 /**
  * 開啟全域設定彈窗
- * @param {Object} options
- * @param {Object} options.settings 全域設定物件
- * @param {Object} options.audioManager 音訊管理器
- * @param {Function} options.saveSettingsDebounce 儲存設定防抖函數
- * @param {Function} options.setEditorCss 編輯器樣式套用函數
- * @param {Function} options.draw 畫布重繪函數
+ * @param {Object} [options={}]
+ * @param {Object} [options.settings] 全域設定物件 (預設自 appContext 取得)
+ * @param {Object} [options.audioManager] 音訊管理器 (預設自 appContext 取得)
+ * @param {Function} [options.saveSettingsDebounce] 儲存設定防抖函數
+ * @param {Function} [options.setEditorCss] 編輯器樣式套用函數
+ * @param {Function} [options.draw] 畫布重繪函數
+ * @param {number} [options.initialTab=0]
  */
-export function openSettingsModal({
-    settings,
-    audioManager,
-    saveSettingsDebounce,
-    setEditorCss,
-    draw,
-    initialTab = 0
-}) {
+export function openSettingsModal(options = {}) {
+    const settings = options.settings || appContext.settings;
+    const audioManager = options.audioManager || appContext.audioManager;
+    const saveSettingsDebounce = options.saveSettingsDebounce || (() => appContext.saveSettings());
+    const setEditorCss = options.setEditorCss || appContext.get('setEditorCss');
+    const draw = options.draw || (() => appContext.draw());
+    const initialTab = options.initialTab || 0;
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
 
@@ -172,12 +174,22 @@ export function openSettingsModal({
             }
         });
 
+        // 透過 appContext 同步並派發變更事件
+        Object.keys(values).forEach(id => {
+            appContext.setSetting(id, values[id]);
+        });
+
         Object.keys(inputRefs).forEach(id => {
             if (inputRefs[id].apply) {
-                inputRefs[id].apply(values[id], values);
+                try {
+                    inputRefs[id].apply(values[id], values);
+                } catch (err) {
+                    console.error(`[settingsModal] Error applying setting "${id}":`, err);
+                }
             }
         });
 
+        eventBus.emit(EVENTS.SETTINGS_SAVED, { allSettings: settings });
         if (saveSettingsDebounce) saveSettingsDebounce();
         if (setEditorCss) setEditorCss();
         if (draw) draw();
@@ -248,8 +260,10 @@ export function openSettingsModal({
                 el = createCheckbox(currentVal, `settings-${item.id}`);
                 el.addEventListener('change', (e) => {
                     try {
-                        targetRef[targetKey] = e.target.checked;
-                        if (item.apply) item.apply(e.target.checked);
+                        const checked = e.target.checked;
+                        targetRef[targetKey] = checked;
+                        appContext.setSetting(targetKey, checked);
+                        if (item.apply) item.apply(checked);
                     } catch (err) { }
                 });
                 el.addEventListener('click', (e) => e.stopPropagation());
@@ -258,8 +272,11 @@ export function openSettingsModal({
             else if (item.type === 'dropdown') {
                 el = createDropdown(currentVal, item.options);
                 el.addEventListener('change', async (e) => {
-                    const newValue = e.target.value;
-                    try { targetRef[targetKey] = newValue; } catch (err) { }
+                    const newValue = isNaN(e.target.value) ? e.target.value : parseFloat(e.target.value);
+                    try {
+                        targetRef[targetKey] = newValue;
+                        appContext.setSetting(targetKey, newValue);
+                    } catch (err) { }
                     if (item.id === 'lang') {
                         el.disabled = true;
                         const success = await setLang(newValue);
@@ -289,6 +306,7 @@ export function openSettingsModal({
                 el = createCustomSlider(currentVal, item.min, item.max, item.step, (val) => {
                     try {
                         targetRef[targetKey] = val;
+                        appContext.setSetting(targetKey, val);
                         if (item.apply) item.apply(val);
                     } catch (err) { }
                 });
@@ -309,6 +327,7 @@ export function openSettingsModal({
                         try {
                             el.value[subKey] = subVal;
                             targetRef[targetKey][subKey] = subVal;
+                            appContext.setSetting(targetKey, targetRef[targetKey]);
                             if (item.apply) item.apply(targetRef[targetKey]);
                         } catch (e) { }
                     });

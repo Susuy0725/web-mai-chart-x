@@ -96,33 +96,37 @@ export function debounce(func, delay = 300) {
         if (timer) clearTimeout(timer);
 
         timer = setTimeout(() => {
+            const a = lastArgs;
+            const t = lastThis;
             timer = null;
-            func.apply(lastThis, lastArgs);
             lastArgs = null;
             lastThis = null;
+            func.apply(t, a);
         }, delay);
     };
 
-    debounced.flush = function () {
+    debounced.cancel = () => {
         if (timer) {
             clearTimeout(timer);
             timer = null;
-            const res = func.apply(lastThis, lastArgs);
-            lastArgs = null;
-            lastThis = null;
-            return res;
         }
+        lastArgs = null;
+        lastThis = null;
     };
 
-    debounced.cancel = function () {
+    debounced.flush = () => {
         if (timer) {
             clearTimeout(timer);
             timer = null;
+            const a = lastArgs;
+            const t = lastThis;
             lastArgs = null;
             lastThis = null;
+            return func.apply(t, a);
         }
     };
 
+    debounced.pending = () => timer !== null;
     return debounced;
 }
 
@@ -138,105 +142,6 @@ export function throttle(func, delay = 16) {
     };
 }
 
-export function parseTag(str, open, close, specialCase = false) {
-    const regex = new RegExp(`\\${open}([^\\${open}\\${close}]*)\\${close}`, 'g');
-    const matches = [...str.matchAll(regex)];
-    const residue = str.replace(regex, '');
-    if (residue.includes(open) || residue.includes(close)) {
-        return { error: `Invalid format: nested or unmatched ${open}${close}` };
-    }
-    let lastValue = null;
-    for (const match of matches) {
-        const val = match[1].trim();
-        if (val.startsWith('#') && specialCase) { // direct assign #duration
-            const duration = parseFloat(val.substring(1));
-            if (isNaN(duration) || duration < 0) {
-                return { error: `Invalid duration value in direct assign ${open}${close}: must be a non-negative number` };
-            }
-            return { residue: residue.trim(), value: duration, override: true };
-        }
-        if (val === '' || isNaN(val) || parseFloat(val) <= 0) {
-            return { error: `Invalid value in ${open}${close}: must be a positive number` };
-        }
-        lastValue = parseFloat(val);
-    }
-    return { residue: residue.trim(), value: lastValue };
-}
-export function parseBeats(str, bpm, slide = false) {
-    if (slide) {
-        if (str.includes("##")) {
-            const parts = str.split("##");
-            if (parts.length === 3) { // dt##bpm##t:b
-                const delay = parseFloat(parts[0]);
-                const overrideBpm = parseFloat(parts[1]);
-                if (isNaN(delay) || delay < 0 || isNaN(overrideBpm) || overrideBpm <= 0) {
-                    console.warn("Invalid delay or bpm value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                const [time, beat] = parts[2].split(":");
-                if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-                    console.warn("Invalid time or beat value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
-            } else if (parts.length === 2) { // dt##t:b dt##t
-                const delay = parseFloat(parts[0]);
-                if (isNaN(delay) || delay < 0) {
-                    console.warn("Invalid delay value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                if (parts[1].includes(":")) {
-                    const [time, beat] = parts[1].split(":");
-                    if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-                        console.warn("Invalid time or beat value in slide note:", str);
-                        return { time: -1, delay: -1 };
-                    }
-                    return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
-                }
-                const time = parseFloat(parts[1]);
-                if (isNaN(time) || time < 0) {
-                    console.warn("Invalid time value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                return { time: time, delay: delay };
-            }
-        } else if (str.includes("#") && !str.includes(":")) { // bpm#t
-            const [bpmStr, timeStr] = str.split("#").map(s => s.trim());
-            const overrideBpm = parseFloat(bpmStr);
-            const time = parseFloat(timeStr);
-            if (isNaN(overrideBpm) || overrideBpm <= 0 || isNaN(time) || time < 0) {
-                console.warn("Invalid bpm or time value in slide note:", str);
-                return { time: -1, delay: -1 };
-            }
-            return { time: time, delay: (60 / overrideBpm) };
-        }
-    } else {
-        if (str.startsWith('#')) { // direct assign #duration
-            const duration = parseFloat(str.substring(1));
-            if (isNaN(duration) || duration < 0) {
-                console.warn("Invalid duration value in direct assign note:", str);
-                return { time: -1, delay: -1 };
-            }
-            return { time: duration, delay: 0 };
-        }
-    }
-    if (str.includes(":")) { // bpm#t:b or t:b
-        const [time, beat] = str.split(":");
-        if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-            console.warn("Invalid time or beat value in hold note:", str);
-            return { time: -1, delay: -1 };
-        }
-        if (time.includes("#")) {
-            const [bpmStr, timeStr] = time.split("#");
-            const overrideBpm = parseFloat(bpmStr);
-            return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(timeStr)), delay: (60 / overrideBpm) };
-        } else {
-            return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: (60 / bpm) };
-        }
-    }
-    console.warn("Invalid hold duration format or empty:", str);
-    return { time: -1, delay: -1 };
-}
 export class PathRecorder {
     constructor() {
         this.segments = [];
@@ -888,11 +793,13 @@ export function popupWindow({
 
     return ctx;
 }
-export function simpleToast({
-    content = "",
-    timeout = 2000,
-    type = "info"
-} = {}) {
+export function simpleToast(options = {}) {
+    const opts = typeof options === 'string' ? { content: options } : (options || {});
+    const {
+        content = "",
+        timeout = 2000,
+        type = "info"
+    } = opts;
 
     const MAX_TOASTS = 3;
 
@@ -1015,7 +922,7 @@ export function simpleToast({
  * 載入所有圖片素材，支援進度回報
  * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)
  */
-export async function loadAllImages(onProgress) {
+export async function loadAllImages(onProgress, skinName = 'Default') {
     const images = {};
 
     const totalCore = coreImageKeys.length;
@@ -1034,10 +941,10 @@ export async function loadAllImages(onProgress) {
 
     // 1. 優先載入首屏必需的核心元件（大幅縮減 LCP 阻塞時間）
     const coreQueue = coreImageKeys.map(async key => {
-        const candidates = getSkinCandidateUrls(key, baseURL);
+        const candidates = getSkinCandidateUrls(key, baseURL, skinName);
         try {
             try {
-                const img = await getImgWithCandidates(candidates, key);
+                const img = await getImgWithCandidates(candidates, key, skinName);
                 if (img) registerImgWithAliases(key, img);
             } catch (err) {
                 console.warn(`[資源缺失] 無法載入 ${key}:`, err);
@@ -1060,9 +967,9 @@ export async function loadAllImages(onProgress) {
         for (let i = 0; i < secondaryKeys.length; i += batchSize) {
             const batch = secondaryKeys.slice(i, i + batchSize);
             await Promise.all(batch.map(async key => {
-                const candidates = getSkinCandidateUrls(key, baseURL);
+                const candidates = getSkinCandidateUrls(key, baseURL, skinName);
                 try {
-                    const img = await getImgWithCandidates(candidates, key);
+                    const img = await getImgWithCandidates(candidates, key, skinName);
                     if (img) registerImgWithAliases(key, img);
                 } catch (err) {
                     console.warn(`[背景資源缺失] 無法載入 ${key}:`, err);
@@ -1076,13 +983,15 @@ export async function loadAllImages(onProgress) {
 
 /**
  * 載入指定 key 的圖片素材，依優先序回退：
- * 1. 優先從 Skin/Default/{type}/{fileName} 載入
- * 2. 若 Default 不存在，改從 Skin/Shared/{type}/{fileName} (或 Skin/Shared/{fileName}) 載入
- * 3. 降級保底原有的 Skin/{fileName} 載入
+ * 1. 優先從 Skin/{skinName}/{type}/{fileName} 載入
+ * 2. 若指定皮膚不存在且非 Default，嘗試 Skin/Default/...
+ * 3. 嘗試 Skin/Shared/{type}/{fileName} (或 Skin/Shared/{fileName}) 載入
+ * 4. 降級保底原有的 Skin/{fileName} 載入
  * @param {string[]} candidateUrls 候選 URL 陣列 (依優先序排列)
  * @param {string} key 素材識別碼
+ * @param {string} [skinName='Default']
  */
-async function getImgWithCandidates(candidateUrls, key) {
+async function getImgWithCandidates(candidateUrls, key, skinName = 'Default') {
     const loadBlobAsImage = (b) => new Promise((resolve, reject) => {
         const img = new Image();
         const objUrl = URL.createObjectURL(b);
@@ -1093,17 +1002,22 @@ async function getImgWithCandidates(candidateUrls, key) {
         };
         img.onerror = async () => {
             URL.revokeObjectURL(objUrl);
-            await idbDelete(`img_cache_skin_${key}`).catch(() => { });
+            await idbDelete(`img_cache_skin_${skinName}_${key}`).catch(() => { });
             reject(new Error(`Failed to decode image blob for key: ${key}`));
         };
         img.src = objUrl;
     });
 
-    // 1. 嘗試從 IndexedDB 取得皮膚快取 (使用 img_cache_skin_ 前綴避免舊快取干擾)
-    let blob = await idbGet(`img_cache_skin_${key}`).catch(() => null);
+    const cacheKey = `img_cache_skin_${skinName}_${key}`;
+
+    // 1. 嘗試從 IndexedDB 取得皮膚快取 (依 skinName 隔離快取，Default 支援向下相容舊 key)
+    let blob = await idbGet(cacheKey).catch(() => null);
+    if (!blob && skinName === 'Default') {
+        blob = await idbGet(`img_cache_skin_${key}`).catch(() => null);
+    }
 
     if (blob && blob.type && !blob.type.startsWith('image/')) {
-        await idbDelete(`img_cache_skin_${key}`).catch(() => { });
+        await idbDelete(cacheKey).catch(() => { });
         blob = null;
     }
 
@@ -1115,7 +1029,7 @@ async function getImgWithCandidates(candidateUrls, key) {
         }
     }
 
-    // 2. 依候選路徑依序嘗試載入：優先 Default -> 其次 Shared -> 最後 Fallback
+    // 2. 依候選路徑依序嘗試載入：優先指定皮膚 -> 其次 Default -> 再次 Shared -> 最後 Fallback
     let lastError = null;
     for (const url of candidateUrls) {
         try {
@@ -1125,7 +1039,7 @@ async function getImgWithCandidates(candidateUrls, key) {
             if (contentType && contentType.includes('text/html')) continue; // Vite SPA fallback
             blob = await response.blob();
             const img = await loadBlobAsImage(blob);
-            await idbSet(`img_cache_skin_${key}`, blob).catch(() => { });
+            await idbSet(cacheKey, blob).catch(() => { });
             return img;
         } catch (err) {
             lastError = err;
@@ -1135,9 +1049,9 @@ async function getImgWithCandidates(candidateUrls, key) {
     throw lastError || new Error(`All candidate skin URLs failed for ${key}`);
 }
 
-async function getImgWithCache(url, key) {
-    const candidates = [url, ...getSkinCandidateUrls(key, baseURL)];
-    return await getImgWithCandidates(candidates, key);
+async function getImgWithCache(url, key, skinName = 'Default') {
+    const candidates = [url, ...getSkinCandidateUrls(key, baseURL, skinName)];
+    return await getImgWithCandidates(candidates, key, skinName);
 }
 export function generatePath(startPos, endPos) {
     console.warn("path missing, using straight line as fallback");
@@ -2026,9 +1940,11 @@ function drawAllPerfectOverlay(ctx, apT, w, h) {
 export async function videoRender(audioManager, canvas, renderer, {
     start = 0,
     end = 0,
-    fps = 30,
-    width = 1080,
-    height = 720,
+    fps = 60,
+    width = 1920,
+    height = 1080,
+    bitrate = null,
+    quality = 'high',
     bgmVolume = 0.8,
     sfxVolume = 1.0,
     includeAudio = true,
@@ -2045,11 +1961,18 @@ export async function videoRender(audioManager, canvas, renderer, {
     overallBrightness = 1.0,
     movieBrightness = null,
     noteBrightness = 1.0,
+    settings: customSettings = null,
+    outlineImage: customOutlineImage = null,
+    draw = null,
 } = {}) {
+    const effectiveDraw = typeof draw === 'function'
+        ? draw
+        : (typeof window !== 'undefined' && typeof window.draw === 'function' ? window.draw : null);
+
     if (!window.Mediabunny) {
         await ensureMediabunny();
     }
-    const settings = renderer.settings || window.settings || {};
+    const settings = customSettings || renderer?.settings || window.settings || {};
 
     // 計算背景與音符的最終亮度係數
     const baseMovieBrightness = movieBrightness !== null && movieBrightness !== undefined
@@ -2063,33 +1986,43 @@ export async function videoRender(audioManager, canvas, renderer, {
         Mp4OutputFormat,
         CanvasSource,
         AudioBufferSource,
-        QUALITY_HIGH
+        QUALITY_HIGH,
+        QUALITY_VERY_HIGH,
     } = window.Mediabunny || {};
 
     const introDuration = includeIntro ? 6 : 0;
 
-    const outlineImage = await (async () => {
-        try {
-            const response = await fetch('./Skin/outline.png');
-            if (!response.ok) throw new Error('fetch failed: ' + response.status);
-            const blob = await response.blob();
-            try {
-                if (window.createImageBitmap) return await createImageBitmap(blob);
-            } catch (e) {
-                console.warn('createImageBitmap 失敗，改用 Image element', e);
-            }
-            return await new Promise((res, rej) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
-                img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
-                img.src = URL.createObjectURL(blob);
-            });
-        } catch (e) {
-            console.error(`外框圖片載入失敗`, e);
-            return null;
+    let outlineImage = customOutlineImage;
+    if (!outlineImage && !settings.hideOutline) {
+        const domOutline = typeof document !== 'undefined' ? document.getElementById('canvasOutline') : null;
+        if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
+            outlineImage = domOutline;
+        } else {
+            outlineImage = await (async () => {
+                try {
+                    const outlineSrc = domOutline?.src || './Skin/Shared/outline.png';
+                    const response = await fetch(outlineSrc);
+                    if (!response.ok) throw new Error('fetch failed: ' + response.status);
+                    const blob = await response.blob();
+                    try {
+                        if (window.createImageBitmap) return await createImageBitmap(blob, { resizeQuality: 'high' });
+                    } catch (e) {
+                        console.warn('createImageBitmap 失敗，改用 Image element', e);
+                    }
+                    return await new Promise((res, rej) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
+                        img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
+                        img.src = URL.createObjectURL(blob);
+                    });
+                } catch (e) {
+                    console.error(`外框圖片載入失敗`, e);
+                    return null;
+                }
+            })();
         }
-    })();
+    }
 
     if (end <= start) {
         console.log(end, start);
@@ -2122,13 +2055,24 @@ export async function videoRender(audioManager, canvas, renderer, {
         }
 
         // 強制確保寬高為偶數 (AVC/H.264 編碼器嚴格要求，避免奇數尺寸拋錯)
-        const targetW = Math.max(2, Math.round((Number(width) || 1080) / 2) * 2);
-        const targetH = Math.max(2, Math.round((Number(height) || 720) / 2) * 2);
+        const targetW = Math.max(2, Math.round((Number(width) || 1920) / 2) * 2);
+        const targetH = Math.max(2, Math.round((Number(height) || 1080) / 2) * 2);
 
         const off = document.createElement('canvas');
         off.width = targetW;
         off.height = targetH;
-        const offCtx = off.getContext('2d');
+        const offCtx = off.getContext('2d', {
+            alpha: false,
+            desynchronized: false,
+            willReadFrequently: false
+        });
+
+        // 確保離屏繪製 context 具備高品質影像平滑
+        offCtx.imageSmoothingEnabled = true;
+        offCtx.imageSmoothingQuality = 'high';
+        if ('textRendering' in offCtx) {
+            try { offCtx.textRendering = 'geometricPrecision'; } catch (_) { }
+        }
 
         // 鎖定 off 畫布尺寸，避免外部事件或意外 resize 竄改寬高
         try {
@@ -2167,17 +2111,45 @@ export async function videoRender(audioManager, canvas, renderer, {
             renderer.setContext(offCtx);
         }
         exportRenderer.resize(targetW, targetH, 1, true);
+        if (exportRenderer.ctx) {
+            exportRenderer.ctx.imageSmoothingEnabled = true;
+            exportRenderer.ctx.imageSmoothingQuality = 'high';
+        }
 
         const target = new BufferTarget();
         const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
         output = new Output({ format, target });
 
+        // 計算最適合音遊高速動態畫面的視訊編碼位元率 (Bitrate)
+        let resolvedBitrate;
+        if (typeof bitrate === 'number' && bitrate > 0) {
+            resolvedBitrate = Math.round(bitrate);
+        } else {
+            // 根據解析度、FPS 與品質模式動態自適應計算 (bps)
+            // 基準：1080p 60fps
+            const pixels = targetW * targetH;
+            const refPixels = 1920 * 1080;
+            const pixelRatio = Math.max(0.5, pixels / refPixels);
+            const fpsRatio = Math.max(0.6, Math.min(fps, 120) / 60);
+
+            let baseBps = 20_000_000; // 預設 high: 20 Mbps @ 1080p 60fps
+            if (quality === 'ultra') {
+                baseBps = 28_000_000; // ultra: 28 Mbps @ 1080p 60fps
+            } else if (quality === 'medium') {
+                baseBps = 10_000_000; // medium: 10 Mbps @ 1080p 60fps
+            } else if (quality === 'low') {
+                baseBps = 5_000_000; // medium: 10 Mbps @ 1080p 60fps
+            }
+            resolvedBitrate = Math.round(Math.max(6_000_000, baseBps * Math.pow(pixelRatio, 0.9) * Math.pow(fpsRatio, 0.75)));
+        }
+
         // 視訊軌設定
         const encodingConfig = {
             codec: 'avc',
-            bitrate: QUALITY_HIGH,
-            keyFrameInterval: 0.5,
-            latencyMode: 'quality'
+            bitrate: resolvedBitrate,
+            keyFrameInterval: 2.0, // 2 秒關鍵幀，提升 GOP 編碼效率與動態畫質，消除過密 I 幀帶來的瞬時模糊
+            latencyMode: 'quality',
+            bitrateMode: 'variable'
         };
 
         const videoSource = new CanvasSource(off, encodingConfig);
@@ -2705,6 +2677,8 @@ export async function videoRender(audioManager, canvas, renderer, {
             try {
                 offCtx.save();
                 offCtx.setTransform(1, 0, 0, 1, 0, 0);
+                offCtx.imageSmoothingEnabled = true;
+                offCtx.imageSmoothingQuality = 'high';
                 offCtx.fillStyle = settings.backgroundColor || '#000';
                 offCtx.fillRect(0, 0, off.width, off.height);
                 const rs = exportRenderer.scale || scale;
@@ -2784,13 +2758,17 @@ export async function videoRender(audioManager, canvas, renderer, {
                     offCtx.filter = 'none';
                 }
 
-                if (outlineImage) {
+                if (!settings.hideOutline && outlineImage) {
                     const p = Math.min(targetW, targetH) / scaleBase * rs;
                     offCtx.setTransform(p, 0, 0, p, targetW / 2, targetH / 2);
+                    offCtx.imageSmoothingEnabled = true;
+                    offCtx.imageSmoothingQuality = 'high';
                     offCtx.drawImage(outlineImage, scaleBase * -0.5 * 0.9, scaleBase * -0.5 * 0.9, scaleBase * 0.9, scaleBase * 0.9);
                 }
             } finally {
                 offCtx.restore();
+                offCtx.imageSmoothingEnabled = true;
+                offCtx.imageSmoothingQuality = 'high';
             }
 
             try {
@@ -2925,7 +2903,34 @@ export async function videoRender(audioManager, canvas, renderer, {
                 try { renderer.resize(currentContext.canvas.width, currentContext.canvas.height, 1, true); } catch (e) { }
             }
         }
+        if (effectiveDraw) {
+            try {
+                effectiveDraw();
+            } catch (e) {
+                console.error("videoRender 完成後呼叫 draw 失敗:", e);
+            }
+        }
     }
+}
+
+function binarySearchLowerBound(arr, val) {
+    let low = 0, high = arr.length;
+    while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (arr[mid] < val) low = mid + 1;
+        else high = mid;
+    }
+    return low;
+}
+
+function binarySearchUpperBound(arr, val) {
+    let low = 0, high = arr.length;
+    while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (arr[mid] <= val) low = mid + 1;
+        else high = mid;
+    }
+    return low;
 }
 
 export class SimaiLogicControler {
@@ -2941,9 +2946,411 @@ export class SimaiLogicControler {
             noteQuantity: this._noteQuantity,
             nowIndex: 0
         };
+
+        this.useLegacyScan = false;
+        this._canOptimize = false;
+        this._isSorted = true;
+        this._preparedNotes = null;
+        this._preparedPlayScoreRes = null;
+        this._lastGlobalTime = -99999;
+        this._noteTimes = new Float64Array(0);
+        this._nonSlideTimes = new Float64Array(0);
+        this._nonSlideIndexes = new Int32Array(0);
+        this._comboTimes = new Float64Array(0);
+        this._prefixScores = new Float64Array(0);
+        this._prefixBreak = new Int32Array(0);
+        this._prefixHold = new Int32Array(0);
+        this._prefixTap = new Int32Array(0);
+        this._prefixTouch = new Int32Array(0);
+        this._prefixSlide = new Int32Array(0);
+        this._maxRetain = 10;
     }
 
-    get({
+    prepare(notes, playScoreRes) {
+        this._preparedNotes = notes;
+        this._preparedPlayScoreRes = playScoreRes;
+        const len = notes ? notes.length : 0;
+        if (len === 0) {
+            this._canOptimize = false;
+            return;
+        }
+
+        const noteTimes = new Float64Array(len);
+        let maxRetain = 0;
+        let isSorted = true;
+
+        for (let i = 0; i < len; i++) {
+            const n = notes[i];
+            noteTimes[i] = n.time;
+            if (i > 0 && n.time < notes[i - 1].time) isSorted = false;
+
+            const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0);
+            const renderSkipT = n.type === 'slide' ? ((n.slideDelay ?? 0) + (n.slideDuration ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0)) : skipT;
+            if (renderSkipT > maxRetain) maxRetain = renderSkipT;
+        }
+
+        this._isSorted = isSorted;
+        this._noteTimes = noteTimes;
+        this._maxRetain = maxRetain + 3.0; // 包含 decay 緩衝
+
+        // Non-slide 音符，用於快速二分搜尋 nowIndex
+        const nsTimes = [];
+        const nsIndexes = [];
+        for (let i = 0; i < len; i++) {
+            const n = notes[i];
+            if (n.type !== 'slide' && n.index !== undefined && n.index !== null) {
+                nsTimes.push(n.time);
+                nsIndexes.push(n.index);
+            }
+        }
+        this._nonSlideTimes = new Float64Array(nsTimes);
+        this._nonSlideIndexes = new Int32Array(nsIndexes);
+
+        // 前綴和陣列建構 (Combo / Score / noteQuantity)
+        const invScore = playScoreRes?.invScore || 0;
+        const breakScore = playScoreRes?.breakScore || 0;
+        const comboEvents = [];
+
+        for (let i = 0; i < len; i++) {
+            const n = notes[i];
+            const noteType = n.type;
+            const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0);
+
+            let counts = false;
+            let finishTime = n.time;
+
+            if (noteType === 'slide') {
+                if (n.lastSlide) {
+                    counts = true;
+                    finishTime = n.time + skipT;
+                }
+            } else if (noteType === 'hold') {
+                counts = true;
+                finishTime = n.time + skipT;
+            } else if (noteType === 'touch' && n.holdDuration !== undefined) {
+                counts = true;
+                finishTime = n.time + skipT;
+            } else {
+                counts = true;
+                finishTime = n.time;
+            }
+
+            if (counts) {
+                const baseWeight = n.isBreak ? 5 : (noteType === 'slide' ? 3 : (n.holdDuration !== undefined ? 2 : 1));
+                const scoreInc = (baseWeight * invScore) * 100 + (n.isBreak ? breakScore : 0);
+                comboEvents.push({
+                    time: finishTime,
+                    origIndex: i,
+                    isBreak: !!n.isBreak,
+                    isHold: !!n.isHold,
+                    type: noteType,
+                    scoreInc
+                });
+            }
+        }
+
+        comboEvents.sort((a, b) => a.time === b.time ? a.origIndex - b.origIndex : a.time - b.time);
+
+        const evCount = comboEvents.length;
+        this._comboTimes = new Float64Array(evCount);
+        this._prefixScores = new Float64Array(evCount + 1);
+        this._prefixBreak = new Int32Array(evCount + 1);
+        this._prefixHold = new Int32Array(evCount + 1);
+        this._prefixTap = new Int32Array(evCount + 1);
+        this._prefixTouch = new Int32Array(evCount + 1);
+        this._prefixSlide = new Int32Array(evCount + 1);
+
+        let curScore = 0;
+        let curBreak = 0, curHold = 0, curTap = 0, curTouch = 0, curSlide = 0;
+
+        for (let i = 0; i < evCount; i++) {
+            const ev = comboEvents[i];
+            this._comboTimes[i] = ev.time;
+            curScore += ev.scoreInc;
+            if (ev.isBreak) curBreak++;
+            else if (ev.isHold) curHold++;
+            else if (ev.type === 'slide') curSlide++;
+            else if (ev.type === 'touch') curTouch++;
+            else curTap++;
+
+            this._prefixScores[i + 1] = curScore;
+            this._prefixBreak[i + 1] = curBreak;
+            this._prefixHold[i + 1] = curHold;
+            this._prefixTap[i + 1] = curTap;
+            this._prefixTouch[i + 1] = curTouch;
+            this._prefixSlide[i + 1] = curSlide;
+        }
+
+        this._canOptimize = isSorted;
+    }
+
+    resetAudioFlags(notes, globalTime) {
+        const lookAhead = 0.1;
+        for (let i = 0; i < notes.length; i++) {
+            const n = notes[i];
+            const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0);
+            const startTargetT = n.time + (n.slideDelay ?? 0);
+            n._startEffectPlayed = (startTargetT - globalTime <= lookAhead);
+            const endTargetT = n.time + skipT;
+            n._endEffectPlayed = (endTargetT - globalTime <= lookAhead);
+            if (n.time - globalTime > 0 && n._riserActive) {
+                n._riserActive = false;
+            }
+        }
+    }
+
+    get(params) {
+        if (this.useLegacyScan || !this._canOptimize) {
+            return this.getLegacy(params);
+        }
+        if (this._preparedNotes !== params.notes || this._preparedPlayScoreRes !== params.playScoreRes) {
+            this.prepare(params.notes, params.playScoreRes);
+            if (!this._canOptimize) {
+                return this.getLegacy(params);
+            }
+        }
+        return this.getOptimized(params);
+    }
+
+    getOptimized(params) {
+        const {
+            renderer,
+            globalTime,
+            realTime,
+            musicDelay,
+            playing,
+            timeControlSliding,
+            readyBeat,
+            clockBpm = 60,
+            playedClock,
+            settings = {},
+            visualHeight,
+            notes = [],
+            decodedTags,
+            nowIndex,
+            skipAudioQueue = false,
+            audioManager,
+        } = params;
+
+        const validVisualHeight = (typeof visualHeight === 'number' && Number.isFinite(visualHeight)) ? Math.max(0, visualHeight) : 0;
+        const zoom = (settings.visualZoom && Number.isFinite(settings.visualZoom) && settings.visualZoom > 0) ? settings.visualZoom : 1;
+        const V = validVisualHeight / zoom;
+        const effectDecayTime = settings.effectDecayTime;
+        const hanabiEffectDecayTime = settings.hanabiEffectDecayTime;
+        const maxSlideCount = settings.maxSlideCount;
+        const middleDistance = settings.middleDistance;
+        const notesLength = notes.length;
+
+        let curNowIndex = nowIndex;
+        if (notesLength > 0 && notes[0] && realTime < notes[0].time) {
+            curNowIndex = 0;
+        } else if (this._nonSlideTimes.length > 0) {
+            const targetT = realTime - musicDelay;
+            const idx = binarySearchUpperBound(this._nonSlideTimes, targetT) - 1;
+            if (idx >= 0) {
+                curNowIndex = this._nonSlideIndexes[idx];
+            } else {
+                curNowIndex = 0;
+            }
+        }
+
+        // 節拍器邏輯
+        if (playing && readyBeat) {
+            const effectiveBpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
+            const beatDuration = 240 / effectiveBpm;
+            for (let i = 0; i < 4; i++) {
+                const clockT = (i / 4) * beatDuration - globalTime;
+                if (clockT > 0) {
+                    playedClock[i] = false;
+                } else if (!playedClock[i]) {
+                    audioManager.queueSoundSingle('clock', clockT);
+                    playedClock[i] = true;
+                }
+            }
+        }
+
+        // 清空桶子
+        this._buckets.slide.length = 0;
+        this._buckets.tapnhold.length = 0;
+        this._buckets.touch.length = 0;
+
+        this._visualBuckets.slide.length = 0;
+        this._visualBuckets.tapnhold.length = 0;
+        this._visualBuckets.touch.length = 0;
+        this._visualBuckets.tags = decodedTags || [];
+
+        // 二分搜尋取得 Combo / Score / noteQuantity (O(log N))
+        const k = binarySearchLowerBound(this._comboTimes, globalTime);
+        const playCombo = k;
+        const playScore = this._prefixScores[k];
+        this._noteQuantity.break = this._prefixBreak[k];
+        this._noteQuantity.hold = this._prefixHold[k];
+        this._noteQuantity.tap = this._prefixTap[k];
+        this._noteQuantity.touch = this._prefixTouch[k];
+        this._noteQuantity.slide = this._prefixSlide[k];
+
+        // 倒帶或跳轉時重置狀態
+        const isSeekOrRewind = timeControlSliding || Math.abs(globalTime - this._lastGlobalTime) > 0.3 || globalTime < this._lastGlobalTime;
+        if (isSeekOrRewind && !skipAudioQueue) {
+            this.resetAudioFlags(notes, globalTime);
+        }
+        this._lastGlobalTime = globalTime;
+
+        // 二分搜尋可見音符視窗區間 [lo, hi)
+        const safeV = Number.isFinite(V) ? Math.max(0, V) : 0;
+        const searchLo = globalTime - Math.max(this._maxRetain, safeV + this._maxRetain);
+        const searchHi = globalTime + Math.max(6, safeV);
+        const lo = binarySearchLowerBound(this._noteTimes, searchLo);
+        const hi = binarySearchUpperBound(this._noteTimes, searchHi);
+
+        const baseSpeed = settings.speed || 1;
+        const baseTouchSpeed = settings.touchSpeed || 1;
+        const calcPiecewiseSpeed = (x) => {
+            if (x >= 1) return x * 0.8833 + 0.8167;
+            if (x <= -1) return x * 0.8833 - 0.8167;
+            return x * 1.7;
+        };
+        const baseSpeedCoeff = calcPiecewiseSpeed(baseSpeed);
+        const baseTouchSpeedCoeff = calcPiecewiseSpeed(baseTouchSpeed);
+
+        const buckets = this._buckets;
+        const visualBuckets = this._visualBuckets;
+
+        // 僅走訪視窗內音符 (從後往前，維持完全相同的桶子順序)
+        for (let i = hi - 1; i >= lo; i--) {
+            const note = notes[i];
+            const noteT = note.time - globalTime;
+            const noteType = note.type;
+            const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
+
+            const noteHispeed = note.hispeed ?? 1;
+            const speedCoeff = noteHispeed === 1 ? baseSpeedCoeff : calcPiecewiseSpeed(baseSpeed * noteHispeed);
+            const touchSpeedCoeff = noteHispeed === 1 ? baseTouchSpeedCoeff : calcPiecewiseSpeed(baseTouchSpeed * noteHispeed);
+
+            // 音效和狀態管理
+            if (!skipAudioQueue) {
+                const lookAhead = 0.1;
+                const startTargetT = note.time + (note.slideDelay ?? 0);
+                const startNoteT = startTargetT - globalTime;
+                const endTargetT = note.time + skipT;
+                const endNoteT = endTargetT - globalTime;
+
+                if (playing && !timeControlSliding) {
+                    if (noteType === "touch" && note.holdDuration > 0) {
+                        const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
+                        const noteId = `riser_${note.pos}_${note.time}`;
+                        if (isInsideHold && !note._riserActive) {
+                            audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
+                            note._riserActive = true;
+                        } else if (!isInsideHold && note._riserActive) {
+                            audioManager.stopLongSound(noteId);
+                            note._riserActive = false;
+                        }
+                    }
+
+                    if (startNoteT > lookAhead) {
+                        note._startEffectPlayed = false;
+                    } else if (startNoteT >= -0.05) {
+                        if (!note._startEffectPlayed) {
+                            if (!(noteType === "slide" && !note.firstSlide)) {
+                                audioManager.queueSound(note, startTargetT);
+                            }
+                            note._startEffectPlayed = true;
+                        }
+                    } else {
+                        note._startEffectPlayed = true;
+                    }
+
+                    if (endNoteT > lookAhead) {
+                        note._endEffectPlayed = false;
+                    } else if (endNoteT >= -0.05) {
+                        if (!note._endEffectPlayed) {
+                            const shouldPlayEndSound =
+                                (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                                note.isHanabi ||
+                                (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
+                            if (shouldPlayEndSound) {
+                                audioManager.queueSound(note, endTargetT);
+                            }
+                            note._endEffectPlayed = true;
+                        }
+                    } else {
+                        note._endEffectPlayed = true;
+                    }
+                } else {
+                    if (startNoteT > lookAhead) {
+                        note._startEffectPlayed = false;
+                    } else {
+                        note._startEffectPlayed = true;
+                    }
+                    if (endNoteT > lookAhead) {
+                        note._endEffectPlayed = false;
+                    } else {
+                        note._endEffectPlayed = true;
+                    }
+                    if (note.time - globalTime > 0) {
+                        if (note._riserActive) {
+                            audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
+                            note._riserActive = false;
+                        }
+                    }
+                }
+            }
+
+            // 繪製可見性判斷
+            const renderSkipT = noteType === 'slide' ? ((note.slideDelay ?? 0) + (note.slideDuration ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0)) : skipT;
+            const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
+
+            let isVisible = false;
+            if (-noteT <= renderSkipT + decay && noteT < 6) {
+                const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
+                const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
+
+                isVisible =
+                    (noteType === "slide" ? t >= middleDistance :
+                        noteType === "touch" ? touchT >= -1 :
+                            t >= -1);
+            }
+
+            const isVisualVisible = noteT >= 0
+                ? Math.abs(noteT) <= V
+                : -noteT <= V + skipT;
+
+            if (isVisible) {
+                if (noteType === 'slide') {
+                    buckets.slide.push(note);
+                } else if (noteType === 'hold' || noteType === 'tap') {
+                    buckets.tapnhold.push(note);
+                } else if (noteType === 'touch') {
+                    buckets.touch.push(note);
+                }
+            }
+
+            if (isVisualVisible) {
+                if (noteType === 'slide') {
+                    visualBuckets.slide.push(note);
+                } else if (noteType === 'hold' || noteType === 'tap') {
+                    visualBuckets.tapnhold.push(note);
+                } else if (noteType === 'touch') {
+                    visualBuckets.touch.push(note);
+                }
+            }
+        }
+
+        if (buckets.slide.length > maxSlideCount) {
+            buckets.slide.sort((a, b) => (b.time + (b.slideDelay ?? 0)) - (a.time + (a.slideDelay ?? 0)));
+            buckets.slide.splice(0, buckets.slide.length - maxSlideCount);
+        }
+
+        this._visualBuckets.tags = decodedTags || [];
+
+        this._result.playCombo = playCombo;
+        this._result.playScore = playScore;
+        this._result.nowIndex = curNowIndex;
+        return this._result;
+    }
+
+    getLegacy({
         renderer,
         globalTime,
         realTime,
@@ -3065,6 +3472,12 @@ export class SimaiLogicControler {
 
             // 音效和狀態管理
             if (!skipAudioQueue) {
+                const lookAhead = 0.1; // 100ms look-ahead
+                const startTargetT = note.time + (note.slideDelay ?? 0);
+                const startNoteT = startTargetT - globalTime;
+                const endTargetT = note.time + skipT;
+                const endNoteT = endTargetT - globalTime;
+
                 if (playing && !timeControlSliding) {
                     // Riser 邏輯
                     if (noteType === "touch" && note.holdDuration > 0) {
@@ -3079,40 +3492,48 @@ export class SimaiLogicControler {
                         }
                     }
 
-                    const lookAhead = 0.1; // 100ms look-ahead
-
-                    // 開始音效 (含前瞻)
-                    const startTargetT = note.time + (note.slideDelay ?? 0);
-                    const startNoteT = startTargetT - globalTime;
-                    if (startNoteT <= lookAhead && !note._startEffectPlayed) {
-                        if (!(noteType === "slide" && !note.firstSlide)) {
-                            audioManager.queueSound(note, startTargetT);
+                    // 開始音效 (含前瞻，僅在 [-0.05, lookAhead] 視窗內發聲)
+                    if (startNoteT > lookAhead) {
+                        note._startEffectPlayed = false;
+                    } else if (startNoteT >= -0.05) {
+                        if (!note._startEffectPlayed) {
+                            if (!(noteType === "slide" && !note.firstSlide)) {
+                                audioManager.queueSound(note, startTargetT);
+                            }
+                            note._startEffectPlayed = true;
                         }
+                    } else {
                         note._startEffectPlayed = true;
                     }
-                    // 結束音效 (含前瞻)
-                    const endTargetT = note.time + skipT;
-                    const endNoteT = endTargetT - globalTime;
-                    if (endNoteT <= lookAhead && !note._endEffectPlayed) {
-                        const shouldPlayEndSound =
-                            (noteType === "slide" && note.lastSlide && note.isBreak) ||
-                            note.isHanabi ||
-                            (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
-                        if (shouldPlayEndSound) {
-                            audioManager.queueSound(note, endTargetT);
+
+                    // 結束音效 (含前瞻，僅在 [-0.05, lookAhead] 視窗內發聲)
+                    if (endNoteT > lookAhead) {
+                        note._endEffectPlayed = false;
+                    } else if (endNoteT >= -0.05) {
+                        if (!note._endEffectPlayed) {
+                            const shouldPlayEndSound =
+                                (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                                note.isHanabi ||
+                                (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
+                            if (shouldPlayEndSound) {
+                                audioManager.queueSound(note, endTargetT);
+                            }
+                            note._endEffectPlayed = true;
                         }
+                    } else {
                         note._endEffectPlayed = true;
                     }
                 } else {
-                    // 倒帶或拖動時重置狀態
-                    const lookAhead = 0.1;
-                    const startTargetT = note.time + (note.slideDelay ?? 0);
-                    const endTargetT = note.time + skipT;
-                    if (startTargetT - globalTime > lookAhead) {
+                    // 倒帶、拖動或暫停時重置狀態
+                    if (startNoteT > lookAhead) {
                         note._startEffectPlayed = false;
+                    } else {
+                        note._startEffectPlayed = true;
                     }
-                    if (endTargetT - globalTime > lookAhead) {
+                    if (endNoteT > lookAhead) {
                         note._endEffectPlayed = false;
+                    } else {
+                        note._endEffectPlayed = true;
                     }
                     if (note.time - globalTime > 0) {
                         if (note._riserActive) {

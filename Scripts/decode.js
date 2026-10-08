@@ -1,4 +1,4 @@
-import { parseTag, parseBeats, PathRecorder, noteRefPos, innerCirleBase, isObject } from './helper.js';
+import { PathRecorder, noteRefPos, innerCirleBase, isObject } from './helper.js';
 
 export let warns = [];
 export let warnpos = [];
@@ -103,6 +103,81 @@ function parsePropertyTag(tagContent) {
     return { valid: false, raw: trimmed, error: `Unknown property tag: "${trimmed}"` };
 }
 
+function parseBeats(str, bpm, slide = false) {
+    if (slide) {
+        if (str.includes("##")) {
+            const parts = str.split("##");
+            if (parts.length === 3) { // dt##bpm##t:b
+                const delay = parseFloat(parts[0]);
+                const overrideBpm = parseFloat(parts[1]);
+                if (isNaN(delay) || delay < 0 || isNaN(overrideBpm) || overrideBpm <= 0) {
+                    console.warn("Invalid delay or bpm value in slide note:", str);
+                    return { time: -1, delay: -1 };
+                }
+                const [time, beat] = parts[2].split(":");
+                if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
+                    console.warn("Invalid time or beat value in slide note:", str);
+                    return { time: -1, delay: -1 };
+                }
+                return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
+            } else if (parts.length === 2) { // dt##t:b dt##t
+                const delay = parseFloat(parts[0]);
+                if (isNaN(delay) || delay < 0) {
+                    console.warn("Invalid delay value in slide note:", str);
+                    return { time: -1, delay: -1 };
+                }
+                if (parts[1].includes(":")) {
+                    const [time, beat] = parts[1].split(":");
+                    if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
+                        console.warn("Invalid time or beat value in slide note:", str);
+                        return { time: -1, delay: -1 };
+                    }
+                    return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
+                }
+                const time = parseFloat(parts[1]);
+                if (isNaN(time) || time < 0) {
+                    console.warn("Invalid time value in slide note:", str);
+                    return { time: -1, delay: -1 };
+                }
+                return { time: time, delay: delay };
+            }
+        } else if (str.includes("#") && !str.includes(":")) { // bpm#t
+            const [bpmStr, timeStr] = str.split("#").map(s => s.trim());
+            const overrideBpm = parseFloat(bpmStr);
+            const time = parseFloat(timeStr);
+            if (isNaN(overrideBpm) || overrideBpm <= 0 || isNaN(time) || time < 0) {
+                console.warn("Invalid bpm or time value in slide note:", str);
+                return { time: -1, delay: -1 };
+            }
+            return { time: time, delay: (60 / overrideBpm) };
+        }
+    } else {
+        if (str.startsWith('#')) { // direct assign #duration
+            const duration = parseFloat(str.substring(1));
+            if (isNaN(duration) || duration < 0) {
+                console.warn("Invalid duration value in direct assign note:", str);
+                return { time: -1, delay: -1 };
+            }
+            return { time: duration, delay: 0 };
+        }
+    }
+    if (str.includes(":")) { // bpm#t:b or t:b
+        const [time, beat] = str.split(":");
+        if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
+            console.warn("Invalid time or beat value in hold note:", str);
+            return { time: -1, delay: -1 };
+        }
+        if (time.includes("#")) {
+            const [bpmStr, timeStr] = time.split("#");
+            const overrideBpm = parseFloat(bpmStr);
+            return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(timeStr)), delay: (60 / overrideBpm) };
+        } else {
+            return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: (60 / bpm) };
+        }
+    }
+    console.warn("Invalid hold duration format or empty:", str);
+    return { time: -1, delay: -1 };
+}
 // Pre-computed mathematical constants
 const PI = Math.PI;
 const HALF_PI = Math.PI * 0.5;

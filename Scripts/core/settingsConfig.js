@@ -1,7 +1,8 @@
 import { getCurrentLang, getLangSetting, setLang, getAvailableLanguages, detectDefaultLanguage, t } from '../i18n.js';
-import { audioManager } from '../audioManager.js';
+import { eventBus, EVENTS } from './eventBus.js';
 import { openExportSelectionModal, openImportSelectionModal } from '../modals/maintenanceModal.js';
 import { openResourceManager } from '../modals/resourceManagerModal.js';
+import { simpleToast } from '../helper.js';
 
 export const defaultSettings = {
     // Game
@@ -10,6 +11,7 @@ export const defaultSettings = {
     slideSpeed: 0,
     middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數(101%+), 3: 分數(101%-)
     moviebrightness: -3,
+    skin: 'Default',
     showSensor: true,
     rotateStars: true,
     pinkStars: false,
@@ -91,8 +93,11 @@ export const settingsConfig = [
                     { value: '-2', label: 'settings.items.dark' },
                     { value: '-3', label: 'settings.items.veryDark' },
                 ],
-                def: defaultSettings.moviebrightness || 0,
-                apply: (val) => window.applyMovieBrightness?.(val),
+                def: defaultSettings.moviebrightness ?? -3,
+                apply: (val) => {
+                    const fn = window.applyMovieBrightness;
+                    if (fn) fn(val);
+                }
             },
             {
                 id: 'pinkStars',
@@ -125,6 +130,16 @@ export const settingsConfig = [
         label: 'settings.tabs.display',
         items: [
             {
+                id: 'skin',
+                type: 'dropdown',
+                label: 'settings.items.skin',
+                options: [
+                    { value: 'Default', label: 'Default' },
+                    { value: 'Deluxe', label: 'Deluxe' },
+                ],
+                def: defaultSettings.skin || 'Default',
+            },
+            {
                 id: 'showSensor',
                 type: 'checkbox',
                 label: 'settings.items.showSensor',
@@ -141,18 +156,12 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.hideBackgroundWhenPaused',
                 def: defaultSettings.hideBackgroundWhenPaused,
-                apply: () => {
-                    window.updateVideoBackgroundDisplay?.();
-                }
             },
             {
                 id: 'disableVideo',
                 type: 'checkbox',
                 label: 'settings.items.disableVideo',
                 def: defaultSettings.disableVideo || false,
-                apply: () => {
-                    window.updateVideoBackgroundDisplay?.();
-                }
             },
             {
                 id: 'rotateStars',
@@ -171,19 +180,12 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.hideOutline',
                 def: defaultSettings.hideOutline || false,
-                apply: (val) => {
-                    const canvasOutline = document.getElementById('canvasOutline');
-                    if (canvasOutline) canvasOutline.style.display = val ? 'none' : '';
-                }
             },
             {
                 id: 'showCoverWhenPaused',
                 type: 'checkbox',
                 label: 'settings.items.showCoverWhenPaused',
                 def: defaultSettings.showCoverWhenPaused || false,
-                apply: () => {
-                    window.updateVideoBackgroundDisplay?.();
-                }
             },
             {
                 id: 'drawHitEffect',
@@ -199,24 +201,18 @@ export const settingsConfig = [
             },
             {
                 id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,
-                apply: (val) => { renderer.settings.showJudge = val; draw(); }
             },
             {
                 id: 'showCriticalPerfect', type: 'checkbox', label: 'settings.items.showCriticalPerfect', def: defaultSettings.showCriticalPerfect ?? true,
-                apply: (val) => { renderer.settings.showCriticalPerfect = val; draw(); }
             },
             {
                 id: 'showBreakCriticalPerfect', type: 'checkbox', label: 'settings.items.showBreakCriticalPerfect', def: defaultSettings.showBreakCriticalPerfect ?? true,
-                apply: (val) => { renderer.settings.showBreakCriticalPerfect = val; draw(); }
             },
             {
                 id: 'lowRes',
                 type: 'checkbox',
                 label: 'settings.items.lowRes',
                 def: defaultSettings.lowRes || false,
-                apply: () => {
-                    window.resize?.(true);
-                }
             },
             {
                 id: 'resetPanelRatio',
@@ -224,17 +220,7 @@ export const settingsConfig = [
                 label: 'settings.items.resetPanelRatio',
                 btnText: 'popup.reset',
                 onClick: () => {
-                    const settings = window.settings || {};
-                    settings.splitRatio = 0.5;
-                    settings.canvasSnapped = false;
-                    window.applySplitRatio?.(0.5);
-                    if (window.canvasSnapped) {
-                        window.snapRestoreCanvas?.();
-                    }
-                    window.setEditorCss?.();
-                    window.resize?.(true);
-                    window.draw?.();
-                    window.saveSettingsDebounce?.();
+                    eventBus.emit(EVENTS.LAYOUT_RESET);
                     simpleToast({ content: t('toast.panelRatioReset'), type: 'info', timeout: 1500 });
                 }
             }
@@ -245,19 +231,15 @@ export const settingsConfig = [
         items: [
             {
                 id: 'globalVolume', type: 'range', label: 'settings.items.globalVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.globalVolume,
-                apply: (val) => { audioManager.setGlobalVolume(val); }
             },
             {
                 id: 'musicVolume', type: 'range', label: 'settings.items.musicVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.musicVolume,
-                apply: (val) => { audioManager.setBGMVolume(val); }
             },
             {
                 id: 'SfxVolume', type: 'range', label: 'settings.items.SfxVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.SfxVolume,
-                apply: (val) => { audioManager.setSFXVolume(val); }
             },
             {
                 id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,
-                apply: (val) => { audioManager.setSFXVolumes(val); }
             },
             {
                 id: 'notPlayHoldEnd',
@@ -274,7 +256,7 @@ export const settingsConfig = [
                 id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
             },
             {
-                id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100, step: 1, def: defaultSettings.maxSlideCount
+                id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount
             },
             {
                 id: 'inputDebounceTime', type: 'number', label: 'settings.items.inputDebounceTime', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime

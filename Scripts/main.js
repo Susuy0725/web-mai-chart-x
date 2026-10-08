@@ -1,5 +1,5 @@
-import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags } from './features/visualEditor.js';
-import { showFloatingMenu, hideFloatingMenu, showBoxFloatingMenu, hideBoxFloatingMenu } from './features/visualFloatingMenu.js';
+import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags, openDivisionInputModal } from './features/visualEditor.js';
+import { showFloatingMenu, hideFloatingMenu, showBoxFloatingMenu, hideBoxFloatingMenu, showTagFloatingMenu } from './features/visualFloatingMenu.js';
 import { openNoteDurationModal } from './modals/noteDurationModal.js';
 import { openSlideEditorModal } from './modals/slideEditorModal.js';
 import { openTouchGroupModal } from './modals/touchGroupModal.js';
@@ -97,6 +97,17 @@ window.simpleToast = simpleToast;
 
 const simaiLogicControler = new SimaiLogicControler(audioManager);
 
+const isVisualMode = () => settings.displayMode === 'visual';
+
+const saveSettingsDebounce = debounce(() => {
+    if (majdataWs.isConnected()) {
+        majdataWs.sendSetting(settings);
+    }
+    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
+        console.error('儲存設定到 IndexedDB 失敗:', error);
+    });
+}, 300);
+
 
 
 if (typeof document !== 'undefined' && document.fonts) {
@@ -160,6 +171,8 @@ const visualDivisionBtn = document.getElementById('visualDivisionBtn');
 const visualDivisionPaletteEl = document.getElementById('visualDivisionPalette');
 const currentDivisionText = document.getElementById('currentDivisionText');
 const currentNoteIconContainer = document.getElementById('currentNoteIconContainer');
+const visualLayerGroupEl = document.getElementById('visualLayerGroup');
+const visualLayerBtn = document.getElementById('visualLayerBtn');
 
 const setVisualToolUI = (mode) => {
     hideFloatingMenu();
@@ -488,21 +501,16 @@ function updateGridDivisionVisibility() {
 }
 
 function ensureDivisionOption(val) {
-    const strVal = String(val);
-    if (typeof divisionSubMenu !== 'undefined') {
-        divisionSubMenu.ensureItem({
-            value: strVal,
-            title: t('visualToolbar.divisionFraction', { division: strVal }),
-            render: () => `<span class="division-text-btn" translate="no">1/${strVal}</span>`
-        }, 'custom');
-    }
+    // 保持 BPM 子面板僅有 BPM 與 {...}，不向面板動態插入多餘按鈕
 }
 
 function setGridDivisionUI(val) {
-    const strVal = String(val);
-    if (typeof divisionSubMenu !== 'undefined') {
-        ensureDivisionOption(val);
-        divisionSubMenu.setValue(strVal, true);
+    const numVal = parseInt(val, 10);
+    if (!isNaN(numVal) && numVal > 0) {
+        settings.gridDivision = numVal;
+        if (settings.visualSelectedTiming !== 'bpm') {
+            divisionSubMenu?.setValue('custom', true);
+        }
     }
 }
 
@@ -537,20 +545,20 @@ visualToolRadios.forEach(radio => {
     });
 });
 
-// --- 可復用子選單組件 (音符種類、效果附加、網格切分) ---
+// --- 可復用子選單組件 (音符種類、效果附加、BPM與網格切分) ---
 const noteTypeSubMenu = new VisualSubMenu({
     id: 'noteType',
     triggerEl: toolPlaceLabel,
     paletteEl: visualNotePaletteEl,
     iconContainerEl: currentNoteIconContainer || toolPlaceLabel,
     defaultValue: 'tap',
+    isEnabled: () => (settings.visualLayerMode !== 'bpm'),
     itemDefinitions: {
         tap: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
         hold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
         slide: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
         touch: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchSkins/touch.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
-        touchhold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
-        bpm: { render: () => '<span id="currentNoteIcon" class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: bold; color: var(--popup-accent, #00e5ff);">BPM</span>' }
+        touchhold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` }
     },
     onSelect: (noteType) => {
         settings.visualSelectedNoteType = noteType;
@@ -585,50 +593,117 @@ const modifierSubMenu = new VisualSubMenu({
 
 const divisionSubMenu = new VisualSubMenu({
     id: 'division',
-    triggerEl: visualDivisionBtn,
+    triggerEl: toolPlaceLabel,
     paletteEl: visualDivisionPaletteEl,
-    iconContainerEl: currentDivisionText,
-    defaultValue: '4',
+    iconContainerEl: currentNoteIconContainer || toolPlaceLabel,
+    defaultValue: 'custom',
     itemValueAttr: 'divisionVal',
     highlightNonDefault: false,
+    isEnabled: () => (settings.visualLayerMode === 'bpm'),
     itemDefinitions: {
-        '4': { render: () => '<span class="division-text-btn" translate="no">1/4</span>' },
-        '8': { render: () => '<span class="division-text-btn" translate="no">1/8</span>' },
-        '12': { render: () => '<span class="division-text-btn" translate="no">1/12</span>' },
-        '16': { render: () => '<span class="division-text-btn" translate="no">1/16</span>' },
-        '24': { render: () => '<span class="division-text-btn" translate="no">1/24</span>' },
-        '32': { render: () => '<span class="division-text-btn" translate="no">1/32</span>' },
-        '48': { render: () => '<span class="division-text-btn" translate="no">1/48</span>' },
-        '64': { render: () => '<span class="division-text-btn" translate="no">1/64</span>' },
-        'custom': {
-            render: () => `<span class="division-text-btn" translate="no">1/${settings.gridDivision || 4}</span>`,
-            isAction: true,
-            action: () => {
-                const input = prompt(t('visualEditor.divisionPrompt'), settings.gridDivision || 4);
-                if (input === null) return;
-                const val = parseInt(input.trim(), 10);
-                if (!isNaN(val) && val > 0) {
-                    ensureDivisionOption(val);
-                    divisionSubMenu.setValue(String(val));
-                } else {
-                    simpleToast({ content: t('visualEditor.divisionInvalid'), type: 'warning' });
-                }
-            }
+        bpm: {
+            render: () => '<span class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: 800; color: #ffffff;">BPM</span>'
+        },
+        custom: {
+            render: () => '<span class="division-text-btn" translate="no" style="font-size: 11px; font-weight: 800; color: #ffffff;">{...}</span>'
         }
     },
     onSelect: (divVal) => {
-        const numVal = parseInt(divVal, 10);
-        if (!isNaN(numVal) && numVal > 0) {
-            settings.gridDivision = numVal;
-            saveSettingsDebounce();
-            draw();
+        if (divVal === 'bpm') {
+            settings.visualSelectedTiming = 'bpm';
+        } else {
+            settings.visualSelectedTiming = 'custom';
         }
+        const placeRadio = document.getElementById('tool-mode-place');
+        if (placeRadio && !placeRadio.checked) {
+            placeRadio.checked = true;
+            placeRadio.dispatchEvent(new Event('change'));
+        }
+        saveSettingsDebounce();
     }
 });
 
+const setVisualLayerUI = (mode, showNotice = false) => {
+    const isBpm = (mode === 'bpm');
+    settings.visualLayerMode = mode;
+    if (visualEditorRenderer && typeof visualEditorRenderer.setLayerMode === 'function') {
+        visualEditorRenderer.setLayerMode(mode);
+    }
+    if (visualToolBarEl) {
+        visualToolBarEl.classList.toggle('layer-mode-bpm', isBpm);
+    }
+    if (visualLayerBtn) {
+        visualLayerBtn.classList.toggle('active-bpm', isBpm);
+        visualLayerBtn.title = isBpm ? (t('visualToolbar.switchToNoteLayer') || '切換至音符圖層') : (t('visualToolbar.switchToBpmLayer') || '切換至 BPM 與時值圖層');
+        visualLayerBtn.setAttribute('aria-label', visualLayerBtn.title);
+    }
+    const layerIconEl = document.getElementById('visualLayerCurrentIcon');
+    if (layerIconEl) {
+        if (isBpm) {
+            // 目前為 BPM 圖層，顯示目標（音符）圖示 Tap (20px，與放置按鈕完全一致)
+            layerIconEl.innerHTML = '<img src="./Skin/Default/TapSkins/tap.png" alt="Tap" class="layer-tap-img" width="20" height="20" style="width: 20px; height: 20px; object-fit: contain; display: block;">';
+        } else {
+            // 目前為音符圖層，顯示目標（BPM）文字圖示 (白色粗體)
+            layerIconEl.innerHTML = '<span class="modifier-text-btn layer-bpm-text" translate="no" style="color: #ffffff; font-size: 11px; font-weight: 800;">BPM</span>';
+        }
+    }
+    if (toolPlaceLabel) {
+        toolPlaceLabel.title = isBpm ? (t('visualToolbar.toolPlaceTiming') || '放置 BPM / 時值') : (t('visualToolbar.toolPlace') || '放置音符');
+        toolPlaceLabel.setAttribute('aria-label', toolPlaceLabel.title);
+    }
+    if (currentNoteIconContainer) {
+        if (isBpm) {
+            const activeTiming = (settings.visualSelectedTiming === 'bpm') ? 'bpm' : 'custom';
+            divisionSubMenu?.setValue(activeTiming, true);
+        } else {
+            noteTypeSubMenu?.setValue(settings.visualSelectedNoteType || 'tap', true);
+        }
+    }
+    const toolModifierLabel = document.getElementById('toolModifierLabel');
+    const toolModifierRadio = document.getElementById('tool-mode-modifier');
+    const visualModifierPalette = document.getElementById('visualModifierPalette');
+    if (toolModifierLabel) {
+        toolModifierLabel.style.display = isBpm ? 'none' : '';
+    }
+    if (toolModifierRadio) {
+        toolModifierRadio.style.display = 'none';
+    }
+    if (visualModifierPalette && isBpm) {
+        visualModifierPalette.style.display = 'none';
+    }
+
+    if (isBpm) {
+        VisualSubMenu.closeAll();
+        if (toolModifierRadio && toolModifierRadio.checked) {
+            const placeRadio = document.getElementById('tool-mode-place');
+            if (placeRadio) {
+                placeRadio.checked = true;
+                placeRadio.dispatchEvent(new Event('change'));
+            }
+        }
+    }
+    saveSettingsDebounce();
+    draw();
+    if (showNotice) {
+        simpleToast({
+            content: isBpm ? (t('visualEditor.switchedToBpmLayer') || '已切換至 BPM 與時值圖層 (左側放置 BPM，右側放置時值)') : (t('visualEditor.switchedToNoteLayer') || '已切換至音符圖層'),
+            type: 'info',
+            timeout: 1800
+        });
+    }
+};
+
+if (visualLayerBtn) {
+    visualLayerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const nextMode = (settings.visualLayerMode === 'bpm') ? 'note' : 'bpm';
+        setVisualLayerUI(nextMode, true);
+    });
+}
+
 // 根據目前設定初始化子選單項目與主按鈕外觀
 const syncVisualSubMenus = () => {
-    if (settings.visualSelectedNoteType === 'break') {
+    if (settings.visualSelectedNoteType === 'break' || settings.visualSelectedNoteType === 'bpm') {
         settings.visualSelectedNoteType = 'tap';
     }
     if (settings.visualSelectedNoteType) {
@@ -637,9 +712,9 @@ const syncVisualSubMenus = () => {
     if (settings.visualSelectedModifier) {
         modifierSubMenu.setValue(settings.visualSelectedModifier, true);
     }
-    const currentGridDiv = settings.gridDivision || 4;
-    ensureDivisionOption(currentGridDiv);
-    divisionSubMenu.setValue(String(currentGridDiv), true);
+    const activeTiming = (settings.visualSelectedTiming === 'bpm') ? 'bpm' : 'custom';
+    divisionSubMenu.setValue(activeTiming, true);
+    setVisualLayerUI(settings.visualLayerMode || 'note', false);
 };
 syncVisualSubMenus();
 
@@ -892,17 +967,7 @@ const VIDEO_SEEK_THRESHOLD = 0.3; // 當差距超過此值才執行 seek（秒�
 let clockBpm = 60;
 
 const playControlsElement = document.getElementById('playControls');
-const isVisualMode = () => settings.displayMode === 'visual';
 const previewVisible = () => (previewContainer.style.display !== 'none' && playControlsElement?.style.display !== 'none');
-
-const saveSettingsDebounce = debounce(() => {
-    if (majdataWs.isConnected()) {
-        majdataWs.sendSetting(settings);
-    }
-    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
-        console.error('儲存設定到 IndexedDB 失敗:', error);
-    });
-}, 300);
 
 let cachedTimelineMin = 0;
 let cachedTimelineMax = 100;
@@ -1798,7 +1863,10 @@ const {
     getNoteCurrentProperties,
     visualUpdateNoteProperty,
     getNoteTouchGroup,
-    visualUpdateTouchGroup
+    visualUpdateTouchGroup,
+    visualPlaceTimingTag,
+    visualDeleteTag,
+    visualEditTag
 } = createVisualNoteCallbacks({
     quantizeTime,
     getRawData: () => rawData,
@@ -1810,6 +1878,27 @@ const {
     getDecodedTags: () => decodedTags,
     updateEditorAndSave
 });
+
+const onVisualTagSelect = (tag, screenPos) => {
+    hideFloatingMenu();
+    if (!tag || !screenPos) {
+        visualEditorRenderer?.clearSelectedTag();
+        return;
+    }
+    visualEditorRenderer?.setSelectedTag(tag);
+    showTagFloatingMenu(tag, screenPos, {
+        onEdit: (t) => {
+            visualEditTag(t);
+        },
+        onDelete: (t) => {
+            visualDeleteTag(t);
+            visualEditorRenderer?.clearSelectedTag();
+        },
+        onClose: () => {
+            visualEditorRenderer?.clearSelectedTag();
+        }
+    });
+};
 
 const onVisualSelectionChange = (selectedNotes) => {
     // 1. 若處於框選模式且有作用中大框
@@ -1827,67 +1916,71 @@ const onVisualSelectionChange = (selectedNotes) => {
     }
     hideBoxFloatingMenu();
 
-    // 2. 單一音符選取
+    // 2. 單一音符選取 (支援 Tap、Hold、Slide、Touch 等所有單選音符選單與刪除)
     if (selectedNotes && selectedNotes.size === 1) {
         const note = Array.from(selectedNotes)[0];
-        const props = getNoteCurrentProperties(note);
-        if (props && (props.isHold || props.isSlide || props.isTouch)) {
-            const screenPos = visualEditorRenderer?.getNoteScreenPos(note);
-            if (screenPos) {
-                showFloatingMenu(note, screenPos, props, {
-                    onChangeDuration: () => {
-                        hideFloatingMenu();
-                        openNoteDurationModal({
-                            note,
-                            currentDuration: props.duration || '',
-                            isSlide: props.isSlide,
-                            onApply: (newDurationStr) => {
-                                visualUpdateNoteProperty(note, { duration: newDurationStr });
-                                draw();
-                            }
-                        });
-                    },
-                    onChangePattern: () => {
-                        hideFloatingMenu();
-                        openSlideEditorModal({
-                            note,
-                            rawPart: props.part,
-                            renderer,
-                            settings,
-                            images,
-                            onApply: (newSlideStr) => {
-                                visualUpdateNoteProperty(note, { fullSlideString: newSlideStr });
-                                draw();
-                            }
-                        });
-                    },
-                    onEditTouchGroup: () => {
-                        hideFloatingMenu();
-                        const groupData = getNoteTouchGroup(note);
-                        if (!groupData) {
-                            simpleToast({ content: t('visualEditor.touchGroupLoadFailed'), type: 'error', timeout: 1500 });
-                            return;
+        const props = getNoteCurrentProperties(note) || {};
+        const screenPos = visualEditorRenderer?.getNoteScreenPos(note);
+        if (screenPos) {
+            showFloatingMenu(note, screenPos, props, {
+                onChangeDuration: () => {
+                    hideFloatingMenu();
+                    openNoteDurationModal({
+                        note,
+                        currentDuration: props.duration || '',
+                        isSlide: props.isSlide,
+                        onApply: (newDurationStr) => {
+                            visualUpdateNoteProperty(note, { duration: newDurationStr });
+                            draw();
                         }
-                        openTouchGroupModal({
-                            note,
-                            touchGroupData: groupData,
-                            renderer,
-                            settings,
-                            images,
-                            bpm: clockBpm,
-                            onApply: ({ touchNotes }) => {
-                                visualUpdateTouchGroup(groupData.commaIndex, {
-                                    leadingTags: groupData.leadingTags,
-                                    nonTouchParts: groupData.nonTouchParts,
-                                    touchNotes
-                                });
-                                draw();
-                            }
-                        });
+                    });
+                },
+                onChangePattern: () => {
+                    hideFloatingMenu();
+                    openSlideEditorModal({
+                        note,
+                        rawPart: props.part,
+                        renderer,
+                        settings,
+                        images,
+                        onApply: (newSlideStr) => {
+                            visualUpdateNoteProperty(note, { fullSlideString: newSlideStr });
+                            draw();
+                        }
+                    });
+                },
+                onEditTouchGroup: () => {
+                    hideFloatingMenu();
+                    const groupData = getNoteTouchGroup(note);
+                    if (!groupData) {
+                        simpleToast({ content: t('visualEditor.touchGroupLoadFailed'), type: 'error', timeout: 1500 });
+                        return;
                     }
-                });
-                return;
-            }
+                    openTouchGroupModal({
+                        note,
+                        touchGroupData: groupData,
+                        renderer,
+                        settings,
+                        images,
+                        bpm: clockBpm,
+                        onApply: ({ touchNotes }) => {
+                            visualUpdateTouchGroup(groupData.commaIndex, {
+                                leadingTags: groupData.leadingTags,
+                                nonTouchParts: groupData.nonTouchParts,
+                                touchNotes
+                            });
+                            draw();
+                        }
+                    });
+                },
+                onDelete: () => {
+                    hideFloatingMenu();
+                    visualDeleteNote(note);
+                    visualEditorRenderer?.clearSelection();
+                    draw();
+                }
+            });
+            return;
         }
     }
     hideFloatingMenu();
@@ -3636,6 +3729,10 @@ async function _init() {
         visualDeleteNote,
         visualChangeNote,
         visualPlaceHoldNote,
+        visualPlaceTimingTag,
+        visualDeleteTag,
+        visualEditTag,
+        onVisualTagSelect,
         onSelectionChange: onVisualSelectionChange,
         quantizeTime,
         timebaseButton,

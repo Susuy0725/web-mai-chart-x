@@ -85,11 +85,6 @@ function ensureFloatingMenuStyles() {
             background: rgba(255, 255, 255, 0.16) !important;
         }
 
-        .wmc-fnm-item .material-symbols-outlined {
-            font-size: 18px !important;
-            color: var(--popup-accent, #00e5ff) !important;
-            flex-shrink: 0 !important;
-        }
 
         .wmc-box-floating-menu {
             position: fixed !important;
@@ -162,7 +157,7 @@ function ensureMenuElement() {
     document.addEventListener('pointerdown', (e) => {
         if (!menuEl || !menuEl.classList.contains('active')) return;
         if (!menuEl.contains(e.target)) {
-            hideFloatingMenu();
+            hideFloatingMenu(true);
         }
     }, true);
 
@@ -177,7 +172,7 @@ function ensureMenuElement() {
  * @param {Object} callbacks 回呼函式 { onChangeDuration, onChangePattern }
  */
 export function showFloatingMenu(note, screenPos, props, callbacks) {
-    if (!note || !screenPos || !props || (!props.isHold && !props.isSlide && !props.isTouch)) {
+    if (!note || !screenPos || !props) {
         hideFloatingMenu();
         return;
     }
@@ -191,7 +186,7 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     if (props.isHold && !props.isSlide) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="change-duration">
-                <span>${t('visualMenu.editDuration')}</span>
+                <span>${t('visualMenu.editDuration') || '時長設定'}</span>
             </button>
         `;
     }
@@ -199,7 +194,7 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     if (props.isSlide) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="change-pattern">
-                <span>${t('visualMenu.editSlideTrack')}</span>
+                <span>${t('visualMenu.editSlideTrack') || 'Slide設定'}</span>
             </button>
         `;
     }
@@ -207,37 +202,63 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
     if (props.isTouch) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="edit-touch-group">
-                <span>${t('visualMenu.editTouchGroup')}</span>
+                <span>${t('visualMenu.editTouchGroup') || '編輯 Touch 群組'}</span>
             </button>
         `;
     }
 
+    // 所有單選音符皆提供「刪除音符」選項
+    html += `
+        <button type="button" class="wmc-fnm-item" data-action="delete-note" style="color: #ef4444 !important;">
+            <span>${t('visualMenu.deleteNote') || '刪除音符'}</span>
+        </button>
+    `;
+
     menu.innerHTML = html;
 
-    // 綁定選項按鈕點擊事件
+    // 綁定選項按鈕點擊事件 (使用傳入之 callbacks 常數，避免被 hideFloatingMenu 重設影響)
+    const { onChangeDuration, onChangePattern, onEditTouchGroup, onDelete } = callbacks || {};
+
     const durBtn = menu.querySelector('[data-action="change-duration"]');
     if (durBtn) {
-        durBtn.addEventListener('click', () => {
-            if (currentCallbacks?.onChangeDuration) {
-                currentCallbacks.onChangeDuration();
+        durBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFloatingMenu(false);
+            if (onChangeDuration) {
+                onChangeDuration();
             }
         });
     }
 
     const patternBtn = menu.querySelector('[data-action="change-pattern"]');
     if (patternBtn) {
-        patternBtn.addEventListener('click', () => {
-            if (currentCallbacks?.onChangePattern) {
-                currentCallbacks.onChangePattern();
+        patternBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFloatingMenu(false);
+            if (onChangePattern) {
+                onChangePattern();
             }
         });
     }
 
     const touchGroupBtn = menu.querySelector('[data-action="edit-touch-group"]');
     if (touchGroupBtn) {
-        touchGroupBtn.addEventListener('click', () => {
-            if (currentCallbacks?.onEditTouchGroup) {
-                currentCallbacks.onEditTouchGroup();
+        touchGroupBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFloatingMenu(false);
+            if (onEditTouchGroup) {
+                onEditTouchGroup();
+            }
+        });
+    }
+
+    const delBtn = menu.querySelector('[data-action="delete-note"]');
+    if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFloatingMenu(false);
+            if (onDelete) {
+                onDelete(note);
             }
         });
     }
@@ -270,14 +291,100 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
 }
 
 /**
- * 隱藏浮動音符選項選單
+ * 顯示 BPM 或時值標籤的浮動選項選單
+ * @param {Object} tag 選中的標籤物件 { type: 'bpm'|'split', value, time }
+ * @param {Object} screenPos 螢幕物理座標 { clientX, clientY }
+ * @param {Object} callbacks 回呼函式 { onEdit, onDelete }
  */
-export function hideFloatingMenu() {
+export function showTagFloatingMenu(tag, screenPos, callbacks) {
+    if (!tag || !screenPos) {
+        hideFloatingMenu();
+        return;
+    }
+
+    const menu = ensureMenuElement();
+    currentNote = tag;
+    currentCallbacks = callbacks;
+
+    const isBpm = tag.type === 'bpm';
+    const label = isBpm ? (t('visualMenu.editBpm') || '編輯 BPM') : (t('visualMenu.editDivision') || '編輯時值');
+    const delLabel = isBpm ? (t('visualMenu.deleteBpm') || '刪除 BPM') : (t('visualMenu.deleteDivision') || '刪除時值');
+
+    menu.innerHTML = `
+        <button type="button" class="wmc-fnm-item" data-action="edit-tag">
+            <span>${label}</span>
+        </button>
+        <button type="button" class="wmc-fnm-item" data-action="delete-tag" style="color: #ef4444 !important;">
+            <span>${delLabel}</span>
+        </button>
+    `;
+
+    const { onEdit, onDelete } = callbacks || {};
+
+    const editBtn = menu.querySelector('[data-action="edit-tag"]');
+    if (editBtn) {
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFloatingMenu(false);
+            if (onEdit) {
+                onEdit(tag);
+            }
+        });
+    }
+
+    const delBtn = menu.querySelector('[data-action="delete-tag"]');
+    if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFloatingMenu(false);
+            if (onDelete) {
+                onDelete(tag);
+            }
+        });
+    }
+
+    menu.style.visibility = 'hidden';
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    menu.classList.add('active');
+
+    const menuWidth = menu.offsetWidth || 140;
+    const menuHeight = menu.offsetHeight || 80;
+
+    const offset = 16;
+    const spaceRight = window.innerWidth - (screenPos.clientX + offset);
+    let left;
+    if (spaceRight >= menuWidth + 8) {
+        left = screenPos.clientX + offset;
+    } else {
+        left = Math.max(8, screenPos.clientX - offset - menuWidth);
+    }
+
+    const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, screenPos.clientY - menuHeight / 2));
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+    menu.style.visibility = 'visible';
+}
+
+/**
+ * 隱藏浮動音符選項選單
+ * @param {boolean} isCanceled 是否因點擊空白處或取消而關閉
+ */
+export function hideFloatingMenu(isCanceled = false) {
     if (menuEl && menuEl.classList.contains('active')) {
         menuEl.classList.remove('active');
         menuEl.style.visibility = 'hidden';
+        const cb = currentCallbacks;
         currentNote = null;
         currentCallbacks = null;
+        if (isCanceled && cb?.onClose) {
+            try {
+                cb.onClose();
+            } catch (e) {
+                console.error(e);
+            }
+        }
     }
 }
 
@@ -312,7 +419,7 @@ export function showBoxFloatingMenu(boxRect, count, callbacks) {
     const menu = ensureBoxMenuElement();
     menu.innerHTML = `
         <button type="button" class="wmc-box-fnm-btn" data-action="delete">
-            <span>${t('visualMenu.deleteSelected')} ${count}</span>
+            <span>${t('visualMenu.deleteSelected') || '刪除選取'} (${count})</span>
         </button>
     `;
 

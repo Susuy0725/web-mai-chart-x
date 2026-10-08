@@ -28,6 +28,7 @@ export class VisualSubMenu {
         this.itemValueAttr = options.itemValueAttr || null;
         this.onSelect = options.onSelect;
         this.onToggle = options.onToggle;
+        this.isEnabled = typeof options.isEnabled === 'function' ? options.isEnabled : (() => true);
 
         // 自動確保通用模組 class
         if (this.paletteEl && !this.paletteEl.classList.contains('visual-sub-palette')) {
@@ -53,6 +54,7 @@ export class VisualSubMenu {
     _bindEvents() {
         if (this.triggerEl) {
             this.triggerEl.addEventListener('click', (e) => {
+                if (!this.isEnabled()) return;
                 e.stopPropagation();
                 const forId = this.triggerEl.getAttribute('for') || this.triggerEl.htmlFor;
                 if (forId) {
@@ -236,6 +238,7 @@ export class VisualSubMenu {
      * 展開子面板
      */
     open() {
+        if (!this.isEnabled()) return;
         VisualSubMenu.instances.forEach(menu => {
             if (menu !== this) {
                 menu.close();
@@ -245,6 +248,18 @@ export class VisualSubMenu {
         this.isOpen = true;
         if (this.paletteEl) {
             this.paletteEl.style.display = 'flex';
+            if (this.triggerEl) {
+                const toolbar = this.paletteEl.closest('.visual-toolbar') || this.paletteEl.parentElement;
+                if (toolbar) {
+                    const toolbarRect = toolbar.getBoundingClientRect();
+                    const triggerRect = this.triggerEl.getBoundingClientRect();
+                    const paletteHeight = this.paletteEl.offsetHeight || 0;
+                    let targetTop = (triggerRect.top - toolbarRect.top) + (triggerRect.height / 2) - (paletteHeight / 2);
+                    targetTop = Math.max(0, Math.min(toolbarRect.height - paletteHeight, targetTop));
+                    this.paletteEl.style.bottom = 'auto';
+                    this.paletteEl.style.top = `${Math.round(targetTop)}px`;
+                }
+            }
         }
         if (this.triggerEl) {
             this.triggerEl.classList.add('menu-open');

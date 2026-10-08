@@ -212,6 +212,81 @@ export function openBpmInputModal({ currentBpm = 120, onApply }) {
 }
 
 /**
+ * 彈出設定拍點時值/切分數值的視窗 (Material Design 原生 HTML + CSS)
+ * @param {Object} options
+ * @param {string|number} options.currentDiv 當前時值
+ * @param {Function} options.onApply 套用回呼 (newDiv) => void
+ */
+export function openDivisionInputModal({ currentDiv = 4, onApply }) {
+    const container = document.createElement('div');
+    container.style.cssText = 'display: flex; flex-direction: column; gap: 14px; color: #e2e8f0; font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif; user-select: none; -webkit-user-select: none;';
+
+    const presets = [4, 8, 12, 16, 24, 32, 48, 64];
+
+    container.innerHTML = `
+        <div style="font-size: 13px; color: #94a3b8;">${t('visualEditor.setDivisionPrompt') || '設定此拍點的時值標籤 (如 4, 8, 16 或 #0.5)：'}</div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="text" id="wmc-div-input" value="${currentDiv}" 
+                style="flex: 1; height: 42px; padding: 0 14px; font-size: 18px; font-weight: bold; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; outline: none; transition: border-color 0.15s ease;">
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            ${presets.map(p => `
+                <button type="button" class="wmc-div-preset-btn" data-preset="${p}"
+                    style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">
+                    1/${p}
+                </button>
+            `).join('')}
+        </div>
+    `;
+
+    const input = container.querySelector('#wmc-div-input');
+    container.querySelectorAll('.wmc-div-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            input.value = btn.dataset.preset;
+        });
+    });
+
+    let modal = null;
+    const handleApply = () => {
+        const valStr = input.value.trim();
+        if (!valStr) return;
+        if (typeof onApply === 'function') {
+            onApply(valStr);
+        }
+        modal?.close();
+    };
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleApply();
+        }
+    });
+
+    modal = popupWindow({
+        title: t('visualEditor.setDivisionTitle') || '設定拍點時值',
+        customContent: container,
+        width: 340,
+        buttons: [
+            {
+                text: t('common.cancel'),
+                onClick: () => modal?.close()
+            },
+            {
+                text: t('common.apply'),
+                isPrimary: true,
+                onClick: handleApply
+            }
+        ]
+    });
+
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 50);
+}
+
+/**
  * 建立視覺化音符編輯操作回呼（放置 Tap、Hold、刪除與變更）
  * @param {Object} ctx
  */
@@ -252,18 +327,35 @@ export function createVisualNoteCallbacks(ctx) {
 
         // 2. 如果點擊的時間在現有音符之後，在尾端擴充逗號
         if (snappedTime > lastTime + 0.02) {
-            const currentBpm = getClockBpm() || 60;
+            let currentBpm = getClockBpm() || 60;
+            const decodedTags = getDecodedTags();
+            if (decodedTags) {
+                const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
+                if (bpmTag) currentBpm = bpmTag.value;
+            }
             const currentGrid = getSettings().gridDivision || 4;
             const timeStep = (240 / currentBpm) / currentGrid;
 
             const numCommas = Math.round((snappedTime - lastTime) / timeStep);
             if (numCommas > 0) {
+                let lastActiveDiv = 4;
+                if (decodedTags) {
+                    const splitTag = decodedTags.filter(t => t.type === 'split' && t.time <= lastTime + 0.001).sort((a, b) => b.time - a.time)[0];
+                    if (splitTag) lastActiveDiv = splitTag.value;
+                }
+
                 for (let k = 0; k < numCommas; k++) {
-                    rawData.push("");
+                    if (k === 0 && lastActiveDiv !== currentGrid) {
+                        rawData.push(`{${currentGrid}}`);
+                    } else {
+                        rawData.push("");
+                    }
                 }
                 for (let k = 1; k <= numCommas; k++) {
                     dataIndexToTime[lastIndex + k] = lastTime + k * timeStep;
                 }
+                const newContent = rawData.join(',');
+                updateEditorAndSave(newContent);
                 return lastIndex + numCommas;
             }
             return null;
@@ -291,51 +383,50 @@ export function createVisualNoteCallbacks(ctx) {
 
             const origDuration = tKNext - tK;
             if (origDuration <= 0.001) return null;
-            const origDiv = Math.round((240 / currentBpm) / origDuration);
+            const origDiv = Math.max(1, Math.round((240 / currentBpm) / origDuration));
 
-            const duration1 = snappedTime - tK;
-            const duration2 = tKNext - snappedTime;
-            if (duration1 <= 0.001 || duration2 <= 0.001) return null;
+            const targetDiv = getSettings().gridDivision || 4;
+            const stepDuration = (240 / currentBpm) / targetDiv;
+            if (stepDuration <= 0.001) return null;
 
-            const newDiv1 = Math.round((240 / currentBpm) / duration1);
-            const newDiv2 = Math.round((240 / currentBpm) / duration2);
-
-            if (isNaN(newDiv1) || newDiv1 <= 0 || isNaN(newDiv2) || newDiv2 <= 0) return null;
+            // 該區間內按照 targetDiv 劃分需要幾步
+            let totalSteps = Math.max(2, Math.round(origDuration / stepDuration));
+            let targetStep = Math.round((snappedTime - tK) / stepDuration);
+            targetStep = Math.max(1, Math.min(totalSteps - 1, targetStep));
 
             let segK = rawData[k] ? rawData[k].trim() : "";
             if (segK.includes('{')) {
-                segK = segK.replace(/\{[^\}]*\}/g, `{${newDiv1}}`);
+                segK = segK.replace(/\{[^\}]*\}/g, `{${targetDiv}}`);
             } else {
                 const match = segK.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
                 if (match) {
-                    segK = match[1] + `{${newDiv1}}` + match[2];
+                    segK = match[1] + `{${targetDiv}}` + match[2];
                 } else {
-                    segK = `{${newDiv1}}` + segK;
+                    segK = `{${targetDiv}}` + segK;
                 }
             }
             rawData[k] = segK;
 
-            let newSegKNext1 = "";
-            if (newDiv2 !== newDiv1) {
-                newSegKNext1 = `{${newDiv2}}`;
-            }
-            rawData.splice(k + 1, 0, newSegKNext1);
+            // 插入 totalSteps - 1 個空拍逗號
+            const insertArray = new Array(totalSteps - 1).fill("");
+            rawData.splice(k + 1, 0, ...insertArray);
 
-            let segKNext2 = rawData[k + 2] ? rawData[k + 2].trim() : "";
-            if (!segKNext2.includes('{') && origDiv > 0) {
-                const match = segKNext2.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
+            // 在區間結尾 (原 k+1，現為 k + totalSteps) 還原原切分
+            let segEnd = rawData[k + totalSteps] ? rawData[k + totalSteps].trim() : "";
+            if (!segEnd.includes('{') && origDiv > 0 && origDiv !== targetDiv) {
+                const match = segEnd.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
                 if (match) {
-                    segKNext2 = match[1] + `{${origDiv}}` + match[2];
+                    segEnd = match[1] + `{${origDiv}}` + match[2];
                 } else {
-                    segKNext2 = `{${origDiv}}` + segKNext2;
+                    segEnd = `{${origDiv}}` + segEnd;
                 }
-                rawData[k + 2] = segKNext2;
+                rawData[k + totalSteps] = segEnd;
             }
 
             const newContent = rawData.join(',');
             updateEditorAndSave(newContent);
 
-            return k + 1;
+            return k + targetStep;
         }
 
         return null;
@@ -625,15 +716,29 @@ export function createVisualNoteCallbacks(ctx) {
             if (segment === "" || segment.startsWith("||")) continue;
 
             const parts = segment.split('/');
-            const partIndex = parts.findIndex(p => {
+            let partIndex = parts.findIndex(p => {
                 const clean = stripLeadingTags(p);
                 if (isTouch) {
                     if (note.touchPos === 'C') return clean.startsWith('C');
                     if (note.touchPos && note.pos) return clean.startsWith(note.touchPos + note.pos);
                     return /^[A-E]\d|C/i.test(clean);
                 }
-                return clean.startsWith(String(lane));
+                if (!clean.startsWith(String(lane))) return false;
+                const isSlide = (note.type === 'slide' || Boolean(note.isSlide));
+                const isHold = (note.type === 'hold' || Boolean(note.isHold));
+                const hasSlideChar = /[-<>^vpqszVw]/.test(clean);
+                const hasHoldChar = clean.includes('h');
+                if (isSlide) return hasSlideChar;
+                if (isHold) return hasHoldChar && !hasSlideChar;
+                return !hasSlideChar && !hasHoldChar;
             });
+
+            if (partIndex === -1 && !isTouch) {
+                partIndex = parts.findIndex(p => {
+                    const clean = stripLeadingTags(p);
+                    return clean.startsWith(String(lane));
+                });
+            }
 
             if (partIndex === -1) continue;
 
@@ -1007,6 +1112,128 @@ export function createVisualNoteCallbacks(ctx) {
         updateEditorAndSave(newContent);
     };
 
+    const visualPlaceTimingTag = (type, clickTime, originalTag = null) => {
+        const snappedTime = quantizeTime(clickTime);
+        if (snappedTime === null || snappedTime === undefined) {
+            simpleToast({ content: t('visualEditor.tooFarFromBeat'), type: 'warning', timeout: 1500 });
+            return;
+        }
+
+        const closestIndex = getOrCreateCommaIndex(snappedTime);
+        if (closestIndex === null || closestIndex === undefined) {
+            simpleToast({ content: t('visualEditor.cannotLocateBeat'), type: 'warning', timeout: 1500 });
+            return;
+        }
+
+        const rawData = getRawData();
+        let segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
+        if (segment.startsWith("||")) {
+            simpleToast({ content: t('visualEditor.cannotPlaceInComment'), type: 'warning', timeout: 1500 });
+            return;
+        }
+
+        if (type === 'bpm') {
+            let currentBpm = originalTag ? originalTag.value : (getClockBpm() || 120);
+            const decodedTags = getDecodedTags();
+            if (!originalTag && decodedTags) {
+                const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
+                if (bpmTag) currentBpm = bpmTag.value;
+            }
+
+            const existingBpmMatch = segment.match(/\(([0-9]+(?:\.[0-9]+)?)\)/);
+            if (existingBpmMatch) {
+                currentBpm = parseFloat(existingBpmMatch[1]);
+            }
+
+            const applyBpm = (bpmVal) => {
+                const raw = getRawData();
+                let curSegment = raw[closestIndex] ? raw[closestIndex].trim() : "";
+                if (curSegment.match(/\([0-9]+(?:\.[0-9]+)?\)/)) {
+                    curSegment = curSegment.replace(/\([0-9]+(?:\.[0-9]+)?\)/, `(${bpmVal})`);
+                } else {
+                    curSegment = `(${bpmVal})` + curSegment;
+                }
+                raw[closestIndex] = curSegment;
+                updateEditorAndSave(raw.join(','));
+                simpleToast({ content: t('visualEditor.bpmSetSuccess', { bpm: bpmVal }), type: 'success', timeout: 1000 });
+            };
+
+            if (!originalTag) {
+                applyBpm(currentBpm);
+            } else {
+                openBpmInputModal({
+                    currentBpm,
+                    onApply: applyBpm
+                });
+            }
+        } else if (type === 'split') {
+            let currentDiv = originalTag ? originalTag.value : (getSettings().gridDivision || 4);
+            const decodedTags = getDecodedTags();
+            if (!originalTag && decodedTags) {
+                const splitTag = decodedTags.filter(t => t.type === 'split' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
+                if (splitTag) currentDiv = splitTag.value;
+            }
+
+            const existingDivMatch = segment.match(/\{([^\}]+)\}/);
+            if (existingDivMatch) {
+                currentDiv = existingDivMatch[1];
+            }
+
+            const applyDiv = (divVal) => {
+                const raw = getRawData();
+                let curSegment = raw[closestIndex] ? raw[closestIndex].trim() : "";
+                if (curSegment.match(/\{[^\}]+\}/)) {
+                    curSegment = curSegment.replace(/\{[^\}]+\}/, `{${divVal}}`);
+                } else {
+                    curSegment = `{${divVal}}` + curSegment;
+                }
+                raw[closestIndex] = curSegment;
+                updateEditorAndSave(raw.join(','));
+                simpleToast({ content: t('visualEditor.divisionSetSuccess', { division: divVal }), type: 'success', timeout: 1000 });
+            };
+
+            // 放置或編輯時皆彈窗詢問該點要放置的時值
+            openDivisionInputModal({
+                currentDiv,
+                onApply: applyDiv
+            });
+        }
+    };
+
+    const visualDeleteTag = (tag) => {
+        if (!tag) return;
+        const rawData = getRawData();
+        const dataIndexToTime = getDataIndexToTime();
+        if (!dataIndexToTime || dataIndexToTime.length === 0) return;
+
+        let targetIdx = -1;
+        for (let idx = 0; idx < dataIndexToTime.length; idx++) {
+            if (Math.abs(dataIndexToTime[idx] - tag.time) < 0.02) {
+                targetIdx = idx;
+                break;
+            }
+        }
+        if (targetIdx === -1) return;
+
+        let segment = rawData[targetIdx] ? rawData[targetIdx] : "";
+        if (tag.type === 'bpm') {
+            segment = segment.replace(/\([0-9]+(?:\.[0-9]+)?\)/, '');
+            rawData[targetIdx] = segment;
+            updateEditorAndSave(rawData.join(','));
+            simpleToast({ content: t('visualEditor.bpmDeleted') || '已刪除 BPM 標籤', type: 'success', timeout: 1000 });
+        } else if (tag.type === 'split') {
+            segment = segment.replace(/\{[^\}]+\}/, '');
+            rawData[targetIdx] = segment;
+            updateEditorAndSave(rawData.join(','));
+            simpleToast({ content: t('visualEditor.divisionDeleted') || '已刪除時值標籤', type: 'success', timeout: 1000 });
+        }
+    };
+
+    const visualEditTag = (tag) => {
+        if (!tag) return;
+        visualPlaceTimingTag(tag.type, tag.time, tag);
+    };
+
     return {
         getOrCreateCommaIndex,
         stripLeadingTags,
@@ -1017,7 +1244,10 @@ export function createVisualNoteCallbacks(ctx) {
         getNoteCurrentProperties,
         visualUpdateNoteProperty,
         getNoteTouchGroup,
-        visualUpdateTouchGroup
+        visualUpdateTouchGroup,
+        visualPlaceTimingTag,
+        visualDeleteTag,
+        visualEditTag
     };
 }
 

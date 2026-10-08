@@ -244,6 +244,17 @@ function initRenderers(ctx, settings, loadedImages) {
     if (typeof ctx.onSelectionChange === 'function') {
         visualEditorRenderer.setSelectionCallback(ctx.onSelectionChange);
     }
+    if (typeof visualEditorRenderer.setLayerMode === 'function') {
+        visualEditorRenderer.setLayerMode(settings.visualLayerMode || 'note');
+    }
+    if (typeof visualEditorRenderer.setTagEditCallbacks === 'function') {
+        visualEditorRenderer.setTagEditCallbacks(
+            ctx.visualPlaceTimingTag,
+            ctx.visualDeleteTag,
+            ctx.visualEditTag,
+            ctx.onVisualTagSelect
+        );
+    }
 
     // 安全讀取拍號輸入值
     const v1 = ctx.timebaseButton?.querySelector('input[name="tb1"]')?.value ?? 4;

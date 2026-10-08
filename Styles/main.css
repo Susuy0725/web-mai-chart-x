@@ -1525,10 +1525,95 @@ body.resizing-panels #canvasContainer canvas {
 .sub-menu-trigger,
 .tool-modifier-item,
 .tool-division-item,
-.tool-place-item {
+.tool-place-item,
+.tool-layer-item {
     position: relative;
     user-select: none;
     touch-action: manipulation;
+}
+
+/* 圖層切換專屬圖示與角標 (Material Design 原生佈局，32x32 方塊) */
+.tool-layer-item {
+    overflow: hidden !important;
+}
+
+.layer-switch-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    box-sizing: border-box;
+    padding: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.layer-switch-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    pointer-events: none;
+}
+
+.layer-bpm-text {
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    line-height: 1;
+}
+
+.layer-tap-img {
+    width: 20px !important;
+    height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+    object-fit: contain;
+    flex-shrink: 0;
+    pointer-events: none;
+    display: block !important;
+}
+
+.layer-sync-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 10px !important;
+    width: 10px;
+    height: 10px;
+    line-height: 10px !important;
+    color: rgba(255, 255, 255, 0.7);
+    pointer-events: none;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.tool-layer-item:hover .layer-sync-badge {
+    transform: none !important;
+}
+
+/* 處於 BPM 圖層時的高亮外觀 (Material Design 暗灰選取態，不使用黃色) */
+.tool-layer-item.active-bpm {
+    background: #484852 !important;
+    color: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.tool-layer-item.active-bpm .layer-sync-badge {
+    color: #ffffff;
+}
+
+/* 當處於 BPM 圖層時，隱藏效果套用按鈕與其子選單 */
+.visual-toolbar.layer-mode-bpm #tool-mode-modifier,
+.visual-toolbar.layer-mode-bpm #toolModifierLabel,
+.visual-toolbar.layer-mode-bpm #visualModifierPalette {
+    display: none !important;
 }
 
 /* 子選單展開中的聚焦按鈕外觀 (通用模組) */
@@ -1580,7 +1665,6 @@ body.resizing-panels #canvasContainer canvas {
 .visual-division-palette {
     position: absolute;
     right: calc(100% + 6px);
-    bottom: 36px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1711,7 +1795,6 @@ body.resizing-panels #canvasContainer canvas {
     .visual-modifier-palette,
     .visual-division-palette {
         right: calc(100% + 4px);
-        bottom: 36px;
         border: none !important;
         height: auto !important;
         max-height: none !important;

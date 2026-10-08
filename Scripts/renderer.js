@@ -2842,6 +2842,7 @@ export class SimaiVisualEditor {
 
         this.editMode = settings.visualToolMode || 'edit'; // 'edit' 或 'select'
         this.selectedNotes = new Set();
+        this.selectedTag = null;
         this.isSelectingBox = false;
         this.selectionStart = { x: 0, y: 0 };
         this.selectionEnd = { x: 0, y: 0 };
@@ -2875,6 +2876,25 @@ export class SimaiVisualEditor {
 
         this.tb1 = 4;
         this.tb2 = 4;
+        this.layerMode = 'note';
+        this.onPlaceTag = null;
+        this.onDeleteTag = null;
+        this.onEditTag = null;
+        this.onSelectTag = null;
+    }
+
+    setLayerMode(layerMode) {
+        this.layerMode = layerMode;
+        this.selectedNotes.clear();
+        this.selectedTag = null;
+        this._upd();
+    }
+
+    setTagEditCallbacks(onPlaceTag, onDeleteTag, onEditTag, onSelectTag) {
+        this.onPlaceTag = onPlaceTag;
+        this.onDeleteTag = onDeleteTag;
+        this.onEditTag = onEditTag;
+        this.onSelectTag = onSelectTag;
     }
 
     setTimebase(tb1, tb2) {
@@ -2886,6 +2906,7 @@ export class SimaiVisualEditor {
         this.editMode = mode;
         if (mode === 'edit') {
             this.selectedNotes.clear();
+            this.selectedTag = null;
             this.isSelectingBox = false;
         }
         if (this.canvas) {
@@ -2900,6 +2921,17 @@ export class SimaiVisualEditor {
 
     clearSelection() {
         this.selectedNotes.clear();
+        this.selectedTag = null;
+        this._upd();
+    }
+
+    setSelectedTag(tag) {
+        this.selectedTag = tag;
+        this._upd();
+    }
+
+    clearSelectedTag() {
+        this.selectedTag = null;
         this._upd();
     }
 
@@ -3248,22 +3280,41 @@ export class SimaiVisualEditor {
         this.ctx.restore();
     }
 
+    _drawRoundRect(ctx, x, y, w, h, r) {
+        if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, r);
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+    }
+
     drawTag(tag) {
         const { ctx } = this;
         const { width: w, height: h } = this.getCanvasWH();
         const zoom = this.zoom || 1;
         const bs = this.settings.noteBaseSize;
-        const lineWidth = bs * (tag.type === 'bpm' ? 6 : 4);
+        const lineWidth = bs * 4.5; // 涵蓋 9 個軌道之總半寬 (中央 X=0，向左向右各 4.5 軌)
 
         ctx.save();
         ctx.lineWidth = 0.5;
 
         const tb1 = this.tb1 || 4;
-        const tb2 = this.tb2 || 4;
+        const gridDiv = parseInt(this.settings?.gridDivision, 10) || this.tb2 || 4;
         // period: 小節的長度 (tb1 代表一小節有幾個四分音符)
         const period = (tag.type === 'bpm') ? ((60 * tb1) / tag.value) : ((240 / tag.bpm) * (1 / tag.value));
         // beatPeriod: 格子線的間距 (gridDiv 代表幾分音符為一格)
-        const beatPeriod = (tag.type === 'bpm') ? ((240 / tag.value) / tb2) : 0;
+        const beatPeriod = (tag.type === 'bpm') ? ((240 / tag.value) / gridDiv) : 0;
         const delta = tag.time - this.globalTime;
 
         if (period > 0) {
@@ -3276,15 +3327,12 @@ export class SimaiVisualEditor {
 
             // 3. 【關鍵修復】：限制 BPM 的渲染終點
             if (tag.type === 'bpm') {
-                // 如果你有計算 nextTime (下一個 BPM 變化的時間)
                 if (tag.nextTime) {
                     const duration = tag.nextTime - tag.time;
-                    // 算出在下一個標籤前，最多能畫幾條線 (減去極小值防止壓線重疊)
                     const maxLines = Math.floor((duration - 0.001) / period);
                     maxI = Math.min(maxI, maxLines);
                 }
             } else {
-                // Split 等標籤本來的邏輯
                 maxI = Math.min(Math.floor(tag.renderTimes || 1) - 1, maxI);
             }
 
@@ -3293,14 +3341,12 @@ export class SimaiVisualEditor {
 
                 if (tag.type === 'bpm') {
                     ctx.strokeStyle = '#ffe865c0';
-                    ctx.setLineDash([]); // 樣式設定移到迴圈外，效能更好
+                    ctx.setLineDash([]);
 
                     // 自動填充小節內的拍號線(以 N 分音符為一拍)
-                    const parts = (tb1 * tb2) / 4;
+                    const parts = Math.round((tb1 * gridDiv) / 4);
                     if (parts > 1) {
                         ctx.save();
-                        ctx.strokeStyle = '#ffe86540'; // 較淡的顏色
-                        ctx.lineWidth = 0.5; // 較細的線條
                         for (let b = 1; b < parts; b++) {
                             const subY = (delta + i * period + b * beatPeriod) * -zoom;
 
@@ -3308,46 +3354,88 @@ export class SimaiVisualEditor {
                             const subTime = tag.time + i * period + b * beatPeriod;
                             if (tag.nextTime && subTime >= tag.nextTime - 0.001) continue;
 
+                            const isMajorBeat = (gridDiv > 4 && (b % Math.round(gridDiv / 4) === 0));
+                            ctx.strokeStyle = isMajorBeat ? '#ffe86580' : '#ffe86530';
+                            ctx.lineWidth = isMajorBeat ? 0.8 : 0.4;
+
                             ctx.beginPath();
-                            ctx.moveTo(-lineWidth * 0.8, subY);
-                            ctx.lineTo(lineWidth * 0.8, subY);
+                            ctx.moveTo(-lineWidth, subY);
+                            ctx.lineTo(lineWidth, subY);
                             ctx.stroke();
                         }
                         ctx.restore();
                     }
 
-                    // 僅在節拍線起點繪製文字
+                    // 起點標籤繪製
                     if (i === 0) {
-                        ctx.save(); // 保存當前狀態
-                        ctx.fillStyle = '#bdaa40';
-                        ctx.font = "5px Arial";
-                        ctx.textAlign = "left";
+                        if (this.layerMode === 'bpm') {
+                            // BPM 圖層下：繪製左半側藍色膠囊標籤
+                            const capsuleH = Math.max(10, bs * 0.7);
+                            const capsuleY = y - capsuleH / 2;
+                            const capW = lineWidth - 1;
+                            const capX = -lineWidth;
 
-                        // 移動到繪製點並旋轉
-                        ctx.translate(bs * -4 - 1.5, y - 1);
-                        ctx.rotate(-Math.PI / 2);
+                            ctx.save();
+                            ctx.fillStyle = '#2952d4';
+                            this._drawRoundRect(ctx, capX, capsuleY, capW, capsuleH, 3);
+                            ctx.fill();
 
-                        ctx.fillText(tag.value.toString(), 0, 0);
-                        ctx.restore(); // 自動還原所有 translate 與 rotate
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = 'bold 4.5px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(`BPM ${tag.value}`, capX + capW / 2, y);
+                            ctx.restore();
+                        } else {
+                            // 音符圖層下：完全還原原版左側邊緣旋轉小字
+                            ctx.save();
+                            ctx.fillStyle = '#bdaa40';
+                            ctx.font = "5px Arial";
+                            ctx.textAlign = "left";
+                            ctx.translate(bs * -4 - 1.5, y - 1);
+                            ctx.rotate(-Math.PI / 2);
+                            ctx.fillText(tag.value.toString(), 0, 0);
+                            ctx.restore();
+                        }
                     }
                 } else {
                     ctx.strokeStyle = '#ffffff';
                     if (i === 0) {
-                        if (tag.nohead) continue;
-                        ctx.globalAlpha = 1; // 起點的線條保持不透明
-                        ctx.save(); // 保存當前狀態
-                        ctx.fillStyle = '#9c9c9c';
-                        ctx.font = "5px Arial";
-                        ctx.textAlign = "right";
+                        if (this.layerMode === 'bpm') {
+                            // BPM 圖層下：繪製右半側深紅色膠囊標籤
+                            ctx.globalAlpha = 1;
+                            const capsuleH = Math.max(10, bs * 0.7);
+                            const capsuleY = y - capsuleH / 2;
+                            const capW = lineWidth - 1;
+                            const capX = 1;
 
-                        // 移動到繪製點並旋轉
-                        ctx.translate(bs * 4 + 1.5, y - 1);
-                        ctx.rotate(Math.PI / 2);
+                            ctx.save();
+                            ctx.fillStyle = '#8a0014';
+                            this._drawRoundRect(ctx, capX, capsuleY, capW, capsuleH, 3);
+                            ctx.fill();
 
-                        ctx.fillText(tag.value.toString(), 0, 0);
-                        ctx.restore(); // 自動還原所有 translate 與 rotate
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = 'bold 4.5px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(`{${tag.value}}`, capX + capW / 2, y);
+                            ctx.restore();
+                        } else {
+                            // 音符圖層下：完全還原原版右側邊緣旋轉小字
+                            if (!tag.nohead) {
+                                ctx.globalAlpha = 1;
+                                ctx.save();
+                                ctx.fillStyle = '#9c9c9c';
+                                ctx.font = "5px Arial";
+                                ctx.textAlign = "right";
+                                ctx.translate(bs * 4 + 1.5, y - 1);
+                                ctx.rotate(Math.PI / 2);
+                                ctx.fillText(tag.value.toString(), 0, 0);
+                                ctx.restore();
+                            }
+                        }
                     } else {
-                        ctx.globalAlpha = 0.4; // 非起點的線條降低透明度
+                        ctx.globalAlpha = 0.4;
                     }
                 }
 
@@ -3514,9 +3602,24 @@ export class SimaiVisualEditor {
         // 1. 優先檢查星星頭與普通音符頭部 (tapnhold)
         for (const note of this._state.visualBuckets.tapnhold) {
             const noteX = visualNoteRefPos[note.pos - 1]?.x;
-            if (noteX !== undefined && checkCandidate(note, noteX)) {
-                note.hitPart = note.isStar ? 'head' : 'note';
-                return note;
+            if (noteX !== undefined) {
+                if (checkCandidate(note, noteX)) {
+                    note.hitPart = note.isStar ? 'head' : 'note';
+                    return note;
+                }
+                if (note.type === 'hold' && note.holdDuration) {
+                    const dx = Math.abs(mouseX - noteX);
+                    if (dx <= tolerance) {
+                        const startY = (note.time - gt) * -zoom;
+                        const endY = (note.time + note.holdDuration - gt) * -zoom;
+                        const minY = Math.min(startY, endY) - tolerance;
+                        const maxY = Math.max(startY, endY) + tolerance;
+                        if (mouseY >= minY && mouseY <= maxY) {
+                            note.hitPart = 'body';
+                            return note;
+                        }
+                    }
+                }
             }
         }
 
@@ -3559,6 +3662,45 @@ export class SimaiVisualEditor {
         }
 
         return null;
+    }
+
+    _hitTestTag(mouseX, mouseY) {
+        if (!this._state || !this._state.visualBuckets || !this._state.visualBuckets.tags) return null;
+        const zoom = this.zoom;
+        const gt = this.globalTime;
+        const bs = this.settings?.noteBaseSize || 11;
+        const lineWidth = bs * 4.5;
+        const capsuleH = Math.max(10, bs * 0.7);
+        const halfH = capsuleH / 2;
+        const tags = this._state.visualBuckets.tags;
+
+        // 必須點擊在 9 個軌道的寬度範圍內 [-lineWidth, lineWidth]
+        if (mouseX < -lineWidth || mouseX > lineWidth) return null;
+
+        let bestTag = null;
+        let minDy = Infinity;
+
+        for (const tag of tags) {
+            const tagY = (tag.time - gt) * -zoom;
+            const dy = Math.abs(mouseY - tagY);
+            if (dy <= halfH) {
+                // 左側明確點中 BPM 膠囊 [-lineWidth, 0]
+                if (tag.type === 'bpm' && mouseX <= 0 && mouseX >= -lineWidth) {
+                    if (dy < minDy) {
+                        minDy = dy;
+                        bestTag = tag;
+                    }
+                }
+                // 右側明確點中 Split 時值膠囊 (0, lineWidth]
+                else if (tag.type === 'split' && mouseX > 0 && mouseX <= lineWidth) {
+                    if (dy < minDy) {
+                        minDy = dy;
+                        bestTag = tag;
+                    }
+                }
+            }
+        }
+        return bestTag;
     }
 
     drawBackground(w, h) {
@@ -3614,13 +3756,16 @@ export class SimaiVisualEditor {
         ctx.moveTo(-w, 0);
         ctx.lineTo(w, 0);
         ctx.stroke();
-        visualBuckets.slide.forEach(n => this.drawSlide(n));
-        visualBuckets.tapnhold.forEach(n => {
-            if (n.type === "hold") this.drawHold(n);
-            else if (n.isStar) this.drawStar(n);
-            else this.drawTap(n);
-        });
-        visualBuckets.touch.forEach(n => this.drawTouch(n));
+        // 僅在音符圖層繪製音符物件（BPM 圖層不繪製任何音符）
+        if (this.layerMode === 'note') {
+            visualBuckets.slide.forEach(n => this.drawSlide(n));
+            visualBuckets.tapnhold.forEach(n => {
+                if (n.type === "hold") this.drawHold(n);
+                else if (n.isStar) this.drawStar(n);
+                else this.drawTap(n);
+            });
+            visualBuckets.touch.forEach(n => this.drawTouch(n));
+        }
 
         // 繪製選擇高亮與拉框
         this._drawSelection();
@@ -3689,7 +3834,12 @@ export class SimaiVisualEditor {
                 let boxW = size;
                 let boxH = size;
 
-                if (note.hitPart === 'track') {
+                if (note.type === 'hold' || (note.holdDuration && note.holdDuration > 0)) {
+                    const startY = (note.time - gt) * -zoom;
+                    const endY = (note.time + (note.holdDuration || 0) - gt) * -zoom;
+                    noteY = (startY + endY) / 2;
+                    boxH = Math.max(size, Math.abs(endY - startY) + size);
+                } else if (note.hitPart === 'track') {
                     const startY = (note.time + (note.slideDelay || 0) - gt) * -zoom;
                     const endY = (note.time + (note.slideDelay || 0) + (note.slideDuration || 0) - gt) * -zoom;
                     noteY = (startY + endY) / 2;
@@ -3801,6 +3951,82 @@ export class SimaiVisualEditor {
 
             ctx.restore();
         }
+
+        // BPM 圖層：繪製選取標籤 (BPM / 時值膠囊) 的發光外框與 Material 角標
+        if (this.layerMode === 'bpm' && this.selectedTag) {
+            ctx.save();
+            const tag = this.selectedTag;
+            const bs = this.settings?.noteBaseSize || 11;
+            const lineWidth = bs * 4.5;
+            const capsuleH = Math.max(10, bs * 0.7);
+            const tagY = (tag.time - gt) * -zoom;
+            const r = 3;
+
+            const capX = (tag.type === 'bpm') ? -lineWidth : 1;
+            const capW = lineWidth - 1;
+            const pad = 2;
+            const boxX = capX - pad;
+            const boxW = capW + pad * 2;
+            const boxY = tagY - capsuleH / 2 - pad;
+            const boxH = capsuleH + pad * 2;
+
+            // 柔和半透明底色
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.12)';
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(boxX, boxY, boxW, boxH, r + 1);
+            } else {
+                ctx.rect(boxX, boxY, boxW, boxH);
+            }
+            ctx.fill();
+
+            // 霓虹微發光邊框
+            ctx.shadowColor = 'rgba(0, 229, 255, 0.8)';
+            ctx.shadowBlur = 8;
+            ctx.strokeStyle = '#00E5FF';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 四個角的裝飾標記 (Corner Accents)
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            const bracketLen = 4;
+            const minX = boxX;
+            const maxX = boxX + boxW;
+            const minY = boxY;
+            const maxY = boxY + boxH;
+
+            // 左上角
+            ctx.beginPath();
+            ctx.moveTo(minX, minY + bracketLen);
+            ctx.lineTo(minX, minY);
+            ctx.lineTo(minX + bracketLen, minY);
+            ctx.stroke();
+
+            // 右上角
+            ctx.beginPath();
+            ctx.moveTo(maxX - bracketLen, minY);
+            ctx.lineTo(maxX, minY);
+            ctx.lineTo(maxX, minY + bracketLen);
+            ctx.stroke();
+
+            // 左下角
+            ctx.beginPath();
+            ctx.moveTo(minX, maxY - bracketLen);
+            ctx.lineTo(minX, maxY);
+            ctx.lineTo(minX + bracketLen, maxY);
+            ctx.stroke();
+
+            // 右下角
+            ctx.beginPath();
+            ctx.moveTo(maxX - bracketLen, maxY);
+            ctx.lineTo(maxX, maxY);
+            ctx.lineTo(maxX, maxY - bracketLen);
+            ctx.stroke();
+
+            ctx.restore();
+        }
     }
 
     getBoxScreenRect() {
@@ -3837,6 +4063,11 @@ export class SimaiVisualEditor {
     _drawMarker() {
         const ctx = this.ctx;
         const size = this.settings.noteBaseSize;
+
+        if (this.layerMode === 'bpm') {
+            // BPM 圖層不繪製跟隨游標之影子標籤，保持畫布乾淨並在點擊處直接放置
+            return;
+        }
 
         // 先檢查是否懸停在現有音符上 (_hitTestNote)
         const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
@@ -3887,6 +4118,68 @@ export class SimaiVisualEditor {
 
     _onPointerDown(e) {
         this._updMousePos(e);
+
+        if (this.layerMode === 'bpm') {
+            const clickedTag = this._hitTestTag(this.mouseX, this.mouseY);
+            const screenPos = { clientX: e.clientX, clientY: e.clientY };
+
+            if (this.editMode === 'eraser') {
+                if (e.button === 0 && clickedTag !== null) {
+                    e.stopPropagation();
+                    if (this.onDeleteTag) {
+                        this.onDeleteTag(clickedTag);
+                    }
+                }
+                if (!this._isLoopActive()) this._upd();
+                return;
+            }
+
+            if (this.editMode === 'select') {
+                if (e.button === 0) {
+                    if (clickedTag !== null) {
+                        e.stopPropagation();
+                        this.selectedTag = clickedTag;
+                        if (this.onSelectTag) {
+                            this.onSelectTag(clickedTag, screenPos);
+                        }
+                    } else {
+                        this.selectedTag = null;
+                        if (this.onSelectTag) {
+                            this.onSelectTag(null, null);
+                        }
+                    }
+                }
+                if (!this._isLoopActive()) this._upd();
+                return;
+            }
+
+            // edit (placement) mode in BPM layer
+            if (e.button === 0) {
+                const bs = this.settings?.noteBaseSize || 11;
+                const lineWidth = bs * 4.5;
+                if (this.mouseX >= -lineWidth && this.mouseX <= lineWidth) {
+                    const targetTime = (clickedTag ? clickedTag.time : null) ?? (this.globalTime - this.mouseY / this.zoom);
+                    if (targetTime !== null && targetTime !== undefined) {
+                        e.stopPropagation();
+                        const selectedTiming = this.settings?.visualSelectedTiming;
+                        const tagType = (selectedTiming === 'bpm') ? 'bpm' : 'split';
+                        if (this.onPlaceTag) {
+                            this.onPlaceTag(tagType, targetTime);
+                        }
+                    }
+                }
+            } else if (e.button === 2) {
+                if (clickedTag !== null) {
+                    e.stopPropagation();
+                    if (this.onDeleteTag) {
+                        this.onDeleteTag(clickedTag);
+                    }
+                }
+            }
+            if (!this._isLoopActive()) this._upd();
+            return;
+        }
+
         const clickedNote = this._hitTestNote(this.mouseX, this.mouseY);
         const lane = this._hitTestLane(this.mouseX);
 
@@ -4094,7 +4387,16 @@ export class SimaiVisualEditor {
 
         this.hoverLane = this._hitTestLane(this.mouseX);
 
-        if (this.editMode === 'boxSelect') {
+        if (this.layerMode === 'bpm') {
+            const hoveredTag = this._hitTestTag(this.mouseX, this.mouseY);
+            if (this.editMode === 'eraser') {
+                this.canvas.style.cursor = hoveredTag !== null ? 'pointer' : 'not-allowed';
+            } else if (this.editMode === 'select') {
+                this.canvas.style.cursor = hoveredTag !== null ? 'pointer' : 'grab';
+            } else {
+                this.canvas.style.cursor = 'crosshair';
+            }
+        } else if (this.editMode === 'boxSelect') {
             const hoveredNote = this._hitTestNote(this.mouseX, this.mouseY);
             this.canvas.style.cursor = hoveredNote !== null ? 'pointer' : 'crosshair';
         } else if (this.editMode === 'select') {

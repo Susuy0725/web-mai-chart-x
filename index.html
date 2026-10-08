@@ -68,7 +68,7 @@
     </noscript>
 
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="Styles/main.css?v=visual_11">
+    <link rel="stylesheet" href="Styles/main.css?v=visual_15">
     <link rel="stylesheet" href="Styles/settings.css">
     <link rel="stylesheet" href="Styles/popup.css">
     <link rel="stylesheet" href="Styles/drive.css">
@@ -193,9 +193,6 @@
                     <div class="palette-item" data-note-type="touchhold" data-i18n-title="visualToolbar.noteTouchHold" title="TouchHold">
                         <img src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="TouchHold">
                     </div>
-                    <div class="palette-item" data-note-type="bpm" data-i18n-title="visualToolbar.noteBpm" title="BPM 標籤">
-                        <span class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: bold;">BPM</span>
-                    </div>
                 </div>
 
                 <!-- 左側效果附加子面板 -->
@@ -218,35 +215,14 @@
                     </div>
                 </div>
 
-                <!-- 左側網格切分子面板 (預設展開鋪開，自訂溢出允許滾動) -->
+                <!-- BPM 圖層專用之 BPM / 時值切分子面板 (僅保留 BPM 與 {...}) -->
                 <div id="visualDivisionPalette" class="visual-sub-palette visual-division-palette"
                     style="display: none;">
-                    <div class="palette-item active" data-division-val="4" title="1/4 切分">
-                        <span class="division-text-btn" translate="no">1/4</span>
+                    <div class="palette-item" data-division-val="bpm" data-i18n-title="visualToolbar.tagBpm" title="BPM 標籤">
+                        <span class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: bold;">BPM</span>
                     </div>
-                    <div class="palette-item" data-division-val="8" title="1/8 切分">
-                        <span class="division-text-btn" translate="no">1/8</span>
-                    </div>
-                    <div class="palette-item" data-division-val="12" title="1/12 切分">
-                        <span class="division-text-btn" translate="no">1/12</span>
-                    </div>
-                    <div class="palette-item" data-division-val="16" title="1/16 切分">
-                        <span class="division-text-btn" translate="no">1/16</span>
-                    </div>
-                    <div class="palette-item" data-division-val="24" title="1/24 切分">
-                        <span class="division-text-btn" translate="no">1/24</span>
-                    </div>
-                    <div class="palette-item" data-division-val="32" title="1/32 切分">
-                        <span class="division-text-btn" translate="no">1/32</span>
-                    </div>
-                    <div class="palette-item" data-division-val="48" title="1/48 切分">
-                        <span class="division-text-btn" translate="no">1/48</span>
-                    </div>
-                    <div class="palette-item" data-division-val="64" title="1/64 切分">
-                        <span class="division-text-btn" translate="no">1/64</span>
-                    </div>
-                    <div class="palette-item custom-item" data-division-val="custom" data-i18n-title="visualToolbar.divisionCustom" title="自訂切分">
-                        <span class="division-text-btn" translate="no">...</span>
+                    <div class="palette-item active" data-division-val="custom" data-i18n-title="visualToolbar.divisionCustom" title="時值切分">
+                        <span class="division-text-btn" translate="no">{...}</span>
                     </div>
                 </div>
 
@@ -274,21 +250,7 @@
                     </div>
                 </div>
 
-                <!-- 3. 網格切分群組 (單鍵，帶子選單) -->
-                <div id="visualDivisionGroup" class="visual-tool-group visual-division-group">
-                    <div id="visualDivisionBtn" class="switch-item tool-division-item sub-menu-trigger" role="button"
-                        tabindex="0" data-i18n-title="visualToolbar.gridDivision" data-i18n-aria-label="visualToolbar.gridDivision" title="網格切分" aria-label="網格切分">
-                        <span class="trigger-icon-slot" id="currentDivisionText">
-                            <span class="division-text-btn" translate="no">1/4</span>
-                        </span>
-                        <svg class="corner-arrow" viewBox="0 0 6 6" width="6" height="6" aria-hidden="true"
-                            focusable="false">
-                            <polygon points="0,6 0,0 6,6" fill="rgba(255, 255, 255, 0.85)" />
-                        </svg>
-                    </div>
-                </div>
-
-                <!-- 4. 主垂直工具欄 -->
+                <!-- 5. 主垂直工具欄 -->
                 <div id="visualToolGroup" class="visual-tool-group">
                     <!-- 音符放置 (編輯模式) -->
                     <input type="radio" id="tool-mode-place" name="visualTool" value="place" checked data-i18n-aria-label="visualToolbar.toolPlace" aria-label="放置音符"
@@ -339,6 +301,21 @@
                     <label for="tool-mode-eraser" class="switch-item" data-i18n-title="visualToolbar.toolEraser" title="橡皮擦">
                         <span class="material-symbols-outlined" translate="no">ink_eraser</span>
                     </label>
+                </div>
+
+                <!-- 3. 圖層切換群組 (單鍵：切換音符層 / BPM與時值層) -->
+                <div id="visualLayerGroup" class="visual-tool-group visual-layer-group">
+                    <div id="visualLayerBtn" class="switch-item tool-layer-item" role="button" tabindex="0"
+                        data-i18n-title="visualToolbar.layerSwitch" data-i18n-aria-label="visualToolbar.layerSwitch"
+                        title="切換圖層 (音符 / BPM)" aria-label="切換圖層 (音符 / BPM)">
+                        <div class="layer-switch-box">
+                            <span class="layer-switch-icon" id="visualLayerCurrentIcon">
+                                <span class="modifier-text-btn layer-bpm-text" translate="no">BPM</span>
+                            </span>
+                            <span class="material-symbols-outlined layer-sync-badge" translate="no"
+                                style="transform: none !important; animation: none !important; transition: none !important; pointer-events: none;">sync</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 底端展開/收納按鈕 (方形且永遠純黑、無白邊) -->

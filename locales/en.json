@@ -788,7 +788,15 @@
     "delBranch": "Delete Branch",
     "branchDuration": "Branch Duration",
     "singleStar": "Single Star",
-    "doubleStar": "Double Star"
+    "doubleStar": "Double Star",
+    "headSettings": "Start Note",
+    "headKey": "Start Key",
+    "headEffect": "Start Effect",
+    "headEx": "EX Note",
+    "branchEffect": "Branch Effect",
+    "effectNone": "Normal",
+    "effectBreak": "Break (bk)",
+    "effectMine": "Mine"
   },
   "touchGroupModal": {
     "title": "Edit Touch Group",

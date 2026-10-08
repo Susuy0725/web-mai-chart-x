@@ -788,7 +788,15 @@
     "delBranch": "刪除分支",
     "branchDuration": "分支時值",
     "singleStar": "單星 (單滑線)",
-    "doubleStar": "雙星 (分支滑線)"
+    "doubleStar": "雙星 (分支滑線)",
+    "headSettings": "起點音符",
+    "headKey": "起點鍵位",
+    "headEffect": "起點效果",
+    "headEx": "EX 音符",
+    "branchEffect": "分支效果",
+    "effectNone": "一般",
+    "effectBreak": "Break (bk)",
+    "effectMine": "地雷 (Mine)"
   },
   "touchGroupModal": {
     "title": "編輯 Touch 群組",

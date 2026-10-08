@@ -788,7 +788,15 @@
     "delBranch": "分岐削除",
     "branchDuration": "分岐時間",
     "singleStar": "単星 (単スライド)",
-    "doubleStar": "二重星 (分岐スライド)"
+    "doubleStar": "二重星 (分岐スライド)",
+    "headSettings": "始点ノーツ",
+    "headKey": "始点キー",
+    "headEffect": "始点効果",
+    "headEx": "EX ノーツ",
+    "branchEffect": "分岐効果",
+    "effectNone": "通常",
+    "effectBreak": "Break (bk)",
+    "effectMine": "地雷 (Mine)"
   },
   "touchGroupModal": {
     "title": "Touch グループ編集",

@@ -28,8 +28,9 @@ function ensureNoteDurationModalStyles() {
         .ndm-container {
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            color: #d0d0d0;
+            gap: 12px;
+            color: var(--popup-text-main, #e2e8f0);
+            font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
             font-size: 13px;
             max-width: 520px;
             width: 100%;
@@ -39,9 +40,9 @@ function ensureNoteDurationModalStyles() {
         }
 
         .ndm-section-card {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 10px;
             padding: 12px;
             display: flex;
             flex-direction: column;
@@ -61,19 +62,18 @@ function ensureNoteDurationModalStyles() {
             display: flex;
             align-items: center;
             gap: 6px;
-        }
-
-        .ndm-section-title .material-symbols-outlined {
-            font-size: 18px;
-            color: var(--popup-accent, #00e5ff);
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
         }
 
         .ndm-tab-row {
             display: flex;
-            gap: 6px;
-            background: rgba(0, 0, 0, 0.3);
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.35);
             padding: 3px;
-            border-radius: 6px;
+            border-radius: 8px;
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             width: fit-content;
         }
 
@@ -81,17 +81,27 @@ function ensureNoteDurationModalStyles() {
             border: none;
             background: transparent;
             color: #94a3b8;
-            padding: 5px 12px;
-            border-radius: 4px;
+            padding: 6px 14px;
+            border-radius: 6px;
             font-size: 12px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.12s ease;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            -webkit-user-select: none;
+            outline: none;
+            white-space: nowrap;
+        }
+
+        .ndm-tab-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
         }
 
         .ndm-tab-btn.active {
-            background: rgba(255, 255, 255, 0.12);
-            color: #ffffff;
-            font-weight: 600;
+            background: var(--popup-accent, var(--accent-color, #49e)) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px var(--popup-accent-glow, rgba(56, 189, 248, 0.25)) !important;
         }
 
         .ndm-row {
@@ -115,7 +125,7 @@ function ensureNoteDurationModalStyles() {
 
         .ndm-input {
             border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.45);
             border-radius: 6px;
             color: #ffffff;
             padding: 6px 8px;
@@ -124,11 +134,12 @@ function ensureNoteDurationModalStyles() {
             text-align: center;
             outline: none;
             box-sizing: border-box;
-            transition: border-color 0.12s ease;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
 
         .ndm-input:focus {
-            border-color: var(--popup-accent, #00e5ff);
+            border-color: var(--popup-accent-hover, #38bdf8);
+            box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
         }
 
         .ndm-checkbox-wrapper {
@@ -147,7 +158,7 @@ function ensureNoteDurationModalStyles() {
             -webkit-appearance: checkbox;
             width: 17px !important;
             height: 17px !important;
-            accent-color: var(--popup-accent, #00e5ff) !important;
+            accent-color: var(--popup-accent, var(--accent-color, #49e)) !important;
             cursor: pointer !important;
             margin: 0 !important;
             flex-shrink: 0 !important;
@@ -164,9 +175,9 @@ function ensureNoteDurationModalStyles() {
         }
 
         .ndm-preview-card {
-            background: rgba(0, 229, 255, 0.08);
-            border: 1px solid rgba(0, 229, 255, 0.25);
-            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 10px;
             padding: 10px 14px;
             display: flex;
             align-items: center;
@@ -176,13 +187,18 @@ function ensureNoteDurationModalStyles() {
         .ndm-preview-label {
             font-size: 12px;
             color: #94a3b8;
+            font-weight: 500;
         }
 
         .ndm-preview-code {
             font-family: monospace;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
-            color: #00e5ff;
+            color: var(--popup-accent-hover, #38bdf8);
+            background: var(--popup-accent-glow, rgba(56, 189, 248, 0.12));
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
             letter-spacing: 0.5px;
         }
     `;

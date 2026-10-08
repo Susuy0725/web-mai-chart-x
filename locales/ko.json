@@ -788,7 +788,15 @@
     "delBranch": "분기 삭제",
     "branchDuration": "분기 시간",
     "singleStar": "단일 별 (단일 슬라이드)",
-    "doubleStar": "이중 별 (분기 슬라이드)"
+    "doubleStar": "이중 별 (분기 슬라이드)",
+    "headSettings": "시작 노츠",
+    "headKey": "시작 키",
+    "headEffect": "시작 효과",
+    "headEx": "EX 노츠",
+    "branchEffect": "분기 효과",
+    "effectNone": "일반",
+    "effectBreak": "Break (bk)",
+    "effectMine": "지뢰 (Mine)"
   },
   "touchGroupModal": {
     "title": "Touch 그룹 편집",

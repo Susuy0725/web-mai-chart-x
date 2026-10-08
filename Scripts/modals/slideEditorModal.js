@@ -274,9 +274,38 @@ export function buildSlideDurationString(state) {
 }
 
 /**
- * 解析滑星字串結構 (支援單滑星與多分支滑星)
- * 例如: "1>2-3<4[4:1]" -> { head: 1, prefixFlags: "", branches: [{ segments: [...], duration: "[4:1]", durState: {...} }] }
- * 例如: "1-4[4:1]*-5[4:1]" -> { head: 1, prefixFlags: "", branches: [ ... ] }
+ * 從滑星條身字串中分離效果旗標 ('b' | 'm') 與純軌跡部分
+ * @param {string} residue 包含軌跡與可能之旗標 (如 "-4b", ">3-5m")
+ * @returns {{ cleanResidue: string, effect: 'none' | 'break' | 'mine' }}
+ */
+function extractBranchEffect(residue) {
+    let effect = 'none';
+    let cleanResidue = residue || '';
+
+    // 檢查結尾或段落中是否帶有 b 或 m (在 simai 中代表該滑星條身為 break 或 mine)
+    if (/[bm]$/i.test(cleanResidue)) {
+        if (/b$/i.test(cleanResidue)) {
+            effect = 'break';
+            cleanResidue = cleanResidue.replace(/b$/i, '');
+        } else if (/m$/i.test(cleanResidue)) {
+            effect = 'mine';
+            cleanResidue = cleanResidue.replace(/m$/i, '');
+        }
+    } else if (cleanResidue.includes('b')) {
+        effect = 'break';
+        cleanResidue = cleanResidue.replace(/b/g, '');
+    } else if (cleanResidue.includes('m')) {
+        effect = 'mine';
+        cleanResidue = cleanResidue.replace(/m/g, '');
+    }
+
+    return { cleanResidue, effect };
+}
+
+/**
+ * 解析滑星字串結構 (支援單滑星與多分支滑星、起點與分支屬性)
+ * 例如: "1>2-3<4[4:1]" -> { head: 1, headEffect: 'none', headIsEx: false, branches: [...] }
+ * 例如: "1bx-4b[4:1]*-5m[4:1]" -> { head: 1, headEffect: 'break', headIsEx: true, branches: [...] }
  * @param {string} rawPart 
  * @param {number} defaultLane 
  */
@@ -289,7 +318,9 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         : (clean ? [clean] : []);
 
     let head = defaultLane;
-    let prefixFlags = '';
+    let headEffect = 'none'; // 'none' | 'break' | 'mine'
+    let headIsEx = false;
+    let headSpecial = '';    // 保留 @, ?, ! 等特殊標記
     const branches = [];
 
     // 解析第 0 分支 (包含音符起點鍵位與前綴旗標)
@@ -298,10 +329,14 @@ export function parseSlideString(rawPart, defaultLane = 1) {
     const duration0 = bracket0 ? bracket0[0] : '';
     let residue0 = part0.replace(/\[[^\]]*\]/g, '');
 
-    const headMatch = residue0.match(/^(\d)([bm@?!]*)/);
+    const headMatch = residue0.match(/^(\d)([bm@?!x]*)/);
     if (headMatch) {
         head = parseInt(headMatch[1], 10);
-        prefixFlags = headMatch[2] || '';
+        const flags = headMatch[2] || '';
+        if (flags.includes('b')) headEffect = 'break';
+        else if (flags.includes('m')) headEffect = 'mine';
+        if (flags.includes('x')) headIsEx = true;
+        headSpecial = flags.replace(/[bmx]/g, '');
         residue0 = residue0.slice(headMatch[0].length);
     } else {
         const laneMatch = residue0.match(/^\d+/);
@@ -311,11 +346,13 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         }
     }
 
+    const { cleanResidue: cRes0, effect: eff0 } = extractBranchEffect(residue0);
     const durState0 = parseSlideDuration(duration0 || '[4:1]');
     branches.push({
-        segments: parseSegmentsFromResidue(residue0, head),
+        segments: parseSegmentsFromResidue(cRes0, head),
         duration: buildSlideDurationString(durState0),
-        durState: durState0
+        durState: durState0,
+        effect: eff0
     });
 
     // 解析第 1..N 分支
@@ -330,11 +367,13 @@ export function parseSlideString(rawPart, defaultLane = 1) {
             residueI = residueI.slice(String(head).length);
         }
 
+        const { cleanResidue: cResI, effect: effI } = extractBranchEffect(residueI);
         const durStateI = parseSlideDuration(durationI || duration0 || '[4:1]');
         branches.push({
-            segments: parseSegmentsFromResidue(residueI, head),
+            segments: parseSegmentsFromResidue(cResI, head),
             duration: buildSlideDurationString(durStateI),
-            durState: durStateI
+            durState: durStateI,
+            effect: effI
         });
     }
 
@@ -343,28 +382,46 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         branches.push({
             segments: parseSegmentsFromResidue('', head),
             duration: buildSlideDurationString(defaultDurState),
-            durState: defaultDurState
+            durState: defaultDurState,
+            effect: 'none'
         });
     }
 
     return {
         head,
-        prefixFlags,
+        headEffect,
+        headIsEx,
+        headSpecial,
         branches,
+        get prefixFlags() {
+            let f = '';
+            if (this.headEffect === 'break') f += 'b';
+            else if (this.headEffect === 'mine') f += 'm';
+            if (this.headIsEx) f += 'x';
+            if (this.headSpecial) f += this.headSpecial;
+            return f;
+        },
         get segments() { return this.branches[0]?.segments || []; },
         get duration() { return this.branches[0]?.duration || ''; }
     };
 }
 
 /**
- * 組合滑星字串 (支援多分支滑星)
+ * 組合滑星字串 (支援多分支滑星、起點與分支效果)
  * @param {Object} data 
  * @returns {string}
  */
 export function buildSlideString(data) {
-    const { head, prefixFlags, branches } = data;
+    const { head, headEffect = 'none', headIsEx = false, headSpecial = '', branches } = data;
+    let headFlags = '';
+    if (headEffect === 'break') headFlags += 'b';
+    else if (headEffect === 'mine') headFlags += 'm';
+    if (headIsEx) headFlags += 'x';
+    if (headSpecial) headFlags += headSpecial;
+    if (!headFlags && data.prefixFlags) headFlags = data.prefixFlags;
+
     if (!branches || branches.length === 0) {
-        return `${head}${prefixFlags || ''}`;
+        return `${head}${headFlags}`;
     }
 
     return branches.map((branch, bIdx) => {
@@ -377,11 +434,15 @@ export function buildSlideString(data) {
                 segStr += `${seg.type}${seg.end}`;
             }
         }
+        let branchFlag = '';
+        if (branch.effect === 'break') branchFlag = 'b';
+        else if (branch.effect === 'mine') branchFlag = 'm';
+
         const durStr = branch.duration || '';
         if (bIdx === 0) {
-            return `${head}${prefixFlags || ''}${segStr}${durStr}`;
+            return `${head}${headFlags}${segStr}${branchFlag}${durStr}`;
         } else {
-            return `*${segStr}${durStr}`;
+            return `*${segStr}${branchFlag}${durStr}`;
         }
     }).join('');
 }
@@ -475,8 +536,8 @@ function ensureSlideEditorStyles() {
             flex-direction: column;
             gap: 8px;
             background: rgba(0, 0, 0, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 10px;
             padding: 10px 14px;
         }
 
@@ -511,9 +572,9 @@ function ensureSlideEditorStyles() {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 10px;
             padding: 10px 14px;
         }
 
@@ -534,8 +595,8 @@ function ensureSlideEditorStyles() {
 
         .sem-branch-count-badge {
             font-size: 11px;
-            background: rgba(56, 189, 248, 0.15);
-            color: #38bdf8;
+            background: var(--popup-accent-glow, rgba(56, 189, 248, 0.15));
+            color: var(--popup-accent-hover, #38bdf8);
             padding: 2px 6px;
             border-radius: 4px;
             font-weight: 600;
@@ -589,10 +650,10 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-branch-chip.active {
-            background: #2563eb !important;
-            border-color: #3b82f6 !important;
+            background: var(--popup-accent, var(--accent-color, #49e)) !important;
+            border-color: var(--popup-accent-hover, #38bdf8) !important;
             color: #ffffff !important;
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
         }
 
         .sem-branch-chip-text {
@@ -630,8 +691,8 @@ function ensureSlideEditorStyles() {
             font-family: monospace;
             font-size: 13px;
             font-weight: 700;
-            color: #38bdf8;
-            background: rgba(56, 189, 248, 0.12);
+            color: var(--popup-accent-hover, #38bdf8);
+            background: var(--popup-accent-glow, rgba(56, 189, 248, 0.12));
             padding: 3px 8px;
             border-radius: 6px;
             border: 1px solid rgba(56, 189, 248, 0.25);
@@ -662,12 +723,12 @@ function ensureSlideEditorStyles() {
             border-color: rgba(255, 255, 255, 0.25);
         }
 
-        /* 正在編輯的選取區間（藍底高亮） */
+        /* 正在編輯的選取區間 */
         .sem-segment-chip.active {
-            background: #2563eb !important;
-            border-color: #3b82f6 !important;
+            background: var(--popup-accent, var(--accent-color, #49e)) !important;
+            border-color: var(--popup-accent-hover, #38bdf8) !important;
             color: #ffffff !important;
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
             font-weight: 700;
         }
 
@@ -688,7 +749,7 @@ function ensureSlideEditorStyles() {
 
         .sem-status-indicator {
             font-size: 13px;
-            color: #38bdf8;
+            color: var(--popup-accent-hover, #38bdf8);
             font-weight: 500;
         }
 
@@ -724,9 +785,9 @@ function ensureSlideEditorStyles() {
 
         /* 卡片分組 */
         .sem-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 10px;
             padding: 12px;
             display: flex;
             flex-direction: column;
@@ -773,10 +834,10 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-pattern-btn.active {
-            background: #2563eb !important;
-            border-color: #3b82f6 !important;
+            background: var(--popup-accent, var(--accent-color, #49e)) !important;
+            border-color: var(--popup-accent-hover, #38bdf8) !important;
             color: #ffffff !important;
-            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45);
+            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
         }
 
         .sem-pattern-btn:disabled {
@@ -816,10 +877,10 @@ function ensureSlideEditorStyles() {
         }
 
         .sem-key-btn.active {
-            background: #2563eb !important;
-            border-color: #3b82f6 !important;
+            background: var(--popup-accent, var(--accent-color, #49e)) !important;
+            border-color: var(--popup-accent-hover, #38bdf8) !important;
             color: #ffffff !important;
-            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.4);
+            box-shadow: 0 2px 10px var(--popup-accent-glow, rgba(56, 189, 248, 0.35)) !important;
         }
 
         /* 被禁用的不合法終點鍵位按鈕 */
@@ -834,9 +895,9 @@ function ensureSlideEditorStyles() {
 
         /* 時長設定卡片 (Material Design 原生風格) */
         .sem-dur-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            border-radius: 10px;
             padding: 12px;
             display: flex;
             flex-direction: column;
@@ -863,10 +924,11 @@ function ensureSlideEditorStyles() {
 
         .sem-dur-tab-row {
             display: flex;
-            gap: 6px;
-            background: rgba(0, 0, 0, 0.3);
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.35);
             padding: 3px;
-            border-radius: 6px;
+            border-radius: 8px;
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             width: fit-content;
         }
 
@@ -874,21 +936,27 @@ function ensureSlideEditorStyles() {
             border: none;
             background: transparent;
             color: #94a3b8;
-            padding: 5px 12px;
-            border-radius: 4px;
+            padding: 6px 14px;
+            border-radius: 6px;
             font-size: 12px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.12s ease;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            -webkit-user-select: none;
+            outline: none;
+            white-space: nowrap;
         }
 
-        .sem-dur-tab-btn:hover {
+        .sem-dur-tab-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
             color: #ffffff;
         }
 
         .sem-dur-tab-btn.active {
-            background: #2563eb;
-            color: #ffffff;
-            font-weight: 600;
+            background: var(--popup-accent, var(--accent-color, #49e)) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px var(--popup-accent-glow, rgba(56, 189, 248, 0.25)) !important;
         }
 
         .sem-dur-row {
@@ -912,7 +980,7 @@ function ensureSlideEditorStyles() {
 
         .sem-dur-input {
             border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.45);
             border-radius: 6px;
             color: #ffffff;
             padding: 6px 8px;
@@ -921,12 +989,12 @@ function ensureSlideEditorStyles() {
             text-align: center;
             outline: none;
             box-sizing: border-box;
-            transition: border-color 0.12s ease;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
 
         .sem-dur-input:focus {
-            border-color: #38bdf8;
-            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+            border-color: var(--popup-accent-hover, #38bdf8);
+            box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
         }
 
         .sem-dur-checkbox-wrapper {
@@ -944,7 +1012,7 @@ function ensureSlideEditorStyles() {
             -webkit-appearance: checkbox;
             width: 17px !important;
             height: 17px !important;
-            accent-color: #2563eb !important;
+            accent-color: var(--popup-accent, var(--accent-color, #49e)) !important;
             cursor: pointer !important;
             margin: 0 !important;
             flex-shrink: 0 !important;
@@ -957,6 +1025,113 @@ function ensureSlideEditorStyles() {
             user-select: none;
             -webkit-user-select: none;
             line-height: 1;
+        }
+
+        /* Material Design 分段按鈕群組 (Segmented Buttons) */
+        .sem-segmented-btn-group {
+            display: inline-flex;
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.35);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+            box-sizing: border-box;
+            width: fit-content;
+        }
+
+        .sem-segmented-btn {
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            -webkit-user-select: none;
+            outline: none;
+            white-space: nowrap;
+        }
+
+        .sem-segmented-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        .sem-segmented-btn.active {
+            background: var(--popup-accent, var(--accent-color, #49e));
+            color: #ffffff;
+            box-shadow: 0 2px 8px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
+        }
+
+        .sem-segmented-btn.active.break {
+            background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.45) !important;
+        }
+
+        .sem-segmented-btn.active.mine {
+            background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.45) !important;
+        }
+
+        /* EX 切換按鈕 (Toggle Chip) */
+        .sem-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: #94a3b8;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            -webkit-user-select: none;
+            outline: none;
+        }
+
+        .sem-toggle-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+
+        .sem-toggle-btn.active {
+            background: linear-gradient(135deg, #06b6d4, #0284c7) !important;
+            border-color: #38bdf8 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 10px rgba(6, 182, 212, 0.45) !important;
+        }
+
+        /* 分支晶片中的效果標籤徽章 */
+        .sem-branch-effect-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 4px;
+            margin-left: 4px;
+            line-height: 1.2;
+            vertical-align: middle;
+        }
+
+        .sem-branch-effect-badge.break {
+            background: rgba(245, 158, 11, 0.25);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+
+        .sem-branch-effect-badge.mine {
+            background: rgba(239, 68, 68, 0.25);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.4);
         }
     `;
     document.head.appendChild(style);
@@ -1050,7 +1225,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
 
         // 呼叫主渲染器 drawFrame 繪製完整真實 maimai 機台畫面
         previewRenderer.drawFrame({
-            globalTime: 0,
+            globalTime: -0.001,
             buckets: {
                 slide: slideNotes,
                 tapnhold: headNotes,
@@ -1072,7 +1247,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         if (!slideData.branches || slideData.branches.length === 0) {
             slideData.branches = [{
                 segments: [{ type: '-', mid: undefined, end: findLegalEnd(slideData.head, '-', ((slideData.head + 3) % 8) + 1) }],
-                duration: '[4:1]'
+                duration: '[4:1]',
+                effect: 'none'
             }];
         }
 
@@ -1106,6 +1282,45 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         const currentDurState = currentBranch.durState || (currentBranch.durState = parseSlideDuration(currentBranch.duration));
 
         scrollBody.innerHTML = `
+            <!-- 最頂部：起點音符設定卡片 (Head Note Settings Card) -->
+            <div class="sem-card">
+                <div class="sem-card-title">
+                    <span>${t('slideEditorModal.headSettings')}</span>
+                    <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.headKey')}: ${slideData.head} 號鍵</span>
+                </div>
+                <div class="sem-key-row">
+                    ${[1, 2, 3, 4, 5, 6, 7, 8].map(k => {
+                        const isHeadActive = (slideData.head === k);
+                        return `
+                            <button type="button" class="sem-key-btn ${isHeadActive ? 'active' : ''}" data-head-key="${k}">
+                                ${k}
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; color: #94a3b8; font-weight: 500;">${t('slideEditorModal.headEffect')}:</span>
+                        <div class="sem-segmented-btn-group">
+                            <button type="button" class="sem-segmented-btn ${slideData.headEffect === 'none' ? 'active' : ''}" data-head-effect="none">
+                                ${t('slideEditorModal.effectNone')}
+                            </button>
+                            <button type="button" class="sem-segmented-btn break ${slideData.headEffect === 'break' ? 'active' : ''}" data-head-effect="break">
+                                ${t('slideEditorModal.effectBreak')}
+                            </button>
+                            <button type="button" class="sem-segmented-btn mine ${slideData.headEffect === 'mine' ? 'active' : ''}" data-head-effect="mine">
+                                ${t('slideEditorModal.effectMine')}
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <button type="button" class="sem-toggle-btn ${slideData.headIsEx ? 'active' : ''}" id="sem-head-ex-btn">
+                            <span>${t('slideEditorModal.headEx')}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 分支管理列 (Branch Navigation Bar) -->
             <div class="sem-branch-container">
                 <div class="sem-branch-header">
@@ -1125,10 +1340,15 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 <div class="sem-branch-tab-track">
                     ${slideData.branches.map((b, bIdx) => {
                         const isBActive = (bIdx === activeBranchIndex);
-                        const bSummary = b.segments.map(s => s.type === 'V' ? `V${s.mid ?? ''}${s.end}` : `${s.type}${s.end}`).join('') + (b.duration || '');
+                        const bEffStr = b.effect === 'break' ? 'b' : (b.effect === 'mine' ? 'm' : '');
+                        const bSummary = b.segments.map(s => s.type === 'V' ? `V${s.mid ?? ''}${s.end}` : `${s.type}${s.end}`).join('') + bEffStr + (b.duration || '');
+                        const effectBadge = b.effect === 'break'
+                            ? `<span class="sem-branch-effect-badge break">BK</span>`
+                            : (b.effect === 'mine' ? `<span class="sem-branch-effect-badge mine">MINE</span>` : '');
                         return `
                             <button type="button" class="sem-branch-chip ${isBActive ? 'active' : ''}" data-branch-index="${bIdx}" title="${bSummary}">
                                 <span class="sem-branch-chip-text">${bSummary}</span>
+                                ${effectBadge}
                             </button>
                         `;
                     }).join('')}
@@ -1169,6 +1389,25 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                             <span>－ ${t('slideEditorModal.delSeg')}</span>
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- 當前分支效果卡片 (Branch Effect Card) -->
+            <div class="sem-card">
+                <div class="sem-card-title">
+                    <span>${t('slideEditorModal.branchEffect')}</span>
+                    <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.branchLabel', { index: activeBranchIndex + 1 })}</span>
+                </div>
+                <div class="sem-segmented-btn-group">
+                    <button type="button" class="sem-segmented-btn ${currentBranch.effect === 'none' ? 'active' : ''}" data-branch-effect="none">
+                        ${t('slideEditorModal.effectNone')}
+                    </button>
+                    <button type="button" class="sem-segmented-btn break ${currentBranch.effect === 'break' ? 'active' : ''}" data-branch-effect="break">
+                        ${t('slideEditorModal.effectBreak')}
+                    </button>
+                    <button type="button" class="sem-segmented-btn mine ${currentBranch.effect === 'mine' ? 'active' : ''}" data-branch-effect="mine">
+                        ${t('slideEditorModal.effectMine')}
+                    </button>
                 </div>
             </div>
 
@@ -1329,13 +1568,61 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             // 更新分支晶片文字與提示
             const chipBtn = scrollBody.querySelector(`.sem-branch-chip[data-branch-index="${activeBranchIndex}"]`);
             if (chipBtn) {
-                const bSummary = currentBranch.segments.map(s => s.type === 'V' ? `V${s.mid ?? ''}${s.end}` : `${s.type}${s.end}`).join('') + (currentBranch.duration || '');
+                const bEffStr = currentBranch.effect === 'break' ? 'b' : (currentBranch.effect === 'mine' ? 'm' : '');
+                const bSummary = currentBranch.segments.map(s => s.type === 'V' ? `V${s.mid ?? ''}${s.end}` : `${s.type}${s.end}`).join('') + bEffStr + (currentBranch.duration || '');
                 chipBtn.title = bSummary;
                 const chipText = chipBtn.querySelector('.sem-branch-chip-text');
                 if (chipText) chipText.textContent = bSummary;
             }
             updateRendererPreview();
         }
+
+        // 選擇起點鍵位 (1-8 鍵)
+        scrollBody.querySelectorAll('[data-head-key]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const newHead = parseInt(btn.dataset.headKey, 10);
+                if (slideData.head === newHead) return;
+                slideData.head = newHead;
+                // 自動校正所有分支第 0 段的合法性
+                slideData.branches.forEach(b => {
+                    if (b.segments && b.segments.length > 0) {
+                        const s0 = b.segments[0];
+                        if (s0.type === 'V' && !isLegalVMid(newHead, s0.mid)) {
+                            s0.mid = getLegalVMid(newHead, s0.mid);
+                        }
+                        if (!isSlideLegal(newHead, s0.end, s0.type, s0.mid)) {
+                            s0.end = findLegalEnd(newHead, s0.type, s0.end, s0.mid);
+                        }
+                    }
+                });
+                renderUI();
+            });
+        });
+
+        // 選擇起點效果 (一般 / Break / 地雷)
+        scrollBody.querySelectorAll('[data-head-effect]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                slideData.headEffect = btn.dataset.headEffect;
+                renderUI();
+            });
+        });
+
+        // 切換起點 EX 音符
+        const headExBtn = scrollBody.querySelector('#sem-head-ex-btn');
+        if (headExBtn) {
+            headExBtn.addEventListener('click', () => {
+                slideData.headIsEx = !slideData.headIsEx;
+                renderUI();
+            });
+        }
+
+        // 選擇當前分支效果 (一般 / Break / 地雷)
+        scrollBody.querySelectorAll('[data-branch-effect]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                currentBranch.effect = btn.dataset.branchEffect;
+                renderUI();
+            });
+        });
 
         // 切換編輯分支
         scrollBody.querySelectorAll('[data-branch-index]').forEach(btn => {
@@ -1360,7 +1647,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                         end: newEnd
                     }],
                     duration: defaultDuration,
-                    durState: defaultDurState
+                    durState: defaultDurState,
+                    effect: 'none'
                 });
                 activeBranchIndex = slideData.branches.length - 1;
                 activeSegIndex = 0;

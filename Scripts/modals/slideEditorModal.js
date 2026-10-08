@@ -228,36 +228,55 @@ function ensureSlideEditorStyles() {
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
+        /* 避免外層 popup-body 與 popup-custom-content 產生多餘滾動條與內距縫隙 */
+        .popup-window:has(.sem-container) .popup-body {
+            overflow: hidden !important;
+            padding: 0 !important;
+            gap: 0 !important;
+        }
+
+        .popup-window:has(.sem-container) .popup-custom-content {
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            overflow: hidden !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: 0 !important;
+        }
+
         .sem-container {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            height: 100%;
+            min-height: 0;
+            width: 100%;
+            box-sizing: border-box;
             color: #e2e8f0;
             font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
             font-size: 14px;
-            width: 100%;
-            box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
             position: relative;
+            overflow: hidden;
         }
 
-        /* 置頂固定預覽窗容器 */
+        /* 頂部固定預覽窗容器 (不隨下方操作區滾動) */
         .sem-preview-sticky {
-            position: sticky;
-            top: 0;
-            z-index: 30;
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: rgba(17, 20, 28, 0.98);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: #11141c;
             border-bottom: 1px solid rgba(255, 255, 255, 0.12);
             padding: 8px 0 10px 0;
-            margin: -8px -8px 0 -8px;
-            border-radius: 12px 12px 0 0;
+            margin: 0;
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .sem-preview-canvas {
@@ -268,12 +287,18 @@ function ensureSlideEditorStyles() {
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.65);
         }
 
-        /* 可滾動操作內容區 */
+        /* 獨立可滾動操作內容區 (限制於預覽窗下方滾動，絕不穿透溢出) */
         .sem-scroll-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
             display: flex;
             flex-direction: column;
             gap: 12px;
-            padding: 4px 0;
+            padding: 12px 14px 16px 14px;
+            box-sizing: border-box;
         }
 
         /* 語法與區間導覽列 */
@@ -867,6 +892,27 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         title: '編輯滑星軌跡',
         customContent: container,
         width: 500,
+        height: 680,
+        maxHeight: '90vh',
+        whenOpen: () => {
+            const customWrapper = container.parentElement;
+            const bodyElem = customWrapper?.parentElement;
+            if (customWrapper) {
+                customWrapper.style.padding = '0';
+                customWrapper.style.border = 'none';
+                customWrapper.style.background = 'transparent';
+                customWrapper.style.height = '100%';
+                customWrapper.style.display = 'flex';
+                customWrapper.style.flexDirection = 'column';
+                customWrapper.style.minHeight = '0';
+                customWrapper.style.overflow = 'hidden';
+            }
+            if (bodyElem && bodyElem.classList.contains('popup-body')) {
+                bodyElem.style.overflow = 'hidden';
+                bodyElem.style.padding = '0';
+                bodyElem.style.gap = '0';
+            }
+        },
         buttons: [
             {
                 text: '取消',

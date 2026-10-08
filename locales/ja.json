@@ -201,7 +201,8 @@
       "showCriticalPerfect": "Critical Perfect 表示",
       "showBreakCriticalPerfect": "Break Critical Perfect 表示",
       "showFastLate": "Fast / Late 表示",
-      "autoPlay": "プレイモード"
+      "autoPlay": "プレイモード",
+      "noBorder": "枠なし"
     },
     "middleDisplayOpts": {
       "off": "オフ",

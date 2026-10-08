@@ -201,7 +201,8 @@
       "showCriticalPerfect": "显示 critical perfect",
       "showBreakCriticalPerfect": "显示 break critical perfect",
       "showFastLate": "显示 fast / late",
-      "autoPlay": "游玩模式"
+      "autoPlay": "游玩模式",
+      "noBorder": "无边框"
     },
     "middleDisplayOpts": {
       "off": "关闭",

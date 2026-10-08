@@ -201,7 +201,8 @@
       "showCriticalPerfect": "Critical Perfect 표시",
       "showBreakCriticalPerfect": "Break Critical Perfect 표시",
       "showFastLate": "Fast / Late 표시",
-      "autoPlay": "플레이 모드"
+      "autoPlay": "플레이 모드",
+      "noBorder": "테두리 없음"
     },
     "middleDisplayOpts": {
       "off": "끄기",

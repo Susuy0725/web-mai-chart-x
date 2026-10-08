@@ -3063,10 +3063,11 @@ export class SimaiVisualEditor {
         const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine } = s;
         const t = (noteTime - this.globalTime);
 
+        const isPink = Boolean(this.settings.pinkStars);
         const img = this.images[isMine ?
             (isMultiple ? "star_mine_double" : "star_mine")
-            : (isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : "star_double"))
-                : (isBreak ? "star_break" : (isDouble ? "star_each" : "star")))
+            : (isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))
+                : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))))
         ];
         if (imgNotExists(img)) return;
         const size = this.settings.noteBaseSize;

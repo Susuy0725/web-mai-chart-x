@@ -779,7 +779,15 @@
     "endKeyHint": "Invalid ends disabled",
     "wCannotChain": "W slide is only supported as a single segment and cannot be chained",
     "cannotAddAfterW": "Cannot add segment after W slide",
-    "appliedToast": "Applied slide track: {slide}"
+    "appliedToast": "Applied slide track: {slide}",
+    "branchTitle": "Slide Branches",
+    "branchLabel": "Branch {index}",
+    "branchCount": "{count} total",
+    "addBranch": "Add Branch",
+    "delBranch": "Delete Branch",
+    "branchDuration": "Branch Duration",
+    "singleStar": "Single Star",
+    "doubleStar": "Double Star"
   },
   "touchGroupModal": {
     "title": "Edit Touch Group",

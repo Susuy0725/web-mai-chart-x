@@ -188,7 +188,7 @@ export function showFloatingMenu(note, screenPos, props, callbacks) {
 
     let html = '';
 
-    if (props.isHold || props.isSlide) {
+    if (props.isHold && !props.isSlide) {
         html += `
             <button type="button" class="wmc-fnm-item" data-action="change-duration">
                 <span>${t('visualMenu.editDuration')}</span>

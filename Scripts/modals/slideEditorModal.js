@@ -119,37 +119,12 @@ function findLegalEnd(start, type, fallback = 1, mid = null) {
 }
 
 /**
- * 解析滑星字串結構
- * 例如: "1>2-3<4[4:1]" -> { head: 1, prefixFlags: "", segments: [...], duration: "[4:1]" }
- * @param {string} rawPart 
- * @param {number} defaultLane 
+ * 解析單一條滑線的段落 (不含起點鍵位與旗標)
+ * @param {string} residue 軌跡字串 (如 "-4", ">3-5", "V24")
+ * @param {number} headLane 起點鍵位 (1-8)
+ * @returns {Array<{type: string, mid?: number, end: number}>}
  */
-export function parseSlideString(rawPart, defaultLane = 1) {
-    let clean = (rawPart || '').trim();
-
-    // 擷取時長方括號
-    const bracketMatch = clean.match(/\[([^\]]*)\]/);
-    const duration = bracketMatch ? bracketMatch[0] : '';
-    clean = clean.replace(/\[[^\]]*\]/g, '');
-
-    // 擷取起點與前綴修飾旗標
-    const headMatch = clean.match(/^(\d)([bm@?!]*)/);
-    let head = defaultLane;
-    let prefixFlags = '';
-    let residue = clean;
-
-    if (headMatch) {
-        head = parseInt(headMatch[1], 10);
-        prefixFlags = headMatch[2] || '';
-        residue = clean.slice(headMatch[0].length);
-    } else {
-        const laneMatch = clean.match(/^\d+/);
-        if (laneMatch) {
-            head = parseInt(laneMatch[0], 10);
-            residue = clean.slice(laneMatch[0].length);
-        }
-    }
-
+function parseSegmentsFromResidue(residue, headLane) {
     const segments = [];
     const REGEX_SEG = /((?:pp)|(?:qq)|[-<>^vpqszVw])(\d+)/g;
     let match;
@@ -161,7 +136,7 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         let end = 1;
 
         if (type === 'V') {
-            const segStart = segments.length === 0 ? head : segments[segments.length - 1].end;
+            const segStart = segments.length === 0 ? headLane : segments[segments.length - 1].end;
             if (numStr.length >= 2) {
                 mid = parseInt(numStr[0], 10);
                 end = parseInt(numStr.slice(1), 10);
@@ -176,9 +151,8 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         segments.push({ type, mid, end });
     }
 
-    // 若無任何有效段落，提供一筆預設段落
     if (segments.length === 0) {
-        const defaultEnd = ((head + 3) % 8) + 1;
+        const defaultEnd = ((headLane + 3) % 8) + 1;
         segments.push({
             type: '-',
             mid: undefined,
@@ -186,37 +160,230 @@ export function parseSlideString(rawPart, defaultLane = 1) {
         });
     }
 
+    return segments;
+}
+
+/**
+ * 解析滑星時長字串結構
+ * @param {string} rawDur 原始時長 (例如 "[4:1]", "[1.5##160#4:1]", "[160#4:1]", "[1.0]")
+ * @returns {Object} 時長狀態物件
+ */
+export function parseSlideDuration(rawDur) {
+    const cleanDur = (rawDur || '').replace(/[\[\]]/g, '').trim();
+    const state = {
+        useCustomWait: false,      // 是否自訂等候時間 (預設 1 拍等候)
+        waitMode: 'seconds',       // 'seconds' (語法 ##) | 'bpm' (語法 #)
+        waitSec: 1.0,              // 自訂等候秒數
+        slideWaitBpm: '',          // 指定等候 BPM
+        slideTracingMode: 'beat',  // 'beat' | 'seconds'
+        time: 4,                   // 幾分音符
+        beat: 1,                   // 拍數
+        slideBpm: '',              // 劃動 BPM (自訂等候秒數模式下)
+        slideSeconds: 1.0          // 劃動秒數
+    };
+
+    if (!cleanDur) return state;
+
+    if (cleanDur.includes('##')) {
+        state.useCustomWait = true;
+        state.waitMode = 'seconds';
+        const parts = cleanDur.split('##');
+        state.waitSec = parseFloat(parts[0]) || 1.0;
+        const residue = parts[1] || '';
+        if (residue.includes('#') && residue.includes(':')) {
+            state.slideTracingMode = 'beat';
+            const [bStr, tbStr] = residue.split('#');
+            state.slideBpm = bStr;
+            const [tStr, btStr] = tbStr.split(':');
+            state.time = parseInt(tStr, 10) || 4;
+            state.beat = parseInt(btStr, 10) || 1;
+        } else if (residue.includes(':')) {
+            state.slideTracingMode = 'beat';
+            const [tStr, btStr] = residue.split(':');
+            state.time = parseInt(tStr, 10) || 4;
+            state.beat = parseInt(btStr, 10) || 1;
+        } else {
+            state.slideTracingMode = 'seconds';
+            state.slideSeconds = parseFloat(residue) || 1.0;
+        }
+    } else if (cleanDur.includes('#')) {
+        state.useCustomWait = true;
+        state.waitMode = 'bpm';
+        if (cleanDur.includes(':')) {
+            state.slideTracingMode = 'beat';
+            const [bStr, tbStr] = cleanDur.split('#');
+            state.slideWaitBpm = bStr;
+            const [tStr, btStr] = tbStr.split(':');
+            state.time = parseInt(tStr, 10) || 4;
+            state.beat = parseInt(btStr, 10) || 1;
+        } else {
+            state.slideTracingMode = 'seconds';
+            const [bStr, sStr] = cleanDur.split('#');
+            state.slideWaitBpm = bStr;
+            state.slideSeconds = parseFloat(sStr) || 1.0;
+        }
+    } else {
+        state.useCustomWait = false;
+        state.waitMode = 'seconds';
+        if (cleanDur.includes(':')) {
+            state.slideTracingMode = 'beat';
+            const [tStr, btStr] = cleanDur.split(':');
+            state.time = parseInt(tStr, 10) || 4;
+            state.beat = parseInt(btStr, 10) || 1;
+        } else {
+            state.slideTracingMode = 'seconds';
+            state.slideSeconds = parseFloat(cleanDur) || 1.0;
+        }
+    }
+    return state;
+}
+
+/**
+ * 組合滑星時長字串
+ * @param {Object} state 
+ * @returns {string} 包含括號之時長字串 (如 "[4:1]", "[1##1.5]")
+ */
+export function buildSlideDurationString(state) {
+    if (!state) return '[4:1]';
+    let inner = '';
+    // 當滑動時長為秒數模式時，依 simai 規範必須包含 delay，語法為 [dly##dur] 或 [bpm#dur]
+    if (state.slideTracingMode === 'seconds') {
+        const dly = (state.waitSec !== undefined && state.waitSec !== null && state.waitSec !== '') ? state.waitSec : 1.0;
+        const dur = (state.slideSeconds !== undefined && state.slideSeconds !== null && state.slideSeconds !== '') ? state.slideSeconds : 1.0;
+        if (state.useCustomWait && state.waitMode === 'bpm' && state.slideWaitBpm) {
+            inner = `${state.slideWaitBpm}#${dur}`;
+        } else {
+            inner = `${dly}##${dur}`;
+        }
+    } else {
+        // 拍數模式
+        if (state.useCustomWait) {
+            if (state.waitMode === 'seconds') {
+                const dly = (state.waitSec !== undefined && state.waitSec !== null && state.waitSec !== '') ? state.waitSec : 1.0;
+                const bpmPart = state.slideBpm ? `${state.slideBpm}#` : '';
+                inner = `${dly}##${bpmPart}${state.time}:${state.beat}`;
+            } else {
+                const bpmPart = state.slideWaitBpm ? `${state.slideWaitBpm}#` : '';
+                inner = `${bpmPart}${state.time}:${state.beat}`;
+            }
+        } else {
+            inner = `${state.time}:${state.beat}`;
+        }
+    }
+    return `[${inner}]`;
+}
+
+/**
+ * 解析滑星字串結構 (支援單滑星與多分支滑星)
+ * 例如: "1>2-3<4[4:1]" -> { head: 1, prefixFlags: "", branches: [{ segments: [...], duration: "[4:1]", durState: {...} }] }
+ * 例如: "1-4[4:1]*-5[4:1]" -> { head: 1, prefixFlags: "", branches: [ ... ] }
+ * @param {string} rawPart 
+ * @param {number} defaultLane 
+ */
+export function parseSlideString(rawPart, defaultLane = 1) {
+    const clean = (rawPart || '').trim();
+
+    // 以星號 '*' 拆分各分支滑線
+    const branchParts = clean.includes('*')
+        ? clean.split('*').map(s => s.trim()).filter(Boolean)
+        : (clean ? [clean] : []);
+
+    let head = defaultLane;
+    let prefixFlags = '';
+    const branches = [];
+
+    // 解析第 0 分支 (包含音符起點鍵位與前綴旗標)
+    const part0 = branchParts[0] || '';
+    const bracket0 = part0.match(/\[([^\]]*)\]/);
+    const duration0 = bracket0 ? bracket0[0] : '';
+    let residue0 = part0.replace(/\[[^\]]*\]/g, '');
+
+    const headMatch = residue0.match(/^(\d)([bm@?!]*)/);
+    if (headMatch) {
+        head = parseInt(headMatch[1], 10);
+        prefixFlags = headMatch[2] || '';
+        residue0 = residue0.slice(headMatch[0].length);
+    } else {
+        const laneMatch = residue0.match(/^\d+/);
+        if (laneMatch) {
+            head = parseInt(laneMatch[0], 10);
+            residue0 = residue0.slice(laneMatch[0].length);
+        }
+    }
+
+    const durState0 = parseSlideDuration(duration0 || '[4:1]');
+    branches.push({
+        segments: parseSegmentsFromResidue(residue0, head),
+        duration: buildSlideDurationString(durState0),
+        durState: durState0
+    });
+
+    // 解析第 1..N 分支
+    for (let i = 1; i < branchParts.length; i++) {
+        const partI = branchParts[i];
+        const bracketI = partI.match(/\[([^\]]*)\]/);
+        const durationI = bracketI ? bracketI[0] : (duration0 || '');
+        let residueI = partI.replace(/\[[^\]]*\]/g, '');
+
+        // 若使用者在星號後贅帶了起點鍵位 (如 *1-5)，先剝除贅帶的起點鍵位
+        if (residueI.startsWith(String(head))) {
+            residueI = residueI.slice(String(head).length);
+        }
+
+        const durStateI = parseSlideDuration(durationI || duration0 || '[4:1]');
+        branches.push({
+            segments: parseSegmentsFromResidue(residueI, head),
+            duration: buildSlideDurationString(durStateI),
+            durState: durStateI
+        });
+    }
+
+    if (branches.length === 0) {
+        const defaultDurState = parseSlideDuration(duration0 || '[4:1]');
+        branches.push({
+            segments: parseSegmentsFromResidue('', head),
+            duration: buildSlideDurationString(defaultDurState),
+            durState: defaultDurState
+        });
+    }
+
     return {
         head,
         prefixFlags,
-        segments,
-        duration
+        branches,
+        get segments() { return this.branches[0]?.segments || []; },
+        get duration() { return this.branches[0]?.duration || ''; }
     };
 }
 
 /**
- * 組合滑星字串
+ * 組合滑星字串 (支援多分支滑星)
  * @param {Object} data 
  * @returns {string}
  */
 export function buildSlideString(data) {
-    const { head, prefixFlags, segments, duration } = data;
-    let result = `${head}${prefixFlags || ''}`;
+    const { head, prefixFlags, branches } = data;
+    if (!branches || branches.length === 0) {
+        return `${head}${prefixFlags || ''}`;
+    }
 
-    for (const seg of segments) {
-        if (seg.type === 'V') {
-            const midStr = seg.mid !== undefined ? String(seg.mid) : '';
-            result += `${seg.type}${midStr}${seg.end}`;
-        } else {
-            result += `${seg.type}${seg.end}`;
+    return branches.map((branch, bIdx) => {
+        let segStr = '';
+        for (const seg of branch.segments) {
+            if (seg.type === 'V') {
+                const midStr = seg.mid !== undefined ? String(seg.mid) : '';
+                segStr += `${seg.type}${midStr}${seg.end}`;
+            } else {
+                segStr += `${seg.type}${seg.end}`;
+            }
         }
-    }
-
-    if (duration) {
-        result += duration;
-    }
-
-    return result;
+        const durStr = branch.duration || '';
+        if (bIdx === 0) {
+            return `${head}${prefixFlags || ''}${segStr}${durStr}`;
+        } else {
+            return `*${segStr}${durStr}`;
+        }
+    }).join('');
 }
 
 /**
@@ -339,6 +506,104 @@ function ensureSlideEditorStyles() {
             border-radius: 2px;
         }
 
+        /* 分支管理列 */
+        .sem-branch-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 10px 14px;
+        }
+
+        .sem-branch-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sem-branch-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .sem-branch-count-badge {
+            font-size: 11px;
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .sem-branch-tab-track {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: thin;
+        }
+
+        .sem-branch-tab-track::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .sem-branch-tab-track::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        .sem-branch-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 86px;
+            height: 34px;
+            padding: 0 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            color: #cbd5e1;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-sizing: border-box;
+            flex-shrink: 0;
+            font-family: monospace, sans-serif;
+        }
+
+        .sem-branch-chip:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .sem-branch-chip.active {
+            background: #2563eb !important;
+            border-color: #3b82f6 !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+        }
+
+        .sem-branch-chip-text {
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: center;
+            display: block;
+        }
+
         .sem-head-node {
             display: inline-flex;
             align-items: center;
@@ -352,6 +617,25 @@ function ensureSlideEditorStyles() {
             color: #f8fafc;
             font-size: 17px;
             font-weight: 700;
+        }
+
+        .sem-duration-editor {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .sem-dur-badge {
+            font-family: monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.12);
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            display: inline-block;
         }
 
         /* 區間晶片 (Material Chip) */
@@ -547,6 +831,133 @@ function ensureSlideEditorStyles() {
             cursor: not-allowed !important;
             pointer-events: none;
         }
+
+        /* 時長設定卡片 (Material Design 原生風格) */
+        .sem-dur-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sem-dur-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .sem-dur-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .sem-dur-tab-row {
+            display: flex;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px;
+            border-radius: 6px;
+            width: fit-content;
+        }
+
+        .sem-dur-tab-btn {
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .sem-dur-tab-btn:hover {
+            color: #ffffff;
+        }
+
+        .sem-dur-tab-btn.active {
+            background: #2563eb;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .sem-dur-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .sem-dur-field {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sem-dur-label {
+            font-size: 12px;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+
+        .sem-dur-input {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 6px;
+            color: #ffffff;
+            padding: 6px 8px;
+            font-size: 13px;
+            font-family: monospace;
+            text-align: center;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.12s ease;
+        }
+
+        .sem-dur-input:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+
+        .sem-dur-checkbox-wrapper {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            position: relative;
+        }
+
+        .sem-dur-checkbox {
+            appearance: auto;
+            -webkit-appearance: checkbox;
+            width: 17px !important;
+            height: 17px !important;
+            accent-color: #2563eb !important;
+            cursor: pointer !important;
+            margin: 0 !important;
+            flex-shrink: 0 !important;
+        }
+
+        .sem-dur-checkbox-label {
+            cursor: pointer;
+            font-size: 13px;
+            color: #cbd5e1;
+            user-select: none;
+            -webkit-user-select: none;
+            line-height: 1;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -566,7 +977,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
 
     const initialLane = note?.pos || 1;
     const slideData = parseSlideString(rawPart, initialLane);
-    let activeIndex = 0; // 當前正在編輯的區間索引
+    let activeBranchIndex = 0; // 當前正在編輯的分支索引
+    let activeSegIndex = 0;    // 當前正在編輯的區間索引
 
     const container = document.createElement('div');
     container.className = 'sem-container';
@@ -608,7 +1020,7 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
     }
 
     /**
-     * 呼叫主渲染器繪製當前滑星預覽畫面
+     * 呼叫主渲染器繪製當前滑星預覽畫面 (包含所有分支與星星頭)
      */
     function updateRendererPreview() {
         if (!previewRenderer) return;
@@ -619,8 +1031,12 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             previewRenderer.resize(250, 250, dpr, true);
         }
 
-        const slideStr = buildSlideString(slideData);
-        const fullSimai = slideData.duration ? slideStr : `${slideStr}[4:1]`;
+        // 確保解碼時每個分支都有有效時長以利 simaiDecode 正確解碼
+        const branchesWithDur = slideData.branches.map(b => ({
+            ...b,
+            duration: b.duration ? b.duration : '[4:1]'
+        }));
+        const fullSimai = buildSlideString({ ...slideData, branches: branchesWithDur });
         let decoded = null;
 
         try {
@@ -653,17 +1069,31 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
      * 重新渲染可滾動內容區與預覽
      */
     function renderUI() {
-        if (activeIndex >= slideData.segments.length) {
-            activeIndex = Math.max(0, slideData.segments.length - 1);
+        if (!slideData.branches || slideData.branches.length === 0) {
+            slideData.branches = [{
+                segments: [{ type: '-', mid: undefined, end: findLegalEnd(slideData.head, '-', ((slideData.head + 3) % 8) + 1) }],
+                duration: '[4:1]'
+            }];
         }
 
-        const currentSeg = slideData.segments[activeIndex];
-        const segCount = slideData.segments.length;
-        const lastSeg = slideData.segments[segCount - 1];
+        if (activeBranchIndex >= slideData.branches.length) {
+            activeBranchIndex = Math.max(0, slideData.branches.length - 1);
+        }
+
+        const currentBranch = slideData.branches[activeBranchIndex];
+        const branchCount = slideData.branches.length;
+
+        if (activeSegIndex >= currentBranch.segments.length) {
+            activeSegIndex = Math.max(0, currentBranch.segments.length - 1);
+        }
+
+        const currentSeg = currentBranch.segments[activeSegIndex];
+        const segCount = currentBranch.segments.length;
+        const lastSeg = currentBranch.segments[segCount - 1];
         const isAddDisabled = (lastSeg?.type === 'w');
 
-        // 計算當前段落的起點
-        const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
+        // 計算當前段落的起點 (第 0 段為起點鍵位，後續為前一段終點)
+        const segStart = activeSegIndex === 0 ? slideData.head : currentBranch.segments[activeSegIndex - 1].end;
 
         // 若當前段落為 V 字形狀且中繼點不合法，自動校正
         if (currentSeg.type === 'V' && !isLegalVMid(segStart, currentSeg.mid)) {
@@ -673,17 +1103,48 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
             }
         }
 
+        const currentDurState = currentBranch.durState || (currentBranch.durState = parseSlideDuration(currentBranch.duration));
+
         scrollBody.innerHTML = `
-            <!-- 上方區間顯示與導航條 -->
+            <!-- 分支管理列 (Branch Navigation Bar) -->
+            <div class="sem-branch-container">
+                <div class="sem-branch-header">
+                    <div class="sem-branch-title">
+                        <span>${t('slideEditorModal.branchTitle')}</span>
+                        <span class="sem-branch-count-badge">${t('slideEditorModal.branchCount', { count: branchCount })}</span>
+                    </div>
+                    <div class="sem-seg-btn-group">
+                        <button type="button" class="sem-icon-btn" id="sem-add-branch" title="${t('slideEditorModal.addBranch')}">
+                            <span>＋ ${t('slideEditorModal.addBranch')}</span>
+                        </button>
+                        <button type="button" class="sem-icon-btn" id="sem-del-branch" ${branchCount <= 1 ? 'disabled' : ''} title="${t('slideEditorModal.delBranch')}">
+                            <span>－ ${t('slideEditorModal.delBranch')}</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="sem-branch-tab-track">
+                    ${slideData.branches.map((b, bIdx) => {
+                        const isBActive = (bIdx === activeBranchIndex);
+                        const bSummary = b.segments.map(s => s.type === 'V' ? `V${s.mid ?? ''}${s.end}` : `${s.type}${s.end}`).join('') + (b.duration || '');
+                        return `
+                            <button type="button" class="sem-branch-chip ${isBActive ? 'active' : ''}" data-branch-index="${bIdx}" title="${bSummary}">
+                                <span class="sem-branch-chip-text">${bSummary}</span>
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <!-- 上方區間顯示與導航條 (當前分支) -->
             <div class="sem-chain-container">
                 <div class="sem-chain-label">
                     <span>${t('slideEditorModal.trackChain')}</span>
-                    <span class="sem-status-indicator">${t('slideEditorModal.editingSeg', { current: activeIndex + 1, total: segCount, start: segStart, end: currentSeg.end })}</span>
+                    <span class="sem-status-indicator">${t('slideEditorModal.editingSeg', { current: activeSegIndex + 1, total: segCount, start: segStart, end: currentSeg.end })}</span>
                 </div>
                 <div class="sem-chain-track">
                     <div class="sem-head-node" title="${t('slideEditorModal.headNode')}">${slideData.head}</div>
-                    ${slideData.segments.map((seg, idx) => {
-                        const isActive = (idx === activeIndex);
+                    ${currentBranch.segments.map((seg, idx) => {
+                        const isActive = (idx === activeSegIndex);
                         const label = seg.type === 'V'
                             ? `${seg.type}${seg.mid ?? ''}${seg.end}`
                             : `${seg.type} ${seg.end}`;
@@ -693,10 +1154,13 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                             </button>
                         `;
                     }).join('')}
-                    ${slideData.duration ? `<div class="sem-duration-tag">${slideData.duration}</div>` : ''}
+                    <div class="sem-duration-editor">
+                        <span style="font-size: 11px; color: #94a3b8;">${t('slideEditorModal.branchDuration')}:</span>
+                        <span class="sem-dur-badge" id="sem-branch-dur-badge">${currentBranch.duration || '[4:1]'}</span>
+                    </div>
                 </div>
                 <div class="sem-actions-bar">
-                    <span style="font-size: 12px; color: #64748b;">${t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) })}</span>
+                    <span id="sem-syntax-text" style="font-size: 12px; color: #64748b;">${t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) })}</span>
                     <div class="sem-seg-btn-group">
                         <button type="button" class="sem-icon-btn" id="sem-add-seg" ${isAddDisabled ? 'disabled' : ''} title="${isAddDisabled ? t('slideEditorModal.cannotAddAfterW') : t('slideEditorModal.addSeg')}">
                             <span>＋ ${t('slideEditorModal.addSeg')}</span>
@@ -763,11 +1227,80 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                         return `
                             <button type="button" class="sem-key-btn ${isEndActive ? 'active' : ''}" 
                                 data-end-key="${k}" ${!isLegal ? 'disabled' : ''}>
-                                ${k}
+                                    ${k}
                             </button>
                         `;
                     }).join('')}
                 </div>
+            </div>
+
+            <!-- 當前分支時長設定：等候時間卡片 (無圖示 Material Design 風格) -->
+            <div class="sem-dur-card">
+                <div class="sem-dur-header">
+                    <div class="sem-dur-title">
+                        <span>${t('noteDurationModal.waitTime')}</span>
+                    </div>
+                    <div class="sem-dur-checkbox-wrapper">
+                        <input type="checkbox" id="sem-slide-custom-wait" class="sem-dur-checkbox" ${currentDurState.useCustomWait ? 'checked' : ''}>
+                        <label for="sem-slide-custom-wait" class="sem-dur-checkbox-label">${t('noteDurationModal.customWait')}</label>
+                    </div>
+                </div>
+
+                <div id="sem-wait-content" style="display: ${currentDurState.useCustomWait ? 'flex' : 'none'}; flex-direction: column; gap: 10px; margin-top: 4px;">
+                    <div class="sem-dur-row">
+                        <div class="sem-dur-tab-row">
+                            <button type="button" class="sem-dur-tab-btn ${currentDurState.waitMode === 'seconds' ? 'active' : ''}" data-action="set-wait-mode-seconds">${t('noteDurationModal.specifySeconds')}</button>
+                            <button type="button" class="sem-dur-tab-btn ${currentDurState.waitMode === 'bpm' ? 'active' : ''}" data-action="set-wait-mode-bpm">${t('noteDurationModal.specifyBpmWait')}</button>
+                        </div>
+
+                        <div class="sem-dur-field" id="sem-wait-sec-field" style="margin-left: auto; display: ${currentDurState.waitMode === 'seconds' ? 'flex' : 'none'};">
+                            <span class="sem-dur-label">${t('noteDurationModal.waitSeconds')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-slide-wait-sec" value="${currentDurState.waitSec}" step="0.1" min="0.01" style="width: 80px;">
+                            <span>${t('noteDurationModal.secondsUnit')}</span>
+                        </div>
+
+                        <div class="sem-dur-field" id="sem-wait-bpm-field" style="margin-left: auto; display: ${currentDurState.waitMode === 'bpm' ? 'flex' : 'none'};">
+                            <span class="sem-dur-label">${t('noteDurationModal.waitBpm')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-slide-wait-bpm" value="${currentDurState.slideWaitBpm}" step="0.1" style="width: 80px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 當前分支時長設定：劃動時長卡片 (無圖示 Material Design 風格) -->
+            <div class="sem-dur-card">
+                <div class="sem-dur-header">
+                    <div class="sem-dur-title">
+                        <span>${t('noteDurationModal.slideDuration')}</span>
+                    </div>
+                    <div class="sem-dur-tab-row">
+                        <button type="button" class="sem-dur-tab-btn ${currentDurState.slideTracingMode === 'beat' ? 'active' : ''}" data-action="set-slide-tracing-beat">${t('noteDurationModal.modeBeat')}</button>
+                        <button type="button" class="sem-dur-tab-btn ${currentDurState.slideTracingMode === 'seconds' ? 'active' : ''}" data-action="set-slide-tracing-seconds">${t('noteDurationModal.modeSeconds')}</button>
+                    </div>
+                </div>
+
+                ${currentDurState.slideTracingMode === 'beat' ? `
+                    <div class="sem-dur-row">
+                        <div class="sem-dur-field">
+                            <input type="number" class="sem-dur-input" id="sem-dur-time" value="${currentDurState.time}" min="1" max="128" style="width: 60px;">
+                            <span class="sem-dur-label">${t('noteDurationModal.divisionTimes')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-dur-beat" value="${currentDurState.beat}" min="1" max="512" style="width: 60px;">
+                            <span class="sem-dur-label">${t('noteDurationModal.beatCount')}</span>
+                        </div>
+                        <div class="sem-dur-field" id="sem-slide-tracing-bpm-field" style="margin-left: auto; display: ${(currentDurState.useCustomWait && currentDurState.waitMode === 'seconds') ? 'flex' : 'none'};">
+                            <span class="sem-dur-label">${t('noteDurationModal.slideBpm')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-slide-tracing-bpm" value="${currentDurState.slideBpm}" step="0.1" style="width: 80px;">
+                        </div>
+                    </div>
+                ` : `
+                    <div class="sem-dur-row">
+                        <div class="sem-dur-field">
+                            <span class="sem-dur-label">${t('noteDurationModal.slideSeconds')}</span>
+                            <input type="number" class="sem-dur-input" id="sem-slide-seconds" value="${currentDurState.slideSeconds}" step="0.05" min="0.01" style="width: 90px;">
+                            <span>${t('noteDurationModal.secondsUnit')}</span>
+                        </div>
+                    </div>
+                `}
             </div>
         `;
 
@@ -779,10 +1312,186 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
      * 綁定互動事件
      */
     function bindEvents() {
+        const currentBranch = slideData.branches[activeBranchIndex];
+        const currentDurState = currentBranch.durState || (currentBranch.durState = parseSlideDuration(currentBranch.duration));
+
+        // 時長同步更新函式
+        function syncBranchDuration() {
+            currentBranch.duration = buildSlideDurationString(currentDurState);
+            const syntaxElem = scrollBody.querySelector('#sem-syntax-text');
+            if (syntaxElem) {
+                syntaxElem.textContent = t('slideEditorModal.syntaxPreview', { syntax: buildSlideString(slideData) });
+            }
+            const durBadge = scrollBody.querySelector('#sem-branch-dur-badge');
+            if (durBadge) {
+                durBadge.textContent = currentBranch.duration;
+            }
+            // 更新分支晶片文字與提示
+            const chipBtn = scrollBody.querySelector(`.sem-branch-chip[data-branch-index="${activeBranchIndex}"]`);
+            if (chipBtn) {
+                const bSummary = currentBranch.segments.map(s => s.type === 'V' ? `V${s.mid ?? ''}${s.end}` : `${s.type}${s.end}`).join('') + (currentBranch.duration || '');
+                chipBtn.title = bSummary;
+                const chipText = chipBtn.querySelector('.sem-branch-chip-text');
+                if (chipText) chipText.textContent = bSummary;
+            }
+            updateRendererPreview();
+        }
+
+        // 切換編輯分支
+        scrollBody.querySelectorAll('[data-branch-index]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                activeBranchIndex = parseInt(btn.dataset.branchIndex, 10);
+                activeSegIndex = 0;
+                renderUI();
+            });
+        });
+
+        // 新增分支 (使用標準預設值建立)
+        const addBranchBtn = scrollBody.querySelector('#sem-add-branch');
+        if (addBranchBtn) {
+            addBranchBtn.addEventListener('click', () => {
+                const newEnd = findLegalEnd(slideData.head, '-', ((slideData.head + 3) % 8) + 1);
+                const defaultDurState = parseSlideDuration('[4:1]');
+                const defaultDuration = buildSlideDurationString(defaultDurState);
+                slideData.branches.push({
+                    segments: [{
+                        type: '-',
+                        mid: undefined,
+                        end: newEnd
+                    }],
+                    duration: defaultDuration,
+                    durState: defaultDurState
+                });
+                activeBranchIndex = slideData.branches.length - 1;
+                activeSegIndex = 0;
+                renderUI();
+            });
+        }
+
+        // 刪除分支
+        const delBranchBtn = scrollBody.querySelector('#sem-del-branch');
+        if (delBranchBtn) {
+            delBranchBtn.addEventListener('click', () => {
+                if (slideData.branches.length <= 1) return;
+                slideData.branches.splice(activeBranchIndex, 1);
+                if (activeBranchIndex >= slideData.branches.length) {
+                    activeBranchIndex = slideData.branches.length - 1;
+                }
+                activeSegIndex = 0;
+                renderUI();
+            });
+        }
+
+        // 自訂等候時間勾選
+        const customWaitCheckbox = scrollBody.querySelector('#sem-slide-custom-wait');
+        if (customWaitCheckbox) {
+            customWaitCheckbox.addEventListener('change', () => {
+                currentDurState.useCustomWait = customWaitCheckbox.checked;
+                syncBranchDuration();
+                renderUI();
+            });
+        }
+
+        // 等候時間模式按鈕 (秒數 / BPM)
+        scrollBody.querySelectorAll('[data-action^="set-wait-mode-"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.action.replace('set-wait-mode-', '');
+                currentDurState.waitMode = mode;
+                syncBranchDuration();
+                renderUI();
+            });
+        });
+
+        // 劃動時間模式按鈕 (節拍 / 秒數)
+        scrollBody.querySelectorAll('[data-action^="set-slide-tracing-"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.action.replace('set-slide-tracing-', '');
+                currentDurState.slideTracingMode = mode;
+                if (mode === 'seconds') {
+                    // 秒數模式下必須具備等候延遲 dly，確保啟用等候秒數以符合 [dly##dur] 規範
+                    currentDurState.useCustomWait = true;
+                    if (!currentDurState.waitSec) currentDurState.waitSec = 1.0;
+                    if (!currentDurState.slideSeconds) currentDurState.slideSeconds = 1.0;
+                }
+                syncBranchDuration();
+                renderUI();
+            });
+        });
+
+        // 等候秒數輸入
+        const waitSecInput = scrollBody.querySelector('#sem-slide-wait-sec');
+        if (waitSecInput) {
+            const onWaitSec = () => {
+                const val = parseFloat(waitSecInput.value);
+                currentDurState.waitSec = !isNaN(val) && val > 0 ? val : 1.0;
+                syncBranchDuration();
+            };
+            waitSecInput.addEventListener('input', onWaitSec);
+            waitSecInput.addEventListener('change', onWaitSec);
+        }
+
+        // 等候 BPM 輸入
+        const waitBpmInput = scrollBody.querySelector('#sem-slide-wait-bpm');
+        if (waitBpmInput) {
+            const onWaitBpm = () => {
+                currentDurState.slideWaitBpm = waitBpmInput.value.trim();
+                syncBranchDuration();
+            };
+            waitBpmInput.addEventListener('input', onWaitBpm);
+            waitBpmInput.addEventListener('change', onWaitBpm);
+        }
+
+        // 拍數分母 (time)
+        const timeInput = scrollBody.querySelector('#sem-dur-time');
+        if (timeInput) {
+            const onTime = () => {
+                const val = parseInt(timeInput.value, 10);
+                currentDurState.time = !isNaN(val) && val > 0 ? val : 4;
+                syncBranchDuration();
+            };
+            timeInput.addEventListener('input', onTime);
+            timeInput.addEventListener('change', onTime);
+        }
+
+        // 拍數分子 (beat)
+        const beatInput = scrollBody.querySelector('#sem-dur-beat');
+        if (beatInput) {
+            const onBeat = () => {
+                const val = parseInt(beatInput.value, 10);
+                currentDurState.beat = !isNaN(val) && val > 0 ? val : 1;
+                syncBranchDuration();
+            };
+            beatInput.addEventListener('input', onBeat);
+            beatInput.addEventListener('change', onBeat);
+        }
+
+        // 劃動 BPM 輸入
+        const slideBpmInput = scrollBody.querySelector('#sem-slide-tracing-bpm');
+        if (slideBpmInput) {
+            const onSlideBpm = () => {
+                currentDurState.slideBpm = slideBpmInput.value.trim();
+                syncBranchDuration();
+            };
+            slideBpmInput.addEventListener('input', onSlideBpm);
+            slideBpmInput.addEventListener('change', onSlideBpm);
+        }
+
+        // 劃動秒數輸入
+        const slideSecInput = scrollBody.querySelector('#sem-slide-seconds');
+        if (slideSecInput) {
+            const onSlideSec = () => {
+                const val = parseFloat(slideSecInput.value);
+                currentDurState.slideSeconds = !isNaN(val) && val > 0 ? val : 1.0;
+                syncBranchDuration();
+            };
+            slideSecInput.addEventListener('input', onSlideSec);
+            slideSecInput.addEventListener('change', onSlideSec);
+        }
+
         // 切換編輯區間
         scrollBody.querySelectorAll('[data-seg-index]').forEach(btn => {
             btn.addEventListener('click', () => {
-                activeIndex = parseInt(btn.dataset.segIndex, 10);
+                activeSegIndex = parseInt(btn.dataset.segIndex, 10);
                 renderUI();
             });
         });
@@ -791,19 +1500,19 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         const addBtn = scrollBody.querySelector('#sem-add-seg');
         if (addBtn) {
             addBtn.addEventListener('click', () => {
-                const lastSeg = slideData.segments[slideData.segments.length - 1];
+                const lastSeg = currentBranch.segments[currentBranch.segments.length - 1];
                 if (lastSeg?.type === 'w') return;
                 const newStart = lastSeg.end;
                 const newType = '-';
                 const newEnd = findLegalEnd(newStart, newType, ((newStart + 3) % 8) + 1);
 
-                slideData.segments.push({
+                currentBranch.segments.push({
                     type: newType,
                     mid: undefined,
                     end: newEnd
                 });
 
-                activeIndex = slideData.segments.length - 1;
+                activeSegIndex = currentBranch.segments.length - 1;
                 renderUI();
             });
         }
@@ -812,14 +1521,14 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         const delBtn = scrollBody.querySelector('#sem-del-seg');
         if (delBtn) {
             delBtn.addEventListener('click', () => {
-                if (slideData.segments.length <= 1) return;
-                slideData.segments.splice(activeIndex, 1);
-                if (activeIndex >= slideData.segments.length) {
-                    activeIndex = slideData.segments.length - 1;
+                if (currentBranch.segments.length <= 1) return;
+                currentBranch.segments.splice(activeSegIndex, 1);
+                if (activeSegIndex >= currentBranch.segments.length) {
+                    activeSegIndex = currentBranch.segments.length - 1;
                 }
-                for (let i = 0; i < slideData.segments.length; i++) {
-                    const sStart = i === 0 ? slideData.head : slideData.segments[i - 1].end;
-                    const sSeg = slideData.segments[i];
+                for (let i = 0; i < currentBranch.segments.length; i++) {
+                    const sStart = i === 0 ? slideData.head : currentBranch.segments[i - 1].end;
+                    const sSeg = currentBranch.segments[i];
                     if (sSeg.type === 'V' && !isLegalVMid(sStart, sSeg.mid)) {
                         sSeg.mid = getLegalVMid(sStart, sSeg.mid);
                     }
@@ -835,9 +1544,9 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         scrollBody.querySelectorAll('[data-pattern]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const newPattern = btn.dataset.pattern;
-                if (newPattern === 'w' && slideData.segments.length > 1) return;
-                const seg = slideData.segments[activeIndex];
-                const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
+                if (newPattern === 'w' && currentBranch.segments.length > 1) return;
+                const seg = currentBranch.segments[activeSegIndex];
+                const segStart = activeSegIndex === 0 ? slideData.head : currentBranch.segments[activeSegIndex - 1].end;
 
                 seg.type = newPattern;
                 if (newPattern === 'V') {
@@ -861,8 +1570,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         scrollBody.querySelectorAll('[data-mid-key]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const midVal = parseInt(btn.dataset.midKey, 10);
-                const seg = slideData.segments[activeIndex];
-                const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
+                const seg = currentBranch.segments[activeSegIndex];
+                const segStart = activeSegIndex === 0 ? slideData.head : currentBranch.segments[activeSegIndex - 1].end;
 
                 if (!isLegalVMid(segStart, midVal)) return;
 
@@ -878,8 +1587,8 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
         scrollBody.querySelectorAll('[data-end-key]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const endVal = parseInt(btn.dataset.endKey, 10);
-                const seg = slideData.segments[activeIndex];
-                const segStart = activeIndex === 0 ? slideData.head : slideData.segments[activeIndex - 1].end;
+                const seg = currentBranch.segments[activeSegIndex];
+                const segStart = activeSegIndex === 0 ? slideData.head : currentBranch.segments[activeSegIndex - 1].end;
 
                 if (!isSlideLegal(segStart, endVal, seg.type, seg.mid)) {
                     return;
@@ -888,9 +1597,9 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
                 seg.end = endVal;
 
                 // 若後面還有段落，檢查並修正後續段落的合法性
-                for (let i = activeIndex + 1; i < slideData.segments.length; i++) {
-                    const sStart = slideData.segments[i - 1].end;
-                    const sSeg = slideData.segments[i];
+                for (let i = activeSegIndex + 1; i < currentBranch.segments.length; i++) {
+                    const sStart = currentBranch.segments[i - 1].end;
+                    const sSeg = currentBranch.segments[i];
                     if (sSeg.type === 'V' && !isLegalVMid(sStart, sSeg.mid)) {
                         sSeg.mid = getLegalVMid(sStart, sSeg.mid);
                     }

@@ -795,7 +795,9 @@ export function simaiDecode(data = "", baseOffset = true) {
                     if (noteStr.includes('*')) {
                         const p = noteStr.split('*').map(s => s.trim());
                         for (let i = 1; i < p.length; i++) {
-                            p[i] = noteObj.pos + p[i];
+                            if (!/^\d/.test(p[i])) {
+                                p[i] = noteObj.pos + p[i];
+                            }
                         }
                         slideParts = p;
                     } else {

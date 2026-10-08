@@ -339,9 +339,10 @@ export function openNoteDurationModal({
                     }
                 }
             } else {
-                // 預設 1 拍等候 (無自訂前綴)
+                // 預設等候 (無自訂前綴)
                 if (state.slideTracingMode === 'seconds') {
-                    return `${state.slideSeconds}`;
+                    // simai 規範 slide 秒數必須包含等候延遲 [dly##dur]
+                    return `${state.waitSec || 1.0}##${state.slideSeconds}`;
                 } else {
                     return `${state.time}:${state.beat}`;
                 }

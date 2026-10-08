@@ -779,7 +779,15 @@
     "endKeyHint": "비활성화된 끝점은 비활성화되었습니다",
     "wCannotChain": "W 슬라이드는 단일 구간만 지원되며 다른 구간과 연결할 수 없습니다",
     "cannotAddAfterW": "W 슬라이드 뒤에는 새 구간을 추가할 수 없습니다",
-    "appliedToast": "슬라이드 궤적 적용 완료: {slide}"
+    "appliedToast": "슬라이드 궤적 적용 완료: {slide}",
+    "branchTitle": "슬라이드 분기",
+    "branchLabel": "분기 {index}",
+    "branchCount": "총 {count} 개",
+    "addBranch": "분기 추가",
+    "delBranch": "분기 삭제",
+    "branchDuration": "분기 시간",
+    "singleStar": "단일 별 (단일 슬라이드)",
+    "doubleStar": "이중 별 (분기 슬라이드)"
   },
   "touchGroupModal": {
     "title": "Touch 그룹 편집",

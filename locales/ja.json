@@ -779,7 +779,15 @@
     "endKeyHint": "無効な終点は無効化されています",
     "wCannotChain": "Wスライドは単一区間のみ対応しており、連結できません",
     "cannotAddAfterW": "Wスライドの後ろに新規区間を追加できません",
-    "appliedToast": "スライド軌道を適用しました: {slide}"
+    "appliedToast": "スライド軌道を適用しました: {slide}",
+    "branchTitle": "スライド分岐",
+    "branchLabel": "分岐 {index}",
+    "branchCount": "全 {count} 本",
+    "addBranch": "分岐追加",
+    "delBranch": "分岐削除",
+    "branchDuration": "分岐時間",
+    "singleStar": "単星 (単スライド)",
+    "doubleStar": "二重星 (分岐スライド)"
   },
   "touchGroupModal": {
     "title": "Touch グループ編集",

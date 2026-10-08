@@ -779,7 +779,15 @@
     "endKeyHint": "无效终点已禁用",
     "wCannotChain": "W 轨迹仅限单段滑星，不可与其他区间串接",
     "cannotAddAfterW": "W 轨迹后方不可新增区间",
-    "appliedToast": "已应用滑星轨迹: {slide}"
+    "appliedToast": "已应用滑星轨迹: {slide}",
+    "branchTitle": "滑线分支",
+    "branchLabel": "分支 {index}",
+    "branchCount": "共 {count} 条",
+    "addBranch": "新增分支",
+    "delBranch": "删除分支",
+    "branchDuration": "分支时值",
+    "singleStar": "单星 (单滑线)",
+    "doubleStar": "双星 (分支滑线)"
   },
   "touchGroupModal": {
     "title": "编辑 Touch 组",

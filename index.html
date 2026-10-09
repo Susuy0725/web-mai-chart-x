@@ -513,15 +513,24 @@
                     <div class="utilitySeparator utility-break"></div>
                 </div>
                 <div class="utility-row utility-row-2">
+                    <div class="utilityButton " data-buttonAction="playbackSpeedMinus" role="button" tabindex="0"
+                        aria-label="降低播放速度">-
+                    </div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed"
+                        data-i18n="menu.playbackSpeed">
+                        播放速度
+                        <input type="number" step="0.25" value="1" name="d" min="0.25" max="2" aria-label="播放速度倍率">
+                    </div>
+                    <div class="utilityButton " data-buttonAction="playbackSpeedAdd" role="button" tabindex="0"
+                        aria-label="提高播放速度">+
+                    </div>
+                    <div class="utilitySeparator"></div>
                     <div class="utilityButton noFixedsize" data-buttonAction="displayMode" data-i18n="menu.displayMode">
                         顯示模式
                         <select name="displayMode" aria-label="顯示模式">
                             <option value="simai" data-i18n="menu.displayModeSimai">simai 語法</option>
                             <option value="visual" data-i18n="menu.displayModeVisual">軌道</option>
                         </select>
-                    </div>
-                    <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
-                        <input type="number" step="0.01" value="0" name="d" aria-label="譜面偏移秒數">
                     </div>
                     <div class="utilitySeparator"></div>
                     <div class="utilityButton noFixedsize" data-buttonAction="changeDifficulty"
@@ -537,16 +546,8 @@
                         </select>
                     </div>
                     <div class="utilitySeparator"></div>
-                    <div class="utilityButton " data-buttonAction="playbackSpeedMinus" role="button" tabindex="0"
-                        aria-label="降低播放速度">-
-                    </div>
-                    <div class="utilityButton noFixedsize" data-buttonAction="playbackSpeed"
-                        data-i18n="menu.playbackSpeed">
-                        播放速度
-                        <input type="number" step="0.25" value="1" name="d" min="0.25" max="2" aria-label="播放速度倍率">
-                    </div>
-                    <div class="utilityButton " data-buttonAction="playbackSpeedAdd" role="button" tabindex="0"
-                        aria-label="提高播放速度">+
+                    <div class="utilityButton noFixedsize" data-buttonAction="offset" data-i18n="menu.offset">偏移
+                        <input type="number" step="0.01" value="0" name="d" aria-label="譜面偏移秒數">
                     </div>
                     <div class="utilitySeparator"></div>
                     <div class="utilityButton noFixedsize" data-buttonAction="timebase" data-i18n="menu.timeSignature">
@@ -554,6 +555,7 @@
                         <input type="number" step="1" value="4" name="tb1" aria-label="拍號分子">/ <input type="number"
                             step="1" value="4" name="tb2" aria-label="拍號分母">
                     </div>
+                    <div class="utilitySeparator"></div>
                     <div class="utilityButton noFixedsize" data-buttonAction="readyBeat" data-i18n="menu.readyBeat">
                         預備拍<input type="checkbox" name="d" aria-label="啟用預備拍">
                     </div>

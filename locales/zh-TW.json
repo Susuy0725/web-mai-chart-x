@@ -204,7 +204,9 @@
       "showBreakCriticalPerfect": "顯示 break critical perfect",
       "showFastLate": "顯示 fast / late",
       "autoPlay": "遊玩模式",
-      "noBorder": "無邊框"
+      "noBorder": "無邊框",
+      "richHanabi": "絢麗煙火特效",
+      "disablePreviewWaveform": "禁用預覽波形"
     },
     "middleDisplayOpts": {
       "off": "關閉",

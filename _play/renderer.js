@@ -262,7 +262,6 @@ export class SimaiRenderer {
         this._tempColorConfig = { colorCode: '' };
         this._tempTransform = { t: 0, displayT: 0, currentScale: 0, scaleX: 1, scaleY: 1 };
         this._auxTextList = new Array(12);
-        this.offscreen = null;
 
         // 中間顯示 Config 樣式
         this._middleDisplayConfig1 = { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" };
@@ -283,16 +282,20 @@ export class SimaiRenderer {
     }
 
     getCanvasWH() {
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        const invP = scaleBase / (Math.min(w, h) * this.scale);
+        const w = this.canvas ? this.canvas.width : 0;
+        const h = this.canvas ? this.canvas.height : 0;
+        const minDim = Math.min(w, h);
+        const scale = this.scale || 1;
+        const invP = (minDim > 0 && scale > 0) ? (scaleBase / (minDim * scale)) : 1;
         if (!this._canvasWH) {
             this._canvasWH = { width: 0, height: 0, halfWidth: 0, halfHeight: 0 };
         }
-        this._canvasWH.width = w * invP;
-        this._canvasWH.height = h * invP;
-        this._canvasWH.halfWidth = w * invP * 0.5;
-        this._canvasWH.halfHeight = h * invP * 0.5;
+        const width = Number.isFinite(w * invP) && w > 0 ? w * invP : scaleBase;
+        const height = Number.isFinite(h * invP) && h > 0 ? h * invP : scaleBase;
+        this._canvasWH.width = width;
+        this._canvasWH.height = height;
+        this._canvasWH.halfWidth = width * 0.5;
+        this._canvasWH.halfHeight = height * 0.5;
         return this._canvasWH;
     }
 
@@ -300,12 +303,14 @@ export class SimaiRenderer {
      * 預算座標縮放比例與中心偏移量，減少每幀重複計算
      */
     updateCanvasMetrics() {
-        const { width: w, height: h } = this.canvas;
+        const w = this.canvas ? this.canvas.width : 0;
+        const h = this.canvas ? this.canvas.height : 0;
         const minDim = Math.min(w, h);
-        this._p = minDim / scaleBase * this.scale;
-        this._invP = scaleBase / (minDim * this.scale);
-        this._hw = w * this._invP * 0.5;
-        this._hh = h * this._invP * 0.5;
+        const scale = this.scale || 1;
+        this._p = (minDim > 0 && scale > 0) ? (minDim / scaleBase * scale) : 1;
+        this._invP = (minDim > 0 && scale > 0) ? (scaleBase / (minDim * scale)) : 1;
+        this._hw = Number.isFinite(w * this._invP) ? w * this._invP * 0.5 : scaleBase * 0.5;
+        this._hh = Number.isFinite(h * this._invP) ? h * this._invP * 0.5 : scaleBase * 0.5;
     }
 
     setImages(images) {
@@ -1097,12 +1102,6 @@ export class SimaiRenderer {
         if (t < -1) return;
         const invt = clamp(-t, 0, 1);
 
-        this.offscreen = this.offscreen || (typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas'));
-
-        function easeOutExpo(x) {
-            return x === 1 ? 1 : 1 - Math.pow(2, -40 * x);
-        }
-
         function getCustomCurveClamped(x) {
             let val;
             if (x <= 0.3) {
@@ -1116,13 +1115,6 @@ export class SimaiRenderer {
 
         const ctx = this.ctx;
         const decayAlpha = getCustomCurveClamped(-t);
-
-        const canvasWH = this.getCanvasWH();
-        this.offscreen.width = canvasWH.width;
-        this.offscreen.height = canvasWH.height;
-
-        const offctx = this.offscreen.getContext('2d');
-        if (!offctx) return;
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
@@ -1144,14 +1136,14 @@ export class SimaiRenderer {
             const cosA1 = Math.cos(angle1);
             const sinA1 = Math.sin(angle1);
 
-            offctx.beginPath();
-            offctx.lineWidth = 1.5;
-            offctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
-            offctx.moveTo(0, 0);
-            offctx.lineTo(cosA * 50, sinA * 50);
-            offctx.lineTo(cosA1 * 50, sinA1 * 50);
-            offctx.closePath();
-            offctx.fill();
+            ctx.beginPath();
+            ctx.lineWidth = 1.5;
+            ctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
+            ctx.moveTo(0, 0);
+            ctx.lineTo(cosA * 50, sinA * 50);
+            ctx.lineTo(cosA1 * 50, sinA1 * 50);
+            ctx.closePath();
+            ctx.fill();
 
             slicePath.moveTo(0, 0);
             slicePath.lineTo(cosA * 50, sinA * 50);

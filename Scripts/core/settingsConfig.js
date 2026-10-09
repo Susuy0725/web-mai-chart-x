@@ -47,7 +47,8 @@ export const defaultSettings = {
     autoConnectMajdataView: false,
     showUI: false,
     enableQuickPanel: true,
-    fancyTouchEffect: false,
+    richHanabi: true,
+    disablePreviewWaveform: false,
     // Sound & Playback
     notPlayHoldEnd: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
@@ -201,6 +202,18 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.drawHanabiEffect',
                 def: defaultSettings.drawHanabiEffect || false
+            },
+            {
+                id: 'richHanabi',
+                type: 'checkbox',
+                label: 'settings.items.richHanabi',
+                def: defaultSettings.richHanabi || true
+            },
+            {
+                id: 'disablePreviewWaveform',
+                type: 'checkbox',
+                label: 'settings.items.disablePreviewWaveform',
+                def: defaultSettings.disablePreviewWaveform || false
             },
             {
                 id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,

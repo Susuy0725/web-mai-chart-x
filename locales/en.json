@@ -204,7 +204,9 @@
       "showBreakCriticalPerfect": "Show Break Critical Perfect",
       "showFastLate": "Show Fast / Late",
       "autoPlay": "Play Mode",
-      "noBorder": "No borders"
+      "noBorder": "No borders",
+      "richHanabi": "Rich Hanabi Effects",
+      "disablePreviewWaveform": "Disable Preview Waveform"
     },
     "middleDisplayOpts": {
       "off": "Off",

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.09 (1)]
+
+### Added
+- 加入絢麗煙火，可從設定回退
+
+### Fixed
+- 預覽波形沒有渲染
+- 視覺化編輯器波形抖動問題修正
+
 ## [2026.10.08 (1)]
 
 ### Added

@@ -100,6 +100,7 @@ body {
 }
 
 #canvasContainer #canvasOutline {
+    display: none;
     position: absolute;
     width: 100%;
     height: 100%;
@@ -230,7 +231,7 @@ body {
     position: absolute;
     margin: 16px;
     bottom: 0;
-    left: calc(min(var(--split-ratio) * 100%, 85% - 90px));
+    left: calc(max(var(--split-ratio) * 100% - 90px, 0px));
     right: auto;
     border: 1px solid var(--button-ouline);
     color: white;
@@ -240,16 +241,14 @@ body {
     justify-content: center;
     flex-wrap: wrap;
     cursor: pointer;
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 0 3px 1px rgba(0, 0, 0, 0.6);
     border-radius: 25px;
     transition: background-color 100ms ease, left 300ms cubic-bezier(0.4, 0, 0.2, 1), right 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease, transform 200ms ease;
     z-index: 100;
 }
 
 #playControls #showPlayControlsBtn:hover {
-    background-color: color-mix(in srgb, var(--main-color) 50%, transparent);
-    opacity: 1;
-    transform: scale(1.05);
+    background-color: color-mix(in srgb, var(--main-color) 50%, black);
 }
 
 #playControls #showPlayControlsBtn:active {
@@ -856,6 +855,7 @@ body.resizing-panels #canvasContainer canvas {
     color: #d4d4d4;
     /* 預設文字顏色 */
     z-index: 1;
+    contain: layout style;
 }
 
 #highlight-layer .highlight-warning {
@@ -1438,7 +1438,7 @@ body.resizing-panels #canvasContainer canvas {
     background: rgba(255, 255, 255, 0.08);
 }
 
-.visual-tool-group input[type="radio"]:checked + .switch-item {
+.visual-tool-group input[type="radio"]:checked+.switch-item {
     background: #484852;
     color: #ffffff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
@@ -1702,6 +1702,7 @@ body.resizing-panels #canvasContainer canvas {
         opacity: 0;
         transform: translateX(8px) scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: translateX(0) scale(1);
@@ -1783,7 +1784,8 @@ body.resizing-panels #canvasContainer canvas {
 }
 
 /* 行動端與窄螢幕適配 */
-@media (max-width: 600px), (max-aspect-ratio: 1/1) {
+@media (max-width: 600px),
+(max-aspect-ratio: 1/1) {
     .visual-toolbar {
         right: 8px;
         bottom: 8px;
@@ -1801,4 +1803,4 @@ body.resizing-panels #canvasContainer canvas {
         overflow: visible !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
     }
-}
+}

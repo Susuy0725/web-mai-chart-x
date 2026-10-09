@@ -4,6 +4,8 @@ import {
     noteRefPos,
     visualNoteRefPos,
     touchRefPos,
+} from './core/chartGeometry.js';
+import {
     imgNotExists,
     getTintedImage,
     generatePath,
@@ -150,6 +152,7 @@ export class SimaiRenderer {
         this.settings = settings;
         this.images = null;
         this.globalTime = 0;
+        this._outlineImage = null;
 
         this.scale = 0.98;
 
@@ -1370,7 +1373,12 @@ export class SimaiRenderer {
             ctx.clearRect(-hw, -hh, w, h);
         }
 
-        // 3. 繪製順序優化
+        // 3. 繪製外框輪廓 (若未隱藏外框)
+        if (!this.settings?.hideOutline) {
+            this.drawOutline();
+        }
+
+        // 4. 繪製順序優化
         if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
 
         // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
@@ -1851,6 +1859,41 @@ export class SimaiRenderer {
         ctx.restore();
     }
 
+    setOutlineImage(img) {
+        this._outlineImage = img;
+    }
+
+    getOutlineImage() {
+        if (this.images?.outline && !imgNotExists(this.images.outline)) {
+            return this.images.outline;
+        }
+        if (this._outlineImage && !imgNotExists(this._outlineImage)) {
+            return this._outlineImage;
+        }
+        if (typeof document !== 'undefined') {
+            const domOutline = document.getElementById('canvasOutline');
+            if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
+                return domOutline;
+            }
+        }
+        return null;
+    }
+
+    drawOutline() {
+        if (this.settings?.hideOutline) return;
+        const img = this.getOutlineImage();
+        if (!img) return;
+
+        const { ctx } = this;
+        ctx.save();
+        this.resetBaseTransform();
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        const size = scaleBase * 0.905;
+        ctx.drawImage(img, -size * 0.5, -size * 0.5, size, size);
+        ctx.restore();
+    }
+
     drawMiddleDisplay() {
         const mode = this.settings.middleDisplay;
         if (!mode) return;
@@ -2113,7 +2156,7 @@ export class SimaiRenderer {
                 const displayT = Math.min(1, Math.max(md, t));
                 const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
                 const size = baseSize * currentScale;
-                const sizeOffset = (t < md || s.holdDuration < 0.1) ? 0 :
+                const sizeOffset = (t < md) ? 0 :
                     Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * (20.35 / baseSize);
                 const isOn = noteT <= -0.1 && !s.isMine;
                 const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
@@ -2122,9 +2165,9 @@ export class SimaiRenderer {
 
                 // 1. 導引弧 (Arc)
                 ctx.rotate(posInfo.rot);
-                if (currentScale !== 1) ctx.setAlpha(currentScale);
+                if (currentScale !== 1) ctx.globalAlpha = currentScale;
                 this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-                if (currentScale !== 1) ctx.setAlpha(1);
+                if (currentScale !== 1) ctx.globalAlpha = 1;
 
                 // 2. Hold 尾端
                 if (t1 > md && endimg) {
@@ -2191,9 +2234,9 @@ export class SimaiRenderer {
 
                 // 1. 導引弧 (Arc)
                 ctx.rotate(posInfo.rot);
-                if (currentScale !== 1) ctx.setAlpha(currentScale);
+                if (currentScale !== 1) ctx.globalAlpha = currentScale;
                 this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-                if (currentScale !== 1) ctx.setAlpha(1);
+                if (currentScale !== 1) ctx.globalAlpha = 1;
 
                 // 2. 音符本體 (Tap / Star)
                 ctx.setTransform(a, b, c, d, e, f);
@@ -2438,14 +2481,14 @@ export class SimaiRenderer {
             this.drawImgAtcenter(touchBorder, size * 2.6);
             this.ctx.restore();
 
-            this.ctx.setAlpha(Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5));
+            this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
             this.ctx.rotate(Math.PI * -0.75);
             for (let i = 0; i < 4; i++) {
                 const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
                 this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
             }
-            this.ctx.setAlpha(1);
+            this.ctx.globalAlpha = 1;
             this.drawImgAtcenter(touchPoint, size * 0.4);
             this.ctx.restore();
 
@@ -2472,7 +2515,7 @@ export class SimaiRenderer {
         const size = this.settings.noteBaseSize * 0.7;
         const a = this.touchTimeFunction(18 * Math.max(1 - t, 0) / 1.5) * 1.6;
         this.ctx.translate(posInfo.x, posInfo.y);
-        this.ctx.setAlpha(1);
+        this.ctx.globalAlpha = 1;
 
         if (count >= 2 && this.drawnBorders[zoneKey] === 0) {
             this.drawnBorders[zoneKey] = 1;
@@ -2481,12 +2524,12 @@ export class SimaiRenderer {
                 this.drawImgAtcenter(borderImg3, size * 2.65);
             }
         }
-        this.ctx.setAlpha(Math.max(0, 1 - (1 - t) * 0.5));
+        this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
         for (let i = 0; i < 4; i++) {
             this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
             this.ctx.rotate(Math.PI * 0.5);
         }
-        this.ctx.setAlpha(1);
+        this.ctx.globalAlpha = 1;
         this.drawImgAtcenter(touchPoint, size * 0.4);
         this.ctx.restore();
     }
@@ -4374,7 +4417,7 @@ export class SimaiVisualEditor {
             };
             this._lastPointerMoveEvent = e;
             if (this.canvas.setPointerCapture) {
-                try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+                try { this.canvas.setPointerCapture(e.pointerId); } catch (_) { }
             }
             if (!this._isLoopActive()) this._upd();
             return;
@@ -4529,7 +4572,7 @@ export class SimaiVisualEditor {
                 this.draggingHold = null;
                 this._lastPointerMoveEvent = null;
                 if (pointerId !== undefined && this.canvas.releasePointerCapture) {
-                    try { this.canvas.releasePointerCapture(pointerId); } catch (_) {}
+                    try { this.canvas.releasePointerCapture(pointerId); } catch (_) { }
                 }
                 if (Math.abs(currentDuration - originalDuration) > 1e-4) {
                     if (this.onUpdateHoldDuration) {
@@ -4600,7 +4643,7 @@ export class SimaiVisualEditor {
             this.draggingHold = null;
             this._lastPointerMoveEvent = null;
             if (pointerId !== undefined && this.canvas.releasePointerCapture) {
-                try { this.canvas.releasePointerCapture(pointerId); } catch (_) {}
+                try { this.canvas.releasePointerCapture(pointerId); } catch (_) { }
             }
         }
         this._onPointerLeave(e);

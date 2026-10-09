@@ -128,7 +128,8 @@
     "swUpdated": "Update ready!",
     "swUpdateDetail": "Cache updated. Please reload to apply latest version.",
     "swReloadNow": "Reload Now",
-    "swDismiss": "Dismiss"
+    "swDismiss": "Dismiss",
+    "swHide": "Hide"
   },
   "quickPanel": {
     "middle": "Cancel",
@@ -177,6 +178,7 @@
       "sfxVolumes": "Individual SFX Volume",
       "notPlayHoldEnd": "Do not play Hold end SFX",
       "autocomplete": "Editor Bracket Autocomplete",
+      "disableSyntaxCheck": "Disable Syntax Check",
       "maxSlideCount": "Max Onscreen Slides",
       "inputDebounceTime": "Editor Refresh Rate (ms)",
       "showUI": "Show FPS Interface",

@@ -1,4 +1,6 @@
-import { ensureMediabunny, simpleToast, popupWindow, createLabeledInput1, videoRender, SimaiLogicControler, getButton } from '../helper.js';
+import { ensureMediabunny, simpleToast, popupWindow, createLabeledInput1, getButton } from '../helper.js';
+import { videoRender } from '../features/videoRender.js';
+import { SimaiLogicControler } from '../core/simaiLogicControler.js';
 import { SimaiRenderer } from '../renderer.js';
 import { t } from '../i18n.js';
 
@@ -104,6 +106,7 @@ export async function openRecordVideoModal({
                         img.src = URL.createObjectURL(blob);
                     });
                 }
+                if (previewRenderer) previewRenderer.setOutlineImage(outlineImage);
                 requestPreviewUpdate();
             }
         } catch (e) {
@@ -642,13 +645,6 @@ export async function openRecordVideoModal({
             } catch (e) { }
         }
 
-        const hideOutline = typeof curSettings.hideOutline === 'boolean' ? curSettings.hideOutline : false;
-        const curOutline = getEffectiveOutlineImage();
-        if (!hideOutline && curOutline) {
-            const p = Math.min(pWidth, pHeight) / 100 * rs;
-            previewCtx.setTransform(p, 0, 0, p, pWidth / 2, pHeight / 2);
-            previewCtx.drawImage(curOutline, 100 * -0.5 * 0.9, 100 * -0.5 * 0.9, 100 * 0.9, 100 * 0.9);
-        }
         previewCtx.restore();
 
         const globalT = currentPreviewTime - (musicDelay || 0);

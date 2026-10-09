@@ -128,7 +128,8 @@
     "swUpdated": "版本更新已就绪！",
     "swUpdateDetail": "缓存已更新，请刷新以应用最新版本",
     "swReloadNow": "立即刷新",
-    "swDismiss": "稍后"
+    "swDismiss": "稍后",
+    "swHide": "隐藏"
   },
   "quickPanel": {
     "middle": "取消",
@@ -177,6 +178,7 @@
       "sfxVolumes": "个别音效音量",
       "notPlayHoldEnd": "不播放 Hold 结尾音效",
       "autocomplete": "编辑器自动补齐括号",
+      "disableSyntaxCheck": "禁用语法检查",
       "maxSlideCount": "屏幕上最大滑星显示数量",
       "inputDebounceTime": "编辑器刷新时间 (ms)",
       "showUI": "显示FPS接口",

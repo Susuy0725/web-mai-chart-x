@@ -543,11 +543,11 @@ class AudioManager {
                         key = includeAnswer ? 'answer' : '';
                         break;
                     }
-                    if (note.isEx) {
-                        key = 'judge_ex';
-                    } else if (note.isBreak) {
+                    if (note.isBreak) {
                         key = 'judge_break';
                         events.push({ key: 'break', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break'], this.MAX_VOLUME_LIMIT) });
+                    } else if (note.isEx) {
+                        key = 'judge_ex';
                     } else {
                         key = 'judge';
                     }

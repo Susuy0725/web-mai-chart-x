@@ -128,7 +128,8 @@
     "swUpdated": "버전 업데이트가 준비되었습니다!",
     "swUpdateDetail": "캐시가 업데이트되었습니다. 새 버전을 적용하려면 새로고침해 주세요",
     "swReloadNow": "지금 새로고침",
-    "swDismiss": "나중에"
+    "swDismiss": "나중에",
+    "swHide": "숨기기"
   },
   "quickPanel": {
     "middle": "취소",
@@ -177,6 +178,7 @@
       "sfxVolumes": "개별 효과음 볼륨",
       "notPlayHoldEnd": "Hold 종료 효과음 재생 안 함",
       "autocomplete": "편집기 괄호 자동 완성",
+      "disableSyntaxCheck": "구문 검사 비활성화",
       "maxSlideCount": "화면에 표시할 최대 슬라이드 별 개수",
       "inputDebounceTime": "편집기 새로고침 시간 (ms)",
       "showUI": "FPS UI 표시",

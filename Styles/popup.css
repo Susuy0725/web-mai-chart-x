@@ -278,7 +278,7 @@
 /* Service Worker 更新進度條懸浮面板 */
 .sw-update-toast {
     position: fixed;
-    bottom: 24px;
+    bottom: calc(var(--playControls-height) + 24px);
     right: 24px;
     z-index: 100000;
     min-width: 240px;
@@ -328,6 +328,12 @@
     color: #f0f0f0;
 }
 
+.sw-update-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .sw-update-percent {
     font-size: 12px;
     font-weight: bold;
@@ -337,6 +343,27 @@
 
 .sw-update-toast.completed .sw-update-percent {
     color: var(--sw-complete-color);
+}
+
+.sw-update-close-btn {
+    background: transparent;
+    border: none;
+    color: #888888;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sw-update-close-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.14);
 }
 
 .sw-update-progress-bar-bg {
@@ -1561,4 +1588,3 @@
 .project-manager-grid::-webkit-scrollbar-thumb:hover {
     background: #777777;
 }
-

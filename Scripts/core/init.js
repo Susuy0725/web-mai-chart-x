@@ -7,12 +7,15 @@ import { openDB } from '../indexDB.js';
  * @param {Object} ctx
  */
 export function runInitModal(ctx) {
+    // 建立共用的設定讀取 Promise，避免背景素材載入與前景初始化並行造成 IndexedDB 競爭
+    const sharedSettingsStrPromise = fetchSavedSettingsString(ctx);
+
     // 1. 背景非同步啟動圖片素材與音效載入（不阻塞使用者檢視與操作編輯器）
     (async () => {
         try {
             let initSkin = 'Default';
             try {
-                const sStr = await ctx.idbGet('simai_settings');
+                const sStr = await sharedSettingsStrPromise;
                 if (sStr) {
                     const parsed = JSON.parse(sStr);
                     if (parsed && parsed.skin) initSkin = parsed.skin;
@@ -58,7 +61,7 @@ export function runInitModal(ctx) {
             // 平行確定專案與讀取設定（兩者互不相依），縮短首屏啟動時間
             const [, settings] = await Promise.all([
                 setupCurrentProject(ctx, step),
-                loadAndRestoreSettings(ctx, step),
+                loadAndRestoreSettings(ctx, step, sharedSettingsStrPromise),
             ]);
 
             // 載入專案譜面資料與設定編輯器 UI
@@ -140,41 +143,120 @@ async function setupCurrentProject(ctx, step) {
     localStorage.setItem('simai_lastProjectId', ctx.getCurrentProjectId());
 }
 
+const BACKUP_SETTINGS_KEY = 'simai_settings_backup';
+
 /**
- * 3. 載入並補齊全域設定
+ * 安全讀取已儲存的設定字串，具備重試機制與 localStorage 備份回退
  */
-async function loadAndRestoreSettings(ctx, step) {
+async function fetchSavedSettingsString(ctx) {
+    let sStr = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+        attempts++;
+        try {
+            sStr = await ctx.idbGet('simai_settings');
+            if (sStr && typeof sStr === 'string' && sStr.trim() !== '' && sStr.trim() !== '{}') {
+                break;
+            }
+        } catch (e) {
+            console.warn(`[Settings] 讀取 IndexedDB simai_settings 失敗 (第 ${attempts} 次嘗試):`, e);
+        }
+        if (attempts < maxAttempts) {
+            // 在重試前稍作等待，讓繁忙的 IndexedDB 交易佇列有時間恢復
+            await new Promise(r => setTimeout(r, 60 * attempts));
+        }
+    }
+
+    // 若 IndexedDB 讀取失敗或回傳空物件，嘗試從 localStorage 備份恢復
+    if (!sStr || sStr === '{}') {
+        try {
+            const backup = localStorage.getItem(BACKUP_SETTINGS_KEY);
+            if (backup && backup.trim() !== '' && backup.trim() !== '{}') {
+                console.info('[Settings] IndexedDB 未能取得有效設定，成功自 localStorage 備份還原設定。');
+                sStr = backup;
+            }
+        } catch (_) { }
+    }
+
+    return sStr;
+}
+
+/**
+ * 3. 載入並補齊全域設定（具備效能延遲容錯、空值保護與防複寫機制）
+ */
+async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
     step(80, t('popup.init.restoringSettings'));
 
-    const savedSettings = await ctx.idbGet('simai_settings');
-    let settings;
+    const savedSettingsStr = sharedSettingsPromise 
+        ? await sharedSettingsPromise 
+        : await fetchSavedSettingsString(ctx);
 
-    if (savedSettings) {
-        settings = JSON.parse(savedSettings);
-        let isMissingSettings = false;
+    let parsedSettings = null;
+    let isFromValidSaved = false;
 
-        for (const key in ctx.defaultSettings) {
-            if (!(key in settings)) {
-                settings[key] = ctx.defaultSettings[key];
-                console.warn(`設定項 "${key}" 在已儲存的設定中缺失，已自動補齊預設值。`);
-                isMissingSettings = true;
+    if (savedSettingsStr) {
+        try {
+            const parsed = JSON.parse(savedSettingsStr);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 2) {
+                parsedSettings = parsed;
+                isFromValidSaved = true;
+            } else {
+                console.warn('[Settings] 已儲存設定內容為空或鍵值過少，忽略以防複寫。', parsed);
             }
+        } catch (err) {
+            console.error('[Settings] 解析已儲存設定 JSON 失敗:', err);
         }
+    }
 
-        if (isMissingSettings) {
-            await ctx.idbSet('simai_settings', JSON.stringify(settings));
-        }
+    // 合併預設值與使用者原有設定：以 defaultSettings 為基底，保留使用者既有值
+    const settings = {
+        ...ctx.defaultSettings,
+        ...(parsedSettings || {})
+    };
 
-        if (ctx.playbackSpeedInput) {
-            ctx.playbackSpeedInput.value = settings.playbackSpeed;
+    // 深入合併巢狀物件（例如音效各音軌獨立音量），避免漏掉新增的預設音效或洗掉使用者單獨調過的音量
+    if (ctx.defaultSettings.sfxVolumes) {
+        settings.sfxVolumes = {
+            ...ctx.defaultSettings.sfxVolumes,
+            ...(parsedSettings?.sfxVolumes || {})
+        };
+    }
+
+    // 檢查是否有缺少的新設定項目
+    let hasNewKeys = false;
+    for (const key in ctx.defaultSettings) {
+        if (!parsedSettings || !(key in parsedSettings)) {
+            hasNewKeys = true;
         }
-    } else {
-        settings = { ...ctx.defaultSettings };
-        await ctx.idbSet('simai_settings', JSON.stringify(settings));
+    }
+
+    // 關鍵修復：絕不在「載入階段」無條件複寫 IndexedDB！
+    // 只有在確認成功讀取到有效的使用者設定、且確實有新鍵值需要補齊時，才非同步在背景回寫，絕不阻塞首屏與破壞原有設定
+    if (isFromValidSaved && hasNewKeys) {
+        Promise.resolve().then(async () => {
+            try {
+                const updatedStr = JSON.stringify(settings);
+                await ctx.idbSet('simai_settings', updatedStr);
+                try { localStorage.setItem(BACKUP_SETTINGS_KEY, updatedStr); } catch (_) { }
+            } catch (e) {
+                console.warn('[Settings] 背景補齊缺失設定項回寫失敗:', e);
+            }
+        });
+    }
+
+    if (ctx.playbackSpeedInput && settings.playbackSpeed !== undefined) {
+        ctx.playbackSpeedInput.value = settings.playbackSpeed;
     }
 
     // 效果修飾屬性於初始化時重設為預設值 'none'，避免重新整理後殘留地雷或 Break 造成誤放
     settings.visualSelectedModifier = 'none';
+
+    // 即時將正確的設定同步至 localStorage 備份，防範後續極端情況中斷
+    try {
+        localStorage.setItem(BACKUP_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (_) { }
 
     ctx.setSettings(settings);
     ctx.applyAudioSettings(settings);

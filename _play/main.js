@@ -368,31 +368,35 @@ if (audioManager && audioManager.soundFiles) {
     }
 }
 
-const savedSettings = await idbGet('simai_settings');
+let savedSettings = await idbGet('simai_settings');
+if (!savedSettings || savedSettings === '{}') {
+    try {
+        savedSettings = localStorage.getItem('simai_settings_backup');
+    } catch (_) { }
+}
 if (savedSettings) {
-    settings = JSON.parse(savedSettings);
-    let isMissingSettings = false;
-    for (const key in defaultSettings) {
-        if (!(key in settings)) {
-            settings[key] = defaultSettings[key];
-            console.warn(`設定項 "${key}" 在已儲存的設定中缺失，已自動補齊預設值。`);
-            isMissingSettings = true;
+    try {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed && typeof parsed === 'object') {
+            settings = { ...defaultSettings, ...parsed };
+            if (defaultSettings.sfxVolumes) {
+                settings.sfxVolumes = { ...defaultSettings.sfxVolumes, ...(parsed.sfxVolumes || {}) };
+            }
+            if (settings.autoPlay === true) {
+                settings.autoPlay = 'computer';
+            } else if (settings.autoPlay === false) {
+                settings.autoPlay = 'off';
+            }
+        } else {
+            settings = { ...defaultSettings };
         }
-    }
-    if (settings.autoPlay === true) {
-        settings.autoPlay = 'computer';
-        isMissingSettings = true;
-    } else if (settings.autoPlay === false) {
-        settings.autoPlay = 'off';
-        isMissingSettings = true;
-    }
-    if (isMissingSettings) {
-        await idbSet('simai_settings', JSON.stringify(settings));
+    } catch (e) {
+        console.warn('解析已儲存設定失敗:', e);
+        settings = { ...defaultSettings };
     }
 } else {
     settings = { ...defaultSettings };
-    await idbSet('simai_settings', JSON.stringify(settings));
-};
+}
 applyAudioSettings(settings);
 if (settings.slideDebug) {
     toggleSlideDebug(true);

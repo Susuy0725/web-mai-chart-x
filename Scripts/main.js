@@ -26,11 +26,12 @@ import {
     getButton, disableNavigationGestures, debounce, throttle,
     getHighlight, parseMaidata, popupWindow, loadAllImages,
     simpleToast,
-    clamp, createCustomSlider,
-    SimaiLogicControler
+    clamp, createCustomSlider
 } from './helper.js';
+import { SimaiLogicControler } from './core/simaiLogicControler.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
+import { decodeWorkerManager } from './core/decodeWorkerManager.js';
 import { t, setLang, getCurrentLang, applyI18nToDOM, i18nReady } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
@@ -99,13 +100,23 @@ const simaiLogicControler = new SimaiLogicControler(audioManager);
 
 const isVisualMode = () => settings.displayMode === 'visual';
 
+const BACKUP_SETTINGS_KEY = 'simai_settings_backup';
+
 const saveSettingsDebounce = debounce(() => {
+    // 效能與防覆寫保護：在初始化完成且設定已完整載入前，嚴禁回寫 IndexedDB，避免以空物件覆寫既有設定
+    if (!isInitComplete || !settings || Object.keys(settings).length < 5) {
+        return;
+    }
     if (majdataWs.isConnected()) {
         majdataWs.sendSetting(settings);
     }
-    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
+    const settingsStr = JSON.stringify(settings);
+    idbSet('simai_settings', settingsStr).catch((error) => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
     });
+    try {
+        localStorage.setItem(BACKUP_SETTINGS_KEY, settingsStr);
+    } catch (_) { }
 }, 300);
 
 
@@ -1042,6 +1053,7 @@ function setDataEmpty(skipPersist = false) {
     backgroundImage = null;
     backgroundVideo = null;
     revokeBlobUrls();
+    getres('');
     applyHighlight('');
     musicDelay = 0;
     playbackEngine?.setTime(0);
@@ -1097,139 +1109,172 @@ fetchFromMainoteButton.addEventListener('click', () => {
     });
 });
 
-const getres = ((simaiDataValue) => {
+// 以逗號切分，支援 Simai 新語法（多行註解、單行註解、屬性標籤 <SIZE*(1.5,2)> 等內部的逗號不分割，且完整保留所有字元）
+const splitSimaiPreservingAll = (text) => {
+    if (!text) return [];
+    const out = [];
+    let cur = '';
+    let inBracket = 0;
+    let inParen = 0;
+    let inBrace = 0;
+    const len = text.length;
+
+    for (let i = 0; i < len;) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        // 1. 單行註解 ||：保留直到行尾（註解內逗號不分割）
+        if (c === '|' && next === '|') {
+            cur += '||';
+            i += 2;
+            while (i < len && text[i] !== '\n' && text[i] !== '\r') {
+                cur += text[i++];
+            }
+            if (i < len && text[i] === '\r') {
+                cur += '\r';
+                i++;
+                if (i < len && text[i] === '\n') { cur += '\n'; i++; }
+            } else if (i < len && text[i] === '\n') {
+                cur += '\n';
+                i++;
+            }
+            continue;
+        }
+
+        // 2. 多行註解 |* ... *|：保留完整內容（註解內逗號不分割）
+        if (c === '|' && next === '*') {
+            cur += '|*';
+            i += 2;
+            while (i < len) {
+                if (text[i] === '*' && text[i + 1] === '|') {
+                    cur += '*|';
+                    i += 2;
+                    break;
+                }
+                cur += text[i++];
+            }
+            continue;
+        }
+
+        // 3. 屬性標籤 <[A-Za-z]+\*[^>]*> (例如 <SIZE*(1.5,2)>, <HS*1.25>, <COLOR*...>)：原子消費（內含逗號不分割）
+        if (c === '<') {
+            const rest = text.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                cur += propMatch[0];
+                i += propMatch[0].length;
+                continue;
+            }
+        }
+
+        // 4. 括號巢狀層級追蹤
+        if (c === '[') inBracket++;
+        else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (c === '(') inParen++;
+        else if (c === ')') inParen = Math.max(0, inParen - 1);
+        else if (c === '{') inBrace++;
+        else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+        // 5. 頂層逗號分隔符
+        if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
+            out.push(cur);
+            cur = '';
+            i++;
+            continue;
+        }
+
+        cur += c;
+        i++;
+    }
+
+    out.push(cur);
+    return out;
+};
+
+/**
+ * 套用解碼結果至主線程狀態與渲染器
+ */
+function applyDecodeResult(result, simaiDataValue) {
+    if (!result || result._isStale) return;
+    if (result.failed) {
+        simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
+        return;
+    }
+
+    notes = result.notes;
+    decodedTags = result.tags || [];
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
-    const result = (() => {
+
+    setEndtime(result.endTime);
+    clockBpm = result.bpm;
+
+    dataIndexToTime = result.indexToTime || [];
+
+    playScoreRes = {
+        ...result.notesCounts,
+        score: result.score,
+    };
+    playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
+    playScoreRes.invScore = 1 / playScoreRes.score;
+    rawData = splitSimaiPreservingAll(simaiDataValue);
+    updateRawCharOffsets();
+    lastCursorIndex = -1;
+
+    // 預先計算二分搜尋結構與前綴和，確保播放無冷啟動延遲
+    simaiLogicControler.prepare(notes, playScoreRes);
+
+    warnings = settings.disableSyntaxCheck ? [] : (result.warnings || []);
+    warningPositions = settings.disableSyntaxCheck ? [] : (result.errpositions || []);
+    warningPositionsConst = warningPositions;
+    if (!settings.disableSyntaxCheck && result.warnings && result.warnings.length > 0) {
+        warnEl.style.visibility = 'visible';
+        warnEl.querySelector('.warnCount').textContent = result.warnings.length;
+        console.warn('Decode warnings:', result.warnings);
+    } else {
+        warnEl.style.visibility = 'hidden';
+    }
+    draw();
+}
+
+/**
+ * 譜面解析進入點：支援 Web Worker 背景非同步解析與主線程同步降級
+ */
+const getres = async (simaiDataValue, options = {}) => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
+
+    const decodeOpts = { disableSyntaxCheck: !!settings.disableSyntaxCheck, ...options };
+
+    // 若指定同步或 Worker 不可用，直接同步解析 (維持最高相容性)
+    if (options.sync || !decodeWorkerManager.isAvailable()) {
         try {
-            return simaiDecode(simaiDataValue, 0);
+            const result = decodeWorkerManager.decodeSync(simaiDataValue, 0, decodeOpts);
+            applyDecodeResult(result, simaiDataValue);
+            return result;
         } catch (e) {
             console.error("解析失敗", e);
             return null;
         }
-    })();
-    if (result) {
-        if (result.failed) {
-            simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
-        } else {
-            notes = result.notes;
-            decodedTags = result.tags || [];
-            renderer?.clearJudgeEffects();
-            renderer?.clearHitEffects();
+    }
 
-            setEndtime(result.endTime);
-            clockBpm = result.bpm;
-            // 以逗號切分，支援 Simai 新語法（多行註解、單行註解、屬性標籤 <SIZE*(1.5,2)> 等內部的逗號不分割，且完整保留所有字元）
-            const splitSimaiPreservingAll = (text) => {
-                if (!text) return [];
-                const out = [];
-                let cur = '';
-                let inBracket = 0;
-                let inParen = 0;
-                let inBrace = 0;
-                const len = text.length;
-
-                for (let i = 0; i < len;) {
-                    const c = text[i];
-                    const next = text[i + 1];
-
-                    // 1. 單行註解 ||：保留直到行尾（註解內逗號不分割）
-                    if (c === '|' && next === '|') {
-                        cur += '||';
-                        i += 2;
-                        while (i < len && text[i] !== '\n' && text[i] !== '\r') {
-                            cur += text[i++];
-                        }
-                        if (i < len && text[i] === '\r') {
-                            cur += '\r';
-                            i++;
-                            if (i < len && text[i] === '\n') { cur += '\n'; i++; }
-                        } else if (i < len && text[i] === '\n') {
-                            cur += '\n';
-                            i++;
-                        }
-                        continue;
-                    }
-
-                    // 2. 多行註解 |* ... *|：保留完整內容（註解內逗號不分割）
-                    if (c === '|' && next === '*') {
-                        cur += '|*';
-                        i += 2;
-                        while (i < len) {
-                            if (text[i] === '*' && text[i + 1] === '|') {
-                                cur += '*|';
-                                i += 2;
-                                break;
-                            }
-                            cur += text[i++];
-                        }
-                        continue;
-                    }
-
-                    // 3. 屬性標籤 <[A-Za-z]+\*[^>]*> (例如 <SIZE*(1.5,2)>, <HS*1.25>, <COLOR*...>)：原子消費（內含逗號不分割）
-                    if (c === '<') {
-                        const rest = text.slice(i);
-                        const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
-                        if (propMatch) {
-                            cur += propMatch[0];
-                            i += propMatch[0].length;
-                            continue;
-                        }
-                    }
-
-                    // 4. 括號巢狀層級追蹤
-                    if (c === '[') inBracket++;
-                    else if (c === ']') inBracket = Math.max(0, inBracket - 1);
-                    else if (c === '(') inParen++;
-                    else if (c === ')') inParen = Math.max(0, inParen - 1);
-                    else if (c === '{') inBrace++;
-                    else if (c === '}') inBrace = Math.max(0, inBrace - 1);
-
-                    // 5. 頂層逗號分隔符
-                    if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
-                        out.push(cur);
-                        cur = '';
-                        i++;
-                        continue;
-                    }
-
-                    cur += c;
-                    i++;
-                }
-
-                out.push(cur);
-                return out;
-            };
-            const splitRespectingLineComments = splitSimaiPreservingAll;
-            dataIndexToTime = result.indexToTime || [];
-
-            playScoreRes = {
-                ...result.notesCounts,
-                score: result.score,
-            };
-            playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
-            playScoreRes.invScore = 1 / playScoreRes.score;
-            rawData = splitSimaiPreservingAll(simaiDataValue);
-            updateRawCharOffsets();
-            lastCursorIndex = -1;
-
-            // 預先計算二分搜尋結構與前綴和，確保播放無冷啟動延遲
-            simaiLogicControler.prepare(notes, playScoreRes);
-
-            warnings = result.warnings || [];
-            warningPositions = result.errpositions || [];
-            warningPositionsConst = warningPositions;
-            if (result.warnings && result.warnings.length > 0) {
-                warnEl.style.visibility = 'visible';
-                warnEl.querySelector('.warnCount').textContent = result.warnings.length;
-                console.warn('Decode warnings:', result.warnings);
-            } else {
-                warnEl.style.visibility = 'hidden';
-            }
-            draw();
+    // 預設採用背景 Worker 非同步解析，主線程 0 卡頓
+    try {
+        const result = await decodeWorkerManager.decodeAsync(simaiDataValue, 0, decodeOpts);
+        applyDecodeResult(result, simaiDataValue);
+        return result;
+    } catch (e) {
+        console.error("Worker 解析失敗，降級同步解析", e);
+        try {
+            const fallbackResult = decodeWorkerManager.decodeSync(simaiDataValue, 0, decodeOpts);
+            applyDecodeResult(fallbackResult, simaiDataValue);
+            return fallbackResult;
+        } catch (err) {
+            console.error("同步解析降級亦失敗", err);
+            return null;
         }
     }
-});
+};
 
 warnEl.addEventListener('click', () => {
     console.log(dataIndexToTime);
@@ -2840,13 +2885,50 @@ editorInput.addEventListener('keydown', (e) => {
     }
 });
 
-function applyHighlight(text) {
-    const warningRanges = warningPositions.map(index => {
+let _highlightRafId = null;
+let _pendingHighlightText = null;
+let _lastRenderedHighlightText = null;
+let _lastRenderedWarningKey = null;
+
+function renderHighlightNow(text) {
+    const warningRanges = settings.disableSyntaxCheck ? [] : warningPositions.map(index => {
         const range = getNoteRangeAtIndex(index);
         return { start: range.start, end: range.end };
     });
+    const warningKey = warningRanges.map(r => `${r.start}:${r.end}`).join(',');
+
+    // 若文字與警告範圍完全未變，直接跳過 DOM 重構以杜絕不必要的 Reflow
+    if (text === _lastRenderedHighlightText && warningKey === _lastRenderedWarningKey) {
+        warningPositions = [];
+        return;
+    }
+
+    _lastRenderedHighlightText = text;
+    _lastRenderedWarningKey = warningKey;
     highlightLayer.innerHTML = getHighlight(text, warningRanges);
     warningPositions = []; // 重置警告位置，等待下一次解析更新
+}
+
+function applyHighlight(text, immediate = false) {
+    _pendingHighlightText = text;
+
+    if (immediate) {
+        if (_highlightRafId !== null) {
+            cancelAnimationFrame(_highlightRafId);
+            _highlightRafId = null;
+        }
+        renderHighlightNow(text);
+        return;
+    }
+
+    if (_highlightRafId !== null) return;
+
+    _highlightRafId = requestAnimationFrame(() => {
+        _highlightRafId = null;
+        if (_pendingHighlightText !== null) {
+            renderHighlightNow(_pendingHighlightText);
+        }
+    });
 }
 
 // === 實例化中央播放引擎 (PlaybackEngine) ===
@@ -3960,6 +4042,7 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
 
     // 6. 需觸發畫布重繪的項目
     const redrawKeys = [
+        'hideOutline',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
         'drawHitEffect', 'drawHanabiEffect', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
@@ -3972,6 +4055,20 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     // 7. 皮膚切換
     if (key === 'skin') {
         switchSkin(value);
+    }
+
+    // 8. 禁用語法檢查
+    if (key === 'disableSyntaxCheck') {
+        if (value) {
+            warnEl.style.visibility = 'hidden';
+            warnings = [];
+            warningPositions = [];
+            warningPositionsConst = [];
+            applyHighlight(editorInput.value);
+        } else {
+            getres(editorInput.value);
+            applyHighlight(editorInput.value);
+        }
     }
 });
 
@@ -4004,8 +4101,10 @@ const flushPendingSaves = () => {
     } else if (typeof saveMaidataImmediate === 'function') {
         saveMaidataImmediate();
     }
-    if (typeof saveSettingsDebounce !== 'undefined' && typeof saveSettingsDebounce.flush === 'function') {
-        saveSettingsDebounce.flush();
+    if (isInitComplete && settings && Object.keys(settings).length >= 5) {
+        if (typeof saveSettingsDebounce !== 'undefined' && typeof saveSettingsDebounce.flush === 'function') {
+            saveSettingsDebounce.flush();
+        }
     }
 };
 

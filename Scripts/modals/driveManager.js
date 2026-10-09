@@ -355,6 +355,7 @@ export function buildDriveTab(ctx) {
     let cachedFiles = [];
     let cachedDriveIdToLocalId = new Map();
     let cachedToken = null;
+    let driveLoadVersion = 0;
 
     filterSelect.onchange = () => {
         currentFilter = filterSelect.value;
@@ -475,10 +476,7 @@ export function buildDriveTab(ctx) {
         }
     }
 
-    renderState();
-
     // ── 讀取雲端專案清單 ───────────────────────────────────────
-    let driveLoadVersion = 0;
     async function loadDriveFiles() {
         if (!isSignedIn()) return;
         const token = getAccessToken();

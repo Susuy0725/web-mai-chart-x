@@ -128,7 +128,8 @@
     "swUpdated": "アップデートの準備が完了しました！",
     "swUpdateDetail": "キャッシュが更新されました。再読み込みして適用してください。",
     "swReloadNow": "今すぐ再読み込み",
-    "swDismiss": "後で"
+    "swDismiss": "後で",
+    "swHide": "非表示"
   },
   "quickPanel": {
     "middle": "キャンセル",
@@ -177,6 +178,7 @@
       "sfxVolumes": "各効果音の音量",
       "notPlayHoldEnd": "Hold終端の効果音を再生しない",
       "autocomplete": "エディタの括弧自動補完",
+      "disableSyntaxCheck": "構文チェックを無効化",
       "maxSlideCount": "画面内の最大Slide数",
       "inputDebounceTime": "エディタ更新レート (ms)",
       "showUI": "FPSインターフェースを表示",

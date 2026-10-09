@@ -3,6 +3,8 @@ import {
     innerCirleBase,
     noteRefPos,
     touchRefPos,
+} from '../Scripts/core/chartGeometry.js';
+import {
     getTintedImage,
     generatePath,
     touchPaths,

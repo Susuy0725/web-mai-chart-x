@@ -70,6 +70,7 @@ export const defaultSettings = {
     },
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
+    disableSyntaxCheck: false, // 禁用語法檢查
     cursorFollow: true, // 游標跟隨
     globalTimeline: true, // 全局時間軸
     drawHitEffect: true,
@@ -81,9 +82,9 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.basic',
         items: [
-            { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
+            { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.25, min: 1, max: 20, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed },
-            { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
+            { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.25, min: 1, max: 20, def: defaultSettings.touchSpeed },
             { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.scorePlus' }, { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }], def: defaultSettings.middleDisplay },
             {
                 id: 'moviebrightness',
@@ -215,6 +216,11 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.lowRes',
                 def: defaultSettings.lowRes || false,
+            }, {
+                id: 'noBorder',
+                type: 'checkbox',
+                label: 'settings.items.noBorder',
+                def: defaultSettings.noBorder || false
             },
             {
                 id: 'resetPanelRatio',
@@ -258,6 +264,9 @@ export const settingsConfig = [
                 id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
             },
             {
+                id: 'disableSyntaxCheck', type: 'checkbox', label: 'settings.items.disableSyntaxCheck', def: defaultSettings.disableSyntaxCheck || false
+            },
+            {
                 id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount
             },
             {
@@ -286,11 +295,6 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.autoConnectMajdataView',
                 def: defaultSettings.autoConnectMajdataView || false
-            }, {
-                id: 'noBorder',
-                type: 'checkbox',
-                label: 'settings.items.noBorder',
-                def: defaultSettings.noBorder || false
             },
         ]
     },

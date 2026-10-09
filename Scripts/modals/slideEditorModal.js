@@ -186,7 +186,12 @@ export function parseSlideDuration(rawDur) {
         state.useCustomWait = true;
         const parts = cleanDur.split('##');
         state.waitSec = parseFloat(parts[0]) || 1.0;
-        const residue = parts[1] || '';
+        let residue = parts[1] || '';
+        if (residue.includes('#')) {
+            const [bStr, movePart] = residue.split('#');
+            state.slideBpm = bStr;
+            residue = movePart || '';
+        }
         if (residue.includes(':')) {
             state.slideTracingMode = 'beat';
             const [tStr, btStr] = residue.split(':');
@@ -231,7 +236,7 @@ export function parseSlideDuration(rawDur) {
 /**
  * 組合滑星時長字串
  * @param {Object} state 
- * @returns {string} 包含括號之時長字串 (如 "[4:1]", "[1##1.5]")
+ * @returns {string} 包含括號之時長字串 (如 "[4:1]", "[1##1.5]", "[1##160#4:1]")
  */
 export function buildSlideDurationString(state) {
     if (!state) return '[4:1]';
@@ -240,14 +245,20 @@ export function buildSlideDurationString(state) {
 
     if (state.slideTracingMode === 'seconds') {
         const dur = (state.slideSeconds !== undefined && state.slideSeconds !== null && state.slideSeconds !== '') ? state.slideSeconds : 1.0;
-        if (state.slideBpm) {
+        if (state.useCustomWait && state.slideBpm) {
+            inner = `${dly}##${state.slideBpm}#${dur}`;
+        } else if (state.useCustomWait) {
+            inner = `${dly}##${dur}`;
+        } else if (state.slideBpm) {
             inner = `${state.slideBpm}#${dur}`;
         } else {
-            inner = `${dly}##${dur}`;
+            inner = `${dur}`;
         }
     } else {
         // 拍數模式
-        if (state.useCustomWait) {
+        if (state.useCustomWait && state.slideBpm) {
+            inner = `${dly}##${state.slideBpm}#${state.time}:${state.beat}`;
+        } else if (state.useCustomWait) {
             inner = `${dly}##${state.time}:${state.beat}`;
         } else if (state.slideBpm) {
             inner = `${state.slideBpm}#${state.time}:${state.beat}`;

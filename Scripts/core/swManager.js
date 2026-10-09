@@ -1,8 +1,20 @@
 import { t } from '../i18n.js';
 
 let swProgressToast = null;
+let isProgressDismissed = false;
+
+function dismissSwToast() {
+    if (!swProgressToast) return;
+    swProgressToast.classList.remove('show');
+    setTimeout(() => {
+        swProgressToast?.remove();
+        swProgressToast = null;
+    }, 300);
+}
 
 export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' } = {}) {
+    if (isProgressDismissed) return;
+
     if (!swProgressToast) {
         swProgressToast = document.createElement('div');
         swProgressToast.className = 'sw-update-toast show';
@@ -12,7 +24,10 @@ export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation: sw-spin 1.2s linear infinite;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
                     <span class="sw-title-text">${t('toast.swUpdating') || '正在下載離線更新...'}</span>
                 </span>
-                <span class="sw-update-percent">${progress}%</span>
+                <div class="sw-update-header-right">
+                    <span class="sw-update-percent">${progress}%</span>
+                    <button class="sw-update-close-btn" type="button" title="${t('toast.swHide') || '隱藏'}" aria-label="${t('toast.swHide') || '隱藏'}">✕</button>
+                </div>
             </div>
             <div class="sw-update-progress-bar-bg">
                 <div class="sw-update-progress-bar-fill" style="transform: scaleX(${progress / 100})"></div>
@@ -22,6 +37,16 @@ export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file
                 <span class="sw-update-count">${loaded} / ${total}</span>
             </div>
         `;
+
+        const closeBtn = swProgressToast.querySelector('.sw-update-close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                isProgressDismissed = true;
+                dismissSwToast();
+            });
+        }
+
         document.body.appendChild(swProgressToast);
     } else {
         const fill = swProgressToast.querySelector('.sw-update-progress-bar-fill');
@@ -37,6 +62,8 @@ export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file
 }
 
 export function showSwUpdateComplete() {
+    isProgressDismissed = false;
+
     if (!swProgressToast) {
         swProgressToast = document.createElement('div');
         document.body.appendChild(swProgressToast);
@@ -49,7 +76,10 @@ export function showSwUpdateComplete() {
                 <svg style="color: var(--sw-complete-color);" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                 <span>${t('toast.swUpdated') || '版本更新已就緒！'}</span>
             </span>
-            <span class="sw-update-percent">100%</span>
+            <div class="sw-update-header-right">
+                <span class="sw-update-percent">100%</span>
+                <button class="sw-update-close-btn" type="button" title="${t('toast.swDismiss') || '稍後'}" aria-label="${t('toast.swDismiss') || '稍後'}">✕</button>
+            </div>
         </div>
         <div class="sw-update-progress-bar-bg">
             <div class="sw-update-progress-bar-fill" style="transform: scaleX(1)"></div>
@@ -65,6 +95,7 @@ export function showSwUpdateComplete() {
 
     const reloadBtn = swProgressToast.querySelector('.sw-update-btn-reload');
     const dismissBtn = swProgressToast.querySelector('.sw-update-btn-dismiss');
+    const closeBtn = swProgressToast.querySelector('.sw-update-close-btn');
 
     if (reloadBtn) {
         reloadBtn.addEventListener('click', () => {
@@ -74,16 +105,44 @@ export function showSwUpdateComplete() {
 
     if (dismissBtn) {
         dismissBtn.addEventListener('click', () => {
-            swProgressToast.classList.remove('show');
-            setTimeout(() => {
-                swProgressToast?.remove();
-                swProgressToast = null;
-            }, 300);
+            dismissSwToast();
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dismissSwToast();
         });
     }
 }
 
+window.showSwUpdateProgress = showSwUpdateProgress;
 window.showSwUpdateComplete = showSwUpdateComplete;
+
+export function mockSwUpdateFlow() {
+    isProgressDismissed = false;
+    let progress = 0;
+    const total = 50;
+    showSwUpdateProgress({ loaded: 0, total, progress: 0, file: './Scripts/main.js' });
+    const timer = setInterval(() => {
+        progress += 10;
+        const loaded = Math.round((progress / 100) * total);
+        showSwUpdateProgress({
+            loaded,
+            total,
+            progress: Math.min(100, progress),
+            file: `./Scripts/chunk-${progress}.js`
+        });
+        if (progress >= 100) {
+            clearInterval(timer);
+            setTimeout(() => {
+                showSwUpdateComplete();
+            }, 500);
+        }
+    }, 200);
+}
+window.mockSwUpdateFlow = mockSwUpdateFlow;
 
 export function initServiceWorker() {
     const isRelease = self.location.hostname === 'susuy0725.github.io';

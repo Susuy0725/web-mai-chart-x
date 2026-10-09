@@ -4184,7 +4184,7 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     const redrawKeys = [
         'hideOutline',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
-        'drawHitEffect', 'drawHanabiEffect', 'rotateStars', 'pinkStars',
+        'drawHitEffect', 'drawHanabiEffect', 'richHanabi', 'disablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
         'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed'
     ];

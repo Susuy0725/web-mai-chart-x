@@ -204,7 +204,9 @@
       "showBreakCriticalPerfect": "Break Critical Perfect 表示",
       "showFastLate": "Fast / Late 表示",
       "autoPlay": "プレイモード",
-      "noBorder": "枠なし"
+      "noBorder": "枠なし",
+      "richHanabi": "豪華な花火エフェクト",
+      "disablePreviewWaveform": "プレビュー波形を無効化"
     },
     "middleDisplayOpts": {
       "off": "オフ",

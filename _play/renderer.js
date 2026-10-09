@@ -41,7 +41,37 @@ const LEVEL_COLORS = {
     7: "#FF6EFC",
 };
 
-const RICH_HANABI_COLOR_MAP = ['#ff009dff', '#ff4800', '#ffe100', '#ddff00', '#00bbff'];
+const RICH_HANABI_COLOR_MAP = ['#b30077', '#b33b00', '#b3a600', '#9bb300', '#0083b3'];
+const TWO_PI = Math.PI * 2;
+const INV_TWO_PI = 1 / TWO_PI;
+
+const RICH_HANABI_COLOR_DATA = RICH_HANABI_COLOR_MAP.map(color => {
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return {
+        hex: color,
+        r, g, b,
+        transparent: `rgba(${r}, ${g}, ${b}, 0)`
+    };
+});
+
+// 預先計算半徑 50 內部的靜態點陣幾何資料（座標、半徑、夾角）
+const HANABI_GRID_STEP = 2.0;
+const HANABI_GRID_DOTS = [];
+for (let y = -50; y <= 50; y += HANABI_GRID_STEP) {
+    for (let x = -50; x <= 50; x += HANABI_GRID_STEP) {
+        const dist = Math.hypot(x, y);
+        if (dist <= 50) {
+            HANABI_GRID_DOTS.push({
+                x,
+                y,
+                dist,
+                angle: Math.atan2(y, x)
+            });
+        }
+    }
+}
 const TOUCH_GROUP_TO_INDEX = { A: 0, B: 8, C: 16, D: 17, E: 25 };
 
 const LEVEL_NAMES = {
@@ -262,7 +292,6 @@ export class SimaiRenderer {
         this._tempColorConfig = { colorCode: '' };
         this._tempTransform = { t: 0, displayT: 0, currentScale: 0, scaleX: 1, scaleY: 1 };
         this._auxTextList = new Array(12);
-        this.offscreen = null;
 
         // 中間顯示 Config 樣式
         this._middleDisplayConfig1 = { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" };
@@ -283,16 +312,20 @@ export class SimaiRenderer {
     }
 
     getCanvasWH() {
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        const invP = scaleBase / (Math.min(w, h) * this.scale);
+        const w = this.canvas ? this.canvas.width : 0;
+        const h = this.canvas ? this.canvas.height : 0;
+        const minDim = Math.min(w, h);
+        const scale = this.scale || 1;
+        const invP = (minDim > 0 && scale > 0) ? (scaleBase / (minDim * scale)) : 1;
         if (!this._canvasWH) {
             this._canvasWH = { width: 0, height: 0, halfWidth: 0, halfHeight: 0 };
         }
-        this._canvasWH.width = w * invP;
-        this._canvasWH.height = h * invP;
-        this._canvasWH.halfWidth = w * invP * 0.5;
-        this._canvasWH.halfHeight = h * invP * 0.5;
+        const width = Number.isFinite(w * invP) && w > 0 ? w * invP : scaleBase;
+        const height = Number.isFinite(h * invP) && h > 0 ? h * invP : scaleBase;
+        this._canvasWH.width = width;
+        this._canvasWH.height = height;
+        this._canvasWH.halfWidth = width * 0.5;
+        this._canvasWH.halfHeight = height * 0.5;
         return this._canvasWH;
     }
 
@@ -300,12 +333,14 @@ export class SimaiRenderer {
      * 預算座標縮放比例與中心偏移量，減少每幀重複計算
      */
     updateCanvasMetrics() {
-        const { width: w, height: h } = this.canvas;
+        const w = this.canvas ? this.canvas.width : 0;
+        const h = this.canvas ? this.canvas.height : 0;
         const minDim = Math.min(w, h);
-        this._p = minDim / scaleBase * this.scale;
-        this._invP = scaleBase / (minDim * this.scale);
-        this._hw = w * this._invP * 0.5;
-        this._hh = h * this._invP * 0.5;
+        const scale = this.scale || 1;
+        this._p = (minDim > 0 && scale > 0) ? (minDim / scaleBase * scale) : 1;
+        this._invP = (minDim > 0 && scale > 0) ? (scaleBase / (minDim * scale)) : 1;
+        this._hw = Number.isFinite(w * this._invP) ? w * this._invP * 0.5 : scaleBase * 0.5;
+        this._hh = Number.isFinite(h * this._invP) ? h * this._invP * 0.5 : scaleBase * 0.5;
     }
 
     setImages(images) {
@@ -1093,11 +1128,9 @@ export class SimaiRenderer {
     }
 
     richHanabi(noteT) {
-        const t = noteT / this.settings.hanabiEffectDecayTime;
+        const t = noteT / this.settings.hanabiEffectDecayTime; // 1.1
         if (t < -1) return;
         const invt = clamp(-t, 0, 1);
-
-        this.offscreen = this.offscreen || (typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas'));
 
         function easeOutExpo(x) {
             return x === 1 ? 1 : 1 - Math.pow(2, -40 * x);
@@ -1117,75 +1150,125 @@ export class SimaiRenderer {
         const ctx = this.ctx;
         const decayAlpha = getCustomCurveClamped(-t);
 
-        const canvasWH = this.getCanvasWH();
-        this.offscreen.width = canvasWH.width;
-        this.offscreen.height = canvasWH.height;
+        // --- 1. 底層光暈 / 圖片 ---
+        if (this.images?.ColorBall) {
+            ctx.globalAlpha = 1 - clamp(invt * 2 - 0.5, 0, 1);
+            this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * (3.8 + invt * 0.5), 0, 0);
+            ctx.globalAlpha = 1 - clamp(invt * 4.4 - 0.5, 0, 1);
+            this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * easeOutExpo(invt * 4.4) * 2.5, 0, 0);
+        }
 
-        const offctx = this.offscreen.getContext('2d');
-        if (!offctx) return;
+        // --- 2. 扇形本體 + 點陣紋理 + 內外雙向羽化 (直接於主畫布渲染，保證高解析度清晰且不抹除其他圖元) ---
+        const maxRadius = 50 * clamp((invt * 11 - 1), 0, 1);
+        if (maxRadius <= 0.001) return;
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = 1;
-        if (this.images && this.images.ColorBall) {
-            this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * 3.8, 0, 0);
-        }
+
+        // 底層白色擴散光環
+        ctx.globalAlpha = decayAlpha * 0.65;
+        const white = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
+        white.addColorStop(0, "#ffffff00");
+        white.addColorStop(0.4, "#ffffff00");
+        white.addColorStop(0.8, "#ffffff8b");
+        white.addColorStop(1, "#ffffff00");
+
+        ctx.fillStyle = white;
+        ctx.beginPath();
+        ctx.arc(0, 0, maxRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = decayAlpha;
+
+        // 羽化半徑設定：
+        // 0 ~ innerHole: 核心完全透明
+        // innerHole ~ innerFeatherEnd: 內圈平滑羽化淡入至純色
+        // innerFeatherEnd ~ outerFeatherStart: 鮮豔飽和主體環帶
+        // outerFeatherStart ~ maxRadius: 外圈平滑羽化淡出至透明
+        const innerHole = 35 * clamp(1 - (1 + t) * 2.75, 0, 1);
+        const innerFeatherEnd = 50 * clamp(1 - (1 + t) * 2.75, 0, 1);
+        const outerFeatherStart = 35 * clamp((invt * 11 - 1), 0, 1);
+        const innerRange = innerFeatherEnd - innerHole;
+        const outerRange = maxRadius - outerFeatherStart;
+
+        // 計算徑向漸變各關鍵比例位置 (0 ~ 1.0)
+        const p1 = Math.min(1, Math.max(0, innerHole / maxRadius));
+        const p2 = Math.min(1, Math.max(p1, innerFeatherEnd / maxRadius));
+        const p3 = Math.min(1, Math.max(p2, outerFeatherStart / maxRadius));
+
+        // 預先為 5 種扇形顏色建立雙向羽化徑向漸變 (使用已預解析的 RGBA，避開每幀 parseInt)
+        const colorGradients = RICH_HANABI_COLOR_DATA.map(c => {
+            const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
+            grad.addColorStop(0, c.transparent);
+            grad.addColorStop(p1, c.transparent);
+            grad.addColorStop(p2, c.hex);
+            grad.addColorStop(p3, c.hex);
+            grad.addColorStop(1, c.transparent);
+            return grad;
+        });
+
         const slices = 30;
-        const slicePath = new Path2D();
-        const tOffset = t * 0.1;
+        const tOffset = t * -0.1;
         const tFive = t * 5 + 5;
 
+        // 繪製扇形各色塊 (不再需要每幀 new Path2D，點陣將直接以幾何角度過濾)
         for (let slice = 1; slice < slices; slice += 2) {
-            const angle = ((slice - 0.5) / slices + tOffset) * Math.PI * 2;
-            const angle1 = ((slice + 0.5) / slices + tOffset) * Math.PI * 2;
+            const angle = ((slice - 0.5) / slices + tOffset) * TWO_PI;
+            const angle1 = ((slice + 0.5) / slices + tOffset) * TWO_PI;
 
             const cosA = Math.cos(angle);
             const sinA = Math.sin(angle);
             const cosA1 = Math.cos(angle1);
             const sinA1 = Math.sin(angle1);
 
-            offctx.beginPath();
-            offctx.lineWidth = 1.5;
-            offctx.fillStyle = RICH_HANABI_COLOR_MAP[Math.floor((slice + tFive) % 5)];
-            offctx.moveTo(0, 0);
-            offctx.lineTo(cosA * 50, sinA * 50);
-            offctx.lineTo(cosA1 * 50, sinA1 * 50);
-            offctx.closePath();
-            offctx.fill();
-
-            slicePath.moveTo(0, 0);
-            slicePath.lineTo(cosA * 50, sinA * 50);
-            slicePath.lineTo(cosA1 * 50, sinA1 * 50);
-            slicePath.closePath();
+            ctx.beginPath();
+            ctx.fillStyle = colorGradients[Math.floor((slice + tFive) % 5)];
+            ctx.moveTo(0, 0);
+            ctx.lineTo(cosA * maxRadius, sinA * maxRadius);
+            ctx.lineTo(cosA1 * maxRadius, sinA1 * maxRadius);
+            ctx.closePath();
+            ctx.fill();
         }
 
-        ctx.restore();
-        ctx.save();
-        ctx.clip(slicePath);
-        ctx.fillStyle = "white";
+        // 繪製內部的點陣波紋（以扇區角度幾何精準過濾，完全免除昂貴的 ctx.clip，並採用預計算網格與高效 rect 批次繪製）
+        const dotGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
+        dotGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        dotGrad.addColorStop(p1, 'rgba(255, 255, 255, 0)');
+        dotGrad.addColorStop(p2, 'rgba(255, 255, 255, 0.3)');
+        dotGrad.addColorStop(p3, 'rgba(255, 255, 255, 0.3)');
+        dotGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = dotGrad;
 
         const tPhase = t * Math.PI * 2.2;
         const distFactor = Math.PI * 0.08;
+        const shiftOffset = (0.5 / slices) - tOffset;
 
         ctx.beginPath();
-        ctx.globalAlpha = 0.3;
-        for (let y = -50; y < 50; y += 1.5) {
-            const y2 = y * y;
-            ctx.lineTo(-50, y - 1.5);
-            for (let x = -50; x < 50; x += 1.5) {
-                const distSq = x * x + y2;
-                if (distSq > 2500) continue;
-                const dist = Math.sqrt(distSq);
-                const size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.5;
-                if (size > 0) {
-                    ctx.arc(x, y, size, 0, 2 * Math.PI);
-                }
+        for (let i = 0; i < HANABI_GRID_DOTS.length; i++) {
+            const dot = HANABI_GRID_DOTS[i];
+            const dist = dot.dist;
+            if (dist < innerHole || dist > maxRadius) continue;
+
+            // 扇瓣切片奇偶過濾：奇數切片（有扇瓣）繪製，偶數切片（空白）跳過
+            let u = dot.angle * INV_TWO_PI + shiftOffset;
+            u = (u % 1 + 1) % 1;
+            if ((Math.floor(u * slices) & 1) === 0) continue;
+
+            let size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.5;
+            if (size <= 0) continue;
+
+            if (dist < innerFeatherEnd && innerRange > 0) {
+                size *= (dist - innerHole) / innerRange; // 內部羽化微縮
+            } else if (dist > outerFeatherStart && outerRange > 0) {
+                size *= (maxRadius - dist) / outerRange; // 外部羽化微縮
             }
-            ctx.lineTo(50, y + 1.5);
-            ctx.lineTo(50, y);
-            ctx.lineTo(-50, y);
+
+            if (size > 0.05) {
+                ctx.rect(dot.x - size, dot.y - size, size * 2, size * 2);
+            }
         }
         ctx.fill();
+
         ctx.restore();
     }
 
@@ -2602,7 +2685,7 @@ export class SimaiRenderer {
             if (eff.cleared) continue;
             this.ctx.save();
             this.ctx.translate(eff.x, eff.y);
-            if (this.settings.drawHanabiEffect === 'rich') {
+            if (this.settings.drawHanabiEffect === 'rich' || this.settings.richHanabi) {
                 this.richHanabi(eff.noteT);
             } else {
                 this.simpleHanabi(eff.noteT, eff.isCenter);

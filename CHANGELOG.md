@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.09 (2)]
+
+### Added
+- 加入按住收納按鍵可固定住的功能
+
 ## [2026.10.09 (1)]
 
 ### Added

@@ -32,6 +32,36 @@ if (typeof OffscreenCanvasRenderingContext2D !== 'undefined' && !OffscreenCanvas
 
 const charWidthCache = {};
 const RICH_HANABI_COLOR_MAP = ['#b30077', '#b33b00', '#b3a600', '#9bb300', '#0083b3'];
+const TWO_PI = Math.PI * 2;
+const INV_TWO_PI = 1 / TWO_PI;
+
+const RICH_HANABI_COLOR_DATA = RICH_HANABI_COLOR_MAP.map(color => {
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return {
+        hex: color,
+        r, g, b,
+        transparent: `rgba(${r}, ${g}, ${b}, 0)`
+    };
+});
+
+// 預先計算半徑 50 內部的靜態點陣幾何資料（座標、半徑、夾角）
+const HANABI_GRID_STEP = 2.0;
+const HANABI_GRID_DOTS = [];
+for (let y = -50; y <= 50; y += HANABI_GRID_STEP) {
+    for (let x = -50; x <= 50; x += HANABI_GRID_STEP) {
+        const dist = Math.hypot(x, y);
+        if (dist <= 50) {
+            HANABI_GRID_DOTS.push({
+                x,
+                y,
+                dist,
+                angle: Math.atan2(y, x)
+            });
+        }
+    }
+}
 const TOUCH_GROUP_TO_INDEX = { A: 0, B: 8, C: 16, D: 17, E: 25 };
 
 const JUDGE_COLORS = {
@@ -359,7 +389,8 @@ export class SimaiRenderer {
     }
 
     getBreakTint(isBreak, isMine) {
-        return (isBreak && !isMine) ? Math.pow(Math.sin(this.globalTime * -6), 2) * 0.7 : 0;
+        if (!isBreak || isMine) return 0;
+        return (this._currentFrameBreakTint !== undefined) ? this._currentFrameBreakTint : Math.pow(Math.sin(this.globalTime * -6), 2) * 0.7;
     }
 
     getNoteSizeScaled(size) {
@@ -424,6 +455,7 @@ export class SimaiRenderer {
         this._middleDisplayCanvas = null;
         this._lastMiddleCacheKey = null;
         this._canvasWH = null;
+        this._cachedDomOutline = null;
     }
 
     // --- 核心工具函式 ---
@@ -1165,22 +1197,33 @@ export class SimaiRenderer {
         const decayAlpha = getCustomCurveClamped(-t);
 
         // --- 1. 底層光暈 / 圖片 ---
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
         if (this.images?.ColorBall) {
             ctx.globalAlpha = 1 - clamp(invt * 2 - 0.5, 0, 1);
             this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * (3.8 + invt * 0.5), 0, 0);
             ctx.globalAlpha = 1 - clamp(invt * 4.4 - 0.5, 0, 1);
             this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * easeOutExpo(invt * 4.4) * 2.5, 0, 0);
         }
-        //ctx.fillStyle = "white";
-        //ctx.fillText(clamp(invt * 4.4 - 0.5, 0, 1), 0, 0);
+
         // --- 2. 扇形本體 + 點陣紋理 + 內外雙向羽化 (直接於主畫布渲染，保證高解析度清晰且不抹除其他圖元) ---
         const maxRadius = 50 * clamp((invt * 11 - 1), 0, 1);
         if (maxRadius <= 0.001) return;
 
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
+
+        // 底層白色擴散光環
+        ctx.globalAlpha = decayAlpha * 0.65;
+        const white = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
+        white.addColorStop(0, "#ffffff00");
+        white.addColorStop(0.4, "#ffffff00");
+        white.addColorStop(0.8, "#ffffff8b");
+        white.addColorStop(1, "#ffffff00");
+
+        ctx.fillStyle = white;
+        ctx.beginPath();
+        ctx.arc(0, 0, maxRadius, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.globalAlpha = decayAlpha;
 
         // 羽化半徑設定：
@@ -1199,31 +1242,25 @@ export class SimaiRenderer {
         const p2 = Math.min(1, Math.max(p1, innerFeatherEnd / maxRadius));
         const p3 = Math.min(1, Math.max(p2, outerFeatherStart / maxRadius));
 
-        // 預先為 5 種扇形顏色建立雙向羽化徑向漸變
-        const colorGradients = RICH_HANABI_COLOR_MAP.map(color => {
+        // 預先為 5 種扇形顏色建立雙向羽化徑向漸變 (使用已預解析的 RGBA，避開每幀 parseInt)
+        const colorGradients = RICH_HANABI_COLOR_DATA.map(c => {
             const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
-            const r = parseInt(color.slice(1, 3), 16);
-            const g = parseInt(color.slice(3, 5), 16);
-            const b = parseInt(color.slice(5, 7), 16);
-            const transparent = `rgba(${r}, ${g}, ${b}, 0)`;
-
-            grad.addColorStop(0, transparent);
-            grad.addColorStop(p1, transparent);
-            grad.addColorStop(p2, color);
-            grad.addColorStop(p3, color);
-            grad.addColorStop(1, transparent);
+            grad.addColorStop(0, c.transparent);
+            grad.addColorStop(p1, c.transparent);
+            grad.addColorStop(p2, c.hex);
+            grad.addColorStop(p3, c.hex);
+            grad.addColorStop(1, c.transparent);
             return grad;
         });
 
         const slices = 30;
-        const slicePath = new Path2D();
         const tOffset = t * -0.1;
         const tFive = t * 5 + 5;
 
-        // 繪製扇形各色塊
+        // 繪製扇形各色塊 (不再需要每幀 new Path2D，點陣將直接以幾何角度過濾)
         for (let slice = 1; slice < slices; slice += 2) {
-            const angle = ((slice - 0.5) / slices + tOffset) * Math.PI * 2;
-            const angle1 = ((slice + 0.5) / slices + tOffset) * Math.PI * 2;
+            const angle = ((slice - 0.5) / slices + tOffset) * TWO_PI;
+            const angle1 = ((slice + 0.5) / slices + tOffset) * TWO_PI;
 
             const cosA = Math.cos(angle);
             const sinA = Math.sin(angle);
@@ -1237,17 +1274,9 @@ export class SimaiRenderer {
             ctx.lineTo(cosA1 * maxRadius, sinA1 * maxRadius);
             ctx.closePath();
             ctx.fill();
-
-            slicePath.moveTo(0, 0);
-            slicePath.lineTo(cosA * maxRadius, sinA * maxRadius);
-            slicePath.lineTo(cosA1 * maxRadius, sinA1 * maxRadius);
-            slicePath.closePath();
         }
 
-        // 繪製內部的點陣波紋（裁切在扇形內，並於內外邊緣同步微縮與漸變淡出）
-        ctx.save();
-        ctx.clip(slicePath);
-
+        // 繪製內部的點陣波紋（以扇區角度幾何精準過濾，完全免除昂貴的 ctx.clip，並採用預計算網格與高效 rect 批次繪製）
         const dotGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
         dotGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
         dotGrad.addColorStop(p1, 'rgba(255, 255, 255, 0)');
@@ -1258,36 +1287,33 @@ export class SimaiRenderer {
 
         const tPhase = t * Math.PI * 2.2;
         const distFactor = Math.PI * 0.08;
-        const maxDistSq = maxRadius * maxRadius;
+        const shiftOffset = (0.5 / slices) - tOffset;
 
         ctx.beginPath();
-        for (let y = -50; y < 50; y += 1.5) {
-            const y2 = y * y;
-            ctx.lineTo(-50, y - 1.5);
-            for (let x = -50; x < 50; x += 1.5) {
-                const distSq = x * x + y2;
-                if (distSq > maxDistSq) continue;
-                const dist = Math.sqrt(distSq);
-                if (dist < innerHole) continue;
+        for (let i = 0; i < HANABI_GRID_DOTS.length; i++) {
+            const dot = HANABI_GRID_DOTS[i];
+            const dist = dot.dist;
+            if (dist < innerHole || dist > maxRadius) continue;
 
-                let size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.5;
-                if (size > 0) {
-                    if (dist < innerFeatherEnd && innerRange > 0) {
-                        size *= (dist - innerHole) / innerRange; // 內部羽化微縮
-                    } else if (dist > outerFeatherStart && outerRange > 0) {
-                        size *= (maxRadius - dist) / outerRange; // 外部羽化微縮
-                    }
-                    if (size > 0.05) {
-                        ctx.arc(x, y, size, 0, 2 * Math.PI);
-                    }
-                }
+            // 扇瓣切片奇偶過濾：奇數切片（有扇瓣）繪製，偶數切片（空白）跳過
+            let u = dot.angle * INV_TWO_PI + shiftOffset;
+            u = (u % 1 + 1) % 1;
+            if ((Math.floor(u * slices) & 1) === 0) continue;
+
+            let size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.5;
+            if (size <= 0) continue;
+
+            if (dist < innerFeatherEnd && innerRange > 0) {
+                size *= (dist - innerHole) / innerRange; // 內部羽化微縮
+            } else if (dist > outerFeatherStart && outerRange > 0) {
+                size *= (maxRadius - dist) / outerRange; // 外部羽化微縮
             }
-            ctx.lineTo(50, y + 1.5);
-            ctx.lineTo(50, y);
-            ctx.lineTo(-50, y);
+
+            if (size > 0.05) {
+                ctx.rect(dot.x - size, dot.y - size, size * 2, size * 2);
+            }
         }
         ctx.fill();
-        ctx.restore();
 
         ctx.restore();
     }
@@ -1374,6 +1400,7 @@ export class SimaiRenderer {
         } = state;
 
         this.globalTime = globalTime;
+        this._currentFrameBreakTint = Math.pow(Math.sin(globalTime * -6), 2) * 0.7;
         this.playCombo = playCombo;
         this.playScore = playScore;
         this.isPlaying = (isPlaying !== undefined) ? !!isPlaying : (playing !== undefined ? !!playing : false);
@@ -1911,9 +1938,13 @@ export class SimaiRenderer {
         if (this._outlineImage && !imgNotExists(this._outlineImage)) {
             return this._outlineImage;
         }
+        if (this._cachedDomOutline && this._cachedDomOutline.complete && this._cachedDomOutline.naturalWidth > 0) {
+            return this._cachedDomOutline;
+        }
         if (typeof document !== 'undefined') {
             const domOutline = document.getElementById('canvasOutline');
             if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
+                this._cachedDomOutline = domOutline;
                 return domOutline;
             }
         }
@@ -2891,7 +2922,7 @@ export class SimaiRenderer {
 
             this.ctx.save();
             this.ctx.translate(eff.x, eff.y);
-            if (settings.richHanabi) {
+            if (this.settings?.richHanabi) {
                 this.richHanabi(eff.noteT);
             } else {
                 this.simpleHanabi(eff.noteT, eff.isCenter);

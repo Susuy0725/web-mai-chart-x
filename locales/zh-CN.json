@@ -545,6 +545,8 @@
       "qualityUltra": "极致超清 (~25 Mbps)",
       "qualityHigh": "高画质 (~18 Mbps, 推荐)",
       "qualityMedium": "标准画质 (~10 Mbps)",
+      "qualityLow": "低画质 (~5 Mbps)",
+      "qualityLowest": "极低画质 (~2 Mbps)",
       "customBitrate": "自定义码率 (Mbps):"
     },
     "quickGenerate": {

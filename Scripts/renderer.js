@@ -1198,7 +1198,7 @@ export class SimaiRenderer {
 
         // --- 1. 底層光暈 / 圖片 ---
         if (this.images?.ColorBall) {
-            ctx.globalAlpha = 1 - clamp(invt * 2 - 0.5, 0, 1);
+            ctx.globalAlpha = 1 - clamp(invt * 3 - 0.5, 0, 1);
             this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * (3.8 + invt * 0.5), 0, 0);
             ctx.globalAlpha = 1 - clamp(invt * 4.4 - 0.5, 0, 1);
             this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * easeOutExpo(invt * 4.4) * 2.5, 0, 0);
@@ -1223,8 +1223,6 @@ export class SimaiRenderer {
         ctx.beginPath();
         ctx.arc(0, 0, maxRadius, 0, Math.PI * 2);
         ctx.fill();
-
-        ctx.globalAlpha = decayAlpha;
 
         // 羽化半徑設定：
         // 0 ~ innerHole: 核心完全透明
@@ -1256,6 +1254,8 @@ export class SimaiRenderer {
         const slices = 30;
         const tOffset = t * -0.1;
         const tFive = t * 5 + 5;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = decayAlpha * 0.8;
 
         // 繪製扇形各色塊 (不再需要每幀 new Path2D，點陣將直接以幾何角度過濾)
         for (let slice = 1; slice < slices; slice += 2) {
@@ -1275,6 +1275,8 @@ export class SimaiRenderer {
             ctx.closePath();
             ctx.fill();
         }
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = decayAlpha;
 
         // 繪製內部的點陣波紋（以扇區角度幾何精準過濾，完全免除昂貴的 ctx.clip，並採用預計算網格與高效 rect 批次繪製）
         const dotGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);

@@ -407,6 +407,63 @@ class AudioManager {
     }
 
     /**
+     * 切片並取得指定時間區間的 BGM AudioBuffer (可用於逐幀影片渲染匯出或片段編輯)
+     * @param {number} startTime 起始時間 (秒)
+     * @param {number} endTime 結束時間 (秒)
+     * @param {number} volume 音量增益係數 (預設 1.0)
+     * @returns {AudioBuffer|null} 切片後的 AudioBuffer
+     */
+    sliceBgmBuffer(startTime = 0, endTime = null, volume = 1.0) {
+        if (!this.bgmBuffer) return null;
+        const buf = this.bgmBuffer;
+        const sr = buf.sampleRate;
+        const totalDuration = buf.duration;
+        const durationSec = (endTime !== null && endTime !== undefined)
+            ? Math.max(0, endTime - startTime)
+            : Math.max(0, totalDuration - startTime);
+
+        const newLen = Math.max(1, Math.floor(durationSec * sr));
+        const numChannels = buf.numberOfChannels;
+
+        const newBuf = (this.ctx && typeof this.ctx.createBuffer === 'function')
+            ? this.ctx.createBuffer(numChannels, newLen, sr)
+            : new AudioBuffer({ length: newLen, numberOfChannels: numChannels, sampleRate: sr });
+
+        const startSample = Math.floor(startTime * sr);
+        const gain = typeof volume === 'number' && Number.isFinite(volume) ? volume : 1.0;
+
+        for (let ch = 0; ch < numChannels; ch++) {
+            const src = buf.getChannelData(ch);
+            const dst = newBuf.getChannelData(ch);
+
+            if (startSample >= 0 && startSample < src.length) {
+                const available = Math.min(src.length - startSample, newLen);
+                if (Math.abs(gain - 1.0) < 1e-4) {
+                    dst.set(src.subarray(startSample, startSample + available));
+                } else {
+                    for (let i = 0; i < available; i++) {
+                        dst[i] = src[startSample + i] * gain;
+                    }
+                }
+            } else if (startSample < 0) {
+                const padOffset = -startSample;
+                const copyLen = Math.min(src.length, newLen - padOffset);
+                if (copyLen > 0) {
+                    if (Math.abs(gain - 1.0) < 1e-4) {
+                        dst.set(src.subarray(0, copyLen), padOffset);
+                    } else {
+                        for (let i = 0; i < copyLen; i++) {
+                            dst[padOffset + i] = src[i] * gain;
+                        }
+                    }
+                }
+            }
+        }
+
+        return newBuf;
+    }
+
+    /**
      * 動態調整全域音量 (限制在閾值內)
      */
     setGlobalVolume(value) {

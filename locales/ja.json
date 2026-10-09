@@ -545,6 +545,8 @@
       "qualityUltra": "最高画質 (~25 Mbps)",
       "qualityHigh": "高画質 (~18 Mbps, 推奨)",
       "qualityMedium": "標準画質 (~10 Mbps)",
+      "qualityLow": "低画質 (~5 Mbps)",
+      "qualityLowest": "最低画質 (~2 Mbps)",
       "customBitrate": "カスタムビットレート (Mbps):"
     },
     "quickGenerate": {

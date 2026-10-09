@@ -278,6 +278,7 @@ export async function openRecordVideoModal({
             { value: '1080x1080', label: '1080 x 1080 (1080p 1:1)' },
             { value: '1280x720', label: '1280 x 720 (720p 16:9)' },
             { value: '720x720', label: '720 x 720 (720p 1:1)' },
+            { value: '854x480', label: '854 x 480 (480p 16:9)' },
             { value: '640x360', label: '640 x 360 (360p 16:9)' },
             { value: 'custom', label: t('popup.recordVideo.custom') }
         ]
@@ -355,6 +356,7 @@ export async function openRecordVideoModal({
             { value: 'high', label: t('popup.recordVideo.qualityHigh') || '高畫質 (~18 Mbps, 推薦)' },
             { value: 'medium', label: t('popup.recordVideo.qualityMedium') || '標準畫質 (~10 Mbps)' },
             { value: 'low', label: t('popup.recordVideo.qualityLow') || '低畫質 (~5 Mbps)' },
+            { value: 'lowest', label: t('popup.recordVideo.qualityLowest') || '極低畫質 (~2 Mbps)' },
             { value: 'custom', label: t('popup.recordVideo.custom') }
         ]
     });

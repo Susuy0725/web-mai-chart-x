@@ -545,6 +545,8 @@
       "qualityUltra": "Ultra (~25 Mbps)",
       "qualityHigh": "High (~18 Mbps, Recommended)",
       "qualityMedium": "Standard (~10 Mbps)",
+      "qualityLow": "Low (~5 Mbps)",
+      "qualityLowest": "Lowest (~2 Mbps)",
       "customBitrate": "Custom Bitrate (Mbps):"
     },
     "quickGenerate": {

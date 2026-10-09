@@ -700,6 +700,7 @@
     "toolEraser": "消しゴム",
     "collapseToolbar": "ツールバーを閉じる",
     "expandToolbar": "ツールバーを展開",
+    "unpinToolbar": "固定を解除してツールバーを閉じる",
     "currentNote": "現在のノーツ"
   },
   "visualMenu": {

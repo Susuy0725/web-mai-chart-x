@@ -708,6 +708,7 @@
     "tagDivision": "Timing Tag",
     "collapseToolbar": "Collapse Toolbar",
     "expandToolbar": "Expand Toolbar",
+    "unpinToolbar": "Unpin and Collapse Toolbar",
     "currentNote": "Current Note"
   },
   "visualMenu": {

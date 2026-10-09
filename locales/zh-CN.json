@@ -708,6 +708,7 @@
     "tagDivision": "时值标签",
     "collapseToolbar": "收纳工具栏",
     "expandToolbar": "展开工具栏",
+    "unpinToolbar": "解除固定并收纳工具栏",
     "currentNote": "当前音符"
   },
   "visualMenu": {

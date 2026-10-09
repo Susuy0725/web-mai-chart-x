@@ -700,6 +700,7 @@
     "toolEraser": "지우개",
     "collapseToolbar": "도구 모음 접기",
     "expandToolbar": "도구 모음 펼치기",
+    "unpinToolbar": "고정 해제 및 도구 모음 접기",
     "currentNote": "현재 노트"
   },
   "visualMenu": {

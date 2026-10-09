@@ -32,7 +32,7 @@ import { SimaiLogicControler } from './core/simaiLogicControler.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 import { decodeWorkerManager } from './core/decodeWorkerManager.js';
-import { t, setLang, getCurrentLang, applyI18nToDOM, i18nReady } from './i18n.js';
+import { t, setLang, getCurrentLang, applyI18nToDOM, i18nReady, onLanguageChange } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
@@ -765,9 +765,64 @@ if (visualRedoBtn) {
     });
 }
 
-// 最底端展開/收納按鈕 (通用控制所有 .visual-tool-group 群組)
+// 最底端展開/收納按鈕 (通用控制所有 .visual-tool-group 群組，支援按住固定)
+let isVisualToolPinned = false;
+let collapseHoldTimer = null;
+let isHoldTriggered = false;
+let holdPointerStartX = 0;
+let holdPointerStartY = 0;
+const HOLD_DURATION = 500; // 按住 500ms 觸發固定
+
+function updateVisualCollapseBtnTooltip() {
+    if (!visualToolCollapseBtn) return;
+    if (isVisualToolPinned) {
+        visualToolCollapseBtn.setAttribute('data-i18n-title', 'visualToolbar.unpinToolbar');
+        visualToolCollapseBtn.setAttribute('data-i18n-aria-label', 'visualToolbar.unpinToolbar');
+        const text = t('visualToolbar.unpinToolbar');
+        visualToolCollapseBtn.title = text;
+        visualToolCollapseBtn.setAttribute('aria-label', text);
+    } else if (visualToolCollapseBtn.classList.contains('collapsed')) {
+        visualToolCollapseBtn.setAttribute('data-i18n-title', 'visualToolbar.expandToolbar');
+        visualToolCollapseBtn.setAttribute('data-i18n-aria-label', 'visualToolbar.expandToolbar');
+        const text = t('visualToolbar.expandToolbar');
+        visualToolCollapseBtn.title = text;
+        visualToolCollapseBtn.setAttribute('aria-label', text);
+    } else {
+        visualToolCollapseBtn.setAttribute('data-i18n-title', 'visualToolbar.collapseToolbar');
+        visualToolCollapseBtn.setAttribute('data-i18n-aria-label', 'visualToolbar.collapseToolbar');
+        const text = t('visualToolbar.collapseToolbar');
+        visualToolCollapseBtn.title = text;
+        visualToolCollapseBtn.setAttribute('aria-label', text);
+    }
+}
+
+function setVisualToolPinned(pinned) {
+    isVisualToolPinned = pinned;
+    if (visualToolCollapseBtn) {
+        visualToolCollapseBtn.classList.toggle('pinned', pinned);
+        const icon = visualToolCollapseBtn.querySelector('.material-symbols-outlined');
+        if (pinned) {
+            visualToolCollapseBtn.style.setProperty('background', '#ffffff', 'important');
+            visualToolCollapseBtn.style.setProperty('color', '#000000', 'important');
+            if (icon) {
+                icon.style.setProperty('color', '#000000', 'important');
+            }
+        } else {
+            visualToolCollapseBtn.style.removeProperty('background');
+            visualToolCollapseBtn.style.removeProperty('color');
+            if (icon) {
+                icon.style.removeProperty('color');
+            }
+        }
+        updateVisualCollapseBtnTooltip();
+    }
+}
+
 function setVisualToolCollapsed(isCollapsed) {
     if (!visualToolCollapseBtn) return;
+    if (isCollapsed) {
+        setVisualToolPinned(false);
+    }
     visualToolCollapseBtn.classList.toggle('collapsed', isCollapsed);
     document.querySelectorAll('.visual-tool-group').forEach(group => {
         group.classList.toggle('collapsed', isCollapsed);
@@ -775,19 +830,99 @@ function setVisualToolCollapsed(isCollapsed) {
     if (isCollapsed) {
         VisualSubMenu.closeAll();
     }
+    updateVisualCollapseBtnTooltip();
+}
+
+function clearCollapseHoldTimer() {
+    if (collapseHoldTimer) {
+        clearTimeout(collapseHoldTimer);
+        collapseHoldTimer = null;
+    }
 }
 
 if (visualToolCollapseBtn) {
+    // 防止右鍵選單干擾長按
+    visualToolCollapseBtn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+
+    visualToolCollapseBtn.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        clearCollapseHoldTimer();
+        isHoldTriggered = false;
+        holdPointerStartX = e.clientX;
+        holdPointerStartY = e.clientY;
+
+        collapseHoldTimer = setTimeout(() => {
+            isHoldTriggered = true;
+            if (visualToolCollapseBtn.classList.contains('collapsed')) {
+                setVisualToolCollapsed(false);
+            }
+            setVisualToolPinned(true);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(40);
+            }
+        }, HOLD_DURATION);
+    });
+
+    visualToolCollapseBtn.addEventListener('pointermove', (e) => {
+        if (!collapseHoldTimer) return;
+        const dx = e.clientX - holdPointerStartX;
+        const dy = e.clientY - holdPointerStartY;
+        if (Math.hypot(dx, dy) > 10) {
+            clearCollapseHoldTimer();
+        }
+    });
+
+    const cancelHold = () => {
+        clearCollapseHoldTimer();
+    };
+
+    visualToolCollapseBtn.addEventListener('pointerup', cancelHold);
+    visualToolCollapseBtn.addEventListener('pointercancel', cancelHold);
+    visualToolCollapseBtn.addEventListener('pointerleave', cancelHold);
+
     visualToolCollapseBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        clearCollapseHoldTimer();
+
+        // 若剛觸發長按固定，放開時忽略 click 事件
+        if (isHoldTriggered) {
+            isHoldTriggered = false;
+            return;
+        }
+
+        // 若處於固定狀態，再輕點一下解除固定並收起面板
+        if (isVisualToolPinned) {
+            setVisualToolPinned(false);
+            setVisualToolCollapsed(true);
+            return;
+        }
+
+        // 一般點擊切換展開/收納
         const willCollapse = !visualToolCollapseBtn.classList.contains('collapsed');
         setVisualToolCollapsed(willCollapse);
     });
 
-    // 點擊到工具欄外的地方時把工具欄收起來
+    // 鍵盤無障礙支援 (Enter / 空白鍵)
+    visualToolCollapseBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (isVisualToolPinned) {
+                setVisualToolPinned(false);
+                setVisualToolCollapsed(true);
+            } else {
+                const willCollapse = !visualToolCollapseBtn.classList.contains('collapsed');
+                setVisualToolCollapsed(willCollapse);
+            }
+        }
+    });
+
+    // 點擊到工具欄外的地方時把工具欄收起來 (固定狀態時不收起)
     document.addEventListener('pointerdown', (e) => {
         if (!visualToolBarEl || visualToolBarEl.style.display === 'none') return;
         if (visualToolCollapseBtn.classList.contains('collapsed')) return;
+        if (isVisualToolPinned) return;
 
         // 若點擊目標在 visualToolBarEl 之內，不收合
         if (visualToolBarEl.contains(e.target)) return;
@@ -799,6 +934,11 @@ if (visualToolCollapseBtn) {
 
         setVisualToolCollapsed(true);
     }, true);
+
+    // 監聽語言切換
+    onLanguageChange(() => {
+        updateVisualCollapseBtnTooltip();
+    });
 }
 
 if (visualToolModeSelect) {

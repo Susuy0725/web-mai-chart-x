@@ -1799,27 +1799,44 @@ export class SimaiRenderer {
             this._cachedFpsVal = 'PAUSE';
         }
 
-        const fpsText = `FPS: ${this._cachedFpsVal}`;
-        const avgFpsText = `Avg FPS: ${this._cachedAvgVal}`;
-        const low1Text = `1% Low: ${this._cachedLow1Val}`;
-        const low01Text = `0.1% Low: ${this._cachedLow01Val}`;
-        const timeText = `Time: ${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
+        if (!this._uiCacheCanvas) {
+            this._uiCacheCanvas = (typeof OffscreenCanvas !== 'undefined')
+                ? new OffscreenCanvas(200, 110)
+                : document.createElement('canvas');
+            this._uiCacheCanvas.width = 200;
+            this._uiCacheCanvas.height = 110;
+            this._uiCacheCtx = this._uiCacheCanvas.getContext('2d');
+            this._lastUiTextUpdateTime = 0;
+        }
 
-        ctx.save();
-        ctx.font = "3px mono";
-        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
+        if (now - this._lastUiTextUpdateTime >= 100) {
+            this._lastUiTextUpdateTime = now;
+            const uctx = this._uiCacheCtx;
+            if (uctx) {
+                uctx.clearRect(0, 0, 200, 110);
+                uctx.font = "14px mono, monospace";
+                uctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+                uctx.textAlign = "left";
+                uctx.textBaseline = "top";
+
+                const fpsText = `FPS: ${this._cachedFpsVal}`;
+                const avgFpsText = `Avg FPS: ${this._cachedAvgVal}`;
+                const low1Text = `1% Low: ${this._cachedLow1Val}`;
+                const low01Text = `0.1% Low: ${this._cachedLow01Val}`;
+                const timeText = `Time: ${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
+
+                uctx.fillText(fpsText, 4, 4);
+                uctx.fillText(avgFpsText, 4, 24);
+                uctx.fillText(low1Text, 4, 44);
+                uctx.fillText(low01Text, 4, 64);
+                uctx.fillText(timeText, 4, 84);
+            }
+        }
 
         const startX = -w / 2 + 2;
-        let startY = -h / 2 + 2;
-        ctx.fillText(fpsText, startX, startY);
-        ctx.fillText(avgFpsText, startX, startY + 4);
-        ctx.fillText(low1Text, startX, startY + 8);
-        ctx.fillText(low01Text, startX, startY + 12);
-        ctx.fillText(timeText, startX, startY + 16);
-
-        ctx.restore();
+        const startY = -h / 2 + 2;
+        // 離屏畫布尺寸為 200x110，在邏輯坐標系中以 40x22 比例繪製 (5:1 縮放，高 DPI 銳利清晰)
+        ctx.drawImage(this._uiCacheCanvas, startX, startY, 40, 22);
     }
 
     drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
@@ -2231,7 +2248,7 @@ export class SimaiRenderer {
                 const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
                 const size = baseSize * currentScale;
                 const sizeOffset = (t < md) ? 0 :
-                    Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * (20.35 / baseSize);
+                    Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize); // 20.35
                 const isOn = noteT <= -0.1 && !s.isMine;
                 const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
@@ -2257,7 +2274,7 @@ export class SimaiRenderer {
                     ctx.rotate(posInfo.rot);
 
                     ctx.drawImage(img, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-                    ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+                    ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.18 + sizeOffset));
                     ctx.drawImage(img, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
 
                     if (s.isEx) {
@@ -2622,6 +2639,7 @@ export class SimaiRenderer {
             return;
         }
 
+        const size = this.settings.noteBaseSize;
         const isIllegalRed = s.isIllegal && this.settings.slideIllegalRed;
         const prefix = isIllegalRed ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
         const standardKey = isIllegalRed ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
@@ -2640,7 +2658,7 @@ export class SimaiRenderer {
         const br = (!isIllegalRed && s.isBreak && !s.isMine) ? this.getBreakTint(s.isBreak, s.isMine) : 0;
         const isWiFi = s.slideType === "w";
         const prefixOrKey = isWiFi ? prefix : standardKey;
-        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, br, isIllegalRed);
+        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, br, isIllegalRed, 0.3963 * size);
         this.ctx.restore();
     }
 
@@ -2793,7 +2811,10 @@ export class SimaiRenderer {
 
     ensureArrowCache(recorder, typew, spacing = 4.36) {
         const key = typew ? '_wArrowCache' : '_stdArrowCache';
-        if (recorder[key]) return recorder[key];
+        const spacingKey = key + '_spacing';
+        if (recorder[key] && Math.abs((recorder[spacingKey] ?? -1) - spacing) < 1e-5) {
+            return recorder[key];
+        }
 
         const totalLen = recorder.totalLength;
         const arrowCount = typew ? 11 : Math.floor((totalLen - 2) / spacing);
@@ -2835,6 +2856,7 @@ export class SimaiRenderer {
         }
 
         recorder[key] = arrows;
+        recorder[spacingKey] = spacing;
         return arrows;
     }
 
@@ -2844,6 +2866,7 @@ export class SimaiRenderer {
         const arrows = this.ensureArrowCache(recorder, typew, spacing);
         if (!arrows || arrows.length === 0) return;
 
+        const size = this.settings.noteBaseSize * 0.0909;
         const totalLen = recorder.totalLength;
         const starDist = starProgress * totalLen;
         let currentStarSensorId = null;
@@ -2897,7 +2920,7 @@ export class SimaiRenderer {
 
             this.ctx.translate(arr.x, arr.y);
             this.ctx.rotate(arr.rad);
-            this.drawImgAtcenter(img, 1, 0, 0, arr.dw, arr.dh);
+            this.drawImgAtcenter(img, 1, 0, 0, arr.dw * size, arr.dh * size);
             this.ctx.setTransform(a, b, c, d, e, f);
         }
     }
@@ -5289,11 +5312,11 @@ export class SimaiPreviewRenderer {
         ctx.beginPath();
         const step = Math.max(1, Math.floor((sampleRate / zoom) / 8));
 
-        for (let x = -1; x <= w + 1; x++) {
+        for (let x = -1; x <= w + 1; x += 2) {
             const pixelTime = Math.floor(leftTime / timePerPixel) * timePerPixel + (x * timePerPixel);
 
             let startIdx = Math.floor(pixelTime * sampleRate);
-            let endIdx = Math.floor((pixelTime + timePerPixel) * sampleRate);
+            let endIdx = Math.floor((pixelTime + timePerPixel * 2) * sampleRate);
 
             if (endIdx <= 0 || startIdx >= totalSamples) continue;
             startIdx = Math.max(0, startIdx);
@@ -5351,8 +5374,13 @@ export class SimaiPreviewRenderer {
         this.indexTime = indexTime ?? 0;
         if (!this.settings.disablePreviewWaveform) this.drawAudioWaveform(audioBuffer, offset);
         // 先繪製譜面切分線 (split tags)，再繪製 BPM 與黃節拍線 (bpm tags，疊在切分線之上)
-        visualBuckets.tags.filter(t => t.type === 'split').forEach(t => this.drawTag(t));
-        visualBuckets.tags.filter(t => t.type !== 'split').forEach(t => this.drawTag(t));
+        const tags = visualBuckets.tags || [];
+        for (let i = 0; i < tags.length; i++) {
+            if (tags[i].type === 'split') this.drawTag(tags[i]);
+        }
+        for (let i = 0; i < tags.length; i++) {
+            if (tags[i].type !== 'split') this.drawTag(tags[i]);
+        }
         visualBuckets.slide.forEach(n => this.drawSlide(n));
         visualBuckets.tapnhold.forEach(n => {
             if (n.type === "hold") this.drawHold(n);

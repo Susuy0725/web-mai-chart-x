@@ -206,7 +206,9 @@
       "autoPlay": "Play Mode",
       "noBorder": "No borders",
       "richHanabi": "Rich Hanabi Effects",
-      "disablePreviewWaveform": "Disable Preview Waveform"
+      "disablePreviewWaveform": "Disable Preview Waveform",
+      "noteBaseSize": "Note Base Size (noteBaseSize)",
+      "middleDistance": "Middle Distance (middleDistance)"
     },
     "middleDisplayOpts": {
       "off": "Off",

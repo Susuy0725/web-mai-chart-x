@@ -1147,9 +1147,49 @@
 .about-header {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding-bottom: 12px;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding-bottom: 14px;
     border-bottom: 1px solid var(--popup-border);
+}
+
+.about-app-icon-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+    margin-bottom: 2px;
+}
+
+.about-app-icon-wrap:active,
+.about-app-icon-wrap.icon-bounce {
+    animation: iconBounce 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.about-app-icon-wrap.egg-unlocked {
+    animation: eggUnlocked 1.2s ease-in-out forwards;
+}
+
+.about-app-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.about-header-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
 }
 
 .about-app-title {
@@ -1162,6 +1202,46 @@
 .about-app-desc {
     color: var(--popup-text-muted);
     font-size: 13px;
+}
+
+@keyframes iconBounce {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(0.86);
+    }
+
+    75% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes eggUnlocked {
+    0% {
+        transform: scale(1) rotate(0deg);
+        filter: drop-shadow(0 0 0 rgba(255, 215, 0, 0));
+    }
+
+    30% {
+        transform: scale(5) rotate(-15deg);
+        filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.8));
+    }
+
+    60% {
+        transform: scale(10) rotate(375deg);
+        filter: drop-shadow(0 0 35px rgba(255, 105, 180, 0.9));
+    }
+
+    100% {
+        transform: scale(1) rotate(360deg);
+        filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.25));
+    }
 }
 
 .about-links {

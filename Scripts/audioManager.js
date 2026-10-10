@@ -485,6 +485,7 @@ class AudioManager {
      * 動態調整各個別音效音量表 (限制在閾值內)
      */
     setSFXVolumes(volumes) {
+        if (!volumes || typeof volumes !== 'object') return;
         for (const [key, vol] of Object.entries(volumes)) {
             if (this.sfxVolumes[key] !== undefined) {
                 this.sfxVolumes[key] = clampVolume(vol, this.MAX_VOLUME_LIMIT);
@@ -493,6 +494,19 @@ class AudioManager {
         if (volumes.judge !== undefined) {
             if (volumes.judge_great === undefined) this.sfxVolumes['judge_great'] = this.sfxVolumes['judge'];
             if (volumes.judge_good === undefined) this.sfxVolumes['judge_good'] = this.sfxVolumes['judge'];
+            if (volumes.judge_ex === undefined) this.sfxVolumes['judge_ex'] = this.sfxVolumes['judge'];
+        }
+        // 若未顯式單獨指定 judge_break_slide，連動至 judge_break (或 judge)
+        if (volumes.judge_break_slide === undefined) {
+            if (volumes.judge_break !== undefined) {
+                this.sfxVolumes['judge_break_slide'] = this.sfxVolumes['judge_break'];
+            } else if (volumes.judge !== undefined) {
+                this.sfxVolumes['judge_break_slide'] = this.sfxVolumes['judge'];
+            }
+        }
+        // 若未顯式單獨指定 break_slide，同步連動至 judge_break_slide (或 break / slide)
+        if (volumes.break_slide === undefined) {
+            this.sfxVolumes['break_slide'] = this.sfxVolumes['judge_break_slide'] ?? this.sfxVolumes['break'] ?? this.sfxVolumes['slide'] ?? 0.4;
         }
         this._updateLongSoundGains();
     }
@@ -551,7 +565,12 @@ class AudioManager {
     }
 
     queueSoundSingle(sample, targetTime, isMono = false, detune = 0) {
-        const vol = clampVolume(this.sfxVolumes[sample] ?? 1.0, this.MAX_VOLUME_LIMIT);
+        const fallbackVol = (sample === 'judge_break_slide')
+            ? (this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4)
+            : (sample === 'break_slide')
+                ? (this.sfxVolumes['judge_break_slide'] ?? this.sfxVolumes['break'] ?? 0.4)
+                : 1.0;
+        const vol = clampVolume(this.sfxVolumes[sample] ?? fallbackVol, this.MAX_VOLUME_LIMIT);
         this._checkAndPush(sample, targetTime, isMono, vol, detune);
     }
 
@@ -661,7 +680,6 @@ class AudioManager {
                     }
                     if (!note._startEffectPlayed) {
                         if (note.isBreak) {
-                            events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT) });
                             key = 'break_slide_start';
                         } else {
                             key = 'slide';
@@ -669,6 +687,11 @@ class AudioManager {
                         isMono = false;
                     } else {
                         if (note.isBreak) {
+                            const breakSlideVol = clampVolume(
+                                this.sfxVolumes['break_slide'] ?? this.sfxVolumes['judge_break_slide'] ?? this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4,
+                                this.MAX_VOLUME_LIMIT
+                            );
+                            events.push({ key: 'break_slide', time: targetTime, isMono: true, volume: breakSlideVol });
                             key = 'judge_break_slide';
                             isMono = false;
                         } else {
@@ -682,7 +705,11 @@ class AudioManager {
             }
 
             if (key) {
-                events.push({ key, time: targetTime, isMono, volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT) });
+                const vol = clampVolume(
+                    this.sfxVolumes[key] ?? (key === 'judge_break_slide' ? (this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4) : 1),
+                    this.MAX_VOLUME_LIMIT
+                );
+                events.push({ key, time: targetTime, isMono, volume: vol });
             }
             return events;
         }
@@ -807,11 +834,15 @@ class AudioManager {
                     isMono = false;
                 } else {
                     if (note.isBreak) {
+                        const breakSlideVol = clampVolume(
+                            this.sfxVolumes['break_slide'] ?? this.sfxVolumes['judge_break_slide'] ?? this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4,
+                            this.MAX_VOLUME_LIMIT
+                        );
                         events.push({
                             key: 'break_slide',
                             time: targetTime,
                             isMono: true,
-                            volume: clampVolume(this.sfxVolumes['break_slide'], this.MAX_VOLUME_LIMIT),
+                            volume: breakSlideVol,
                             detune: judgeDetune
                         });
                         key = 'judge_break_slide';
@@ -829,11 +860,15 @@ class AudioManager {
 
         if (key) {
             const isNonPitchKey = (key === 'answer' || key === 'hanabi' || key === 'clock');
+            const vol = clampVolume(
+                this.sfxVolumes[key] ?? (key === 'judge_break_slide' ? (this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4) : 1),
+                this.MAX_VOLUME_LIMIT
+            );
             events.push({
                 key,
                 time: targetTime,
                 isMono,
-                volume: clampVolume(this.sfxVolumes[key], this.MAX_VOLUME_LIMIT),
+                volume: vol,
                 detune: isNonPitchKey ? 0 : judgeDetune
             });
         }

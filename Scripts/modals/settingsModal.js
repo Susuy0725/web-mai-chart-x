@@ -1,5 +1,5 @@
 import { popupWindow, clamp, createCustomSlider, simpleToast } from '../helper.js';
-import { settingsConfig } from '../core/settingsConfig.js';
+import { settingsConfig, isEasterEggUnlocked } from '../core/settingsConfig.js';
 import { t, setLang } from '../i18n.js';
 import { idbSet } from '../indexDB.js';
 import { appContext } from '../core/appContext.js';
@@ -242,7 +242,10 @@ export function openSettingsModal(options = {}) {
 
     // 生成各分類與設定項
     settingsConfig.forEach((category) => {
-        const section = addTab(t(category.label));
+        if (category.secret && !isEasterEggUnlocked()) {
+            return;
+        }
+        const section = addTab(category.label === '???' ? '???' : t(category.label));
 
         if (category.html) {
             section.innerHTML += category.html;

@@ -83,9 +83,9 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.basic',
         items: [
-            { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.25, min: 1, max: 20, def: defaultSettings.speed },
+            { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.25, min: -1, max: 40, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed },
-            { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.25, min: 1, max: 20, def: defaultSettings.touchSpeed },
+            { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.25, min: -1, max: 40, def: defaultSettings.touchSpeed },
             { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.scorePlus' }, { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }], def: defaultSettings.middleDisplay },
             {
                 id: 'moviebrightness',
@@ -351,5 +351,39 @@ export const settingsConfig = [
                 }
             }
         ]
+    },
+    {
+        label: '???',
+        secret: true,
+        items: [
+            {
+                id: 'noteBaseSize',
+                type: 'number',
+                label: 'settings.items.noteBaseSize',
+                min: 1, max: 100, step: 1, def: defaultSettings.noteBaseSize || 11
+            },
+            {
+                id: 'middleDistance',
+                type: 'number',
+                label: 'settings.items.middleDistance',
+                min: -1, max: 1, step: 0.01, def: defaultSettings.middleDistance || 0.25
+            },
+            { id: 'effectDecayTime', type: 'number', label: 'settings.items.effectDecayTime', step: 0.1, def: defaultSettings.effectDecayTime },
+            { id: 'hanabiEffectDecayTime', type: 'number', label: 'settings.items.hanabiEffectDecayTime', step: 0.1, def: defaultSettings.hanabiEffectDecayTime },
+        ]
     }
 ];
+
+export const isEasterEggUnlocked = () => {
+    try {
+        return localStorage.getItem('wmc_easter_egg_unlocked') === 'true';
+    } catch {
+        return false;
+    }
+};
+
+export const setEasterEggUnlocked = (unlocked = true) => {
+    try {
+        localStorage.setItem('wmc_easter_egg_unlocked', unlocked ? 'true' : 'false');
+    } catch { }
+};

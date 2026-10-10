@@ -2168,8 +2168,8 @@ export class SimaiRenderer {
         const displayT = Math.min(1, Math.max(md, t));
         const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
         const size = this.settings.noteBaseSize * currentScale;
-        const sizeOffset = (t < md || s.holdDuration < 0.1) ? 0 :
-            Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * (20.35 / this.settings.noteBaseSize);
+        const sizeOffset = (t < md) ? 0 :
+            Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / this.settings.noteBaseSize);
 
         this.ctx.save();
         const arcimg = this.images[isMine ? "MineArc" : (isBreak ? "BreakArc" : (isDouble ? "EachArc" : "NormalArc"))];
@@ -2572,7 +2572,10 @@ export class SimaiRenderer {
      */
     ensureArrowCache(recorder, typew, spacing = 4.36) {
         const key = typew ? '_wArrowCache' : '_stdArrowCache';
-        if (recorder[key]) return recorder[key];
+        const spacingKey = key + '_spacing';
+        if (recorder[key] && Math.abs((recorder[spacingKey] ?? -1) - spacing) < 1e-5) {
+            return recorder[key];
+        }
 
         const totalLen = recorder.totalLength;
         const arrowCount = typew ? 11 : Math.floor((totalLen - 2) / spacing);
@@ -2614,6 +2617,7 @@ export class SimaiRenderer {
         }
 
         recorder[key] = arrows;
+        recorder[spacingKey] = spacing;
         return arrows;
     }
 

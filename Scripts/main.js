@@ -1122,28 +1122,50 @@ const previewVisible = () => (previewContainer.style.display !== 'none' && playC
 
 let cachedTimelineMin = 0;
 let cachedTimelineMax = 100;
+let cachedTimelineWidth = 300;
 let lastSliderRatio = -1;
 let lastSliderValue = -1;
+let lastSliderUpdateTime = 0;
+
+const updateCachedTimelineWidth = () => {
+    if (timeline && timeline.style.display !== 'none') {
+        cachedTimelineWidth = timeline.clientWidth || 300;
+    }
+};
+window.addEventListener('resize', updateCachedTimelineWidth, { passive: true });
 
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
     cachedTimelineMax = endTime + musicDelay;
     timeline.max = cachedTimelineMax;
+    updateCachedTimelineWidth();
     updateSlider(realTime, true);
 };
 
 const updateSlider = (time, force = false) => {
-    if (!force && Math.abs(time - lastSliderValue) < 0.016) {
+    if (!timeline || timeline.style.display === 'none') {
         return;
     }
+    const now = performance.now();
+    if (!force) {
+        if (now - lastSliderUpdateTime < 33) {
+            return;
+        }
+        if (Math.abs(time - lastSliderValue) < 0.02) {
+            return;
+        }
+    }
+    lastSliderUpdateTime = now;
     lastSliderValue = time;
     const min = cachedTimelineMin;
     const max = cachedTimelineMax;
     const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
-    timeline.value = time;
-    const roundedRatio = Math.round(ratio * 10000);
+
+    // 使用快取寬度，避免在修改 DOM 後立即讀取 clientWidth 引發強制同步重排 (Forced Layout)
+    const roundedRatio = Math.round(ratio * cachedTimelineWidth);
     if (force || roundedRatio !== lastSliderRatio) {
         lastSliderRatio = roundedRatio;
+        timeline.value = time;
         const thumbWidth = 16;
         const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
         timeline.style.setProperty('--timeline-progress', stopPos);
@@ -3112,10 +3134,11 @@ appContext.register('getIsImagesLoaded', () => isImagesLoaded);
 appContext.register('getIsInitComplete', () => isInitComplete);
 
 // 監聽播放狀態變更，自動同步按鈕 UI
-eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying }) => {
+eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying, realTime }) => {
     hideFloatingMenu();
     playButton.dataset.playing = isPlaying ? 'true' : 'false';
     playButton.children[0].innerText = isPlaying ? 'pause' : 'play_arrow';
+    updateSlider(realTime ?? playbackEngine.realTime, true);
 });
 
 // UI 控制按鈕綁定
@@ -4036,6 +4059,14 @@ async function _init() {
                 loadProject
             });
             showWelcomeModal({ isDatabaseEmpty });
+
+            window.settings = settings;
+            Object.defineProperty(window, 'globalTime', {
+                get() {
+                    return globalTime;
+                },
+                configurable: true
+            });
         }
     });
 }
@@ -4186,7 +4217,8 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
         'drawHitEffect', 'drawHanabiEffect', 'richHanabi', 'disablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
-        'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed'
+        'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed',
+        'noteBaseSize', 'middleDistance'
     ];
     if (redrawKeys.includes(key)) {
         draw();

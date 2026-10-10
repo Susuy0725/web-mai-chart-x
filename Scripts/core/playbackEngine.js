@@ -644,8 +644,14 @@ export class PlaybackEngine {
                 const point = this.opts.getCharOffsetAtIndex
                     ? this.opts.getCharOffsetAtIndex(nowIndex)
                     : rawData.slice(0, nowIndex + 1).join(',').length;
-                editorInput.selectionStart = point;
-                editorInput.selectionEnd = point;
+                if (editorInput.selectionStart !== point || editorInput.selectionEnd !== point) {
+                    if (typeof editorInput.setSelectionRange === 'function') {
+                        editorInput.setSelectionRange(point, point);
+                    } else {
+                        editorInput.selectionStart = point;
+                        editorInput.selectionEnd = point;
+                    }
+                }
             }
 
             // 背景影片同步邏輯

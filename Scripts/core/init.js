@@ -56,7 +56,7 @@ export function runInitModal(ctx) {
     // 2. 前景立即初始化專案與編輯器 UI，讓使用者第一時間看到編輯器
     (async () => {
         try {
-            const step = () => {};
+            const step = () => { };
 
             // 平行確定專案與讀取設定（兩者互不相依），縮短首屏啟動時間
             const [, settings] = await Promise.all([
@@ -189,8 +189,8 @@ async function fetchSavedSettingsString(ctx) {
 async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
     step(80, t('popup.init.restoringSettings'));
 
-    const savedSettingsStr = sharedSettingsPromise 
-        ? await sharedSettingsPromise 
+    const savedSettingsStr = sharedSettingsPromise
+        ? await sharedSettingsPromise
         : await fetchSavedSettingsString(ctx);
 
     let parsedSettings = null;
@@ -260,7 +260,6 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
 
     ctx.setSettings(settings);
     ctx.applyAudioSettings(settings);
-    window.settings = settings;
 
     return settings;
 }
@@ -383,6 +382,7 @@ async function finalizeInit(ctx, settings) {
     ctx.resize();
     ctx.setIsInitComplete(true);
     ctx.updateDiscordRPC(ctx.getMaidata(), ctx.getNowDifficulty());
+
     if (typeof ctx.onInitFinished === 'function') {
         try {
             ctx.onInitFinished();
@@ -412,7 +412,7 @@ function handleInitError(e) {
                         try {
                             localStorage.removeItem('wmcx_first_run_completed');
                             localStorage.removeItem('simai_lastProjectId');
-                        } catch {}
+                        } catch { }
                         console.log("已清除 IndexedDB 中的所有資料");
                         window.location.reload();
                     } catch (err) {

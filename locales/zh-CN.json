@@ -206,7 +206,9 @@
       "autoPlay": "游玩模式",
       "noBorder": "无边框",
       "richHanabi": "绚丽烟火特效",
-      "disablePreviewWaveform": "禁用预览波形"
+      "disablePreviewWaveform": "禁用预览波形",
+      "noteBaseSize": "Note 基础大小 (noteBaseSize)",
+      "middleDistance": "滑星中段距离 (middleDistance)"
     },
     "middleDisplayOpts": {
       "off": "关闭",

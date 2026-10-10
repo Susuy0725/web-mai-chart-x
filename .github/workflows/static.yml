@@ -16,23 +16,50 @@ concurrency:
 jobs:
   update-cache:
     environment:
-        name: github-pages
-        url: ${{ steps.deployment.outputs.page_url }}
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Update Service Worker Cache Name
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           sed -i "s/__CACHE_VERSION__/$SHORT_SHA/g" sw.js
 
+      - name: Minify Static Files
+        run: |
+          # 1. 遞迴壓縮所有 JS（排除 sw.js、已是 .min.js 的檔案與版本庫）
+          find . -type f -name "*.js" \
+            ! -name "sw.js" \
+            ! -name "*.min.js" \
+            ! -path "*/.git/*" \
+            ! -path "*/node_modules/*" \
+            -exec npx esbuild {} --minify --allow-overwrite --outfile={} \;
+
+          # 2. 壓縮 Styles 與 _play 目錄下的 CSS
+          find Styles _play -type f -name "*.css" -exec npx clean-css-cli -o {} {} \;
+
+          # 3. 壓縮根目錄與 _play 目錄下的 HTML（去除空白、註解）
+          find . -maxdepth 2 -name "*.html" ! -path "*/.*" \
+            -exec npx html-minifier-terser --collapse-whitespace --remove-comments --minify-css true --minify-js true -o {} {} \;
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: '.'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}

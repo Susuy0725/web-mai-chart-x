@@ -206,7 +206,9 @@
       "autoPlay": "플레이 모드",
       "noBorder": "테두리 없음",
       "richHanabi": "화려한 불꽃 효과",
-      "disablePreviewWaveform": "미리보기 파형 비활성화"
+      "disablePreviewWaveform": "미리보기 파형 비활성화",
+      "middleDistance": "슬라이딩 스타 중간 거리(middleDistance)",
+      "noteBaseSize": "노트 베이스 크기(noteBaseSize)"
     },
     "middleDisplayOpts": {
       "off": "끄기",
@@ -705,14 +707,26 @@
     "collapseToolbar": "도구 모음 접기",
     "expandToolbar": "도구 모음 펼치기",
     "unpinToolbar": "고정 해제 및 도구 모음 접기",
-    "currentNote": "현재 노트"
+    "currentNote": "현재 노트",
+    "layerBpm": "BPM 및 기간 레이어",
+    "layerNote": "노트 레이어",
+    "layerSwitch": "레이어 전환(음표/BPM)",
+    "switchToBpmLayer": "BPM 및 기간 레이어로 전환",
+    "switchToNoteLayer": "노트 레이어로 전환",
+    "tagBpm": "BPM 태그",
+    "tagDivision": "시간 태그",
+    "toolPlaceTiming": "배치 BPM/기간"
   },
   "visualMenu": {
     "editDuration": "지속 시간 설정",
     "editSlideTrack": "슬라이드 설정",
     "editTouchGroup": "Touch 그룹 편집",
     "deleteNote": "노트 삭제",
-    "deleteSelected": "선택 항목 삭제"
+    "deleteSelected": "선택 항목 삭제",
+    "deleteBpm": "BPM 제거",
+    "deleteDivision": "삭제 기간",
+    "editBpm": "BPM 수정",
+    "editDivision": "시간 값 편집"
   },
   "visualEditor": {
     "setBpmTitle": "박자 BPM 설정",
@@ -746,7 +760,15 @@
     "laneLabel": "레인 {lane}",
     "divisionPrompt": "분할 값을 입력하세요:",
     "divisionInvalid": "유효한 양의 정수를 입력하세요",
-    "touchGroupLoadFailed": "이 박자의 Touch 그룹을 불러올 수 없습니다"
+    "touchGroupLoadFailed": "이 박자의 Touch 그룹을 불러올 수 없습니다",
+    "bpmDeleted": "이 비트의 BPM 태그가 삭제되었습니다.",
+    "cannotDeleteInitialBpm": "초기 BPM을 삭제할 수 없습니다. 대신 수정을 사용하세요.",
+    "divisionDeleted": "이 비트 포인트의 지속 시간 라벨이 삭제되었습니다.",
+    "divisionSetSuccess": "지속 시간은 다음 비트로 설정되었습니다: {division}",
+    "setDivisionPrompt": "이 비트의 지속 시간 라벨을 설정합니다(예: 4, 8, 16 또는",
+    "setDivisionTitle": "비트 타임 값 설정",
+    "switchedToBpmLayer": "BPM 및 지속 시간 레이어로 전환됨(왼쪽은 BPM, 오른쪽은 지속 시간)",
+    "switchedToNoteLayer": "노트 레이어로 전환됨"
   },
   "noteDurationModal": {
     "titleHold": "Hold 지속 시간 수정",

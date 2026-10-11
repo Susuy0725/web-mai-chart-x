@@ -206,7 +206,9 @@
       "autoPlay": "プレイモード",
       "noBorder": "枠なし",
       "richHanabi": "豪華な花火エフェクト",
-      "disablePreviewWaveform": "プレビュー波形を無効化"
+      "disablePreviewWaveform": "プレビュー波形を無効化",
+      "middleDistance": "スライディングスター中距離(middleDistance)",
+      "noteBaseSize": "ノートベースサイズ (noteBaseSize)"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -705,14 +707,26 @@
     "collapseToolbar": "ツールバーを閉じる",
     "expandToolbar": "ツールバーを展開",
     "unpinToolbar": "固定を解除してツールバーを閉じる",
-    "currentNote": "現在のノーツ"
+    "currentNote": "現在のノーツ",
+    "layerBpm": "BPM およびデュレーションレイヤー",
+    "layerNote": "メモレイヤー",
+    "layerSwitch": "レイヤー切り替え（ノート/BPM）",
+    "switchToBpmLayer": "BPM およびデュレーションレイヤーに切り替えます",
+    "switchToNoteLayer": "ノートレイヤーに切り替える",
+    "tagBpm": "BPMタグ",
+    "tagDivision": "タイムタグ",
+    "toolPlaceTiming": "配置BPM / デュレーション"
   },
   "visualMenu": {
     "editDuration": "長さ設定",
     "editSlideTrack": "スライド設定",
     "editTouchGroup": "Touch グループ編集",
     "deleteNote": "ノーツ削除",
-    "deleteSelected": "選択ノーツ削除"
+    "deleteSelected": "選択ノーツ削除",
+    "deleteBpm": "BPMの削除",
+    "deleteDivision": "削除期間",
+    "editBpm": "BPMの編集",
+    "editDivision": "時間値を編集する"
   },
   "visualEditor": {
     "setBpmTitle": "拍点 BPM 設定",
@@ -746,7 +760,15 @@
     "laneLabel": "レーン {lane}",
     "divisionPrompt": "分割値を入力してください：",
     "divisionInvalid": "有効な正の整数を入力してください",
-    "touchGroupLoadFailed": "この拍点の Touch グループを取得できません"
+    "touchGroupLoadFailed": "この拍点の Touch グループを取得できません",
+    "bpmDeleted": "このビートの BPM タグは削除されました",
+    "cannotDeleteInitialBpm": "初期 BPM を削除できません。代わりに編集を使用してください",
+    "divisionDeleted": "このビートポイントのデュレーションラベルは削除されました",
+    "divisionSetSuccess": "持続時間はこの拍に設定されています: {division}",
+    "setDivisionPrompt": "このビートの長さラベルを設定します (例: 4、8、16、または",
+    "setDivisionTitle": "ビートタイム値を設定する",
+    "switchedToBpmLayer": "BPM とデュレーションのレイヤーに切り替えました (左側が BPM、右側がデュレーション)",
+    "switchedToNoteLayer": "ノートレイヤーに切り替えました"
   },
   "noteDurationModal": {
     "titleHold": "Hold 長さ変更",

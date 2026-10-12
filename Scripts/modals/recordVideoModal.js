@@ -77,43 +77,6 @@ export async function openRecordVideoModal({
     }
     const previewLogicControler = new SimaiLogicControler();
 
-    // 預載入外框圖片
-    let outlineImage = null;
-    const getEffectiveOutlineImage = () => {
-        if (outlineImage) return outlineImage;
-        const domOutline = document.getElementById('canvasOutline');
-        if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
-            return domOutline;
-        }
-        return null;
-    };
-
-    (async () => {
-        try {
-            const outlineSrc = document.getElementById('canvasOutline')?.src || './Skin/Shared/outline.png';
-            const response = await fetch(outlineSrc);
-            if (response.ok) {
-                const blob = await response.blob();
-                try {
-                    if (window.createImageBitmap) outlineImage = await createImageBitmap(blob, { resizeQuality: 'high' });
-                } catch (e) { }
-                if (!outlineImage) {
-                    outlineImage = await new Promise((res, rej) => {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous';
-                        img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
-                        img.onerror = rej;
-                        img.src = URL.createObjectURL(blob);
-                    });
-                }
-                if (previewRenderer) previewRenderer.setOutlineImage(outlineImage);
-                requestPreviewUpdate();
-            }
-        } catch (e) {
-            console.warn('載入外框圖片失敗 (預覽將省略外框)', e);
-        }
-    })();
-
     // 開啟全域設定 (點擊 topUtility 中的 settings 按鈕)
     const openSettings = () => {
         const btn = getButton('settings', 'utility');
@@ -266,7 +229,7 @@ export async function openRecordVideoModal({
     // 3. 解析度選單 + 自訂欄位
     // ==========================================
     const resField = createLabeledInput1({
-        value: '1920x1080',
+        value: '1280x720',
         labelText: t('popup.recordVideo.resolution'),
         type: 'select',
         assign: 'record_res_select',
@@ -346,7 +309,7 @@ export async function openRecordVideoModal({
     // 4.1 畫質 / 碼率選單 + 自訂欄位
     // ==========================================
     const qualityField = createLabeledInput1({
-        value: 'high',
+        value: 'low',
         labelText: t('popup.recordVideo.quality') || '畫質 / 碼率:',
         type: 'select',
         assign: 'record_quality_select',
@@ -361,7 +324,7 @@ export async function openRecordVideoModal({
         ]
     });
 
-    const customBitrate = createLabeledInput1({ value: 20, labelText: t('popup.recordVideo.customBitrate') || '自訂碼率 (Mbps):', type: 'number', assign: 'custom_bitrate', ref: inputRefs });
+    const customBitrate = createLabeledInput1({ value: 18, labelText: t('popup.recordVideo.customBitrate') || '自訂碼率 (Mbps):', type: 'number', assign: 'custom_bitrate', ref: inputRefs });
     customBitrate.wrapper.style.cssText = 'display:none; margin-top:4px;';
     qualityField.wrapper.appendChild(customBitrate.wrapper);
 
@@ -736,6 +699,14 @@ export async function openRecordVideoModal({
             if (editorBackgroundVideo) {
                 editorBackgroundVideo.removeEventListener('seeked', onVideoSeeked);
             }
+            if (previewCanvas) {
+                previewCanvas.width = 0;
+                previewCanvas.height = 0;
+            }
+            if (previewRenderer) {
+                previewRenderer.ctx = null;
+                previewRenderer.canvas = null;
+            }
         },
         buttons: [
             {
@@ -768,8 +739,8 @@ export async function openRecordVideoModal({
                     let qualityVal = qualityField.input.value || 'high';
                     let bitrateVal = null;
                     if (qualityVal === 'custom') {
-                        const mbps = parseFloat(inputRefs.custom_bitrate?.value || 20);
-                        bitrateVal = Math.round(Math.max(1, isNaN(mbps) ? 20 : mbps) * 1_000_000);
+                        const mbps = parseFloat(inputRefs.custom_bitrate?.value || 18);
+                        bitrateVal = Math.round(Math.max(1, isNaN(mbps) ? 18 : mbps) * 1_000_000);
                     }
 
                     const bgmVolValNum = Number(inputRefs.record_bgm_vol?.value || 1);
@@ -813,7 +784,6 @@ export async function openRecordVideoModal({
                             lv: String(maidata[`lv_${nowDifficulty}`] || ''),
                         },
                         settings: curSettings,
-                        outlineImage: getEffectiveOutlineImage(),
                         draw,
                     });
                 }

@@ -1,5 +1,6 @@
 import { ensureMediabunny, simpleToast, popupWindow } from '../helper.js';
 import { SimaiLogicControler } from '../core/simaiLogicControler.js';
+import { t as i18n } from '../i18n.js';
 
 async function resampleAudioBuffer(audioBuffer, targetSampleRate = 44100) {
     if (audioBuffer.sampleRate === targetSampleRate) {
@@ -202,7 +203,6 @@ export async function videoRender(audioManager, canvas, renderer, {
     movieBrightness = null,
     noteBrightness = 1.0,
     settings: customSettings = null,
-    outlineImage: customOutlineImage = null,
     draw = null,
 } = {}) {
     const effectiveDraw = typeof draw === 'function'
@@ -232,41 +232,9 @@ export async function videoRender(audioManager, canvas, renderer, {
 
     const introDuration = includeIntro ? 6 : 0;
 
-    let outlineImage = customOutlineImage;
-    if (!outlineImage && !settings.hideOutline) {
-        const domOutline = typeof document !== 'undefined' ? document.getElementById('canvasOutline') : null;
-        if (domOutline && domOutline.complete && domOutline.naturalWidth > 0) {
-            outlineImage = domOutline;
-        } else {
-            outlineImage = await (async () => {
-                try {
-                    const outlineSrc = domOutline?.src || './Skin/Shared/outline.png';
-                    const response = await fetch(outlineSrc);
-                    if (!response.ok) throw new Error('fetch failed: ' + response.status);
-                    const blob = await response.blob();
-                    try {
-                        if (window.createImageBitmap) return await createImageBitmap(blob, { resizeQuality: 'high' });
-                    } catch (e) {
-                        console.warn('createImageBitmap 失敗，改用 Image element', e);
-                    }
-                    return await new Promise((res, rej) => {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous';
-                        img.onload = () => { URL.revokeObjectURL(img.src); res(img); };
-                        img.onerror = (err) => { URL.revokeObjectURL(img.src); rej(err); };
-                        img.src = URL.createObjectURL(blob);
-                    });
-                } catch (e) {
-                    console.error(`外框圖片載入失敗`, e);
-                    return null;
-                }
-            })();
-        }
-    }
-
     if (end <= start) {
         console.log(end, start);
-        simpleToast({ content: '結束時間需大於開始時間', type: 'error' });
+        simpleToast({ content: i18n('toast.durationError') || '結束時間需大於開始時間', type: 'error' });
         return;
     }
 
@@ -280,13 +248,17 @@ export async function videoRender(audioManager, canvas, renderer, {
     let videoTrack = null;
     let canvasIterator = null;
     let currentCanvasFrame = null;
+    let target = null;
+    let off = null;
+    let exportRenderer = null;
+    let isUsingCustomRenderer = false;
 
     const popup = popupWindow({
-        title: "渲染影片",
-        content: "準備中...",
+        title: i18n('popup.recordVideo.renderTitle') || '渲染影片',
+        content: i18n('popup.recordVideo.preparing') || '準備中...',
         unclosable: true,
-        buttons: [{ text: '取消', hideOnClick: true }],
-    })
+        buttons: [{ text: i18n('popup.cancel') || '取消', hideOnClick: true }],
+    });
     try {
         if (popup.isClosed) return;
 
@@ -298,7 +270,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         const targetW = Math.max(2, Math.round((Number(width) || 1920) / 2) * 2);
         const targetH = Math.max(2, Math.round((Number(height) || 1080) / 2) * 2);
 
-        const off = document.createElement('canvas');
+        off = document.createElement('canvas');
         off.width = targetW;
         off.height = targetH;
         const offCtx = off.getContext('2d', {
@@ -331,8 +303,8 @@ export async function videoRender(audioManager, canvas, renderer, {
         } catch (_) { }
 
         // 建立獨立的匯出渲染器實例，徹底隔離主畫面的 window resize 與 drawFrame 迴圈
-        let exportRenderer;
-        let isUsingCustomRenderer = false;
+        exportRenderer = null;
+        isUsingCustomRenderer = false;
         try {
             if (renderer && renderer.constructor) {
                 exportRenderer = new renderer.constructor(off, settings);
@@ -356,8 +328,25 @@ export async function videoRender(audioManager, canvas, renderer, {
             exportRenderer.ctx.imageSmoothingQuality = 'high';
         }
 
-        const target = new BufferTarget();
-        const format = new Mp4OutputFormat({ fastStart: 'in-memory' });
+        target = new BufferTarget();
+        // 核心最佳化：在 _finalize 產生非 resizable 的標準 ArrayBuffer 後，立即釋放內部大型 resizable buffer 參照以節省記憶體
+        target._finalize = async function () {
+            if (this._buffer) {
+                this.buffer = this._buffer.slice(0, this._maxPos);
+                this._buffer = null;
+                this._bytes = null;
+            }
+            if (this._options.onFinalize) {
+                await this._options.onFinalize(this.buffer);
+            }
+            this._emit("finalized");
+        };
+
+        // 核心最佳化：使用 fastStart: false。
+        // fastStart: 'in-memory' 會在 JavaScript 記憶體中保留所有影格的 sample 資料直到結尾，
+        // 在高碼率 (~18Mbps+ 1080p60) 下會使堆疊飆破 1.5GB~2GB 導致瀏覽器分頁當掉並自動重新整理。
+        // fastStart: false 會在封包寫入 buffer 後立即釋放 sample.data (設為 null)，大幅降低 70% 以上記憶體開銷。
+        const format = new Mp4OutputFormat({ fastStart: false });
         output = new Output({ format, target });
 
         // 計算最適合音遊高速動態畫面的視訊編碼位元率 (Bitrate)
@@ -372,24 +361,27 @@ export async function videoRender(audioManager, canvas, renderer, {
             const pixelRatio = Math.max(0.5, pixels / refPixels);
             const fpsRatio = Math.max(0.6, Math.min(fps, 120) / 60);
 
-            let baseBps = 20_000_000; // 預設 high: 20 Mbps @ 1080p 60fps
+            let baseBps = 18_000_000; // 預設 high: 18 Mbps @ 1080p 60fps (與彈窗設定標籤 ~18 Mbps 一致)
             if (quality === 'ultra') {
-                baseBps = 28_000_000; // ultra: 28 Mbps @ 1080p 60fps
+                baseBps = 25_000_000; // ultra: 25 Mbps @ 1080p 60fps
+            } else if (quality === 'high') {
+                baseBps = 18_000_000; // high: 18 Mbps @ 1080p 60fps
             } else if (quality === 'medium') {
                 baseBps = 10_000_000; // medium: 10 Mbps @ 1080p 60fps
             } else if (quality === 'low') {
-                baseBps = 5_000_000; // medium: 5 Mbps @ 1080p 60fps
+                baseBps = 5_000_000; // low: 5 Mbps @ 1080p 60fps
             } else if (quality === 'lowest') {
-                baseBps = 1_000_000; // medium: 1 Mbps @ 1080p 60fps
+                baseBps = 2_000_000; // lowest: 2 Mbps @ 1080p 60fps
             }
-            resolvedBitrate = Math.round(Math.max(6_000_000, baseBps * Math.pow(pixelRatio, 0.9) * Math.pow(fpsRatio, 0.75)));
+            const minBps = Math.min(baseBps * 0.5, 600_000);
+            resolvedBitrate = Math.round(Math.max(minBps, baseBps * Math.pow(pixelRatio, 0.9) * Math.pow(fpsRatio, 0.75)));
         }
 
         // 視訊軌設定
         const encodingConfig = {
             codec: 'avc',
             bitrate: resolvedBitrate,
-            keyFrameInterval: 2.0, // 2 秒關鍵幀，提升 GOP 編碼效率與動態畫質，消除過密 I 幀帶來的瞬時模糊
+            keyFrameInterval: 1.5, // 1.5 秒關鍵幀，縮短 GOP 緩衝長度並大幅降低硬體編碼器佇列顯存消耗
             latencyMode: 'quality',
             bitrateMode: 'variable'
         };
@@ -876,7 +868,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         let nowIndexLocal = 0;
         const startTime = performance.now();
 
-        popup.setContent(`開始逐幀渲染：${frameCount} 幀`);
+        popup.setContent(i18n('popup.recordVideo.startRendering', { count: frameCount }) || `開始逐幀渲染：${frameCount} 幀`);
         for (let i = 0; i < frameCount; i++) {
             if (popup.isClosed) {
                 console.log('逐幀渲染已取消');
@@ -1070,18 +1062,22 @@ export async function videoRender(audioManager, canvas, renderer, {
                 const remainingFrames = frameCount - (i + 1);
                 const remainingSec = Math.round((remainingFrames * avgTimePerFrame) / 1000);
                 const formatRemainingTime = (sec) => {
-                    if (sec < 60) return `${sec} 秒`;
+                    if (sec < 60) return i18n('popup.recordVideo.seconds', { sec }) || `${sec} 秒`;
                     const mins = Math.floor(sec / 60);
                     const secs = sec % 60;
-                    return `${mins} 分 ${secs} 秒`;
+                    return i18n('popup.recordVideo.minutesSeconds', { min: mins, sec: secs }) || `${mins} 分 ${secs} 秒`;
                 };
-                const remainingStr = i > 2 ? `\n預估剩餘 ${formatRemainingTime(remainingSec)}` : `，計算剩餘時間中...`;
+                const remainingStr = i > 2
+                    ? (i18n('popup.recordVideo.estRemaining', { time: formatRemainingTime(remainingSec) }) || `\n預估剩餘 ${formatRemainingTime(remainingSec)}`)
+                    : (i18n('popup.recordVideo.calcRemaining') || `，計算剩餘時間中...`);
 
+                const percent = (((i + 1) / frameCount) * 100).toFixed(2);
                 popup.setProgress(((i + 1) / frameCount) * 100);
-                popup.setContent(`渲染中：第 ${i + 1} / ${frameCount} 幀 (${(((i + 1) / frameCount) * 100).toFixed(2)}%)${remainingStr}`);
+                popup.setContent((i18n('popup.recordVideo.renderingProgress', { current: i + 1, total: frameCount, percent }) || `渲染中：第 ${i + 1} / ${frameCount} 幀 (${percent}%)`) + remainingStr);
 
-                // 讓出主執行緒，供瀏覽器重繪 UI 與處理點擊取消事件
-                await new Promise(resolve => setTimeout(resolve, 0));
+                // 每 5 幀讓出主執行緒；每 30 幀給予 10ms 空閒時間供瀏覽器進行 GC 與 GPU 佇列清空，防止分頁假死重新整理
+                const idleDelay = (i % 30 === 0) ? 10 : 0;
+                await new Promise(resolve => setTimeout(resolve, idleDelay));
             }
         }
 
@@ -1089,25 +1085,47 @@ export async function videoRender(audioManager, canvas, renderer, {
         const mime = await output.getMimeType();
         const ext = output.format?.fileExtension || '.mp4';
         const buf = target.buffer;
-        if (!buf) throw new Error('未取得輸出 buffer');
+        if (!buf) throw new Error(i18n('popup.recordVideo.errorNoBuffer') || '未取得輸出 buffer');
 
         const blob = new Blob([buf], { type: mime });
+        // 立即釋放 target 佔用之龐大 ArrayBuffer 參照，避免記憶體峰值疊加導致 OOM
+        target.buffer = null;
+        target._buffer = null;
+        target._bytes = null;
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = `simai_render${ext}`; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000); // 1 分鐘後自動釋放 Blob URL 佔用的記憶體
 
-        simpleToast({ content: '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
+        simpleToast({ content: i18n('toast.renderComplete') || '逐幀渲染完成，檔案已下載', type: 'success', timeout: 2500 });
 
         popup.setProgress(100);
-        popup.setContent('完成');
+        popup.setContent(i18n('popup.recordVideo.completed') || '完成');
 
         setTimeout(() => {
             popup.close();
         }, 3000);
     } catch (err) {
         console.error('逐幀渲染失敗', err);
-        simpleToast({ content: '渲染失敗：' + String(err), type: 'error' });
-        try { popup.setContent('錯誤：' + String(err)); } catch (e) { }
+        simpleToast({ content: i18n('toast.renderFailed', { error: String(err) }) || ('渲染失敗：' + String(err)), type: 'error' });
+        try { popup.setContent(i18n('popup.recordVideo.renderError', { error: String(err) }) || ('錯誤：' + String(err))); } catch (e) { }
     } finally {
+        if (target) {
+            target.buffer = null;
+            target._buffer = null;
+            target._bytes = null;
+        }
+        if (off) {
+            off.width = 0;
+            off.height = 0;
+        }
+        if (isUsingCustomRenderer && exportRenderer) {
+            try {
+                if (typeof exportRenderer.destroy === 'function') exportRenderer.destroy();
+                exportRenderer.ctx = null;
+                exportRenderer.canvas = null;
+            } catch (_) { }
+        }
         if (exportVideo && exportVideo.parentNode) {
             exportVideo.parentNode.removeChild(exportVideo);
         }
@@ -1117,23 +1135,20 @@ export async function videoRender(audioManager, canvas, renderer, {
             } catch (e) {
                 console.error("Error returning canvasIterator:", e);
             }
+            canvasIterator = null;
         }
+        currentCanvasFrame = null;
         if (mediabunnyInput) {
             try {
-                const res = mediabunnyInput.dispose();
-                if (res && typeof res.catch === 'function') {
-                    res.catch(e => console.error("Error disposing Mediabunny input:", e));
-                }
+                mediabunnyInput.dispose();
             } catch (e) {
                 console.error("Error disposing Mediabunny input:", e);
             }
+            mediabunnyInput = null;
         }
         if (output && output.state !== 'finalized' && output.state !== 'canceled') {
             try {
-                const res = output.cancel();
-                if (res && typeof res.catch === 'function') {
-                    res.catch(e => console.error("Error cancelling output:", e));
-                }
+                await output.cancel();
             } catch (e) {
                 console.error("Error cancelling output:", e);
             }

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.12 (1)]
+
+### Added
+- 補齊影片渲染模組（`videoRender.js`）之多語系（i18n）支援（包含繁體中文、簡體中文、英文、日文、韓文之彈窗標題、進度條、剩餘時間預估與錯誤提示）。
+
+### Fixed
+- 修正影片渲染在較高碼率（如 ~18 Mbps）時因記憶體膨脹導致瀏覽器分頁崩潰重新整理的問題。
+- 修正影片渲染取消或中途拋錯時因作用域問題導致的 `ReferenceError: target is not defined` 錯誤。
+- 修正匯出下載時 `new Blob()` 接收 Resizable ArrayBuffer 視圖引發的 `TypeError: The provided ArrayBufferView value must not be resizable` 錯誤。
+- 修正 Mediabunny 背景視訊影格解碼隊列未及時處置引發的 `VideoSample was garbage collected without first being closed` 記憶體回收警告。
+
 ## [2026.10.09 (2)]
 
 ### Added

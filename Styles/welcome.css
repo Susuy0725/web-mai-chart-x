@@ -35,7 +35,7 @@
     box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.15);
     width: 460px;
     max-width: calc(100vw - 32px);
-    padding: 34px 28px 28px 28px;
+    padding: 38px 28px 28px 28px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -48,6 +48,74 @@
 
 .wmc-welcome-overlay.active .wmc-welcome-dialog {
     transform: scale(1);
+}
+
+/* ==========================================================================
+   左上角語言選擇器 (Language Selector)
+   ========================================================================== */
+.wmc-welcome-lang-selector {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px 4px 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+}
+
+.wmc-welcome-lang-selector:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.28);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.wmc-welcome-lang-selector:focus-within {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+}
+
+.wmc-welcome-lang-icon {
+    color: #9ca3af;
+    flex-shrink: 0;
+    pointer-events: none;
+    transition: color 0.2s ease;
+}
+
+.wmc-welcome-lang-selector:hover .wmc-welcome-lang-icon {
+    color: #60a5fa;
+}
+
+.wmc-welcome-lang-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e5e7eb;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    padding-right: 2px;
+}
+
+.wmc-welcome-lang-select option {
+    background-color: #1f2937;
+    color: #f3f4f6;
+}
+
+.wmc-welcome-lang-chevron {
+    color: #9ca3af;
+    flex-shrink: 0;
+    pointer-events: none;
+    transition: transform 0.2s ease;
 }
 
 /* 步驟切換容器 */
@@ -68,6 +136,7 @@
         opacity: 0;
         transform: translateY(6px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -77,12 +146,98 @@
 /* ==========================================================================
    步驟一：品牌與服務條款 (Step 1)
    ========================================================================== */
+.wmc-welcome-logo-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
 .wmc-welcome-logo {
     width: 104px;
     height: 104px;
     object-fit: contain;
-    margin-bottom: 16px;
-    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
+    margin-bottom: 0;
+    filter: drop-shadow(0 4PX 8px rgba(0, 0, 0, 0.6));
+}
+
+/* Icon 右上角各語言 "你好" 徽章氣泡 */
+/* Icon 右上角各語言 "你好" 徽章氣泡 */
+.wmc-welcome-greeting-badge {
+    position: absolute;
+    top: -15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px 4px 8px;
+    background: #1e1e1e;
+    color: #ffffff;
+    border-radius: 24px;
+    height: 28px;
+    max-width: 140px;
+    border: 1px solid #444;
+    box-shadow: 0 3px 3px rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+    transform: rotate(5deg) translateX(24px);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, background 0.3s ease;
+    z-index: 2;
+    user-select: none;
+    -webkit-user-select: none;
+    box-sizing: border-box;
+}
+
+.wmc-welcome-greeting-badge:hover {
+    transform: rotate(0deg) scale(1.1) translateY(-8px) translateX(18px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+/* 文字垂直滾輪視窗與平滑寬度過渡容器 */
+.wmc-welcome-greeting-roller {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    height: 18px;
+    line-height: 18px;
+    vertical-align: middle;
+    transition: width 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+    box-sizing: content-box;
+}
+
+.wmc-welcome-greeting-text {
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform, opacity;
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.wmc-welcome-greeting-text.current {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.wmc-welcome-greeting-text.exit-up {
+    transform: translateY(-115%);
+    opacity: 0;
+}
+
+.wmc-welcome-greeting-text.enter-bottom {
+    transform: translateY(115%);
+    opacity: 0;
 }
 
 .wmc-welcome-brand {
@@ -187,11 +342,14 @@
 }
 
 @keyframes wmcArrowBounceDown {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(0);
         opacity: 0.85;
         filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.2));
     }
+
     50% {
         transform: translateY(7px);
         opacity: 1;
@@ -234,11 +392,14 @@
 }
 
 @keyframes wmcArrowSlideRight {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateX(0);
         opacity: 0.85;
         filter: drop-shadow(2px 0 4px rgba(255, 255, 255, 0.2));
     }
+
     50% {
         transform: translateX(7px);
         opacity: 1;

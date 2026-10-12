@@ -5,10 +5,38 @@
  * 涵蓋服務條款確認、舊站資料遷移 (限 tri-dent.cc 網域)、備份包匯入以及歡迎使用流程。
  */
 
-import { t } from '../i18n.js';
+import { t, getCurrentLang, getLangSetting, setLang, getAvailableLanguages, detectDefaultLanguage } from '../i18n.js';
 import { openImportSelectionModal } from './maintenanceModal.js';
 
 const STORAGE_KEY = 'wmcx_first_run_completed';
+
+/**
+ * 各支援語言的「你好」清單
+ */
+const GREETINGS = [
+    { code: 'zh-TW', name: '繁體中文', text: '你好' },
+    { code: 'en', name: 'English', text: 'Hello' },
+    { code: 'ja', name: '日本語', text: 'こんにちは' },
+    { code: 'zh-CN', name: '简体中文', text: '你好' },
+    { code: 'ko', name: '한국어', text: '안녕하세요' }
+];
+
+/**
+ * 產生語言下拉選單的 option HTML
+ */
+function renderLanguageOptions() {
+    const currentLang = getLangSetting();
+    const detected = detectDefaultLanguage();
+    const autoLabel = `${t('settings.items.langAuto', {}, detected) || '自動 (Auto)'} 🖥️`;
+    const available = getAvailableLanguages();
+
+    let html = `<option value="auto" ${currentLang === 'auto' ? 'selected' : ''}>${autoLabel}</option>`;
+    for (const item of available) {
+        const isSelected = currentLang === item.code ? 'selected' : '';
+        html += `<option value="${item.code}" ${isSelected}>${item.name}</option>`;
+    }
+    return html;
+}
 
 /**
  * 檢查當前網域是否屬於 tri-dent.cc
@@ -86,14 +114,39 @@ export function showWelcomeModal(options = {}) {
 
     overlay.innerHTML = `
         <div class="wmc-welcome-dialog" id="wmc-welcome-dialog">
+            <!-- 語言選擇器 (左上角) -->
+            <div class="wmc-welcome-lang-selector" id="wmc-welcome-lang-selector" title="Language / 語言">
+                <svg class="wmc-welcome-lang-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <select class="wmc-welcome-lang-select" id="wmc-welcome-lang-select" aria-label="Language">
+                    ${renderLanguageOptions()}
+                </select>
+                <svg class="wmc-welcome-lang-chevron" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                    <path d="M7 10l5 5 5-5z"/>
+                </svg>
+            </div>
+
             <!-- 步驟一：服務條款與隱私政策 -->
             <div class="wmc-welcome-step" id="wmc-welcome-step-1">
-                <img src="./favicon.png" alt="Web mai Chart X Logo" class="wmc-welcome-logo" draggable="false" />
+                <div class="wmc-welcome-logo-wrapper">
+                    <img src="./favicon.png" alt="Web mai Chart X Logo" class="wmc-welcome-logo" draggable="false" />
+                    <div class="wmc-welcome-greeting-badge" id="wmc-welcome-greeting-badge" title="Greetings!">
+                        <div class="wmc-welcome-greeting-roller" id="wmc-welcome-greeting-roller">
+                            <span class="wmc-welcome-greeting-text current" id="wmc-welcome-greeting-text">你好</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="wmc-welcome-brand">Web mai Chart X</div>
                 <div class="wmc-welcome-subdesc">${t('popup.welcome.step1Desc')}</div>
                 <label class="wmc-welcome-agreement-row">
                     <input type="checkbox" id="wmc-welcome-agree-check" class="wmc-welcome-checkbox" />
-                    <span>${t('popup.welcome.agreeText')} <a href="./terms.html" id="wmc-welcome-terms-link" target="_blank" rel="noopener noreferrer">${t('popup.about.termsOfService')}</a> ${t('popup.welcome.andText')} <a href="./privacy.html" id="wmc-welcome-privacy-link" target="_blank" rel="noopener noreferrer">${t('popup.about.privacyPolicy')}</a></span>
+                    <span>
+                        <span id="wmc-welcome-txt-agree">${t('popup.welcome.agreeText')}</span>
+                        <a href="./terms.html" id="wmc-welcome-terms-link" target="_blank" rel="noopener noreferrer">${t('popup.about.termsOfService')}</a>
+                        <span id="wmc-welcome-txt-and">${t('popup.welcome.andText')}</span>
+                        <a href="./privacy.html" id="wmc-welcome-privacy-link" target="_blank" rel="noopener noreferrer">${t('popup.about.privacyPolicy')}</a>
+                    </span>
                 </label>
                 <button type="button" class="wmc-welcome-btn-full" id="wmc-welcome-next-1" disabled>${t('popup.welcome.nextStep')}</button>
             </div>
@@ -285,6 +338,182 @@ export function showWelcomeModal(options = {}) {
         });
     }
 
+    // -------------------------------------------------------------
+    // 各支援語言問候語輪播與互動 (Push-up 垂直擠入替換與寬度平滑過渡)
+    // -------------------------------------------------------------
+    let greetingIndex = 0;
+    const initialEffectiveLang = getCurrentLang();
+    const initIdx = GREETINGS.findIndex(g => g.code === initialEffectiveLang);
+    if (initIdx !== -1) {
+        greetingIndex = initIdx;
+    }
+
+    const greetingBadge = overlay.querySelector('#wmc-welcome-greeting-badge');
+    const rollerEl = overlay.querySelector('#wmc-welcome-greeting-roller');
+
+    function syncRollerWidth(targetText) {
+        if (!rollerEl) return 0;
+        const measurer = document.createElement('span');
+        measurer.className = 'wmc-welcome-greeting-text';
+        measurer.style.position = 'absolute';
+        measurer.style.visibility = 'hidden';
+        measurer.style.width = 'auto';
+        measurer.textContent = targetText;
+        rollerEl.appendChild(measurer);
+        const measuredWidth = Math.ceil(measurer.getBoundingClientRect().width) + 2;
+        measurer.remove();
+        rollerEl.style.width = `${measuredWidth}px`;
+        return measuredWidth;
+    }
+
+    if (rollerEl) {
+        rollerEl.innerHTML = '';
+        const initialText = GREETINGS[greetingIndex].text;
+        const initItem = document.createElement('span');
+        initItem.className = 'wmc-welcome-greeting-text current';
+        initItem.textContent = initialText;
+        rollerEl.appendChild(initItem);
+        syncRollerWidth(initialText);
+    }
+
+    function rollToGreeting(newText) {
+        if (!rollerEl) return;
+        const currentItem = rollerEl.querySelector('.wmc-welcome-greeting-text.current');
+        if (currentItem && currentItem.textContent === newText) {
+            return;
+        }
+
+        // 清理所有過期或非 current 的舊節點
+        rollerEl.querySelectorAll('.wmc-welcome-greeting-text:not(.current)').forEach(el => el.remove());
+
+        // 1. 建立從下方擠上來的新文字節點
+        const nextItem = document.createElement('span');
+        nextItem.className = 'wmc-welcome-greeting-text enter-bottom';
+        nextItem.textContent = newText;
+        rollerEl.appendChild(nextItem);
+
+        // 2. 測量新文字寬度並平滑變更 roller 寬度
+        syncRollerWidth(newText);
+
+        // 3. 雙 requestAnimationFrame 確保樣式重繪就緒，觸發垂直擠出與擠入動畫
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (currentItem) {
+                    currentItem.className = 'wmc-welcome-greeting-text exit-up';
+                }
+                nextItem.className = 'wmc-welcome-greeting-text current';
+
+                // 4. 動畫完成後清理舊元素
+                setTimeout(() => {
+                    if (currentItem && currentItem.parentNode === rollerEl) {
+                        currentItem.remove();
+                    }
+                }, 380);
+            });
+        });
+    }
+
+    let greetingTimer = setInterval(() => {
+        greetingIndex = (greetingIndex + 1) % GREETINGS.length;
+        rollToGreeting(GREETINGS[greetingIndex].text);
+    }, 2400);
+
+    const restartGreetingTimer = () => {
+        if (greetingTimer) clearInterval(greetingTimer);
+        greetingTimer = setInterval(() => {
+            greetingIndex = (greetingIndex + 1) % GREETINGS.length;
+            rollToGreeting(GREETINGS[greetingIndex].text);
+        }, 2400);
+    };
+
+    if (greetingBadge) {
+        greetingBadge.addEventListener('click', () => {
+            greetingIndex = (greetingIndex + 1) % GREETINGS.length;
+            rollToGreeting(GREETINGS[greetingIndex].text);
+            restartGreetingTimer();
+        });
+    }
+
+    // -------------------------------------------------------------
+    // 左上角語言切換與文字動態刷新
+    // -------------------------------------------------------------
+    function refreshModalTexts() {
+        overlay.setAttribute('aria-label', t('popup.welcome.welcomeTitle') || 'Welcome');
+
+        // Step 1
+        const subdesc = overlay.querySelector('.wmc-welcome-subdesc');
+        if (subdesc) subdesc.textContent = t('popup.welcome.step1Desc');
+
+        const txtAgree = overlay.querySelector('#wmc-welcome-txt-agree');
+        if (txtAgree) txtAgree.textContent = t('popup.welcome.agreeText');
+        const termsLink = overlay.querySelector('#wmc-welcome-terms-link');
+        if (termsLink) termsLink.textContent = t('popup.about.termsOfService');
+        const txtAnd = overlay.querySelector('#wmc-welcome-txt-and');
+        if (txtAnd) txtAnd.textContent = t('popup.welcome.andText');
+        const privacyLink = overlay.querySelector('#wmc-welcome-privacy-link');
+        if (privacyLink) privacyLink.textContent = t('popup.about.privacyPolicy');
+        const next1Btn = overlay.querySelector('#wmc-welcome-next-1');
+        if (next1Btn) next1Btn.textContent = t('popup.welcome.nextStep');
+
+        // Step 2 (若存在)
+        const step2Title = overlay.querySelector('#wmc-welcome-step-2 .wmc-welcome-step-title');
+        if (step2Title) step2Title.textContent = t('popup.welcome.migrateTitle');
+        const step2Desc = overlay.querySelector('#wmc-welcome-step-2 .wmc-welcome-step-desc');
+        if (step2Desc) step2Desc.textContent = t('popup.welcome.migrateDesc');
+        const openMigrate = overlay.querySelector('#wmc-welcome-open-migrate');
+        if (openMigrate) openMigrate.textContent = t('popup.welcome.openMigrateTool');
+        const skipMigrate = overlay.querySelector('#wmc-welcome-skip-migrate');
+        if (skipMigrate) skipMigrate.textContent = t('popup.welcome.skip');
+
+        // Step 3
+        const step3Title = overlay.querySelector('#wmc-welcome-step-3 .wmc-welcome-step-title');
+        if (step3Title) step3Title.textContent = t('popup.welcome.importTitle');
+        const step3Desc = overlay.querySelector('#wmc-welcome-step-3 .wmc-welcome-step-desc');
+        if (step3Desc) step3Desc.textContent = t('popup.welcome.importDesc');
+        const importBackup = overlay.querySelector('#wmc-welcome-import-backup');
+        if (importBackup) importBackup.textContent = t('popup.welcome.importBackup');
+        const skipImport = overlay.querySelector('#wmc-welcome-skip-import');
+        if (skipImport) skipImport.textContent = t('popup.welcome.skip');
+
+        // Step 4
+        const finalTitle = overlay.querySelector('#wmc-welcome-step-4 .wmc-welcome-final-title');
+        if (finalTitle) finalTitle.textContent = t('popup.welcome.welcomeTitle');
+        const finishBtn = overlay.querySelector('#wmc-welcome-finish');
+        if (finishBtn) finishBtn.textContent = t('popup.welcome.confirm');
+    }
+
+    const langSelect = overlay.querySelector('#wmc-welcome-lang-select');
+    if (langSelect) {
+        langSelect.addEventListener('change', async (e) => {
+            const chosen = e.target.value;
+            await setLang(chosen);
+            refreshModalTexts();
+
+            // 若切換至特定語言，立即擠上來該語言的問候語
+            const effectiveLang = getCurrentLang();
+            const matchedIdx = GREETINGS.findIndex(g => g.code === effectiveLang);
+            if (matchedIdx !== -1) {
+                greetingIndex = matchedIdx;
+                rollToGreeting(GREETINGS[greetingIndex].text);
+                restartGreetingTimer();
+            }
+
+            // 更新選項標籤（如 Auto 的偵測名稱）
+            langSelect.innerHTML = renderLanguageOptions();
+        });
+    }
+
+    const cleanup = () => {
+        if (greetingTimer) {
+            clearInterval(greetingTimer);
+            greetingTimer = null;
+        }
+        overlay.classList.remove('active');
+        setTimeout(() => {
+            overlay.remove();
+        }, 300);
+    };
+
     // 步驟四事件
     const finishBtn = overlay.querySelector('#wmc-welcome-finish');
     if (finishBtn) {
@@ -295,10 +524,7 @@ export function showWelcomeModal(options = {}) {
                 console.error('[welcomeModal] 寫入 localStorage 失敗:', err);
             }
 
-            overlay.classList.remove('active');
-            setTimeout(() => {
-                overlay.remove();
-            }, 300);
+            cleanup();
         });
     }
 

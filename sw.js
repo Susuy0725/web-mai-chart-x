@@ -114,18 +114,22 @@ async function broadcast(message) {
 
 self.addEventListener('install', (event) => {
     console.log('Service worker installing', CACHE_NAME);
+    const isUpdate = Boolean(self.registration.active);
     event.waitUntil(
         (async () => {
             const cache = await caches.open(CACHE_NAME);
             let loaded = 0;
             const total = ASSETS.length;
 
-            await broadcast({
-                type: 'SW_UPDATE_START',
-                total,
-                loaded: 0,
-                progress: 0
-            });
+            if (isUpdate) {
+                await broadcast({
+                    type: 'SW_UPDATE_START',
+                    total,
+                    loaded: 0,
+                    progress: 0,
+                    isUpdate: true
+                });
+            }
 
             await Promise.all(
                 ASSETS.map(async (url) => {
@@ -139,23 +143,29 @@ self.addEventListener('install', (event) => {
                     } finally {
                         loaded++;
                         const progress = Math.round((loaded / total) * 100);
-                        await broadcast({
-                            type: 'SW_UPDATE_PROGRESS',
-                            total,
-                            loaded,
-                            progress,
-                            file: url
-                        });
+                        if (isUpdate) {
+                            await broadcast({
+                                type: 'SW_UPDATE_PROGRESS',
+                                total,
+                                loaded,
+                                progress,
+                                file: url,
+                                isUpdate: true
+                            });
+                        }
                     }
                 })
             );
 
-            await broadcast({
-                type: 'SW_UPDATE_COMPLETE',
-                total,
-                loaded: total,
-                progress: 100
-            });
+            if (isUpdate) {
+                await broadcast({
+                    type: 'SW_UPDATE_COMPLETE',
+                    total,
+                    loaded: total,
+                    progress: 100,
+                    isUpdate: true
+                });
+            }
         })()
     );
     self.skipWaiting();

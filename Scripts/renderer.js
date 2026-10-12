@@ -2957,6 +2957,56 @@ export class SimaiRenderer {
     }
 }
 
+
+/**
+ * 預計算並快取音訊緩衝區的波形峰值 (Waveform Peaks Cache)
+ * 避免每幀遍歷數百萬個 Float32Array 原始音訊樣本造成的 CPU 阻塞與主線程掉幀。
+ * 採樣率預設為每秒 200 個採樣點 (5ms 一個峰值)，一首 3 分鐘音訊僅需 36,000 個 float (約 144KB)，
+ * 僅在音訊載入時計算一次 (約 1~2ms)，後續所有渲染幀均為 O(1) 查表。
+ */
+const WAVE_PEAKS_PER_SEC = 200;
+
+function getAudioWaveformPeaks(audioBuffer) {
+    if (!audioBuffer) return null;
+    if (audioBuffer._cachedWavePeaks && audioBuffer._cachedWavePeaks.rate === WAVE_PEAKS_PER_SEC) {
+        return audioBuffer._cachedWavePeaks;
+    }
+
+    const channelData = audioBuffer.getChannelData
+        ? audioBuffer.getChannelData(0)
+        : (audioBuffer.data || audioBuffer);
+    if (!channelData || channelData.length === 0) return null;
+
+    const sampleRate = audioBuffer.sampleRate || 44100;
+    const totalSamples = channelData.length;
+    const duration = totalSamples / sampleRate;
+    const totalBuckets = Math.ceil(duration * WAVE_PEAKS_PER_SEC);
+    const peaks = new Float32Array(totalBuckets);
+
+    const samplesPerBucket = sampleRate / WAVE_PEAKS_PER_SEC;
+    // 每個 bucket 內部使用步進採樣，既能精準捕捉瞬態峰值又能在 2ms 內完成
+    const step = Math.max(1, Math.floor(samplesPerBucket / 16));
+
+    for (let b = 0; b < totalBuckets; b++) {
+        const start = Math.floor(b * samplesPerBucket);
+        const end = Math.min(totalSamples, Math.floor((b + 1) * samplesPerBucket));
+        let maxVal = 0;
+        for (let i = start; i < end; i += step) {
+            const v = Math.abs(channelData[i]);
+            if (v > maxVal) maxVal = v;
+        }
+        peaks[b] = maxVal;
+    }
+
+    const cacheObj = {
+        rate: WAVE_PEAKS_PER_SEC,
+        peaks,
+        duration
+    };
+    audioBuffer._cachedWavePeaks = cacheObj;
+    return cacheObj;
+}
+
 export class SimaiVisualEditor {
     constructor(canvas, settings) {
         this.canvas = canvas;
@@ -3606,74 +3656,67 @@ export class SimaiVisualEditor {
         ctx.restore();
     }
 
+
     drawAudioWaveform(audioBuffer, offset = 0) {
         if (!audioBuffer) return;
         const ctx = this.ctx;
         const { width: w, height: h } = this.getCanvasWH();
         if (!ctx || w <= 0 || h <= 0) return;
 
-        const channelData = audioBuffer.getChannelData ? audioBuffer.getChannelData(0) : (audioBuffer.data || audioBuffer);
-        const sampleRate = audioBuffer.sampleRate || 44100;
-        if (!channelData || channelData.length === 0) return;
+        const waveCache = getAudioWaveformPeaks(audioBuffer);
+        if (!waveCache) return;
+
+        const { peaks, rate: bucketRate, duration } = waveCache;
+        const totalBuckets = peaks.length;
 
         const zoom = this.zoom || 1;
         const gt = this.globalTime + offset;
         const waveHalfWidth = w * this.audioWaveformWidthRatio;
-        const totalSamples = channelData.length;
+        const audioAmp = this.audioAmp || 1.0;
 
         ctx.save();
-
-        // 樣式
         ctx.lineWidth = 1;
         ctx.strokeStyle = '#888';
         ctx.globalAlpha = 0.8;
 
-        /**
-         * 【關鍵修正 1】：對齊絕對時間基準
-         * 計算螢幕最上方像素對應的「絕對時間」，並進行「格點化」
-         */
         const timePerPixel = 1 / zoom;
-        const topTime = gt - (h / zoom); // 畫布中心的 y=0 (hh) 對應 gt，回推 y=0 的時間
-
-        // 算出第一個像素格點的偏移量（子像素位移），用來消除滑動時的抖動
+        const topTime = gt - (h / zoom);
         const subPixelOffset = (topTime % timePerPixel) * zoom;
+        const bucketsPerPixel = timePerPixel * bucketRate;
 
-        // 為了涵蓋裁剪邊緣，多畫 2 像素
+        ctx.beginPath();
+
         for (let y = -1; y < h * 2 + 1; y++) {
-            // 【關鍵修正 2】：計算絕對的取樣區間，不受當前 gt 的浮點數微動影響
-            // 使用絕對格點時間 t = (格點編號 * 時間步進) + 基準時間
             const pixelTime = Math.floor(topTime / timePerPixel) * timePerPixel + (y * timePerPixel);
+            if (pixelTime < 0 || pixelTime > duration) continue;
 
-            let startIdx = Math.floor(pixelTime * sampleRate);
-            let endIdx = Math.floor((pixelTime + timePerPixel) * sampleRate);
-
-            if (endIdx <= 0 || startIdx >= totalSamples) continue;
-            startIdx = Math.max(0, startIdx);
-            endIdx = Math.min(totalSamples, endIdx);
-
-            // 穩定 Peak 偵測
+            const bStart = Math.floor(pixelTime * bucketRate);
             let peak = 0;
-            if (endIdx - startIdx <= 1) {
-                peak = Math.abs(channelData[startIdx] || 0);
+
+            if (bucketsPerPixel <= 1) {
+                if (bStart >= 0 && bStart < totalBuckets) {
+                    peak = peaks[bStart];
+                }
             } else {
-                for (let i = startIdx; i < endIdx; i++) {
-                    const v = Math.abs(channelData[i]);
+                const bEnd = Math.min(totalBuckets, Math.floor((pixelTime + timePerPixel) * bucketRate) + 1);
+                for (let b = Math.max(0, bStart); b < bEnd; b++) {
+                    const v = peaks[b];
                     if (v > peak) peak = v;
                 }
             }
 
-            const amp = Math.min(1, peak * (this.audioAmp || 1));
+            if (peak <= 0.002) continue;
+
+            const amp = Math.min(1, peak * audioAmp);
             const pxW = amp * waveHalfWidth;
+            if (pxW < 0.5) continue;
 
-            // 繪製座標補上 subPixelOffset 修正
             const drawY = h - y + subPixelOffset;
-
-            ctx.beginPath();
             ctx.moveTo(-pxW, drawY);
             ctx.lineTo(pxW, drawY);
-            ctx.stroke();
         }
 
+        ctx.stroke();
         ctx.restore();
     }
 
@@ -5290,55 +5333,59 @@ export class SimaiPreviewRenderer {
         const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
         if (!ctx || w <= 0 || h <= 0) return;
 
-        const channelData = audioBuffer.getChannelData ? audioBuffer.getChannelData(0) : (audioBuffer.data || audioBuffer);
-        const sampleRate = audioBuffer.sampleRate || 44100;
-        if (!channelData || channelData.length === 0) return;
+        const waveCache = getAudioWaveformPeaks(audioBuffer);
+        if (!waveCache) return;
+
+        const { peaks, rate: bucketRate, duration } = waveCache;
+        const totalBuckets = peaks.length;
 
         const zoom = this.zoom || 200;
         const gt = this.globalTime + offset;
-        const totalSamples = channelData.length;
-
         const waveMaxHeight = h * (this.settings.audioWaveformHeightRatio || 0.4);
         const audioAmp = this.settings.audioAmp || 1.0;
 
+        const leftTime = gt - (hw / zoom);
+        const rightTime = gt + (hw / zoom);
+        if (rightTime < 0 || leftTime > duration) return;
+
         ctx.save();
         ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(136, 136, 136, 0.2)';
-
-        const timePerPixel = 1 / zoom;
-        const leftTime = gt - (hw / zoom);
-        const subPixelOffset = (leftTime % timePerPixel) * zoom;
-
+        ctx.strokeStyle = 'rgba(136, 136, 136, 0.25)';
         ctx.beginPath();
-        const step = Math.max(1, Math.floor((sampleRate / zoom) / 8));
 
-        for (let x = -1; x <= w + 1; x += 2) {
-            const pixelTime = Math.floor(leftTime / timePerPixel) * timePerPixel + (x * timePerPixel);
+        const stepX = 2;
+        const timePerStep = stepX / zoom;
+        const bucketsPerStep = timePerStep * bucketRate;
 
-            let startIdx = Math.floor(pixelTime * sampleRate);
-            let endIdx = Math.floor((pixelTime + timePerPixel * 2) * sampleRate);
+        for (let x = 0; x <= w; x += stepX) {
+            const t = leftTime + (x / zoom);
+            if (t < 0 || t > duration) continue;
 
-            if (endIdx <= 0 || startIdx >= totalSamples) continue;
-            startIdx = Math.max(0, startIdx);
-            endIdx = Math.min(totalSamples, endIdx);
-
+            const bStart = Math.floor(t * bucketRate);
             let peak = 0;
-            if (endIdx - startIdx <= 1) {
-                peak = Math.abs(channelData[startIdx] || 0);
+
+            if (bucketsPerStep <= 1) {
+                if (bStart >= 0 && bStart < totalBuckets) {
+                    peak = peaks[bStart];
+                }
             } else {
-                for (let i = startIdx; i < endIdx; i += step) {
-                    const v = Math.abs(channelData[i]);
+                const bEnd = Math.min(totalBuckets, Math.floor((t + timePerStep) * bucketRate) + 1);
+                for (let b = Math.max(0, bStart); b < bEnd; b++) {
+                    const v = peaks[b];
                     if (v > peak) peak = v;
                 }
             }
 
+            if (peak <= 0.002) continue;
+
             const amp = Math.min(1, peak * audioAmp);
             const pxH = amp * waveMaxHeight;
-            const drawX = x - subPixelOffset;
+            if (pxH < 0.5) continue;
 
-            ctx.moveTo(drawX, hh - pxH);
-            ctx.lineTo(drawX, hh + pxH);
+            ctx.moveTo(x, hh - pxH);
+            ctx.lineTo(x, hh + pxH);
         }
+
         ctx.stroke();
         ctx.restore();
     }

@@ -164,9 +164,15 @@ export function initServiceWorker() {
     }
 
     if ('serviceWorker' in navigator && isRelease) {
+        // 核心檢查：僅當頁面啟動時已由既有的 Service Worker 控制，才屬於「版本更新」，否則為「首次載入安裝」
+        const hasExistingController = Boolean(navigator.serviceWorker.controller);
+
         navigator.serviceWorker.addEventListener('message', (event) => {
             const data = event.data;
             if (!data) return;
+
+            // 首次載入時由 SW 背景靜默快取，不彈出更新進度與就緒提示
+            if (!hasExistingController || data.isUpdate === false) return;
 
             if (data.type === 'SW_UPDATE_START' || data.type === 'SW_UPDATE_PROGRESS') {
                 showSwUpdateProgress(data);
@@ -181,8 +187,9 @@ export function initServiceWorker() {
 
                 reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;
+                    if (!newWorker) return;
                     newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        if (newWorker.state === 'installed' && hasExistingController) {
                             showSwUpdateComplete();
                         }
                     });

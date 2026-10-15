@@ -30,6 +30,13 @@ if (typeof OffscreenCanvasRenderingContext2D !== 'undefined' && !OffscreenCanvas
     };
 }
 
+// 檢測 iOS / iPadOS / Safari 環境 (用於避開 WebKit Metal 著色器在透明畫布上 lighter 混色產生的黑塊與除零 bug)
+const IS_IOS_OR_SAFARI = typeof navigator !== 'undefined' && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+    (/^((?!chrome|android).)*safari/i.test(navigator.userAgent || ''))
+);
+
 const charWidthCache = {};
 const RICH_HANABI_COLOR_MAP = ['#b30077', '#b33b00', '#b3a600', '#9bb300', '#0083b3'];
 const TWO_PI = Math.PI * 2;
@@ -72,11 +79,16 @@ const JUDGE_COLORS = {
 
 function hexToRgb(hex) {
     if (!hex) return { r: 255, g: 254, b: 2 };
-    let c = hex.replace('#', '');
+    let c = String(hex).replace('#', '').trim();
     if (c.length === 3) {
         c = c.split('').map(x => x + x).join('');
+    } else if (c.length === 8) {
+        c = c.slice(0, 6);
     }
     const num = parseInt(c, 16);
+    if (isNaN(num)) {
+        return { r: 255, g: 254, b: 2 };
+    }
     return {
         r: (num >> 16) & 255,
         g: (num >> 8) & 255,
@@ -106,7 +118,8 @@ function getJudgeRgba(judge, alpha = 1) {
         }
     }
     const rgb = hexToRgb(colorHex);
-    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+    const safeAlpha = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${safeAlpha})`;
 }
 
 function textMonospace(ctx, text, x, y, cellWidth, mode = 'stroke') {
@@ -498,6 +511,7 @@ export class SimaiRenderer {
      */
     queueHitEffect(pos, noteT, judge = null, x = null, y = null) {
         if (!this.settings.drawHitEffect) return;
+        if (!Number.isFinite(noteT)) return;
         if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
         const decayTime = this.settings.effectDecayTime || 0.4;
         if (noteT / decayTime < -1 || noteT > 0.05) return;
@@ -572,6 +586,7 @@ export class SimaiRenderer {
      */
     queueHoldEffect(pos, noteT, judge = null, x = null, y = null) {
         if (!this.settings.drawHitEffect) return;
+        if (!Number.isFinite(noteT)) return;
         if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
 
         let px = x;
@@ -645,7 +660,7 @@ export class SimaiRenderer {
 
     /**
      * 獨立分離的打擊特效渲染通道 (Batch Hit Effects Pass)
-     * 在所有音符繪製完成後統一執行，整幀只切換一次 lighter 混合模式
+     * 在所有音符繪製完成後統一執行，整幀只切換一次混合模式
      */
     drawHitEffects() {
         if (!this.settings.drawHitEffect || this._hitEffectCount === 0) {
@@ -658,7 +673,8 @@ export class SimaiRenderer {
         const queue = this._hitEffectQueue;
 
         ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
+        // iOS WebKit 在透明畫布上使用 lighter 會導致 Metal 著色器產生黑塊 (Black Artifacts)，安全回退至 source-over
+        ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
 
         for (let i = 0; i < count; i++) {
             const eff = queue[i];
@@ -1116,20 +1132,30 @@ export class SimaiRenderer {
     }
 
     simpleHitEffect(noteT, judge = null, x = 0, y = 0, isBatch = false) {
-        const t = noteT / this.settings.effectDecayTime;
+        if (!Number.isFinite(noteT)) return;
+        const decayTime = this.settings.effectDecayTime || 0.4;
+        const t = noteT / decayTime;
         if (t < -1) return;
-        const decayAlpha = 1 - Math.max(0, -t);
-        const radius = 0.5 * this.settings.noteBaseSize * (1 - decayAlpha);
+        const decayAlpha = Math.min(1, Math.max(0, 1 - Math.max(0, -t)));
+        if (decayAlpha <= 0.01) return;
+
+        const baseSize = this.settings.noteBaseSize || 50;
+        // iOS WebKit arc 半徑不可小於等於 0 或為負數，否則會拋出 IndexSizeError 或渲染黑塊
+        const radius = Math.max(1.0, 0.5 * baseSize * (1 - decayAlpha));
+        const lineWidth = Math.max(0.5, 0.25 * baseSize * decayAlpha);
+
+        const safeX = Number.isFinite(x) ? x : 0;
+        const safeY = Number.isFinite(y) ? y : 0;
 
         if (!isBatch) {
             this.ctx.save();
-            this.ctx.globalCompositeOperation = 'lighter';
+            this.ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
         }
 
         this.ctx.strokeStyle = getJudgeRgba(judge, 0.9 * decayAlpha);
-        this.ctx.lineWidth = 0.25 * this.settings.noteBaseSize * decayAlpha;
+        this.ctx.lineWidth = lineWidth;
         this.ctx.beginPath();
-        this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+        this.ctx.arc(safeX, safeY, radius, 0, Math.PI * 2);
         this.ctx.stroke();
 
         if (!isBatch) {
@@ -1138,32 +1164,37 @@ export class SimaiRenderer {
     }
 
     simpleHanabi(noteT, isCenter) {
-        const t = noteT / this.settings.hanabiEffectDecayTime;
+        const decayTime = this.settings.hanabiEffectDecayTime || 1;
+        const t = noteT / decayTime;
         if (t < -1) return;
+        const decayAlpha = Math.min(1, Math.max(0, 1 - Math.max(0, -t)));
+        if (decayAlpha <= 0.01) return;
+
         this.ctx.save();
         const ease = (x) => 1 - Math.pow(1 - x, 2);
-        const decayAlpha = 1 - Math.max(0, -t);
-        const radius = (3 + isCenter * 1) * this.settings.noteBaseSize * ease(1 - decayAlpha);
+        const baseSize = this.settings.noteBaseSize || 50;
+        const radius = Math.max(1.0, (3 + (isCenter ? 1 : 0)) * baseSize * ease(1 - decayAlpha));
+
         const color = this.ctx.createLinearGradient(-radius, -radius, radius, radius);
         color.addColorStop(0, "#00D5FF");
         color.addColorStop(0.4, "#FF00FF");
         color.addColorStop(0.8, "#FFD823");
         color.addColorStop(1, "#FFD823");
-        const white = this.ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.3);
+        const white = this.ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1.0, radius * 1.3));
         white.addColorStop(0, "#ffffff00");
         white.addColorStop(0.4, "#ffffff00");
         white.addColorStop(0.8, "#ffffff8b");
         white.addColorStop(1, "#ffffff00");
 
         this.ctx.globalAlpha = decayAlpha;
-        this.ctx.globalCompositeOperation = 'lighter';
+        this.ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
         this.ctx.fillStyle = white;
         this.ctx.globalAlpha = decayAlpha * 0.8;
         this.ctx.beginPath();
-        this.ctx.arc(0, 0, radius * 1.3, 0, Math.PI * 2);
+        this.ctx.arc(0, 0, Math.max(1.0, radius * 1.3), 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.beginPath();
-        this.ctx.lineWidth = 1.4 * decayAlpha * this.settings.noteBaseSize * (1 - ease(Math.max(0, -t)));
+        this.ctx.lineWidth = Math.max(0.5, 1.4 * decayAlpha * baseSize * (1 - ease(Math.max(0, -t))));
         this.ctx.strokeStyle = color;
         this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
         this.ctx.stroke();
@@ -1209,7 +1240,7 @@ export class SimaiRenderer {
         if (maxRadius <= 0.001) return;
 
         ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
 
         // 底層白色擴散光環
         ctx.globalAlpha = decayAlpha * 0.65;
@@ -1275,7 +1306,7 @@ export class SimaiRenderer {
             ctx.closePath();
             ctx.fill();
         }
-        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
         ctx.globalAlpha = decayAlpha;
 
         // 繪製內部的點陣波紋（以扇區角度幾何精準過濾，完全免除昂貴的 ctx.clip，並採用預計算網格與高效 rect 批次繪製）
@@ -1321,27 +1352,44 @@ export class SimaiRenderer {
     }
 
     simpleHoldEffect(noteT, judge = null, x = 0, y = 0, isBatch = false) {
+        if (!Number.isFinite(noteT)) return;
         const t = noteT * -2;
-        const decayAlpha = 1 - Math.max(0, t % 1);
-        const decayAlpha1 = 1 - Math.max(0, (t + 0.5) % 1);
-        const radius = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha);
-        const radius1 = 0.6 * this.settings.noteBaseSize * (1 - decayAlpha1);
+        // 修正負數模運算問題，確保 decayAlpha 永遠在 [0, 1]
+        const mod0 = ((t % 1) + 1) % 1;
+        const mod1 = (((t + 0.5) % 1) + 1) % 1;
+        const decayAlpha = Math.min(1, Math.max(0, 1 - mod0));
+        const decayAlpha1 = Math.min(1, Math.max(0, 1 - mod1));
+
+        const baseSize = this.settings.noteBaseSize || 50;
+        // iOS WebKit arc 半徑保證大於等於 1.0，防止零半徑除零黑塊與負數拋錯
+        const radius = Math.max(1.0, 0.6 * baseSize * (1 - decayAlpha));
+        const radius1 = Math.max(1.0, 0.6 * baseSize * (1 - decayAlpha1));
+
+        const safeX = Number.isFinite(x) ? x : 0;
+        const safeY = Number.isFinite(y) ? y : 0;
 
         if (!isBatch) {
             this.ctx.save();
-            this.ctx.globalCompositeOperation = 'lighter';
+            this.ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
         }
 
-        this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha);
-        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha;
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, radius, 0, Math.PI * 2);
-        this.ctx.stroke();
-        this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha1);
-        this.ctx.lineWidth = 0.5 * this.settings.noteBaseSize * decayAlpha1;
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, radius1, 0, Math.PI * 2);
-        this.ctx.stroke();
+        if (decayAlpha > 0.01) {
+            const lineWidth = Math.max(0.5, 0.5 * baseSize * decayAlpha);
+            this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha);
+            this.ctx.lineWidth = lineWidth;
+            this.ctx.beginPath();
+            this.ctx.arc(safeX, safeY, radius, 0, Math.PI * 2);
+            this.ctx.stroke();
+        }
+
+        if (decayAlpha1 > 0.01) {
+            const lineWidth1 = Math.max(0.5, 0.5 * baseSize * decayAlpha1);
+            this.ctx.strokeStyle = getJudgeRgba(judge, 0.6 * decayAlpha1);
+            this.ctx.lineWidth = lineWidth1;
+            this.ctx.beginPath();
+            this.ctx.arc(safeX, safeY, radius1, 0, Math.PI * 2);
+            this.ctx.stroke();
+        }
 
         if (!isBatch) {
             this.ctx.restore();

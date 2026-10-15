@@ -1053,7 +1053,7 @@ export class SimaiRenderer {
                     const isCruvSlide = (imgKey && (imgKey.includes('curv')));
                     const strSlideOffset = this.getSlideOffset(eff, slideFlip, isCruvSlide);
                     ctx.save();
-                    ctx.rotate(isSlide ? Math.PI * (isWifiEff * 0.5 + slideFlip + isCruvSlide * (slideFlip ? 0.15 : -0.165)) : 0);
+                    ctx.rotate(isSlide ? Math.PI * (isWifiEff * 0.5 + slideFlip + isCruvSlide * (slideFlip ? 0.15 : -0.145)) : 0);
                     ctx.drawImage(img,
                         (isSlide ? (!slideFlip * -judgeWidth + (slideFlip - 0.5) * strSlideOffset.x) : -judgeWidth / 2),
                         -judgeHeight / 2 + isSlide * ((isCruvSlide ? -2.7 : 2) + strSlideOffset.y),

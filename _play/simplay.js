@@ -97,12 +97,14 @@ export class SimulatedPlayController {
                     if (other === note || !other.triggered || other.holdFinish) continue;
                     if (!other.isHolding) continue;
                     if (noteType === 'touch') {
-                        if (other.type === 'touch' && other.touchPos === note.touchPos && other.pos === note.pos) {
+                        const noteSensor = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
+                        const otherSensor = (other.touchPos === 'C') ? 'C' : (other.touchPos + other.pos);
+                        if (other.type === 'touch' && otherSensor === noteSensor) {
                             isOccupiedByHolding = true;
                             break;
                         }
                     } else {
-                        const otherIsHold = (other.holdDuration > 0 || other.isHold || other.type === 'hold');
+                        const otherIsHold = (other.type !== 'touch') && (other.holdDuration > 0 || other.isHold || other.type === 'hold');
                         if (otherIsHold && other.pos === note.pos) {
                             isOccupiedByHolding = true;
                             break;
@@ -178,8 +180,6 @@ export class SimulatedPlayController {
                     if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
                         const totalCount = note._totalAreasCount || 1;
                         const progress = Math.min(1, Math.max(0, slideT / arriveEndTime));
-                        // 實時依手指滑動進度更新引導箭頭消散
-                        note.slideProgress = Math.min(1, Math.max(note.slideProgress || 0, progress));
 
                         if (totalCount <= 1) {
                             // 單一感應區 Slide

@@ -1066,12 +1066,14 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                     if (other === note || !other.triggered || other.holdFinish) continue;
                     if (!other.isHolding) continue;
                     if (isTouch) {
-                        if (other.type === 'touch' && other.touchPos === note.touchPos && other.pos === note.pos) {
+                        const noteSensor = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
+                        const otherSensor = (other.touchPos === 'C') ? 'C' : (other.touchPos + other.pos);
+                        if (other.type === 'touch' && otherSensor === noteSensor) {
                             isPosOccupiedByHolding = true;
                             break;
                         }
                     } else {
-                        const otherIsHold = (other.holdDuration > 0 || other.isHold || other.type === 'hold');
+                        const otherIsHold = (other.type !== 'touch') && (other.holdDuration > 0 || other.isHold || other.type === 'hold');
                         if (otherIsHold && other.pos === note.pos) {
                             isPosOccupiedByHolding = true;
                             break;
@@ -1123,12 +1125,14 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                             if (other === note || !other.triggered || other.holdFinish) continue;
                             if (!other.isHolding) continue;
                             if (note.type === 'touch') {
-                                if (other.type === 'touch' && other.touchPos === note.touchPos && other.pos === note.pos) {
+                                const noteSensor = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
+                                const otherSensor = (other.touchPos === 'C') ? 'C' : (other.touchPos + other.pos);
+                                if (other.type === 'touch' && otherSensor === noteSensor) {
                                     isPosOccupiedByHolding = true;
                                     break;
                                 }
                             } else {
-                                const otherIsHold = (other.holdDuration > 0 || other.isHold || other.type === 'hold');
+                                const otherIsHold = (other.type !== 'touch') && (other.holdDuration > 0 || other.isHold || other.type === 'hold');
                                 if (otherIsHold && other.pos === note.pos) {
                                     isPosOccupiedByHolding = true;
                                     break;

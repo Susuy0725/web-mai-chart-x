@@ -129,7 +129,12 @@
     "swUpdateDetail": "キャッシュが更新されました。再読み込みして適用してください。",
     "swReloadNow": "今すぐ再読み込み",
     "swDismiss": "後で",
-    "swHide": "非表示"
+    "swHide": "非表示",
+    "swUpdateAvailableTitle": "新しいバージョンが利用可能です",
+    "swUpdateAvailableDesc": "Web mai Chart X の新バージョンがあります。今すぐ更新しますか？",
+    "swDelay": "後で",
+    "swUpdate": "更新",
+    "swPreparing": "リソースのダウンロードを準備中..."
   },
   "quickPanel": {
     "middle": "キャンセル",
@@ -148,6 +153,7 @@
       "basic": "基本",
       "display": "表示",
       "sfx": "音声",
+      "operation": "操作",
       "other": "その他",
       "maintenance": "メンテナンス"
     },

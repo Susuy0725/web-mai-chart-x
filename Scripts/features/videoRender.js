@@ -1,3 +1,13 @@
+/**
+ * @file videoRender.js
+ * 譜面影片錄製與導出核心模組。
+ * 
+ * ⚠️ Agent 重要提示：
+ * 本模組依賴的 Mediabunny 為大型打包庫 (Scripts/mediabunny.cjs, 1.4MB)。
+ * 排查影片渲染與轉碼相關問題時，請先查閱官方線上 API 文件，切勿優先分析 mediabunny.cjs：
+ * https://mediabunny.dev/api/
+ */
+
 import { ensureMediabunny, simpleToast, popupWindow } from '../helper.js';
 import { SimaiLogicControler } from '../core/simaiLogicControler.js';
 import { t as i18n } from '../i18n.js';

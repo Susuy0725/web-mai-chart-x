@@ -1,146 +1,155 @@
 import { t } from '../i18n.js';
+import { simpleToast } from '../helper.js';
 
-let swProgressToast = null;
-let isProgressDismissed = false;
+let isUpdating = false;
+let latestProgressData = null;
 
-function dismissSwToast() {
-    if (!swProgressToast) return;
-    swProgressToast.classList.remove('show');
-    setTimeout(() => {
-        swProgressToast?.remove();
-        swProgressToast = null;
-    }, 300);
+export function promptSwUpdate({ onConfirm, onDelay } = {}) {
+    if (sessionStorage.getItem('sw_update_deferred') === 'true') {
+        return null;
+    }
+
+    return simpleToast({
+        id: 'sw-update-toast',
+        type: 'info',
+        title: t('toast.swUpdateAvailableTitle') || '發現新版本',
+        content: t('toast.swUpdateAvailableDesc') || '偵測到應用程式有新版本，是否立即更新？',
+        timeout: 0,
+        closable: true,
+        buttons: [
+            {
+                text: t('toast.swDelay') || '延遲',
+                primary: false,
+                onClick: (toast) => {
+                    sessionStorage.setItem('sw_update_deferred', 'true');
+                    isUpdating = false;
+                    if (typeof onDelay === 'function') onDelay();
+                }
+            },
+            {
+                text: t('toast.swUpdate') || '更新',
+                primary: true,
+                onClick: (toast) => {
+                    isUpdating = true;
+                    if (typeof onConfirm === 'function') {
+                        onConfirm();
+                    } else if (latestProgressData?.completed) {
+                        showSwUpdateComplete();
+                    } else {
+                        const progress = latestProgressData?.progress || 0;
+                        const loaded = latestProgressData?.loaded || 0;
+                        const total = latestProgressData?.total || 0;
+                        const file = latestProgressData?.file || '';
+                        showSwUpdateProgress({ loaded, total, progress, file });
+                    }
+                    return false; // 保持 Toast 開啟以展示下載進度
+                }
+            }
+        ]
+    });
 }
 
 export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' } = {}) {
-    if (isProgressDismissed) return;
+    if (sessionStorage.getItem('sw_update_deferred') === 'true') return;
 
-    if (!swProgressToast) {
-        swProgressToast = document.createElement('div');
-        swProgressToast.className = 'sw-update-toast show';
-        swProgressToast.innerHTML = `
-            <div class="sw-update-header">
-                <span class="sw-update-title">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation: sw-spin 1.2s linear infinite;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                    <span class="sw-title-text">${t('toast.swUpdating') || '正在下載離線更新...'}</span>
-                </span>
-                <div class="sw-update-header-right">
-                    <span class="sw-update-percent">${progress}%</span>
-                    <button class="sw-update-close-btn" type="button" title="${t('toast.swHide') || '隱藏'}" aria-label="${t('toast.swHide') || '隱藏'}">✕</button>
-                </div>
-            </div>
-            <div class="sw-update-progress-bar-bg">
-                <div class="sw-update-progress-bar-fill" style="transform: scaleX(${progress / 100})"></div>
-            </div>
-            <div class="sw-update-details">
-                <span class="sw-update-file">${file ? file.replace('./', '') : ''}</span>
-                <span class="sw-update-count">${loaded} / ${total}</span>
-            </div>
-        `;
+    latestProgressData = { loaded, total, progress, file, completed: false };
 
-        const closeBtn = swProgressToast.querySelector('.sw-update-close-btn');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isProgressDismissed = true;
-                dismissSwToast();
-            });
-        }
-
-        document.body.appendChild(swProgressToast);
-    } else {
-        const fill = swProgressToast.querySelector('.sw-update-progress-bar-fill');
-        const percent = swProgressToast.querySelector('.sw-update-percent');
-        const fileEl = swProgressToast.querySelector('.sw-update-file');
-        const countEl = swProgressToast.querySelector('.sw-update-count');
-
-        if (fill) fill.style.transform = `scaleX(${progress / 100})`;
-        if (percent) percent.textContent = `${progress}%`;
-        if (fileEl && file) fileEl.textContent = file.replace('./', '');
-        if (countEl) countEl.textContent = `${loaded} / ${total}`;
+    // 若使用者尚未點擊「更新」，先提示使用者決定更新
+    if (!isUpdating) {
+        promptSwUpdate();
+        return;
     }
+
+    simpleToast({
+        id: 'sw-update-toast',
+        type: 'info',
+        title: t('toast.swUpdating') || '正在下載離線更新...',
+        content: `${progress}%`,
+        detail: `${file ? file.replace('./', '') : ''} (${loaded} / ${total})`,
+        progress,
+        timeout: 0,
+        closable: true,
+        buttons: []
+    });
 }
 
 export function showSwUpdateComplete() {
-    isProgressDismissed = false;
+    if (sessionStorage.getItem('sw_update_deferred') === 'true') return;
 
-    if (!swProgressToast) {
-        swProgressToast = document.createElement('div');
-        document.body.appendChild(swProgressToast);
+    latestProgressData = { ...(latestProgressData || {}), progress: 100, completed: true };
+
+    if (!isUpdating) {
+        promptSwUpdate();
+        return;
     }
 
-    swProgressToast.className = 'sw-update-toast show completed';
-    swProgressToast.innerHTML = `
-        <div class="sw-update-header">
-            <span class="sw-update-title">
-                <svg style="color: var(--sw-complete-color);" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <span>${t('toast.swUpdated') || '版本更新已就緒！'}</span>
-            </span>
-            <div class="sw-update-header-right">
-                <span class="sw-update-percent">100%</span>
-                <button class="sw-update-close-btn" type="button" title="${t('toast.swDismiss') || '稍後'}" aria-label="${t('toast.swDismiss') || '稍後'}">✕</button>
-            </div>
-        </div>
-        <div class="sw-update-progress-bar-bg">
-            <div class="sw-update-progress-bar-fill" style="transform: scaleX(1)"></div>
-        </div>
-        <div class="sw-update-details">
-            <span>${t('toast.swUpdateDetail') || '快取已更新，請重新整理以套用最新版本'}</span>
-        </div>
-        <div class="sw-update-actions">
-            <button class="sw-update-btn sw-update-btn-dismiss">${t('toast.swDismiss') || '稍後'}</button>
-            <button class="sw-update-btn sw-update-btn-reload">${t('toast.swReloadNow') || '立即重新整理'}</button>
-        </div>
-    `;
-
-    const reloadBtn = swProgressToast.querySelector('.sw-update-btn-reload');
-    const dismissBtn = swProgressToast.querySelector('.sw-update-btn-dismiss');
-    const closeBtn = swProgressToast.querySelector('.sw-update-close-btn');
-
-    if (reloadBtn) {
-        reloadBtn.addEventListener('click', () => {
-            window.location.reload();
-        });
-    }
-
-    if (dismissBtn) {
-        dismissBtn.addEventListener('click', () => {
-            dismissSwToast();
-        });
-    }
-
-    if (closeBtn) {
-        closeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dismissSwToast();
-        });
-    }
+    simpleToast({
+        id: 'sw-update-toast',
+        type: 'success',
+        title: t('toast.swUpdated') || '版本更新已就緒！',
+        content: t('toast.swUpdateDetail') || '快取已更新，請重新整理以套用最新版本',
+        detail: '',
+        progress: 100,
+        timeout: 0,
+        closable: true,
+        buttons: [
+            {
+                text: t('toast.swDismiss') || '稍後',
+                primary: false,
+                onClick: () => {
+                    isUpdating = false;
+                }
+            },
+            {
+                text: t('toast.swReloadNow') || '立即重新整理',
+                primary: true,
+                onClick: () => {
+                    window.location.reload();
+                }
+            }
+        ]
+    });
 }
 
 window.showSwUpdateProgress = showSwUpdateProgress;
 window.showSwUpdateComplete = showSwUpdateComplete;
+window.promptSwUpdate = promptSwUpdate;
 
 export function mockSwUpdateFlow() {
-    isProgressDismissed = false;
+    sessionStorage.removeItem('sw_update_deferred');
+    isUpdating = false;
+    latestProgressData = null;
+
     let progress = 0;
     const total = 50;
-    showSwUpdateProgress({ loaded: 0, total, progress: 0, file: './Scripts/main.js' });
-    const timer = setInterval(() => {
-        progress += 10;
-        const loaded = Math.round((progress / 100) * total);
-        showSwUpdateProgress({
-            loaded,
-            total,
-            progress: Math.min(100, progress),
-            file: `./Scripts/chunk-${progress}.js`
-        });
-        if (progress >= 100) {
-            clearInterval(timer);
-            setTimeout(() => {
-                showSwUpdateComplete();
-            }, 500);
+
+    promptSwUpdate({
+        onDelay: () => {
+            console.log('[MockSW] 使用者選擇延遲更新，下次重新整理時生效。');
+        },
+        onConfirm: () => {
+            console.log('[MockSW] 使用者決定更新，開始模擬下載流程...');
+            showSwUpdateProgress({ loaded: 0, total, progress: 0, file: './Scripts/main.js' });
+
+            const timer = setInterval(() => {
+                progress += 10;
+                const loaded = Math.round((progress / 100) * total);
+                showSwUpdateProgress({
+                    loaded,
+                    total,
+                    progress: Math.min(100, progress),
+                    file: `./Scripts/chunk-${progress}.js`
+                });
+
+                if (progress >= 100) {
+                    clearInterval(timer);
+                    setTimeout(() => {
+                        showSwUpdateComplete();
+                    }, 400);
+                }
+            }, 250);
         }
-    }, 200);
+    });
 }
 window.mockSwUpdateFlow = mockSwUpdateFlow;
 

@@ -35,6 +35,11 @@
     --popup-success: #10b981;
     --popup-success-bg: rgba(16, 185, 129, 0.15);
     --popup-success-hover: #059669;
+
+    --toast-info: #00bbff;
+    --toast-error: #ff4444;
+    --toast-success: #00ffcc;
+    --toast-warning: #ffcc00;
 }
 
 .popup-backdrop {
@@ -156,7 +161,7 @@
 .popup-progress-bar {
     width: 0%;
     height: 100%;
-    background: var(--accent-color);
+    background: var(--popup-accent);
     transition: width 0.3s ease;
 }
 
@@ -229,60 +234,265 @@
 
 #hint-container {
     position: fixed;
-    top: var(--utility-height, 40px);
+    top: var(--toast-container-top, var(--utility-height, 40px));
     left: 0;
-    padding: 10px;
-    z-index: 10000;
+    padding: 10px 12px;
+    z-index: 100005;
+    /* 確保高於所有彈窗與遮罩 (如 welcomeModal 的 99999) */
     display: flex;
     flex-direction: column;
     pointer-events: none;
-    overflow: hidden;
-    max-height: 100vh;
+    max-height: calc(100vh - 20px);
+    box-sizing: border-box;
+    transition: top 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 當頁面有其他 Popup / Modal 開啟時，自適應頂部高度與間距 */
+:root:has(.popup-backdrop) #hint-container,
+:root:has(.wmc-welcome-overlay.active) #hint-container,
+#hint-container.has-popup {
+    --toast-container-top: 14px;
+    padding-left: 16px;
+}
+
+/* 行動端全螢幕 Page 模式開啟時，避開頂部標題列與返回按鈕 */
+@media (max-width: 440px) {
+
+    :root:has(.popup-backdrop-page) #hint-container,
+    #hint-container.has-popup-page {
+        --toast-container-top: calc(env(safe-area-inset-top, 0px) + 54px);
+    }
 }
 
 .toast-item {
+    position: relative;
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
+    flex-direction: column;
     background: #202020;
     color: #ffffff;
-    padding: 10px 15px;
-    border-left: 4px solid #404040;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    border-left: 6px solid #404040;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
     font-size: 13px;
     pointer-events: auto;
+    cursor: pointer;
     width: fit-content;
-    max-width: 300px;
-    margin-bottom: 10px;
+    min-width: min(180px, calc(50vw - 32px));
+    max-width: min(380px, calc(50vw - 32px));
+    box-sizing: border-box;
     overflow: hidden;
-    min-height: 20px;
-    max-height: 100px;
-    flex-shrink: 0;
-    opacity: 1;
-    transform: translateX(0);
+    margin-bottom: 0;
+    max-height: 0;
+    padding: 0 12px;
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
     transition:
-        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        margin 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+        transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+        max-height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+        margin 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+        padding 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.toast-item.toast-show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    max-height: 240px;
+    margin-bottom: 8px;
+    padding: 8px 12px 12px 12px;
+}
+
+.toast-item.toast-removing {
+    opacity: 0 !important;
+    transform: translateY(-10px) scale(0.94) !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    pointer-events: none !important;
 }
 
 .toast-item.toast-info {
-    border-left-color: #00bbff;
+    border-left-color: var(--toast-info);
 }
 
 .toast-item.toast-error {
-    border-left-color: #ff4444;
+    border-left-color: var(--toast-error);
 }
 
 .toast-item.toast-success {
-    border-left-color: #00ffcc;
+    border-left-color: var(--toast-success);
 }
 
 .toast-item.toast-warning {
-    border-left-color: #ffcc00;
+    border-left-color: var(--toast-warning);
+}
+
+/* Toast 內部排版 */
+.toast-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    min-height: 22px;
+    justify-content: center;
+}
+
+.toast-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+}
+
+.toast-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.4;
+}
+
+.toast-close-btn {
+    background: transparent;
+    border: none;
+    color: #888888;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 8px;
+    width: 30px;
+    height: 30px;
+    margin: -2px -4px 0 0;
+    line-height: 1;
+    border-radius: 4px;
+    justify-content: center;
+    align-items: center;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.toast-close-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.toast-body-text {
+    display: flex;
+    align-items: center;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #d4d4d4;
+    word-break: break-word;
+}
+
+.toast-detail-text {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #8e8e8e;
+    font-family: monospace, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Toast 操作按鈕群 */
+.toast-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.toast-btn {
+    border: none;
+    outline: none;
+    cursor: pointer;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 4px;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+}
+
+.toast-btn-primary {
+    background: var(--popup-accent);
+    color: #121212;
+}
+
+.toast-btn-primary:hover {
+    background: color-mix(in srgb, var(--popup-accent), black 20%);
+}
+
+.toast-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #d4d4d4;
+}
+
+.toast-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+}
+
+/* Toast 進度條軌道與進度條 */
+.toast-progress-track {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.toast-progress-bar {
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    background: currentColor;
+    transition: transform 0.2s linear;
+}
+
+.toast-item.toast-info .toast-progress-bar {
+    background: gray;
+}
+
+.toast-item.toast-success .toast-progress-bar {
+    background: color-mix(in srgb, var(--toast-success), gray 50%);
+}
+
+.toast-item.toast-warning .toast-progress-bar {
+    background: color-mix(in srgb, var(--toast-warning), gray 50%);
+}
+
+.toast-item.toast-error .toast-progress-bar {
+    background: color-mix(in srgb, var(--toast-error), gray 50%);
+}
+
+/* 倒數計時動畫 (Timeout countdown) */
+.toast-progress-bar-countdown {
+    animation: toastProgressCountdown linear forwards;
+}
+
+.toast-item:hover .toast-progress-bar-countdown {
+    animation-play-state: paused;
+}
+
+@keyframes toastProgressCountdown {
+    from {
+        transform: scaleX(1);
+    }
+
+    to {
+        transform: scaleX(0);
+    }
 }
 
 /* Service Worker 更新進度條懸浮面板 */
@@ -295,7 +505,7 @@
     max-width: 400px;
     background: #262626;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-left: 4px solid var(--accent-color);
+    border-left: 4px solid var(--popup-accent);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 187, 255, 0.15);
     padding: 14px 16px;
@@ -347,7 +557,7 @@
 .sw-update-percent {
     font-size: 12px;
     font-weight: bold;
-    color: var(--accent-color);
+    color: var(--popup-accent);
     font-family: 'ShareTechMono', monospace;
 }
 

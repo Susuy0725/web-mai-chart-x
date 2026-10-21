@@ -129,7 +129,12 @@
     "swUpdateDetail": "Cache updated. Please reload to apply latest version.",
     "swReloadNow": "Reload Now",
     "swDismiss": "Dismiss",
-    "swHide": "Hide"
+    "swHide": "Hide",
+    "swUpdateAvailableTitle": "New Version Available",
+    "swUpdateAvailableDesc": "A new version of Web mai Chart X is available. Update now?",
+    "swDelay": "Later",
+    "swUpdate": "Update",
+    "swPreparing": "Preparing to download assets..."
   },
   "quickPanel": {
     "middle": "Cancel",
@@ -148,6 +153,7 @@
       "basic": "Basic",
       "display": "Display",
       "sfx": "Audio",
+      "operation": "Operation",
       "other": "Other",
       "maintenance": "Maint."
     },

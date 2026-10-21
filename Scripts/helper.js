@@ -75,7 +75,7 @@ const secondaryImageKeys = [
     'touch_mine', 'touch_point_mine', 'touch_border_2_mine', 'touch_border_3_mine',
     'star_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
     'slide_mine',
-    'ColorBall',
+    'ColorBall', 'HexEffect',
     'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine'
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
@@ -664,129 +664,382 @@ export function popupWindow({
 
     return ctx;
 }
+function syncToastContainerPosition(container) {
+    if (!container) return;
+    const hasPageModal = Boolean(document.querySelector('.popup-backdrop-page, .popup-page'));
+    const hasAnyModal = hasPageModal || Boolean(document.querySelector('.popup-backdrop, .wmc-welcome-overlay.active, .popup-window, dialog[open]'));
+    container.classList.toggle('has-popup', hasAnyModal);
+    container.classList.toggle('has-popup-page', hasPageModal);
+}
+
 export function simpleToast(options = {}) {
-    const opts = typeof options === 'string' ? { content: options } : (options || {});
+    const opts = typeof options === 'string' ? { title: options } : (options || {});
     const {
+        id = null,
+        title = "",
         content = "",
-        timeout = 2000,
-        type = "info"
+        detail = "",
+        timeout = 2500,
+        type = "info",
+        showProgress = true,
+        progress = null,
+        closable = null,
+        buttons = null
     } = opts;
 
-    const MAX_TOASTS = 3;
+    const MAX_TOASTS = 4;
 
     let container = document.getElementById('hint-container');
-
     if (!container) {
         container = document.createElement('div');
         container.id = 'hint-container';
         document.body.appendChild(container);
     }
+    syncToastContainerPosition(container);
 
-    // =========================
-    // 限制最大 toast 數量
-    // =========================
+    // ==========================================
+    // 檢查現有同 ID 的 Toast，原地更新而非重複建立
+    // ==========================================
+    if (id) {
+        const existing = [...container.children].find(el => el._toastId === id && !el._isRemoving);
+        if (existing && existing._toastController) {
+            existing._toastController.update({
+                title,
+                content,
+                detail,
+                type,
+                showProgress,
+                progress,
+                closable,
+                buttons,
+                timeout
+            });
+            return existing._toastController;
+        }
+    }
 
-    const activeToasts =
-        [...container.children]
-            .filter(v => !v._isRemoving);
-
+    // ==========================================
+    // 限制最大 toast 數量，平滑關閉最舊的 toast
+    // ==========================================
+    const activeToasts = [...container.children].filter(v => !v._isRemoving);
     if (activeToasts.length >= MAX_TOASTS) {
         const oldest = activeToasts[0];
         oldest?._triggerRemove?.();
     }
 
-    // =========================
-    // 建立 toast
-    // =========================
-
+    // ==========================================
+    // 建立 toast 元素與子結構
+    // ==========================================
     const popup = document.createElement('div');
     popup.className = `toast-item toast-${type}`;
+    if (id) {
+        popup._toastId = id;
+        popup.dataset.toastId = id;
+    }
 
-    // 安全版
-    popup.textContent = content;
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'toast-content-wrapper';
+
+    // Header (Title & Close Button)
+    const headerRow = document.createElement('div');
+    headerRow.className = 'toast-header-row';
+
+    const titleEl = document.createElement('span');
+    titleEl.className = 'toast-title';
+    titleEl.textContent = title;
+    headerRow.appendChild(titleEl);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'toast-close-btn';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.textContent = '✕';
+    headerRow.appendChild(closeBtn);
+
+    contentWrapper.appendChild(headerRow);
+
+    // Body Text
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'toast-body-text';
+    bodyEl.textContent = content;
+    contentWrapper.appendChild(bodyEl);
+
+    // Detail Text
+    const detailEl = document.createElement('div');
+    detailEl.className = 'toast-detail-text';
+    detailEl.textContent = detail;
+    if (!detail) detailEl.style.display = 'none';
+    contentWrapper.appendChild(detailEl);
+
+    // Actions Row
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'toast-actions-row';
+    actionsRow.style.display = 'none';
+    contentWrapper.appendChild(actionsRow);
+
+    popup.appendChild(contentWrapper);
+
+    // Progress Track & Bar
+    const progressTrack = document.createElement('div');
+    progressTrack.className = 'toast-progress-track';
+    const progressBar = document.createElement('div');
+    progressBar.className = 'toast-progress-bar';
+    progressTrack.appendChild(progressBar);
+    popup.appendChild(progressTrack);
 
     container.appendChild(popup);
 
-    // =========================
-    // 出現動畫
-    // =========================
-
-    popup.animate(
-        [
-            {
-                transform: 'translateX(-40px)',
-                opacity: 0
-            },
-            {
-                transform: 'translateX(0)',
-                opacity: 1
+    // 觸發展開動畫 (Accordion)
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (!popup._isRemoving) {
+                popup.classList.add('toast-show');
             }
-        ],
-        {
-            duration: 300,
-            easing:
-                'cubic-bezier(0.58,0.18,0.34,1.41)'
-        }
-    );
+        });
+    });
 
-    // =========================
-    // 移除邏輯
-    // =========================
+    // ==========================================
+    // 狀態與計時器管理
+    // ==========================================
+    let timer = null;
+    let remainingTime = typeof timeout === 'number' ? timeout : 0;
+    let startTime = Date.now();
+    let isCountdownActive = false;
 
     const removePopup = () => {
-
         if (popup._isRemoving) return;
-
         popup._isRemoving = true;
 
-        clearTimeout(timer);
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
 
-        popup.style.maxHeight = '0px';
-
-        popup.style.marginTop = '0px';
-        popup.style.marginBottom = '0px';
-
-        popup.style.paddingTop = '0px';
-        popup.style.paddingBottom = '0px';
-
-        popup.style.opacity = '0';
-
-        popup.style.transform =
-            'translateX(-40px)';
-
-        popup.style.pointerEvents = 'none';
-
-        // transitionend 有時不穩
-        // 直接 timeout 最穩
+        popup.classList.remove('toast-show');
+        popup.classList.add('toast-removing');
 
         setTimeout(() => {
-
             popup.remove();
-
-            if (
-                container &&
-                container.children.length === 0
-            ) {
+            if (container && container.children.length === 0) {
                 container.remove();
             }
-
-        }, 450);
+        }, 320);
     };
 
     popup._triggerRemove = removePopup;
 
-    // =========================
-    // 自動關閉
-    // =========================
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removePopup();
+    });
 
-    const timer =
-        setTimeout(removePopup, timeout);
+    // 點擊關閉：除點擊操作按鈕外，點擊 Toast 任意區域皆可直接手動關閉
+    popup.addEventListener('click', (e) => {
+        if (e.target.closest('.toast-btn')) return;
+        removePopup();
+    });
 
-    // =========================
-    // 點擊關閉
-    // =========================
+    function setupCountdown(ms) {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        remainingTime = ms;
+        if (ms > 0) {
+            startTime = Date.now();
+            isCountdownActive = true;
+            timer = setTimeout(removePopup, ms);
+            if (showProgress !== false) {
+                progressTrack.style.display = 'block';
+                progressBar.classList.add('toast-progress-bar-countdown');
+                progressBar.style.animationDuration = `${ms}ms`;
+                progressBar.style.transform = '';
+            } else {
+                progressTrack.style.display = 'none';
+            }
+        } else {
+            isCountdownActive = false;
+            if (progress == null) {
+                progressTrack.style.display = 'none';
+            }
+        }
+    }
 
-    popup.onclick = removePopup;
+    // 滑鼠 Hover 暫停倒數與動畫
+    popup.addEventListener('mouseenter', () => {
+        if (isCountdownActive) {
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            const elapsed = Date.now() - startTime;
+            remainingTime = Math.max(0, remainingTime - elapsed);
+        }
+    });
+
+    popup.addEventListener('mouseleave', () => {
+        if (isCountdownActive && !popup._isRemoving) {
+            if (remainingTime > 0) {
+                startTime = Date.now();
+                timer = setTimeout(removePopup, remainingTime);
+            } else {
+                // 若停留在 Toast 期間已達倒數上限，滑鼠移開時立即關閉
+                removePopup();
+            }
+        }
+    });
+
+    // 備用保險：進度條動畫播畢後，若滑鼠不在上方則立即關閉
+    progressBar.addEventListener('animationend', () => {
+        if (isCountdownActive && !popup._isRemoving) {
+            if (!popup.matches(':hover')) {
+                removePopup();
+            } else {
+                remainingTime = 0;
+            }
+        }
+    });
+
+    function renderButtons(btnList, controller) {
+        actionsRow.innerHTML = '';
+        if (Array.isArray(btnList) && btnList.length > 0) {
+            actionsRow.style.display = 'flex';
+            for (const btnConf of btnList) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                const isPrimary = btnConf.primary !== false && (btnConf.primary === true || btnConf.type === 'primary');
+                btn.className = `toast-btn ${isPrimary ? 'toast-btn-primary' : 'toast-btn-secondary'}`;
+                btn.textContent = btnConf.text || '';
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (typeof btnConf.onClick === 'function') {
+                        const result = btnConf.onClick(controller);
+                        if (result !== false) {
+                            removePopup();
+                        }
+                    } else {
+                        removePopup();
+                    }
+                });
+                actionsRow.appendChild(btn);
+            }
+        } else {
+            actionsRow.style.display = 'none';
+        }
+    }
+
+    function applyState({
+        title: newTitle,
+        content: newContent,
+        detail: newDetail,
+        type: newType,
+        showProgress: newShowProgress,
+        progress: newProgress,
+        closable: newClosable,
+        buttons: newButtons,
+        timeout: newTimeout
+    }) {
+        if (newType) {
+            popup.className = `toast-item toast-${newType} toast-show`;
+        }
+
+        const shouldShowClose = newClosable !== false && (newClosable === true || Boolean(newTitle) || (newButtons && newButtons.length > 0) || newTimeout === 0);
+        closeBtn.style.display = shouldShowClose ? 'flex' : 'none';
+
+        if (newTitle !== undefined) {
+            titleEl.textContent = newTitle;
+            headerRow.style.display = (newTitle || shouldShowClose) ? 'flex' : 'none';
+        }
+
+        if (newContent !== undefined) {
+            bodyEl.textContent = newContent;
+        }
+
+        if (newDetail !== undefined) {
+            detailEl.textContent = newDetail;
+            detailEl.style.display = newDetail ? 'block' : 'none';
+        }
+
+        if (newButtons !== undefined) {
+            renderButtons(newButtons, controller);
+        }
+
+        if (newProgress != null) {
+            // 手動進度模式
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            isCountdownActive = false;
+            progressTrack.style.display = 'block';
+            progressBar.classList.remove('toast-progress-bar-countdown');
+            const ratio = Math.max(0, Math.min(100, Number(newProgress))) / 100;
+            progressBar.style.transform = `scaleX(${ratio})`;
+        } else if (newTimeout !== undefined) {
+            setupCountdown(newTimeout);
+        }
+    }
+
+    const controller = {
+        id,
+        element: popup,
+        close: removePopup,
+        update: (newOpts) => {
+            applyState(newOpts);
+            syncToastContainerPosition(container);
+            return controller;
+        },
+        setProgress: (pct, detailText) => {
+            progressTrack.style.display = 'block';
+            progressBar.classList.remove('toast-progress-bar-countdown');
+            const ratio = Math.max(0, Math.min(100, Number(pct))) / 100;
+            progressBar.style.transform = `scaleX(${ratio})`;
+            if (detailText !== undefined) {
+                detailEl.textContent = detailText;
+                detailEl.style.display = detailText ? 'block' : 'none';
+            }
+            return controller;
+        },
+        setContent: (text) => {
+            bodyEl.textContent = text;
+            return controller;
+        },
+        setTitle: (text) => {
+            titleEl.textContent = text;
+            headerRow.style.display = (text || closeBtn.style.display !== 'none') ? 'flex' : 'none';
+            return controller;
+        },
+        setDetail: (text) => {
+            detailEl.textContent = text;
+            detailEl.style.display = text ? 'block' : 'none';
+            return controller;
+        },
+        setType: (newType) => {
+            popup.className = `toast-item toast-${newType} toast-show`;
+            return controller;
+        },
+        setButtons: (btnList) => {
+            renderButtons(btnList, controller);
+            return controller;
+        }
+    };
+
+    popup._toastController = controller;
+
+    // 初始渲染狀態
+    applyState({
+        title,
+        content,
+        detail,
+        type,
+        showProgress,
+        progress,
+        closable,
+        buttons,
+        timeout: (progress != null) ? 0 : timeout
+    });
+
+    return controller;
 }
 
 /**

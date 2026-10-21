@@ -76,6 +76,7 @@ export const defaultSettings = {
     globalTimeline: true, // 全局時間軸
     drawHitEffect: true,
     drawHanabiEffect: true,
+    richHitEffectBeta: false,
     noBorder: false
 };
 
@@ -271,22 +272,13 @@ export const settingsConfig = [
         ]
     },
     {
-        label: 'settings.tabs.other',
+        label: 'settings.tabs.operation',
         items: [
             {
                 id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
             },
             {
                 id: 'disableSyntaxCheck', type: 'checkbox', label: 'settings.items.disableSyntaxCheck', def: defaultSettings.disableSyntaxCheck || false
-            },
-            {
-                id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount
-            },
-            {
-                id: 'inputDebounceTime', type: 'number', label: 'settings.items.inputDebounceTime', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
-            },
-            {
-                id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
             },
             {
                 id: 'autoPauseOnScroll', type: 'checkbox', label: 'settings.items.autoPauseOnScroll', def: defaultSettings.autoPauseOnScroll
@@ -296,6 +288,20 @@ export const settingsConfig = [
             },
             {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
+            },
+        ]
+    },
+    {
+        label: 'settings.tabs.other',
+        items: [
+            {
+                id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
+            },
+            {
+                id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount
+            },
+            {
+                id: 'inputDebounceTime', type: 'number', label: 'settings.items.inputDebounceTime', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
             },
             {
                 id: 'majdataWsUrl',

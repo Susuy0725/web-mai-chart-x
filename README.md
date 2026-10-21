@@ -33,6 +33,13 @@ https://discord.gg/vX7XcG7bMy
 本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
 - 音符圖案、音訊素材資源與判定機制來自 [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha)、[LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView)、[TeamMajdata/MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
 
+### 📚 開發與架構文檔
+
+- [Agent 開發與架構指引 (AGENTS.md)](./AGENTS.md)
+- [詳細架構與生命週期 (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
+- [模組與 API 索引手冊 (docs/MODULES.md)](./docs/MODULES.md)
+- [渲染與音訊引擎詳解 (docs/RENDERER_AND_AUDIO.md)](./docs/RENDERER_AND_AUDIO.md)
+
 ### 📖 授權條款
 
 本專案依據 **GNU General Public License v3.0 (GPL-3.0)** 條款開源。詳細內容請參閱專案根目錄下的 `LICENSE` 檔案。
@@ -66,6 +73,12 @@ https://discord.gg/vX7XcG7bMy
 
 Special thanks to the open-source community for providing the assets:
 - Skin, media resources and judgement logic are derived from [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha), [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView), [TeamMajdata/MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).
+
+### 📚 Documentation
+- [Agent Guide & Navigation (AGENTS.md)](./AGENTS.md)
+- [System Architecture & Lifecycle (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
+- [Module & API Directory (docs/MODULES.md)](./docs/MODULES.md)
+- [Renderer & Audio Engine Details (docs/RENDERER_AND_AUDIO.md)](./docs/RENDERER_AND_AUDIO.md)
 
 ### 📖 License
 

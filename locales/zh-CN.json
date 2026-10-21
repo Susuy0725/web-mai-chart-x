@@ -129,7 +129,12 @@
     "swUpdateDetail": "缓存已更新，请刷新以应用最新版本",
     "swReloadNow": "立即刷新",
     "swDismiss": "稍后",
-    "swHide": "隐藏"
+    "swHide": "隐藏",
+    "swUpdateAvailableTitle": "发现新版本",
+    "swUpdateAvailableDesc": "Web mai Chart X 有新版本可用，是否立即更新？",
+    "swDelay": "延迟",
+    "swUpdate": "更新",
+    "swPreparing": "准备下载新版本资源..."
   },
   "quickPanel": {
     "middle": "取消",
@@ -148,6 +153,7 @@
       "basic": "基本",
       "display": "显示",
       "sfx": "音效",
+      "operation": "操作",
       "other": "其他",
       "maintenance": "维护"
     },

@@ -129,7 +129,12 @@
     "swUpdateDetail": "캐시가 업데이트되었습니다. 새 버전을 적용하려면 새로고침해 주세요",
     "swReloadNow": "지금 새로고침",
     "swDismiss": "나중에",
-    "swHide": "숨기기"
+    "swHide": "숨기기",
+    "swUpdateAvailableTitle": "새 버전 이용 가능",
+    "swUpdateAvailableDesc": "Web mai Chart X의 새 버전이 있습니다. 지금 업데이트하시겠습니까?",
+    "swDelay": "나중에",
+    "swUpdate": "업데이트",
+    "swPreparing": "리소스 다운로드 준비 중..."
   },
   "quickPanel": {
     "middle": "취소",
@@ -148,6 +153,7 @@
       "basic": "기본",
       "display": "화면",
       "sfx": "효과음",
+      "operation": "조작",
       "other": "기타",
       "maintenance": "관리"
     },

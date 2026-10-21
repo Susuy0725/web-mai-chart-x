@@ -509,7 +509,7 @@ export class SimaiRenderer {
     /**
      * 佇列單次打擊光圈特效 (Hit Effect) - 具備同位置去重 (Deduplication)
      */
-    queueHitEffect(pos, noteT, judge = null, x = null, y = null) {
+    queueHitEffect(pos, noteT, judge = null, x = null, y = null, rot = null) {
         if (!this.settings.drawHitEffect) return;
         if (!Number.isFinite(noteT)) return;
         if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
@@ -518,14 +518,26 @@ export class SimaiRenderer {
 
         let px = x;
         let py = y;
-        if (px === null || py === null) {
-            if (pos && noteRefPos[pos - 1]) {
-                const posInfo = noteRefPos[pos - 1];
+        let r = rot;
+
+        if (pos && noteRefPos[pos - 1]) {
+            const posInfo = noteRefPos[pos - 1];
+            if (px === null || py === null) {
                 px = posInfo.x;
                 py = posInfo.y;
-            } else {
-                px = 0;
-                py = 0;
+            }
+            if (r === null || r === undefined) {
+                r = posInfo.rot;
+            }
+        } else {
+            if (px === null) px = 0;
+            if (py === null) py = 0;
+            if (r === null || r === undefined) {
+                if (px !== 0 || py !== 0) {
+                    r = Math.atan2(py, px) + Math.PI / 2;
+                } else {
+                    r = 0;
+                }
             }
         }
 
@@ -538,6 +550,7 @@ export class SimaiRenderer {
                 if (noteT > existing.noteT) {
                     existing.x = px;
                     existing.y = py;
+                    existing.rot = r;
                     existing.noteT = noteT;
                     existing.judge = judge || existing.judge;
                 }
@@ -554,6 +567,7 @@ export class SimaiRenderer {
                         if (noteT > eff.noteT) {
                             eff.x = px;
                             eff.y = py;
+                            eff.rot = r;
                             eff.noteT = noteT;
                             eff.judge = judge || eff.judge;
                         }
@@ -565,12 +579,13 @@ export class SimaiRenderer {
 
         let eff = this._hitEffectQueue[this._hitEffectCount];
         if (!eff) {
-            eff = { type: 'hit', x: 0, y: 0, noteT: 0, judge: null, pos: 0 };
+            eff = { type: 'hit', x: 0, y: 0, rot: 0, noteT: 0, judge: null, pos: 0 };
             this._hitEffectQueue[this._hitEffectCount] = eff;
         }
         eff.type = 'hit';
         eff.x = px;
         eff.y = py;
+        eff.rot = r;
         eff.noteT = noteT;
         eff.judge = judge;
         eff.pos = pos || 0;
@@ -584,21 +599,33 @@ export class SimaiRenderer {
     /**
      * 佇列持續按壓波紋特效 (Hold Effect) - 具備同位置去重 (Deduplication)
      */
-    queueHoldEffect(pos, noteT, judge = null, x = null, y = null) {
+    queueHoldEffect(pos, noteT, judge = null, x = null, y = null, rot = null) {
         if (!this.settings.drawHitEffect) return;
         if (!Number.isFinite(noteT)) return;
         if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
 
         let px = x;
         let py = y;
-        if (px === null || py === null) {
-            if (pos && noteRefPos[pos - 1]) {
-                const posInfo = noteRefPos[pos - 1];
+        let r = rot;
+
+        if (pos && noteRefPos[pos - 1]) {
+            const posInfo = noteRefPos[pos - 1];
+            if (px === null || py === null) {
                 px = posInfo.x;
                 py = posInfo.y;
-            } else {
-                px = 0;
-                py = 0;
+            }
+            if (r === null || r === undefined) {
+                r = posInfo.rot;
+            }
+        } else {
+            if (px === null) px = 0;
+            if (py === null) py = 0;
+            if (r === null || r === undefined) {
+                if (px !== 0 || py !== 0) {
+                    r = Math.atan2(py, px) + Math.PI / 2;
+                } else {
+                    r = 0;
+                }
             }
         }
 
@@ -609,6 +636,7 @@ export class SimaiRenderer {
                 const existing = this._hitEffectQueue[existingIdx];
                 existing.x = px;
                 existing.y = py;
+                existing.rot = r;
                 existing.noteT = noteT;
                 existing.judge = judge || existing.judge;
                 return;
@@ -623,6 +651,7 @@ export class SimaiRenderer {
                     if (dx * dx + dy * dy < thresholdSq) {
                         eff.x = px;
                         eff.y = py;
+                        eff.rot = r;
                         eff.noteT = noteT;
                         eff.judge = judge || eff.judge;
                         return;
@@ -633,12 +662,13 @@ export class SimaiRenderer {
 
         let eff = this._hitEffectQueue[this._hitEffectCount];
         if (!eff) {
-            eff = { type: 'hold', x: 0, y: 0, noteT: 0, judge: null, pos: 0 };
+            eff = { type: 'hold', x: 0, y: 0, rot: 0, noteT: 0, judge: null, pos: 0 };
             this._hitEffectQueue[this._hitEffectCount] = eff;
         }
         eff.type = 'hold';
         eff.x = px;
         eff.y = py;
+        eff.rot = r;
         eff.noteT = noteT;
         eff.judge = judge;
         eff.pos = pos || 0;
@@ -679,7 +709,11 @@ export class SimaiRenderer {
         for (let i = 0; i < count; i++) {
             const eff = queue[i];
             if (eff.type === 'hit') {
-                this.simpleHitEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+                if (this.settings.richHitEffectBeta) {
+                    this.standardHitEffect(eff.noteT, eff.judge, eff.x, eff.y, eff.rot, true);
+                } else {
+                    this.simpleHitEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+                }
             } else if (eff.type === 'hold') {
                 this.simpleHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
             }
@@ -1161,6 +1195,26 @@ export class SimaiRenderer {
         if (!isBatch) {
             this.ctx.restore();
         }
+    }
+
+    standardHitEffect(noteT, judge = null, x = 0, y = 0, rot = 0, isBatch = false) {
+        if (!Number.isFinite(noteT)) return;
+        const decayTime = this.settings.effectDecayTime || 0.4;
+        const t = noteT / decayTime;
+        if (t < -1) return;
+        const decayAlpha = Math.min(1, Math.max(0, 1 - Math.max(0, -t)));
+        if (decayAlpha <= 0.01) return;
+
+        function centerHex(t) {
+            return 1.83713 * Math.pow(t, 0.427301);
+        }
+
+        this.ctx.save();
+        this.ctx.globalCompositeOperation = 'source-over';
+        this.ctx.translate(x, y);
+        this.ctx.rotate(rot + Math.PI / 2);
+        this.drawImgAtcenter(this.images.HexEffect, this.settings.noteBaseSize * centerHex(1 - decayAlpha), 0, 0);
+        this.ctx.restore();
     }
 
     simpleHanabi(noteT, isCenter) {

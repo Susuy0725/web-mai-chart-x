@@ -7,7 +7,14 @@
  */
 
 export const defaultSkinMap = {
-    "no_image": "no_image.png",
+    "no_image": "Effects/no_image.png",
+    "outline": "Effects/outline.png",
+    "ColorBall": "Effects/ColorBall.png",
+    "HexEffect": "Effects/HexEffect.png",
+    "StarEffect": "Effects/StarEffect.png",
+    "HoldEffect": "Effects/HoldEffect.png",
+    "TouchEffparts_01": "Effects/TouchEffparts_01.png",
+    "TouchEffparts_02": "Effects/TouchEffparts_02.png",
     "judge_text_break": "JudgeTextSkins/judge_text_cPerfect_break.png",
     "hold": "HoldSkins/hold.png",
     "hold_break": "HoldSkins/hold_break.png",
@@ -269,6 +276,7 @@ export const skinAliases = {
 
 export function inferSkinType(key) {
     const lk = key.toLowerCase();
+    if (lk.includes('effect') || lk === 'outline' || lk === 'no_image' || lk === 'colorball' || lk.startsWith('toucheffparts')) return 'Effects';
     if (lk.startsWith('tap')) return 'TapSkins';
     if (lk.startsWith('touchhold')) return 'TouchHoldSkins';
     if (lk.startsWith('touch')) return 'TouchSkins';
@@ -288,6 +296,7 @@ export const sharedAssetKeys = new Set([
     'ColorBall',
     'HexEffect',
     'StarEffect',
+    'HoldEffect',
     'outline',
     'TouchEffparts_01',
     'TouchEffparts_02'
@@ -307,13 +316,19 @@ export const sharedAssetKeys = new Set([
 export function getSkinCandidateUrls(key, baseURL, skinName = 'Default') {
     const skin = (skinName && typeof skinName === 'string') ? skinName : 'Default';
 
-    // 若該素材屬於純共用素材 (Shared)，優先從 Shared 載入以避免不必要的 404 紀錄
+    // 若該素材屬於純共用素材 (Shared)，優先從 Shared / Effects 載入以避免不必要的 404 紀錄
     if (sharedAssetKeys.has(key)) {
         const list = [
+            `${baseURL}Shared/Effects/${key}.png`,
             `${baseURL}Shared/${key}.png`,
+            `${baseURL}${skin}/Effects/${key}.png`,
             `${baseURL}${skin}/${key}.png`,
         ];
-        if (skin !== 'Default') list.push(`${baseURL}Default/${key}.png`);
+        if (skin !== 'Default') {
+            list.push(`${baseURL}Default/Effects/${key}.png`);
+            list.push(`${baseURL}Default/${key}.png`);
+        }
+        list.push(`${baseURL}Effects/${key}.png`);
         list.push(`${baseURL}${key}.png`);
         return Array.from(new Set(list));
     }

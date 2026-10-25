@@ -305,16 +305,27 @@ export class SimaiRenderer {
     /**
      * 優化染色圖片取得方式，採用整數化透明度快取 Key
      */
-    getMemoizedTintedImage(imgKey, opacity, config) {
-        if (!this.images || !this.images[imgKey]) return null;
-        const snappedOpacity = Math.round(opacity * 20) / 20;
-        const cacheKey = `${imgKey}_${snappedOpacity}_${config.colorCode}`;
+    getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
+        let imgKey = null;
+        let img = null;
+        if (typeof imgKeyOrImg === 'string') {
+            imgKey = imgKeyOrImg;
+            img = this.images?.[imgKey];
+        } else if (imgKeyOrImg && typeof imgKeyOrImg === 'object') {
+            img = imgKeyOrImg;
+            imgKey = img._tintKey || img.src || 'custom_img';
+        }
+        if (!img) return null;
+
+        const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
+        const snappedOpacity = Math.round((opacity || 0) * 20) / 20;
+        const cacheKey = `${imgKey}_${snappedOpacity}_${conf.colorCode}`;
 
         if (this._tintCache.has(cacheKey)) {
             return this._tintCache.get(cacheKey);
         }
 
-        const tinted = getTintedImage(this.images[imgKey], opacity, config);
+        const tinted = getTintedImage(img, opacity, conf);
         if (this._tintCache.size >= 250) {
             const iter = this._tintCache.keys();
             for (let i = 0; i < 50; i++) {
@@ -1200,21 +1211,45 @@ export class SimaiRenderer {
     standardHitEffect(noteT, judge = null, x = 0, y = 0, rot = 0, isBatch = false) {
         if (!Number.isFinite(noteT)) return;
         const decayTime = this.settings.effectDecayTime || 0.4;
-        const t = noteT / decayTime;
-        if (t < -1) return;
-        const decayAlpha = Math.min(1, Math.max(0, 1 - Math.max(0, -t)));
-        if (decayAlpha <= 0.01) return;
+        const p = -noteT / decayTime;
+        if (p <= 0 || p >= 1) return;
 
-        function centerHex(t) {
-            return 1.83713 * Math.pow(t, 0.427301);
-        }
+        const alpha = p < 0.125 ? p / 0.125 : (p > 0.67 ? (1 - p) / 0.33 : 1);
+        if (alpha <= 0) return;
 
-        this.ctx.save();
-        this.ctx.globalCompositeOperation = 'source-over';
-        this.ctx.translate(x, y);
-        this.ctx.rotate(rot + Math.PI / 2);
-        this.drawImgAtcenter(this.images.HexEffect, this.settings.noteBaseSize * centerHex(1 - decayAlpha), 0, 0);
-        this.ctx.restore();
+        const isBreak = typeof judge === 'boolean'
+            ? judge
+            : !!(judge && (judge.isBreak || judge.grade?.includes?.('BREAK') || judge.breakScoreValue !== undefined));
+        const img = (isBreak ? this.images.StarEffect : this.images.HexEffect) || this.images.HexEffect || this.images.StarEffect;
+        if (!img) return;
+
+        const titimg = this.getMemoizedTintedImage(img, 0.5, "#fffb00");
+
+        const base = this.settings.noteBaseSize;
+        const centerSize = base * 2.32598 * Math.pow(p, 0.531406);
+        const s1 = base * 1.30475 * Math.pow(p, 0.537346);
+        const s2 = s1 * 1.4;
+
+        const rot5 = 5 * p;
+        const dis10 = ((((-7.08291 * p + 17.28141) * p - 16.16681) * p + 5.73033) * p - 0.0163808) * 10;
+        const ax = Math.cos(rot5) * dis10;
+        const ay = Math.sin(rot5) * dis10;
+
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = alpha;
+        ctx.translate(x, y);
+        ctx.rotate(rot + Math.PI * (0.5 + isBreak * 1));
+
+        // 在旋轉後的局部坐標系中直接繪製，完全無需內部重複 save / restore / translate
+        this.drawImgAtcenter(titimg, centerSize, 0, 0);
+        this.drawImgAtcenter(titimg, s1, ax, ay);
+        this.drawImgAtcenter(titimg, s1, -ax, -ay);
+        this.drawImgAtcenter(titimg, s2, ax, -ay);
+        this.drawImgAtcenter(titimg, s2, -ax, ay);
+
+        ctx.restore();
     }
 
     simpleHanabi(noteT, isCenter) {
@@ -2334,7 +2369,7 @@ export class SimaiRenderer {
                 // drawHold
                 if (-noteT > s.holdDuration) {
                     if (drawHitEffect) {
-                        this.queueHitEffect(s.pos, s.holdDuration + noteT);
+                        this.queueHitEffect(s.pos, s.holdDuration + noteT, s);
                     }
                     if (this.settings.showJudge !== false) {
                         this.queueJudgeEffect(s, null, s.time + s.holdDuration);
@@ -2351,7 +2386,7 @@ export class SimaiRenderer {
                 const size = baseSize * currentScale;
                 const sizeOffset = (t < md) ? 0 :
                     Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize); // 20.35
-                const isOn = noteT <= -0.1 && !s.isMine;
+                const isOn = noteT <= -0.15 && !s.isMine; // 150ms
                 const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
                 const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
@@ -2395,9 +2430,6 @@ export class SimaiRenderer {
                 }
 
                 if (drawHitEffect) {
-                    if (noteT <= 0 && noteT >= -0.2) {
-                        this.queueHitEffect(s.pos, noteT, null, posInfo.x * displayT, posInfo.y * displayT);
-                    }
                     if (isOn) {
                         this.queueHoldEffect(s.pos, noteT, null, posInfo.x * displayT, posInfo.y * displayT);
                     }
@@ -2409,7 +2441,7 @@ export class SimaiRenderer {
                 // 普通 Tap / Star
                 if (noteT <= 0) {
                     if (drawHitEffect) {
-                        this.queueHitEffect(s.pos, noteT, null, posInfo.x, posInfo.y);
+                        this.queueHitEffect(s.pos, noteT, s, posInfo.x, posInfo.y);
                     }
                     if (this.settings.showJudge !== false) {
                         this.queueJudgeEffect(s, null, s.time);
@@ -2462,136 +2494,6 @@ export class SimaiRenderer {
             }
         }
     }
-
-    /*drawTap(s, forceStar = false) {
-        const { time: noteTime, pos, isBreak, isDouble, isMultiple, isMine, hispeed } = s;
-        const isStar = forceStar || !!s.isStar;
-        const noteT = noteTime - this.globalTime;
-        const posInfo = noteRefPos[pos - 1];
-        const ctx = this.ctx;
-
-        if (noteT <= 0) {
-            if (this.settings.drawHitEffect) {
-                const baseTransform = ctx.getTransform();
-                ctx.translate(posInfo.x, posInfo.y);
-                this.simpleHitEffect(noteT);
-                ctx.setTransform(baseTransform);
-            }
-            return;
-        }
-
-        const { displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, hispeed, s.size);
-        const img = isStar
-            ? this.getStarImage(isMine, isBreak, isDouble, isMultiple)
-            : this.getTapImage(isMine, isBreak, isDouble);
-        const arcimg = this.getArcImage(isMine, isBreak, isDouble, isStar);
-        const size = this.settings.noteBaseSize * currentScale;
-
-        const baseTransform = ctx.getTransform();
-
-        // 1. 導引弧 (Arc)
-        ctx.rotate(posInfo.rot);
-        ctx.globalAlpha = currentScale;
-        this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-        ctx.globalAlpha = 1;
-
-        // 2. 音符本體 (Tap / Star)
-        ctx.setTransform(baseTransform);
-        ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-
-        let rot = posInfo.rot;
-        if (isStar && this.settings.rotateStars) {
-            let speed = 0;
-            if (s.slideDuration && s.slideDuration > 0) {
-                speed = clamp(1.5 / s.slideDuration, 0.5, 6);
-            }
-            rot += this.globalTime * 2 * Math.PI * speed;
-        }
-        ctx.rotate(rot);
-        this.drawImgAtcenter(img, size, 0, 0, scaleX, scaleY);
-
-        if (s.isEx) {
-            const exType = isStar ? "star" : "tap";
-            this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, exType, isStar ? this.settings.pinkStars : false);
-            const exKey = isStar
-                ? (isMultiple ? "star_ex_double" : "star_ex")
-                : "tap_ex";
-            const exImg = this.getMemoizedTintedImage(exKey, 0.6, this._tempColorConfig);
-            this.drawImgAtcenter(exImg, size, 0, 0, scaleX, scaleY);
-        }
-
-        ctx.setTransform(baseTransform);
-    }
-
-    drawHold(s) {
-        const { time: noteTime, pos, isBreak, isDouble, isMine, holdDuration, hispeed } = s;
-        const noteT = (noteTime - this.globalTime);
-        const speedMult = this._speedFactor * (hispeed || 1);
-        const t = 1 - this.timeFunction(noteT * speedMult);
-        const posInfo = noteRefPos[pos - 1];
-
-        if (-noteT > holdDuration) {
-            if (this.settings.drawHitEffect) {
-                this.ctx.save();
-                this.ctx.translate(posInfo.x, posInfo.y);
-                this.simpleHitEffect(holdDuration + noteT);
-                this.ctx.restore();
-            }
-            return;
-        }
-        const md = this.settings.middleDistance;
-
-        const isOn = (noteTime - this.globalTime) <= -0.1 && !isMine;
-        const img = this.getHoldImage(isMine, isBreak, isDouble, isOn);
-        const arcimg = this.getArcImage(isMine, isBreak, isDouble, false);
-        const endimg = this.getHoldEndImage(isMine, isBreak, isDouble);
-
-        const t1 = 1 - this.timeFunction((noteT + holdDuration) * speedMult);
-        const displayT = Math.min(1, Math.max(md, t));
-        const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
-        const size = this.settings.noteBaseSize * currentScale;
-        const sizeOffset = t < md ? 0 :
-            Math.min(t - t1, Math.min(1, t, (1 - t1 + md)) * 0.98 - md) * 2.5;
-
-        const baseTransform = this.ctx.getTransform();
-
-        this.ctx.rotate(posInfo.rot);
-        this.ctx.globalAlpha = currentScale;
-        this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-        this.ctx.globalAlpha = 1;
-
-        if (t1 > md) {
-            this.ctx.setTransform(baseTransform);
-            this.ctx.translate(posInfo.x * t1, posInfo.y * t1);
-            this.drawImgAtcenter(endimg, size * 0.65);
-        }
-
-        function drawHoldImage(ctx, img, size, sizeOffset) {
-            ctx.drawImage(img, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-            ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-            ctx.drawImage(img, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-        }
-
-        this.ctx.setTransform(baseTransform);
-        this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-        this.ctx.rotate(posInfo.rot);
-        drawHoldImage(this.ctx, img, size, sizeOffset);
-
-        if (s.isEx) {
-            this._tempColorConfig.colorCode = this.getEXColor(isBreak, isDouble, "tap");
-            const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
-            drawHoldImage(this.ctx, ex, size, sizeOffset);
-        }
-
-        this.ctx.setTransform(baseTransform);
-
-        if (this.settings.drawHitEffect) {
-            this.ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-            this.simpleHitEffect(noteT);
-            if (isOn) this.simpleHoldEffect(noteT);
-            this.ctx.setTransform(baseTransform);
-        }
-    }*/
 
     getTouchHanabi(s) {
         const { time: noteTime, pos, touchPos, holdDuration } = s;
@@ -2646,12 +2548,12 @@ export class SimaiRenderer {
         const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble);
 
         if (holdDuration) {
-            const isOn = (noteTime - this.globalTime) <= -0.1;
+            const isOn = (noteTime - this.globalTime) <= -0.15; // 150ms
             const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
 
             if (-noteT > holdDuration) {
                 if (this.settings.drawHitEffect) {
-                    this.queueHitEffect(null, holdDuration + noteT, null, posInfo.x, posInfo.y);
+                    this.queueHitEffect(null, holdDuration + noteT, s, posInfo.x, posInfo.y);
                 }
                 if (this.settings.showJudge !== false) {
                     this.queueJudgeEffect(s, null, noteTime + holdDuration);
@@ -2687,7 +2589,7 @@ export class SimaiRenderer {
 
             if (this.settings.drawHitEffect) {
                 if (noteT <= 0 && noteT >= -0.2) {
-                    this.queueHitEffect(null, noteT, null, posInfo.x, posInfo.y);
+                    this.queueHitEffect(null, noteT, s, posInfo.x, posInfo.y);
                 }
                 if (isOn) this.queueHoldEffect(null, noteT, null, posInfo.x, posInfo.y);
             }
@@ -2696,7 +2598,7 @@ export class SimaiRenderer {
 
         if (noteT <= 0) {
             if (this.settings.drawHitEffect) {
-                this.queueHitEffect(null, noteT, null, posInfo.x, posInfo.y);
+                this.queueHitEffect(null, noteT, s, posInfo.x, posInfo.y);
             }
             if (this.settings.showJudge !== false) {
                 this.queueJudgeEffect(s, null, noteTime);
@@ -3300,15 +3202,26 @@ export class SimaiVisualEditor {
         }
     }
 
-    getMemoizedTintedImage(imgKey, opacity, config) {
-        if (!this.images[imgKey]) return null;
-        const cacheKey = `${imgKey}_${opacity.toFixed(2)}_${config.colorCode}`;
+    getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
+        let imgKey = null;
+        let img = null;
+        if (typeof imgKeyOrImg === 'string') {
+            imgKey = imgKeyOrImg;
+            img = this.images?.[imgKey];
+        } else if (imgKeyOrImg && typeof imgKeyOrImg === 'object') {
+            img = imgKeyOrImg;
+            imgKey = img._tintKey || img.src || 'custom_img';
+        }
+        if (!img) return null;
+
+        const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
+        const cacheKey = `${imgKey}_${(opacity || 0).toFixed(2)}_${conf.colorCode}`;
 
         if (this._tintCache.has(cacheKey)) {
             return this._tintCache.get(cacheKey);
         }
 
-        const tinted = getTintedImage(this.images[imgKey], opacity, config);
+        const tinted = getTintedImage(img, opacity, conf);
         if (this._tintCache.size >= 250) {
             const iter = this._tintCache.keys();
             for (let i = 0; i < 50; i++) {

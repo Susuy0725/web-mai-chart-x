@@ -75,7 +75,7 @@ const secondaryImageKeys = [
     'touch_mine', 'touch_point_mine', 'touch_border_2_mine', 'touch_border_3_mine',
     'star_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
     'slide_mine',
-    'ColorBall', 'HexEffect',
+    'ColorBall', 'HexEffect', 'StarEffect', 'HoldEffect', 'TouchEffparts_01', 'TouchEffparts_02',
     'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine'
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];

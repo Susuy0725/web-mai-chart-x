@@ -225,7 +225,7 @@ export async function openMainoteFetcher({
             const songTitle = chart.songs?.title || t('popup.fetchMainote.unknownSong');
             const rawType = (chart.type || chart.chart_type || chart.songs?.type || chart.songs?.chart_type || '').toUpperCase();
             let chartType = '';
-            if (rawType.includes('DX') || chart.is_dx || chart.songs?.is_dx) {
+            if (rawType.includes('DX') || rawType.includes('DELUXE') || chart.is_dx || chart.songs?.is_dx) {
                 chartType = 'DX';
             } else if (rawType.includes('STD') || rawType.includes('STANDARD') || chart.is_std || chart.songs?.is_std) {
                 chartType = 'STD';
@@ -233,7 +233,8 @@ export async function openMainoteFetcher({
                 chartType = rawType;
             }
 
-            const groupKey = `${songTitle}___${chartType}`;
+            const songId = chart.songs?.id || chart.song_id;
+            const groupKey = songId || `${songTitle}___${chart.songs?.artist || ''}___${chartType}`;
             if (!songGroupsMap.has(groupKey)) {
                 songGroupsMap.set(groupKey, {
                     title: songTitle,
@@ -246,9 +247,6 @@ export async function openMainoteFetcher({
         });
 
         const songGroups = Array.from(songGroupsMap.values());
-
-        const resultContainer = document.createElement('div');
-        resultContainer.className = 'popup-search-results';
 
         let resultPopupCtx = null;
 
@@ -334,18 +332,29 @@ export async function openMainoteFetcher({
         };
 
         const openDifficultySelectPopup = (group) => {
-            const sortedCharts = [...group.charts].sort((a, b) => {
+            const chartMapByDiff = new Map();
+            group.charts.forEach(c => {
+                const dKey = (c.difficulty || '').toUpperCase();
+                if (!chartMapByDiff.has(dKey) || (!chartMapByDiff.get(dKey).chart_data && c.chart_data)) {
+                    chartMapByDiff.set(dKey, c);
+                }
+            });
+            const sortedCharts = Array.from(chartMapByDiff.values()).sort((a, b) => {
                 const orderA = diffOrder[(a.difficulty || '').toUpperCase()] ?? 99;
                 const orderB = diffOrder[(b.difficulty || '').toUpperCase()] ?? 99;
                 return orderA - orderB;
             });
 
             const diffListContainer = document.createElement('div');
-            diffListContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px 0;';
+            diffListContainer.className = 'popup-diff-list';
 
             const subTitle = document.createElement('div');
-            subTitle.style.cssText = 'font-size:12px;color:#aaa;margin-bottom:4px;';
-            subTitle.textContent = `${group.song.artist || ''}${group.song.version ? ' · ' + group.song.version : ''}`;
+            subTitle.style.cssText = 'font-size:12px;color:var(--popup-text-muted, #8e8e93);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            const metaArr = [];
+            if (group.song.artist) metaArr.push(group.song.artist);
+            if (group.song.version) metaArr.push(group.song.version);
+            subTitle.textContent = metaArr.join(' · ');
+            if (subTitle.textContent) subTitle.title = subTitle.textContent;
             diffListContainer.appendChild(subTitle);
 
             sortedCharts.forEach((chart) => {
@@ -353,29 +362,27 @@ export async function openMainoteFetcher({
                 const colors = diffColors[diffKey] || { bg: '#555', text: '#fff' };
 
                 const btn = document.createElement('button');
-                btn.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#26262a;border:1px solid #3d3d45;border-radius:6px;cursor:pointer;color:#fff;transition:all 0.15s;`;
+                btn.className = 'popup-diff-btn';
 
                 const left = document.createElement('div');
-                left.style.cssText = 'display:flex;align-items:center;gap:10px;';
+                left.style.cssText = 'display:flex;align-items:center;gap:10px;min-width:0;';
 
                 const badge = document.createElement('span');
                 badge.textContent = chart.difficulty;
-                badge.style.cssText = `padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;background:${colors.bg};color:${colors.text};`;
+                badge.style.cssText = `padding:3px 9px;border-radius:5px;font-size:12px;font-weight:700;background:${colors.bg};color:${colors.text};flex-shrink:0;`;
 
                 const des = document.createElement('span');
                 des.textContent = chart.notes_designer ? `${chart.notes_designer}` : '';
-                des.style.cssText = 'font-size:12px;color:#888;';
+                des.style.cssText = 'font-size:12px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                if (chart.notes_designer) des.title = chart.notes_designer;
 
                 left.append(badge, des);
 
                 const right = document.createElement('span');
                 right.textContent = chart.level ? `Lv.${chart.level}` : '';
-                right.style.cssText = 'font-size:14px;font-weight:700;color:#ffcc00;';
+                right.style.cssText = 'font-size:14px;font-weight:700;color:#ffcc00;flex-shrink:0;margin-left:8px;';
 
                 btn.append(left, right);
-
-                btn.onmouseenter = () => { btn.style.background = '#303038'; btn.style.borderColor = colors.bg; };
-                btn.onmouseleave = () => { btn.style.background = '#26262a'; btn.style.borderColor = '#3d3d45'; };
 
                 btn.onclick = () => {
                     diffPopupCtx.close();
@@ -392,40 +399,53 @@ export async function openMainoteFetcher({
             });
         };
 
-        songGroups.forEach((group) => {
+        const createSongCard = (group) => {
             const card = document.createElement('div');
             card.className = 'popup-song-card';
 
             const header = document.createElement('div');
             header.className = 'popup-card-header';
 
-            const titleEl = document.createElement('div');
-            titleEl.className = 'popup-card-title';
-            titleEl.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+            const titleRow = document.createElement('div');
+            titleRow.className = 'popup-card-title-row';
 
-            const titleText = document.createElement('span');
+            const titleText = document.createElement('div');
+            titleText.className = 'popup-card-title';
             titleText.textContent = group.title;
-            titleEl.appendChild(titleText);
+            titleRow.appendChild(titleText);
 
             if (group.chartType) {
                 const typeTag = document.createElement('span');
-                typeTag.textContent = group.chartType;
                 typeTag.className = 'popup-card-type-badge';
-                const isDx = group.chartType === 'DX';
-                typeTag.style.background = isDx ? '#ec4899' : '#06b6d4';
-                titleEl.appendChild(typeTag);
+                const isDx = group.chartType === 'DX' || group.chartType === 'DELUXE';
+                typeTag.textContent = isDx ? 'DX' : group.chartType;
+                typeTag.style.background = isDx ? '#00AAE7' : '#444';
+                titleRow.appendChild(typeTag);
             }
 
-            const metaEl = document.createElement('div');
-            metaEl.style.cssText = 'font-size:11px;color:var(--popup-text-muted);white-space:nowrap;';
             const metaParts = [];
             if (group.song.version) metaParts.push(group.song.version);
             if (group.song.artist) metaParts.push(group.song.artist);
-            metaEl.textContent = metaParts.join(' · ');
+            const metaStr = metaParts.join(' · ');
 
-            header.append(titleEl, metaEl);
+            if (metaStr) {
+                const metaEl = document.createElement('div');
+                metaEl.className = 'popup-card-meta';
+                metaEl.textContent = metaStr;
+                metaEl.title = metaStr;
+                header.append(titleRow, metaEl);
+            } else {
+                header.appendChild(titleRow);
+            }
 
-            const sortedCharts = [...group.charts].sort((a, b) => {
+            const chartMapByDiff = new Map();
+            group.charts.forEach(c => {
+                const dKey = (c.difficulty || '').toUpperCase();
+                if (!chartMapByDiff.has(dKey) || (!chartMapByDiff.get(dKey).chart_data && c.chart_data)) {
+                    chartMapByDiff.set(dKey, c);
+                }
+            });
+            const sortedCharts = Array.from(chartMapByDiff.values()).sort((a, b) => {
                 const orderA = diffOrder[(a.difficulty || '').toUpperCase()] ?? 99;
                 const orderB = diffOrder[(b.difficulty || '').toUpperCase()] ?? 99;
                 return orderA - orderB;
@@ -439,11 +459,11 @@ export async function openMainoteFetcher({
                 const colors = diffColors[diffKey] || { bg: '#555', text: '#fff' };
 
                 const badge = document.createElement('span');
-                badge.style.cssText = `display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;background:${colors.bg};color:${colors.text};cursor:pointer;user-select:none;transition:opacity 0.15s, transform 0.1s;`;
-                badge.innerHTML = `<span>${chart.difficulty}</span>${chart.level ? `<span style="font-weight:700;opacity:0.9;">${chart.level}</span>` : ''}`;
-
-                badge.onmouseenter = () => { badge.style.opacity = '0.85'; badge.style.transform = 'scale(1.05)'; };
-                badge.onmouseleave = () => { badge.style.opacity = '1'; badge.style.transform = 'scale(1)'; };
+                badge.className = 'popup-card-badge';
+                badge.style.background = colors.bg;
+                badge.style.color = colors.text;
+                badge.title = t('popup.fetchMainote.clickToLoad', { diff: chart.difficulty }) || `載入 ${chart.difficulty} 譜面`;
+                badge.innerHTML = `<span>${chart.difficulty}</span>${chart.level ? `<span style="font-weight:700;margin-left:3px;opacity:0.95;">${chart.level}</span>` : ''}`;
 
                 badge.onclick = (e) => {
                     e.stopPropagation();
@@ -464,18 +484,133 @@ export async function openMainoteFetcher({
                 }
             };
 
-            card.onmouseenter = () => { card.style.borderColor = '#0066cc'; card.style.background = '#303036'; };
-            card.onmouseleave = () => { card.style.borderColor = '#3d3d45'; card.style.background = '#26262a'; };
+            return card;
+        };
 
-            resultContainer.appendChild(card);
+        // --- 搜尋結果包裝容器與過濾系統 ---
+        const wrapper = document.createElement('div');
+        wrapper.className = 'popup-search-wrapper';
+
+        const filterRow = document.createElement('div');
+        filterRow.className = 'popup-search-filter-row';
+
+        const filterInputWrap = document.createElement('div');
+        filterInputWrap.className = 'popup-search-filter-input-wrap';
+
+        const filterIcon = document.createElement('span');
+        filterIcon.className = 'material-symbols-outlined popup-search-filter-icon';
+        filterIcon.textContent = 'search';
+
+        const filterInput = document.createElement('input');
+        filterInput.type = 'text';
+        filterInput.className = 'popup-search-filter-input';
+        filterInput.placeholder = t('popup.fetchMainote.filterPlaceholder') || '在結果中快速篩選歌名或藝術家...';
+
+        filterInputWrap.append(filterIcon, filterInput);
+
+        const countLabel = document.createElement('div');
+        countLabel.className = 'popup-search-count-label';
+
+        filterRow.append(filterInputWrap, countLabel);
+
+        const resultsList = document.createElement('div');
+        resultsList.className = 'popup-search-results';
+
+        wrapper.append(filterRow, resultsList);
+
+        // 分批渲染邏輯 (Batch / Infinite Scroll)
+        const BATCH_SIZE = 40;
+        let currentFiltered = songGroups;
+        let renderedCount = 0;
+        let loadMoreBtn = null;
+
+        const renderBatch = () => {
+            const nextBatch = currentFiltered.slice(renderedCount, renderedCount + BATCH_SIZE);
+            if (nextBatch.length === 0) {
+                if (renderedCount === 0) {
+                    resultsList.innerHTML = `<div style="text-align:center;padding:30px 10px;color:var(--popup-text-muted);font-size:13px;">${t('popup.fetchMainote.noResultsMatch') || '沒有符合篩選條件的歌曲'}</div>`;
+                }
+                if (loadMoreBtn && loadMoreBtn.parentNode) {
+                    loadMoreBtn.remove();
+                    loadMoreBtn = null;
+                }
+                updateCountUI();
+                return;
+            }
+
+            if (renderedCount === 0) {
+                resultsList.innerHTML = '';
+            }
+
+            if (loadMoreBtn && loadMoreBtn.parentNode) {
+                loadMoreBtn.remove();
+                loadMoreBtn = null;
+            }
+
+            const fragment = document.createDocumentFragment();
+            nextBatch.forEach(group => {
+                fragment.appendChild(createSongCard(group));
+            });
+            resultsList.appendChild(fragment);
+            renderedCount += nextBatch.length;
+
+            updateCountUI();
+
+            // 若還有後續項目，提供備用「載入更多」按鈕
+            if (renderedCount < currentFiltered.length) {
+                loadMoreBtn = document.createElement('div');
+                loadMoreBtn.className = 'popup-search-load-more';
+                loadMoreBtn.textContent = t('popup.fetchMainote.loadMore') || '載入更多...';
+                loadMoreBtn.onclick = () => renderBatch();
+                resultsList.appendChild(loadMoreBtn);
+            }
+        };
+
+        const updateCountUI = () => {
+            const shown = Math.min(renderedCount, currentFiltered.length);
+            const total = currentFiltered.length;
+            countLabel.textContent = t('popup.fetchMainote.showingCount', { shown, total }) || `顯示 ${shown} / ${total} 首歌曲`;
+        };
+
+        // 滾動觸發加載下一批
+        resultsList.addEventListener('scroll', () => {
+            if (renderedCount >= currentFiltered.length) return;
+            if (resultsList.scrollTop + resultsList.clientHeight >= resultsList.scrollHeight - 140) {
+                renderBatch();
+            }
         });
+
+        // 即時篩選
+        let filterDebounceTimer = null;
+        filterInput.addEventListener('input', () => {
+            if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+            filterDebounceTimer = setTimeout(() => {
+                const query = filterInput.value.trim().toLowerCase();
+                if (!query) {
+                    currentFiltered = songGroups;
+                } else {
+                    const terms = query.split(/\s+/);
+                    currentFiltered = songGroups.filter(g => {
+                        const targetText = `${g.title} ${g.song.artist || ''} ${g.song.version || ''} ${g.chartType || ''}`.toLowerCase();
+                        return terms.every(term => targetText.includes(term));
+                    });
+                }
+                renderedCount = 0;
+                resultsList.scrollTop = 0;
+                renderBatch();
+            }, 120);
+        });
+
+        // 初始渲染第一批
+        renderBatch();
 
         resultPopupCtx = popupWindow({
             title: t('popup.fetchMainote.searchResults', { count: result.length }),
-            customContent: resultContainer,
-            buttons: [{ text: t('popup.close'), hideOnClick: true }]
+            customContent: wrapper,
+            buttons: [{ text: t('popup.close'), hideOnClick: true }],
+            width: '92%',
+            maxWidth: 720,
         });
-
         searchBtn.disabled = false;
         searchBtn.textContent = t('popup.fetchMainote.btnSearch');
     });

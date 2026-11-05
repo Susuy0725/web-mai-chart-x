@@ -140,6 +140,9 @@ function parseSlideMovement(str, fallbackBpm) {
         }
 
         // 移動時間為純秒數 "s"
+        if (!/^[0-9]+(?:\.[0-9]+)?$/.test(tbStr)) {
+            return { time: -1, error: `Invalid slide seconds value: "${tbStr}"` };
+        }
         const sec = parseFloat(tbStr);
         if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
             return { time: -1, error: `Invalid slide seconds value: "${tbStr}"` };
@@ -153,6 +156,9 @@ function parseSlideMovement(str, fallbackBpm) {
     }
 
     // 純秒數 "s" (例如 [1.5] 或 [1])
+    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(s)) {
+        return { time: -1, error: `Invalid slide duration format: "${s}"` };
+    }
     const sec = parseFloat(s);
     if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
         return { time: -1, error: `Invalid slide duration format: "${s}"` };
@@ -246,7 +252,11 @@ export function parseHoldTime(str, currentBpm) {
 
     // 1. 直給秒數格式: "#seconds"
     if (clean.startsWith('#')) {
-        const sec = parseFloat(clean.slice(1).trim());
+        const secStr = clean.slice(1).trim();
+        if (!/^[0-9]+(?:\.[0-9]+)?$/.test(secStr)) {
+            return { time: -1, delay: 0, error: `Invalid hold duration value: "${clean}"` };
+        }
+        const sec = parseFloat(secStr);
         if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
             return { time: -1, delay: 0, error: `Invalid hold duration value: "${clean}"` };
         }
@@ -269,6 +279,9 @@ export function parseHoldTime(str, currentBpm) {
             if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error };
             return { time: beatRes.time, delay: 0, error: null };
         }
+        if (!/^[0-9]+(?:\.[0-9]+)?$/.test(tbStr)) {
+            return { time: -1, delay: 0, error: `Invalid hold seconds value: "${tbStr}"` };
+        }
         const sec = parseFloat(tbStr);
         if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
             return { time: -1, delay: 0, error: `Invalid hold seconds value: "${tbStr}"` };
@@ -284,9 +297,11 @@ export function parseHoldTime(str, currentBpm) {
     }
 
     // 4. 純秒數: "s"
-    const sec = parseFloat(clean);
-    if (!isNaN(sec) && sec >= 0 && isFinite(sec)) {
-        return { time: sec, delay: 0, error: null };
+    if (/^[0-9]+(?:\.[0-9]+)?$/.test(clean)) {
+        const sec = parseFloat(clean);
+        if (!isNaN(sec) && sec >= 0 && isFinite(sec)) {
+            return { time: sec, delay: 0, error: null };
+        }
     }
 
     return { time: -1, delay: 0, error: `Invalid hold duration format: "${clean}"` };
@@ -848,6 +863,11 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             };
 
             // Check Flags
+            if (!noteStr.includes('h') && !slideMatch && (noteStr.includes('[') || noteStr.includes(']'))) {
+                pushWarn(`Invalid brackets in tap note "${noteStr}", `, { errpos: noteCommaIndex });
+                continue;
+            }
+
             if (noteStr.includes('b') && !slideMatch) {
                 if (touchMatch) {
                     pushWarn("Break flag 'b' is not allowed in touch notes, ", { errpos: noteCommaIndex });
@@ -972,11 +992,6 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
                 for (let i = 0; i < slideParts.length; i++) {
                     const slidePart = slideParts[i];
-                    const slidePartMatch = slidePart.match(REGEX_SLIDE_SYMBOL);
-                    if (!slidePartMatch) {
-                        pushWarn("Missing slide type in slide note, ", { errpos: noteCommaIndex });
-                        continue;
-                    }
 
                     const timeMatches = slidePart.match(REGEX_BRACKET_CONTENT);
                     if (!timeMatches) {
@@ -988,6 +1003,12 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     const residue = slidePart.replace(REGEX_BRACKET_CONTENT, '');
                     if (residue.includes('[') || residue.includes(']')) {
                         pushWarn("Invalid time format or empty in slide note, ", { errpos: noteCommaIndex });
+                        continue;
+                    }
+
+                    const slidePartMatch = residue.match(REGEX_SLIDE_SYMBOL);
+                    if (!slidePartMatch) {
+                        pushWarn("Missing slide type in slide note, ", { errpos: noteCommaIndex });
                         continue;
                     }
                     noteObj.isStar = true;
@@ -1029,17 +1050,19 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                         p[0] = p[0].replace(/!/g, '');
                     }
 
-                    const isSlideBreak = p.some(part => part.includes('b'));
-                    const isSlideMine = p.some(part => part.includes('m'));
+                    const isSlideBreak = p.some(part => part && part.includes('b'));
+                    const isSlideMine = p.some(part => part && part.includes('m'));
 
                     if (isSlideBreak) {
                         for (let j = 0; j < p.length; j++) {
+                            if (!p[j]) continue;
                             if (p[j].startsWith('b')) pushWarn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", { errpos: noteCommaIndex });
                             p[j] = p[j].replace(/b/g, '');
                         }
                     }
                     if (isSlideMine) {
                         for (let j = 0; j < p.length; j++) {
+                            if (!p[j]) continue;
                             if (p[j].startsWith('m')) pushWarn("Not recommand write mine flag like this since it may cause confusion, please put mine flag at the end of the slide part!! :", { errpos: noteCommaIndex });
                             p[j] = p[j].replace(/m/g, '');
                         }
@@ -1065,8 +1088,12 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
                     for (let j = 0; j < slidePartMatch.length; j++) {
                         const slideType = slidePartMatch[j];
-                        const head = j === 0 ? noteObj.pos : parseInt(p[j].slice(-1));
+                        const head = j === 0 ? noteObj.pos : (p[j] && p[j].length > 0 ? parseInt(p[j].slice(-1)) : NaN);
                         const part = p[j + 1];
+                        if (!part || typeof part.slice !== 'function' || part.length === 0) {
+                            segError = true;
+                            break;
+                        }
                         const end = parseInt(part.slice(-1));
                         const mid = part.length > 1 ? parseInt(part.slice(-2, -1)) : undefined;
 
@@ -1342,130 +1369,5 @@ export function simaiDecode(data = "", baseOffset = true, options = {}) {
     }
     _sp = splitParts;
 
-    // 檢查情境 2: 嘗試增量解析 (逗號總數相同，且變更範圍不含 BPM / Split 等結構標籤)
-    if (
-        !options.forceFull &&
-        _incrementalCache.splitParts &&
-        _incrementalCache.blocks &&
-        _incrementalCache.result &&
-        _incrementalCache.baseOffset === baseOffset &&
-        _incrementalCache.splitParts.length === splitParts.length &&
-        _incrementalCache.blocks.length === splitParts.length
-    ) {
-        const oldParts = _incrementalCache.splitParts;
-        const totalLen = splitParts.length;
-
-        let prefixLen = 0;
-        while (prefixLen < totalLen && splitParts[prefixLen] === oldParts[prefixLen]) {
-            prefixLen++;
-        }
-
-        let suffixLen = 0;
-        while (
-            suffixLen < totalLen - prefixLen &&
-            splitParts[totalLen - 1 - suffixLen] === oldParts[totalLen - 1 - suffixLen]
-        ) {
-            suffixLen++;
-        }
-
-        const changeStart = prefixLen;
-        const changeEnd = totalLen - 1 - suffixLen;
-
-        // 確保修改區段兩側與變更內容都不包含 BPM 或 Split 標籤
-        let canIncremental = true;
-        for (let i = changeStart; i <= changeEnd; i++) {
-            const oldP = oldParts[i];
-            const newP = splitParts[i];
-            if (oldP.includes('(') || oldP.includes('{') || oldP.includes('<') ||
-                newP.includes('(') || newP.includes('{') || newP.includes('<')) {
-                canIncremental = false;
-                break;
-            }
-        }
-
-        if (canIncremental) {
-            const context = {
-                baseOffset,
-                tags: _incrementalCache.result.tags,
-                pushWarn
-            };
-
-            const newBlocks = [..._incrementalCache.blocks];
-            for (let i = changeStart; i <= changeEnd; i++) {
-                const prevBlock = i > 0 ? newBlocks[i - 1] : null;
-                const stateIn = prevBlock
-                    ? { ...prevBlock.stateOut, nowTime: newBlocks[i].startTime }
-                    : {
-                        nowTime: (baseOffset ? (60 / 60) * 4 : 0),
-                        nowBpm: 60,
-                        nowSplit: 4,
-                        overrideSplitTime: null,
-                        hispeed: 1,
-                        firstBpm: null,
-                        lastBpmTag: -1,
-                        lastSplitTag: -1,
-                        lastSplitTagCommIndex: -1
-                    };
-                newBlocks[i] = decodeCommaBlock(splitParts[i], i, stateIn, context);
-            }
-
-            // 重新匯總所有 Block
-            const allNotes = [];
-            let tapCounts = 0, holdCounts = 0, slideCounts = 0, touchCounts = 0, breakCounts = 0;
-            let maxEndTime = 0;
-            const indexToTime = [];
-
-            for (let i = 0; i < totalLen; i++) {
-                const b = newBlocks[i];
-                indexToTime[i] = b.startTime;
-                if (b.notes.length > 0) {
-                    for (let n = 0; n < b.notes.length; n++) {
-                        allNotes.push(b.notes[n]);
-                    }
-                }
-                tapCounts += b.counts.tap;
-                holdCounts += b.counts.hold;
-                slideCounts += b.counts.slide;
-                touchCounts += b.counts.touch;
-                breakCounts += b.counts.break;
-                if (b.maxEndTime > maxEndTime) maxEndTime = b.maxEndTime;
-            }
-
-            const lastBlock = newBlocks[totalLen - 1];
-            indexToTime[totalLen] = lastBlock.stateOut.nowTime;
-            if (lastBlock.stateOut.nowTime > maxEndTime) {
-                maxEndTime = lastBlock.stateOut.nowTime;
-            }
-
-            const result = {
-                notes: allNotes,
-                endTime: maxEndTime,
-                tags: _incrementalCache.result.tags,
-                bpm: _incrementalCache.result.bpm,
-                baseOffset,
-                notesCounts: {
-                    tap: tapCounts,
-                    hold: holdCounts,
-                    slide: slideCounts,
-                    touch: touchCounts,
-                    break: breakCounts,
-                },
-                score: (tapCounts + touchCounts + holdCounts * 2 + slideCounts * 3 + breakCounts * 5) || 0,
-                failed: false,
-                warnings: warns,
-                errpositions: warnpos,
-                indexToTime,
-            };
-
-            _incrementalCache.raw = raw;
-            _incrementalCache.splitParts = splitParts;
-            _incrementalCache.blocks = newBlocks;
-            _incrementalCache.result = result;
-
-            return result;
-        }
-    }
-
-    // 情況 3: 全量解析並建立快取
     return executeFullDecode(raw, splitParts, baseOffset, options);
 }

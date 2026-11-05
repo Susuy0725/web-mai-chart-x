@@ -2970,7 +2970,7 @@ export class SimaiRenderer {
  */
 const WAVE_PEAKS_PER_SEC = 200;
 
-function getAudioWaveformPeaks(audioBuffer) {
+export function getAudioWaveformPeaks(audioBuffer) {
     if (!audioBuffer) return null;
     if (audioBuffer._cachedWavePeaks && audioBuffer._cachedWavePeaks.rate === WAVE_PEAKS_PER_SEC) {
         return audioBuffer._cachedWavePeaks;
@@ -3078,6 +3078,7 @@ export class SimaiVisualEditor {
 
         this.tb1 = 4;
         this.tb2 = 4;
+        this.selectionRange = null;
         this.layerMode = 'note';
         this.onPlaceTag = null;
         this.onDeleteTag = null;
@@ -5042,6 +5043,7 @@ export class SimaiPreviewRenderer {
 
         this.tb1 = 4;
         this.tb2 = 4;
+        this.selectionRange = null;
     }
 
     setZoom(zoom) {
@@ -5421,6 +5423,94 @@ export class SimaiPreviewRenderer {
         ctx.restore();
     }
 
+
+    setSelectionRange(range) {
+        this.selectionRange = range;
+    }
+
+    getSelectionRange() {
+        return this.selectionRange;
+    }
+
+    drawSelectionRange() {
+        if (!this.selectionRange) return;
+        const { start, end } = this.selectionRange;
+        if (typeof start !== 'number' || typeof end !== 'number') return;
+        const startTime = Math.min(start, end);
+        const endTime = Math.max(start, end);
+        const duration = endTime - startTime;
+        if (duration <= 0.001) return;
+
+        const { width: w, height: h, halfWidth: hw } = this.getCanvasWH();
+        const zoom = this.zoom || 1;
+        const ctx = this.ctx;
+
+        const x1 = hw + (startTime - this.globalTime) * zoom;
+        const x2 = hw + (endTime - this.globalTime) * zoom;
+
+        if (x2 < 0 || x1 > w) return;
+
+        const drawLeft = Math.max(0, x1);
+        const drawRight = Math.min(w, x2);
+        const drawWidth = drawRight - drawLeft;
+
+        ctx.save();
+
+        // 1. 半透明選取底色 (Cyberpunk / Modern Neon 藍綠漸層)
+        const grad = ctx.createLinearGradient(x1, 0, x2, 0);
+        grad.addColorStop(0, 'rgba(0, 185, 247, 0.35)');
+        grad.addColorStop(0.5, 'rgba(0, 229, 255, 0.22)');
+        grad.addColorStop(1, 'rgba(0, 185, 247, 0.35)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(drawLeft, 0, drawWidth, h);
+
+        // 2. 邊界線
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#00e5ff';
+        if (x1 >= 0 && x1 <= w) {
+            ctx.beginPath();
+            ctx.moveTo(x1, 0);
+            ctx.lineTo(x1, h);
+            ctx.stroke();
+        }
+        if (x2 >= 0 && x2 <= w) {
+            ctx.beginPath();
+            ctx.moveTo(x2, 0);
+            ctx.lineTo(x2, h);
+            ctx.stroke();
+        }
+
+        // 3. 頂部選取資訊標籤
+        const labelText = startTime.toFixed(2) + 's ~ ' + endTime.toFixed(2) + 's (' + duration.toFixed(2) + 's)';
+        ctx.font = 'bold 11px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const textMetrics = ctx.measureText(labelText);
+        const paddingX = 8;
+        const textW = textMetrics.width + paddingX * 2;
+        const textH = 20;
+        let textX = (x1 + x2) * 0.5 - textW * 0.5;
+        textX = Math.max(4, Math.min(w - textW - 4, textX));
+        const textY = 4;
+
+        ctx.fillStyle = 'rgba(10, 20, 35, 0.88)';
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(textX, textY, textW, textH, 4);
+        } else {
+            ctx.rect(textX, textY, textW, textH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#00e5ff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(labelText, textX + textW * 0.5, textY + textH * 0.5);
+
+        ctx.restore();
+    }
+
     drawFrame(state) {
         const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
         this.w = w;
@@ -5463,5 +5553,6 @@ export class SimaiPreviewRenderer {
             t + h * 0.1, 0,
             '#ff0000ce', 1);
         this.drawLine(hw, 0, hw, h, '#ff0000ce', 1);
+        this.drawSelectionRange();
     }
 }

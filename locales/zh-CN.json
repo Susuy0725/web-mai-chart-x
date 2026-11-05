@@ -67,7 +67,8 @@
     "helpShortcuts": "快捷键",
     "changelog": "更新日志",
     "about": "关于",
-    "gotoPlay": "打开Play"
+    "gotoPlay": "打开Play",
+    "toolsSmoothBpm": "平滑变速"
   },
   "textarea": {
     "placeholder": "在此输入谱面数据..."
@@ -400,7 +401,12 @@
       "allLevels": "全部",
       "allDifficulties": "全部难度",
       "allVersions": "全部版本",
-      "allCategories": "全部分类"
+      "allCategories": "全部分类",
+      "filterPlaceholder": "在结果中快速筛选歌名或艺术家...",
+      "showingCount": "显示 {shown} / {total} 首歌曲",
+      "noResultsMatch": "没有符合筛选条件的歌曲",
+      "loadMore": "加载更多...",
+      "clickToLoad": "点击加载 {diff} 谱面"
     },
     "createNewProject": {
       "confirm": "是否要创建新的谱面？这将创建一个新项目。"
@@ -864,5 +870,33 @@
     "effectMine": "地雷",
     "effectEx": "EX 判定",
     "appliedToast": "已成功应用 Touch 组"
+  },
+  "smoothBpm": {
+    "title": "平滑变速生成器 (Smooth BPM)",
+    "timeRange": "选取时段范围",
+    "startSec": "起点时间",
+    "endSec": "终点时间",
+    "speedParams": "速度与切分设定",
+    "startBpm": "起始 BPM",
+    "endBpm": "结束 BPM",
+    "division": "细分 (Division)",
+    "restoreDivision": "结束时恢复原切分",
+    "steps": "拍点步数",
+    "curveP": "曲线指数 p",
+    "previewCode": "生成代码预览",
+    "insertLocation": "带入位置",
+    "insertAtStart": "自动插入至选取起点时间处",
+    "replaceRange": "替换选取时段内的拍点逗号",
+    "insertAtCursor": "插入至当前文本编辑器光标处",
+    "enterKeyTip": "按键盘 Enter 键即可直接带入；亦可使用 Ctrl+Z 随时撤销。",
+    "apply": "直接带入",
+    "copy": "复制代码",
+    "cancel": "关闭",
+    "modeEnabledTip": "已开启时段选取模式：请在预览轴上拖拽选取时段 (支持 Shift + 拖拽)",
+    "selectRangeFirst": "请先在下方预览轴上拖拽选取时段",
+    "appliedSuccess": "已成功带入平滑变速！",
+    "copied": "已复制代码至剪贴板！",
+    "previewSelectTitle": "时间轴预览 (点击或拖拽选取时段)",
+    "dragSelectTip": "在时间轴上拖拽或点击可变更时段；亦可拖拽两侧旗标微调"
   }
 }

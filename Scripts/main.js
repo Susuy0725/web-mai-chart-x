@@ -45,6 +45,8 @@ import { initFindReplace, openFindBar, closeFindBar } from './features/findRepla
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 import { showWelcomeModal } from './modals/welcomeModal.js';
 import { openSubdivisionModal } from './modals/subdivisionModal.js';
+import { generateSmoothBpmByDuration, initSmoothBpmLauncher } from './features/smoothBpm.js';
+import { openSmoothBpmModal } from './modals/smoothBpmModal.js';
 import { handleFormatDocument, formatDocument, formatSimai } from './features/formatter.js';
 export { toggleNoteFlag };
 
@@ -251,6 +253,8 @@ const toggleExButton = getButton("toggleEx", "utility");
 const connectMajdataViewButton = getButton("connectMajdataView", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
+const smoothBpmMenuButton = getButton("smoothBpm", "utility");
+const smoothBpmBtn = document.getElementById("mpSmoothBpmBtn");
 const previewContainer = document.getElementById('miniPreviewContainer');
 const previewCanvas = document.getElementById('miniPreview');
 const previewZoomInButton = document.getElementById('mpzoomIn');
@@ -1397,6 +1401,8 @@ function applyDecodeResult(result, simaiDataValue) {
         warnEl.style.visibility = 'hidden';
     }
     draw();
+    // 立即以 Worker/同步解析出的最新 warningPositions 重新繪製編輯器紅底線
+    applyHighlight(editorInput.value, true);
 }
 
 /**
@@ -2969,6 +2975,21 @@ const updateVisualTime = (newTime) => {
     }
 };
 
+const smoothBpmLauncher = initSmoothBpmLauncher({
+    smoothBpmBtn,
+    getRealTime: () => playbackEngine.realTime,
+    getDecodedTags: () => decodedTags,
+    getClockBpm: () => clockBpm,
+    getDataIndexToTime: () => dataIndexToTime,
+    getAudioBuffer: () => audioManager.bgmBuffer,
+    getMusicDelay: () => musicDelay,
+    editorInput,
+    findCommaCharIndex,
+    updateEditorAndSave,
+    simpleToast,
+    t
+});
+
 const { visualScroller, startMomentum, bindScrollerEvents } = initVisualScroller({
     visualEditor,
     previewCanvas,
@@ -3061,14 +3082,12 @@ function renderHighlightNow(text) {
 
     // 若文字與警告範圍完全未變，直接跳過 DOM 重構以杜絕不必要的 Reflow
     if (text === _lastRenderedHighlightText && warningKey === _lastRenderedWarningKey) {
-        warningPositions = [];
         return;
     }
 
     _lastRenderedHighlightText = text;
     _lastRenderedWarningKey = warningKey;
     highlightLayer.innerHTML = getHighlight(text, warningRanges);
-    warningPositions = []; // 重置警告位置，等待下一次解析更新
 }
 
 function applyHighlight(text, immediate = false) {
@@ -3404,6 +3423,11 @@ if (subdivisionButton) {
             recordEditorHistory,
             inputDebounce
         });
+    });
+}
+if (smoothBpmMenuButton) {
+    smoothBpmMenuButton.addEventListener('click', () => {
+        smoothBpmLauncher?.openModal();
     });
 }
 if (formatDocumentButton) {
@@ -4094,6 +4118,9 @@ window.findCommaCharIndex = findCommaCharIndex;
 window.indexFromCursor = indexFromCursor;
 window.getNoteRangeAtIndex = getNoteRangeAtIndex;
 window.getCharOffsetAtIndex = getCharOffsetAtIndex;
+window.generateSmoothBpmByDuration = generateSmoothBpmByDuration;
+window.openSmoothBpmModal = openSmoothBpmModal;
+window.smoothBpmLauncher = smoothBpmLauncher;
 
 let currentSkin = settings?.skin || 'Default';
 let isSwitchingSkin = false;
@@ -4148,6 +4175,8 @@ appContext.register('getVisualEditorRenderer', () => visualEditorRenderer);
 appContext.register('getPreviewRender', () => previewRender);
 appContext.register('draw', draw);
 appContext.register('resize', resize);
+appContext.register('generateSmoothBpmByDuration', generateSmoothBpmByDuration);
+appContext.register('smoothBpmLauncher', smoothBpmLauncher);
 appContext.register('saveSettingsDebounce', saveSettingsDebounce);
 appContext.register('setEditorCss', setEditorCss);
 appContext.register('applyMovieBrightness', applyMovieBrightness);

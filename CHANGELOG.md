@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.05 (1)]
+
+### Changed
+- 改善使用者介面與操作體驗。
+
 ## [2026.10.12 (1)]
 
 ### Added

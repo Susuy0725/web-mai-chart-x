@@ -67,7 +67,8 @@
     "helpShortcuts": "ショートカット",
     "changelog": "更新履歴",
     "about": "このアプリについて",
-    "gotoPlay": "Playを起動する"
+    "gotoPlay": "Playを起動する",
+    "toolsSmoothBpm": "スムーズBPM"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."
@@ -400,7 +401,12 @@
       "allLevels": "すべて",
       "allDifficulties": "すべての難易度",
       "allVersions": "すべてのバージョン",
-      "allCategories": "すべてのカテゴリー"
+      "allCategories": "すべてのカテゴリー",
+      "filterPlaceholder": "曲名やアーティストで素早く絞り込み...",
+      "showingCount": "{total} 曲中 {shown} 曲を表示",
+      "noResultsMatch": "条件に一致する楽曲が見つかりません",
+      "loadMore": "さらに読み込む...",
+      "clickToLoad": "{diff} 譜面を読み込む"
     },
     "createNewProject": {
       "confirm": "新しく譜面を作成しますか？これにより新規プロジェクトが作成されます。"
@@ -864,5 +870,33 @@
     "effectMine": "地雷",
     "effectEx": "EX 判定",
     "appliedToast": "Touch グループを適用しました"
+  },
+  "smoothBpm": {
+    "title": "スムーズBPMジェネレーター",
+    "timeRange": "選択区間範囲",
+    "startSec": "開始時間",
+    "endSec": "終了時間",
+    "speedParams": "BPM・細分設定",
+    "startBpm": "開始 BPM",
+    "endBpm": "終了 BPM",
+    "division": "拍細分 (Division)",
+    "restoreDivision": "終了時に元の拍細分に戻す",
+    "steps": "ステップ数",
+    "curveP": "曲線指数 p",
+    "previewCode": "生成コードプレビュー",
+    "insertLocation": "挿入先",
+    "insertAtStart": "開始時間の拍点位置に挿入",
+    "replaceRange": "区間内のカンマを置き換える",
+    "insertAtCursor": "現在のエディタカーソル位置に挿入",
+    "enterKeyTip": "Enterキーで即座に反映されます。Ctrl+Zでいつでも元に戻せます。",
+    "apply": "反映する",
+    "copy": "コードをコピー",
+    "cancel": "閉じる",
+    "modeEnabledTip": "区間選択モードが有効です：プレビュー軸上をドラッグして選択してください (Shift+ドラッグ対応)",
+    "selectRangeFirst": "まずプレビュー軸上で区間を選択してください",
+    "appliedSuccess": "スムーズBPMを譜面に反映しました！",
+    "copied": "コードをクリップボードにコピーしました！",
+    "previewSelectTitle": "タイムラインプレビュー (クリックまたはドラッグで区間選択)",
+    "dragSelectTip": "タイムライン上をドラッグまたはクリックして選択。両端の旗をドラッグして微調整も可能"
   }
 }

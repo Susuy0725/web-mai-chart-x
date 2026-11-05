@@ -67,7 +67,8 @@
     "helpShortcuts": "Hotkeys",
     "changelog": "Changelog",
     "about": "About",
-    "gotoPlay": "Open Play"
+    "gotoPlay": "Open Play",
+    "toolsSmoothBpm": "Smooth BPM"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."
@@ -400,7 +401,12 @@
       "allLevels": "All",
       "allDifficulties": "All Difficulties",
       "allVersions": "All Versions",
-      "allCategories": "All Categories"
+      "allCategories": "All Categories",
+      "filterPlaceholder": "Quickly filter by title or artist...",
+      "showingCount": "Showing {shown} / {total} songs",
+      "noResultsMatch": "No songs match the filter criteria",
+      "loadMore": "Load More...",
+      "clickToLoad": "Click to load {diff} chart"
     },
     "createNewProject": {
       "confirm": "Do you want to create a new chart? This will create a new project."
@@ -864,5 +870,33 @@
     "effectMine": "Mine",
     "effectEx": "EX Judgement",
     "appliedToast": "Touch group applied successfully"
+  },
+  "smoothBpm": {
+    "title": "Smooth BPM Generator",
+    "timeRange": "Selected Time Range",
+    "startSec": "Start Time",
+    "endSec": "End Time",
+    "speedParams": "BPM & Subdivision Settings",
+    "startBpm": "Start BPM",
+    "endBpm": "End BPM",
+    "division": "Division",
+    "restoreDivision": "Restore original division afterwards",
+    "steps": "Total Steps",
+    "curveP": "Curve Exponent p",
+    "previewCode": "Generated Chart Preview",
+    "insertLocation": "Insertion Target",
+    "insertAtStart": "Insert at start time",
+    "replaceRange": "Replace comma steps in range",
+    "insertAtCursor": "Insert at editor cursor",
+    "enterKeyTip": "Press Enter to apply immediately; press Ctrl+Z to undo anytime.",
+    "apply": "Apply",
+    "copy": "Copy Code",
+    "cancel": "Close",
+    "modeEnabledTip": "Selection mode enabled: Drag on the preview timeline (Hold Shift + Drag)",
+    "selectRangeFirst": "Please drag to select a range on the preview timeline first",
+    "appliedSuccess": "Smooth BPM chart inserted successfully!",
+    "copied": "Chart code copied to clipboard!",
+    "previewSelectTitle": "Timeline Preview (Click or Drag to Select)",
+    "dragSelectTip": "Drag or click on the timeline to select; or drag start/end flags to adjust"
   }
 }

@@ -557,7 +557,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     :root {
         --utility-rows: 2;
         --utility-row-height: 35px;
-        --utility-height: 70px;
+        --utility-height: 75px;
     }
 
     #topUtilityBtns {
@@ -891,20 +891,20 @@ body.resizing-panels #canvasContainer canvas {
     display: flex;
     position: fixed;
     background-color: var(--main-color);
-    min-width: 120px;
-    box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.5);
+    min-width: 135px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
     z-index: 1100;
     border: 1px solid var(--button-ouline);
     border-radius: 10px;
-    padding: 5px;
+    padding: 4px;
     flex-direction: column;
-    gap: 5px;
+    gap: 2px;
     opacity: 0;
     visibility: hidden;
-    transform: scaleY(0);
+    transform: scaleY(0.95);
     transform-origin: top left;
     pointer-events: none;
-    transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s;
+    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
 }
 
 .utilityButton:hover {
@@ -912,17 +912,43 @@ body.resizing-panels #canvasContainer canvas {
 }
 
 .utilityDropdown-content .utilityButton {
-    padding: 10px;
+    padding: 0 8px 0 10px;
     border: none;
     width: 100%;
     box-sizing: border-box;
     text-align: left;
-    justify-content: flex-start;
-    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 30px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.92);
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .utilityDropdown-content .utilityButton:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+}
+
+.utilityDropdown-content .utilityButton .utilityItemIcon {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.52);
+    margin-left: auto;
+    padding-left: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 16;
+    transition: color 0.12s ease;
+}
+
+.utilityDropdown-content .utilityButton:hover .utilityItemIcon {
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .utilityDropdown-content .utilityMenuTitle {
@@ -930,15 +956,25 @@ body.resizing-panels #canvasContainer canvas {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-right: 0px;
     cursor: default;
     overflow: visible;
 }
 
 .utilityDropdown-content .utilityMenuTitle .utilityMenuArrow {
-    margin-left: 0px;
-    font-size: 20px;
-    color: #d4d4d4;
+    margin-left: auto;
+    padding-left: 14px;
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.45);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    font-variation-settings: 'FILL' 1, 'wght' 350, 'GRAD' 0, 'opsz' 16;
+    transition: color 0.12s ease;
+}
+
+.utilityDropdown-content .utilityMenuTitle:hover .utilityMenuArrow {
+    color: rgba(255, 255, 255, 0.95);
 }
 
 .utilitySubmenu {
@@ -946,21 +982,21 @@ body.resizing-panels #canvasContainer canvas {
     position: absolute;
     top: 0;
     left: 100%;
-    min-width: 150px;
+    min-width: 155px;
     background-color: var(--main-color);
     border: 1px solid var(--button-ouline);
     border-radius: 10px;
-    padding: 5px;
+    padding: 4px;
     flex-direction: column;
-    gap: 5px;
-    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.5);
+    gap: 2px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
     z-index: 1110;
     opacity: 0;
     visibility: hidden;
-    transform: translateX(-6px) scale(0.96);
+    transform: translateX(-4px) scale(0.97);
     transform-origin: top left;
     pointer-events: none;
-    transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.18s;
+    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
 }
 
 .utilityDropdown-content .utilityMenuTitle:hover .utilitySubmenu {
@@ -976,10 +1012,10 @@ body.resizing-panels #canvasContainer canvas {
 
 .utilityDropdown-content hr,
 .utilitySubmenu hr {
-    width: 90%;
-    margin: 0;
-    align-self: center;
-    border: 1px solid var(--button-ouline);
+    width: 100%;
+    margin: 3px 0;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .quick-panel {

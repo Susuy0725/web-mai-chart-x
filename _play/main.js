@@ -492,6 +492,7 @@ const hideShowBtn = document.getElementById("showPlayControlsBtn");
 const projectBtn = getControlButton("openProject");
 const folderBtn = getControlButton("openFolder");
 const settingsBtn = getControlButton("settings");
+const fullscreenBtn = getControlButton("fullscreen");
 
 const playbackSpeedInput = document.getElementById("playbackSpeedInput");
 const playbackSpeedBtn = getControlButton("playbackSpeed");
@@ -617,6 +618,11 @@ window.addEventListener('keydown', (e) => {
 
     if (e.ctrlKey || e.metaKey) {
         switch (e.key.toLowerCase()) {
+            case 'f': {
+                e.preventDefault();
+                fullscreenBtn?.click();
+                return;
+            }
             case 'o': {
                 e.preventDefault();
                 let sp = (settings.playbackSpeed || 1) - 0.25;
@@ -1362,6 +1368,46 @@ if (settingsBtn) {
         e.stopPropagation();
         openSettings();
     });
+}
+
+if (fullscreenBtn) {
+    fullscreenBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+            const docEl = document.documentElement;
+            if (docEl.requestFullscreen) {
+                docEl.requestFullscreen().catch(err => console.warn('進入全螢幕失敗:', err));
+            } else if (docEl.webkitRequestFullscreen) {
+                docEl.webkitRequestFullscreen();
+            } else if (docEl.msRequestFullscreen) {
+                docEl.msRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(err => console.warn('退出全螢幕失敗:', err));
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    });
+
+    const updateFullscreenIcon = () => {
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+        const iconSpan = fullscreenBtn.querySelector('.material-symbols-outlined');
+        if (iconSpan) {
+            iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
+        }
+        const titleText = isFullscreen ? (t('settings.exitFullscreen') || '退出全螢幕') : (t('settings.fullscreen') || '全螢幕');
+        fullscreenBtn.title = titleText;
+        fullscreenBtn.setAttribute('aria-label', titleText);
+        setTimeout(resize, 100);
+    };
+
+    document.addEventListener('fullscreenchange', updateFullscreenIcon);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+    document.addEventListener('msfullscreenchange', updateFullscreenIcon);
 }
 
 if (folderBtn) {

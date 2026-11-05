@@ -67,7 +67,8 @@
     "helpShortcuts": "단축키",
     "changelog": "변경 내역",
     "about": "정보",
-    "gotoPlay": "Play 열기"
+    "gotoPlay": "Play 열기",
+    "toolsSmoothBpm": "스무스 BPM"
   },
   "textarea": {
     "placeholder": "여기에 채보 데이터를 입력하세요..."
@@ -400,7 +401,12 @@
       "allLevels": "전체",
       "allDifficulties": "모든 난이도",
       "allVersions": "모든 버전",
-      "allCategories": "모든 분류"
+      "allCategories": "모든 분류",
+      "filterPlaceholder": "곡 제목 또는 아티스트로 빠른 필터링...",
+      "showingCount": "{total}곡 중 {shown}곡 표시",
+      "noResultsMatch": "필터 조건과 일치하는 곡이 없습니다",
+      "loadMore": "더 보기...",
+      "clickToLoad": "{diff} 채보 불러오기"
     },
     "createNewProject": {
       "confirm": "새 채보를 만드시겠습니까? 새 프로젝트가 생성됩니다."
@@ -864,5 +870,33 @@
     "effectMine": "지뢰",
     "effectEx": "EX 판정",
     "appliedToast": "Touch 그룹 적용 완료"
+  },
+  "smoothBpm": {
+    "title": "스무스 BPM 생성기 (Smooth BPM)",
+    "timeRange": "선택 구간 범위",
+    "startSec": "시작 시간",
+    "endSec": "종료 시간",
+    "speedParams": "BPM 및 박자 분할 설정",
+    "startBpm": "시작 BPM",
+    "endBpm": "종료 BPM",
+    "division": "분할 (Division)",
+    "restoreDivision": "종료 시 원래 분할로 복원",
+    "steps": "스텝 수",
+    "curveP": "곡선 지수 p",
+    "previewCode": "생성 코드 미리보기",
+    "insertLocation": "적용 위치",
+    "insertAtStart": "선택 시작 시간에 삽입",
+    "replaceRange": "구간 내 쉼표 치환",
+    "insertAtCursor": "현재 텍스트 커서 위치에 삽입",
+    "enterKeyTip": "Enter 키를 누르면 바로 적용됩니다. Ctrl+Z로 언제든 되돌릴 수 있습니다.",
+    "apply": "적용하기",
+    "copy": "코드 복사",
+    "cancel": "닫기",
+    "modeEnabledTip": "구간 선택 모드 활성화됨: 미리보기 타임라인에서 드래그하여 선택하세요 (Shift+드래그 지원)",
+    "selectRangeFirst": "먼저 미리보기 축에서 구간을 드래그하여 선택해주세요",
+    "appliedSuccess": "스무스 BPM이 성공적으로 적용되었습니다!",
+    "copied": "코드가 클립보드에 복사되었습니다!",
+    "previewSelectTitle": "타임라인 미리보기 (클릭 또는 드래그하여 구간 선택)",
+    "dragSelectTip": "타임라인에서 드래그하거나 클릭하여 구간을 선택하세요. 깃발 핸들을 드래그하여 미세 조정도 가능합니다"
   }
 }

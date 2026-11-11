@@ -215,7 +215,11 @@
       "richHanabi": "Rich Hanabi Effects",
       "disablePreviewWaveform": "Disable Preview Waveform",
       "noteBaseSize": "Note Base Size (noteBaseSize)",
-      "middleDistance": "Middle Distance (middleDistance)"
+      "middleDistance": "Middle Distance (middleDistance)",
+      "invertWheelDirection": "Invert Wheel Scroll Direction",
+      "smoothScroll": "Smooth Wheel Scrolling",
+      "wheelSensitivity": "Wheel Scroll Sensitivity",
+      "syntaxColors": "Syntax Highlighting Colors"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -228,6 +232,39 @@
       "computer": "Autoplay (Computer)",
       "simulate": "Autoplay (Simulation)",
       "off": "Manual Play"
+    },
+    "invertWheelOpts": {
+      "none": "None (Default)",
+      "preview": "Preview Track Only",
+      "visualEditor": "Visual Editor Only",
+      "both": "Both"
+    },
+    "syntaxColorPresets": {
+      "title": "Color Presets",
+      "custom": "Custom",
+      "default": "Default (Classic WMCX)",
+      "arcade": "maimai DX Arcade",
+      "vscode": "VS Code Dark+",
+      "monokai": "Monokai Pro",
+      "tokyoNight": "Tokyo Night",
+      "cyberpunk": "Neon (Cyberpunk)"
+    },
+    "syntaxColorOpts": {
+      "resetColors": "Reset to Default Colors",
+      "note": "Default Notes / Text (1-8)",
+      "comment": "Comments (/*...*/, ||)",
+      "bpm": "BPM Marker ( (120) )",
+      "split": "Beat Division ( {4} )",
+      "time": "Duration Marker ( [1:4] )",
+      "slide": "Slide Paths (-^v...)",
+      "customSlide": "Special Slide (<A1>)",
+      "hold": "Hold Note (h)",
+      "break": "Break Note (b)",
+      "ex": "EX Note (x)",
+      "mine": "Mine Note (m)",
+      "hanabi": "Fireworks (f)",
+      "touch": "Touch Sensors (A1, C)",
+      "comma": "Beat Comma (,)"
     }
   },
   "popup": {
@@ -572,7 +609,10 @@
       "qualityMedium": "Standard (~10 Mbps)",
       "qualityLow": "Low (~5 Mbps)",
       "qualityLowest": "Lowest (~2 Mbps)",
-      "customBitrate": "Custom Bitrate (Mbps):"
+      "customBitrate": "Custom Bitrate (Mbps):",
+      "speedMode": "Export Speed Mode:",
+      "speedFast": "Fast Hardware Encoding (Recommended, Near Real-time)",
+      "speedQuality": "Quality Compression Mode (Deep Computation)"
     },
     "quickGenerate": {
       "title": "Quick Generate",

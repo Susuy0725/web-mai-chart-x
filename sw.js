@@ -83,7 +83,6 @@ const ASSETS = [
     './Fonts/Inter.ttf',
     './Fonts/FOT-NewRodin Pro B.otf',
     './Fonts/Geologica_Auto-Regular.ttf',
-    './Skin/Shared/outline.png',
     './Scripts/i18n.js',
     './config/manifest.json',
     './locales/en.json',

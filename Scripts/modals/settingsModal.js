@@ -1,4 +1,4 @@
-import { popupWindow, clamp, createCustomSlider, simpleToast } from '../helper.js';
+import { popupWindow, clamp, simpleToast, defaultSyntaxColors, applySyntaxColors, syntaxColorPresets } from '../helper.js';
 import { settingsConfig, isEasterEggUnlocked } from '../core/settingsConfig.js';
 import { t, setLang } from '../i18n.js';
 import { idbSet } from '../indexDB.js';
@@ -122,7 +122,17 @@ export function openSettingsModal(options = {}) {
             return row;
         }
 
-        // 4. Button
+        // 4. Color Wrap
+        if (element.classList && element.classList.contains('popup-setting-color-wrap')) {
+            const label = document.createElement('label');
+            label.textContent = labelText;
+            label.className = 'popup-setting-label';
+            row.appendChild(label);
+            row.appendChild(element);
+            return row;
+        }
+
+        // 5. Button
         if (element.tagName === 'BUTTON') {
             const label = document.createElement('label');
             label.textContent = labelText;
@@ -133,11 +143,15 @@ export function openSettingsModal(options = {}) {
             return row;
         }
 
-        // 5. 一般 Number / Dropdown
+        // 6. 一般 Number / Dropdown
         const label = document.createElement('label');
         label.textContent = labelText;
         label.className = 'popup-setting-label';
-        element.className = 'popup-setting-input';
+        if (!element.classList.contains('popup-setting-dropdown') &&
+            !element.classList.contains('popup-setting-input') &&
+            !element.classList.contains('popup-setting-color-wrap')) {
+            element.classList.add('popup-setting-input');
+        }
         row.appendChild(label);
         row.appendChild(element);
         return row;
@@ -156,7 +170,9 @@ export function openSettingsModal(options = {}) {
                 finalVal = config.el.checked;
             } else if (config.type === 'dropdown') {
                 finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
-            } else if (config.type === 'object') {
+            } else if (config.type === 'text') {
+                finalVal = config.el.value;
+            } else if (config.type === 'object' || config.type === 'color-object') {
                 // 直接複製子選單同步完的物件結果
                 finalVal = { ...config.el.value };
             } else {
@@ -194,6 +210,106 @@ export function openSettingsModal(options = {}) {
         if (setEditorCss) setEditorCss();
         if (draw) draw();
         simpleToast({ content: t('toast.settingsSaved'), type: 'success', timeout: 1500 });
+    };
+
+    const createRangeInput = (value, min = 0, max = 1, step = 0.1, onInputCallback) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'popup-setting-range-wrap';
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.className = 'popup-setting-range';
+        input.min = min;
+        input.max = max;
+        input.step = step;
+        input.value = value;
+
+        const valSpan = document.createElement('span');
+        valSpan.className = 'popup-setting-range-val';
+        const formatVal = (v) => {
+            const num = parseFloat(v);
+            if (isNaN(num)) return v;
+            if (step >= 1) return Math.round(num).toString();
+            const precision = step < 0.01 ? 3 : (step < 0.1 ? 2 : 1);
+            return num.toFixed(precision);
+        };
+
+        const updateVisuals = () => {
+            valSpan.textContent = formatVal(input.value);
+            const minNum = parseFloat(input.min);
+            const maxNum = parseFloat(input.max);
+            const curVal = parseFloat(input.value);
+            const pct = (maxNum <= minNum) ? 0 : Math.max(0, Math.min(100, ((curVal - minNum) / (maxNum - minNum)) * 100));
+            input.style.setProperty('--range-pct', `${pct}%`);
+        };
+
+        updateVisuals();
+
+        input.addEventListener('input', () => {
+            updateVisuals();
+            if (onInputCallback) onInputCallback(parseFloat(input.value));
+        });
+        input.addEventListener('change', () => {
+            updateVisuals();
+        });
+
+        wrap.type = 'range';
+        Object.defineProperty(wrap, 'value', {
+            get: () => input.value,
+            set: (v) => {
+                input.value = v;
+                updateVisuals();
+            }
+        });
+        wrap.min = min;
+        wrap.max = max;
+        wrap.step = step;
+        wrap._updateDisplay = () => {
+            updateVisuals();
+        };
+
+        wrap.appendChild(input);
+        wrap.appendChild(valSpan);
+        return wrap;
+    };
+
+    const createColorInput = (value, onInputCallback, previewText = '') => {
+        const wrap = document.createElement('div');
+        wrap.className = 'popup-setting-color-wrap';
+
+        const preview = document.createElement('span');
+        preview.className = 'popup-setting-color-preview';
+        preview.textContent = previewText;
+        preview.style.color = value;
+
+        const hexText = document.createElement('span');
+        hexText.className = 'popup-setting-color-hex';
+        hexText.textContent = (value || '').toUpperCase();
+
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.className = 'popup-setting-color-input';
+        input.value = value;
+
+        const updateColor = (newVal) => {
+            input.value = newVal;
+            preview.style.color = newVal;
+            hexText.textContent = (newVal || '').toUpperCase();
+        };
+
+        input.addEventListener('input', () => {
+            updateColor(input.value);
+            if (onInputCallback) onInputCallback(input.value);
+        });
+
+        wrap.setValue = (newVal) => {
+            updateColor(newVal);
+        };
+
+        wrap.appendChild(preview);
+        wrap.appendChild(hexText);
+        wrap.appendChild(input);
+        return wrap;
     };
 
     const createNumberInput = (value, step = 0.1, min = -999, max = 9999) => {
@@ -306,7 +422,7 @@ export function openSettingsModal(options = {}) {
             }
             // --- C. 處理 Range ---
             else if (item.type === 'range') {
-                el = createCustomSlider(currentVal, item.min, item.max, item.step, (val) => {
+                el = createRangeInput(currentVal, item.min, item.max, item.step, (val) => {
                     try {
                         targetRef[targetKey] = val;
                         appContext.setSetting(targetKey, val);
@@ -314,7 +430,21 @@ export function openSettingsModal(options = {}) {
                     } catch (err) { }
                 });
             }
-            // --- D. 處理 Object (如 sfxVolumes) ---
+            // --- D. 處理 Text ---
+            else if (item.type === 'text') {
+                el = document.createElement('input');
+                el.type = 'text';
+                el.className = 'popup-setting-input popup-setting-input-text';
+                el.value = currentVal ?? '';
+                el.addEventListener('input', (e) => {
+                    try {
+                        targetRef[targetKey] = e.target.value;
+                        appContext.setSetting(targetKey, e.target.value);
+                        if (item.apply) item.apply(e.target.value);
+                    } catch (err) { }
+                });
+            }
+            // --- E. 處理 Object (如 sfxVolumes) ---
             else if (item.type === 'object') {
                 el = document.createElement('div');
                 el.dataset.type = 'object-container';
@@ -326,7 +456,7 @@ export function openSettingsModal(options = {}) {
                     const subDefault = item.def[subKey];
                     const subCurrent = currentVal[subKey] ?? subDefault;
 
-                    const subSlider = createCustomSlider(subCurrent, 0, 1, 0.05, (subVal) => {
+                    const subSlider = createRangeInput(subCurrent, 0, 1, 0.05, (subVal) => {
                         try {
                             el.value[subKey] = subVal;
                             targetRef[targetKey][subKey] = subVal;
@@ -346,6 +476,114 @@ export function openSettingsModal(options = {}) {
                         el._subRefs[subKey].value = targetRef[targetKey][subKey] ?? item.def[subKey];
                         if (el._subRefs[subKey]._updateDisplay) el._subRefs[subKey]._updateDisplay();
                     });
+                };
+            }
+            // --- F. 處理 Color Object (如 syntaxColors) ---
+            else if (item.type === 'color-object') {
+                el = document.createElement('div');
+                el.dataset.type = 'object-container';
+                el.value = { ...currentVal };
+
+                el._subRefs = {};
+
+                // 頂部色系預設組 (Presets) 與重設按鈕列
+                const toolbarRow = document.createElement('div');
+                toolbarRow.className = 'popup-setting-color-toolbar';
+
+                const presetGroup = document.createElement('div');
+                presetGroup.className = 'popup-setting-color-preset-group';
+
+                const presetLabel = document.createElement('label');
+                presetLabel.textContent = t('settings.syntaxColorPresets.title');
+
+                const presetSelect = document.createElement('select');
+                presetSelect.className = 'popup-setting-dropdown popup-setting-preset-dropdown';
+
+                // 加入 Custom 選項
+                const customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                customOpt.textContent = t('settings.syntaxColorPresets.custom');
+                presetSelect.appendChild(customOpt);
+
+                // 加入各預設組
+                Object.keys(syntaxColorPresets).forEach(presetKey => {
+                    const opt = document.createElement('option');
+                    opt.value = presetKey;
+                    opt.textContent = t(`settings.syntaxColorPresets.${presetKey}`);
+                    presetSelect.appendChild(opt);
+                });
+
+                const detectMatchingPreset = (curColors) => {
+                    if (!curColors) return 'custom';
+                    for (const [key, preset] of Object.entries(syntaxColorPresets)) {
+                        const matches = Object.keys(preset.colors).every(k =>
+                            (curColors[k] || '').toLowerCase() === (preset.colors[k] || '').toLowerCase()
+                        );
+                        if (matches) return key;
+                    }
+                    return 'custom';
+                };
+
+                presetSelect.value = detectMatchingPreset(currentVal);
+
+                presetSelect.addEventListener('change', (e) => {
+                    const selected = e.target.value;
+                    if (selected === 'custom' || !syntaxColorPresets[selected]) return;
+                    const newColors = { ...syntaxColorPresets[selected].colors };
+                    Object.assign(el.value, newColors);
+                    targetRef[targetKey] = { ...newColors };
+                    appContext.setSetting(targetKey, targetRef[targetKey]);
+                    if (item.apply) item.apply(targetRef[targetKey]);
+                    el._updateDisplay();
+                });
+
+                presetGroup.appendChild(presetLabel);
+                presetGroup.appendChild(presetSelect);
+                toolbarRow.appendChild(presetGroup);
+
+                const resetBtn = document.createElement('button');
+                resetBtn.type = 'button';
+                resetBtn.className = 'popup-setting-sub-reset-btn';
+                resetBtn.textContent = t('settings.syntaxColorOpts.resetColors');
+                resetBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    Object.assign(el.value, defaultSyntaxColors);
+                    targetRef[targetKey] = { ...defaultSyntaxColors };
+                    appContext.setSetting(targetKey, targetRef[targetKey]);
+                    if (item.apply) item.apply(targetRef[targetKey]);
+                    el._updateDisplay();
+                });
+                toolbarRow.appendChild(resetBtn);
+                el.appendChild(toolbarRow);
+
+                Object.keys(item.def).forEach((subKey) => {
+                    const subDefault = item.def[subKey];
+                    const subCurrent = currentVal[subKey] ?? subDefault;
+                    const subLabel = t(item.subLabels?.[subKey] || subKey);
+                    const previewText = item.subPreviews?.[subKey] || '';
+
+                    const colorInput = createColorInput(subCurrent, (newColor) => {
+                        try {
+                            el.value[subKey] = newColor;
+                            targetRef[targetKey][subKey] = newColor;
+                            appContext.setSetting(targetKey, targetRef[targetKey]);
+                            if (item.apply) item.apply(targetRef[targetKey]);
+                            presetSelect.value = detectMatchingPreset(targetRef[targetKey]);
+                        } catch (e) { }
+                    }, previewText);
+
+                    el._subRefs[subKey] = colorInput;
+
+                    const subRow = createRow(subLabel, colorInput);
+                    el.appendChild(subRow);
+                });
+
+                el._updateDisplay = () => {
+                    Object.keys(el._subRefs).forEach(subKey => {
+                        const val = targetRef[targetKey]?.[subKey] ?? item.def[subKey];
+                        if (el._subRefs[subKey]?.setValue) el._subRefs[subKey].setValue(val);
+                    });
+                    presetSelect.value = detectMatchingPreset(targetRef[targetKey]);
                 };
             }
             // --- E. 處理 Button ---
@@ -383,6 +621,8 @@ export function openSettingsModal(options = {}) {
         sfxVolumes: settings.sfxVolumes ? { ...settings.sfxVolumes } : null
     };
 
+    const oldSyntaxColors = settings.syntaxColors ? { ...settings.syntaxColors } : null;
+
     popupCtx = popupWindow({
         title: t('settings.title'),
         customContent: container,
@@ -402,6 +642,10 @@ export function openSettingsModal(options = {}) {
                 text: t('popup.cancel'),
                 onClick: () => {
                     applyAudioSettings(oldAudioSettings);
+                    if (oldSyntaxColors) {
+                        applySyntaxColors(oldSyntaxColors);
+                        if (settings) settings.syntaxColors = { ...oldSyntaxColors };
+                    }
                 },
                 hideOnClick: true
             },
@@ -414,7 +658,7 @@ export function openSettingsModal(options = {}) {
                         } else if (ref.type === 'checkbox') {
                             ref.el.checked = ref.def;
                             ref.ref[ref.key] = ref.def;
-                        } else if (ref.type === 'object') {
+                        } else if (ref.type === 'object' || ref.type === 'color-object') {
                             ref.el.value = { ...ref.def };
                             Object.assign(ref.ref[ref.key], ref.def);
                             if (ref.el._updateDisplay) ref.el._updateDisplay();

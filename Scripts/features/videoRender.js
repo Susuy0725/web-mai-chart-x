@@ -196,6 +196,7 @@ export async function videoRender(audioManager, canvas, renderer, {
     height = 1080,
     bitrate = null,
     quality = 'high',
+    speedMode = 'fast',
     bgmVolume = 0.8,
     sfxVolume = 1.0,
     includeAudio = true,
@@ -387,12 +388,13 @@ export async function videoRender(audioManager, canvas, renderer, {
             resolvedBitrate = Math.round(Math.max(minBps, baseBps * Math.pow(pixelRatio, 0.9) * Math.pow(fpsRatio, 0.75)));
         }
 
-        // 視訊軌設定
+        // 視訊軌設定 (支援極速硬體編碼 realtime 模式，避免 lookahead 緩衝停頓)
+        const isFastMode = speedMode !== 'quality';
         const encodingConfig = {
             codec: 'avc',
             bitrate: resolvedBitrate,
-            keyFrameInterval: 1.5, // 1.5 秒關鍵幀，縮短 GOP 緩衝長度並大幅降低硬體編碼器佇列顯存消耗
-            latencyMode: 'quality',
+            keyFrameInterval: isFastMode ? 2.0 : 1.5,
+            latencyMode: isFastMode ? 'realtime' : 'quality',
             bitrateMode: 'variable'
         };
 
@@ -877,6 +879,8 @@ export async function videoRender(audioManager, canvas, renderer, {
         const simaiLogicControler = new SimaiLogicControler();
         let nowIndexLocal = 0;
         const startTime = performance.now();
+        let lastUiUpdateTime = startTime;
+        let lastYieldTime = startTime;
 
         popup.setContent(i18n('popup.recordVideo.startRendering', { count: frameCount }) || `開始逐幀渲染：${frameCount} 幀`);
         for (let i = 0; i < frameCount; i++) {
@@ -968,13 +972,11 @@ export async function videoRender(audioManager, canvas, renderer, {
                         }
 
                         if (currentCanvasFrame && currentCanvasFrame.canvas) {
-                            try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (e) { offCtx.filter = 'none'; }
                             const vw = currentCanvasFrame.canvas.width;
                             const vh = currentCanvasFrame.canvas.height;
                             drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) =>
                                 offCtx.drawImage(currentCanvasFrame.canvas, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh)
                             );
-                            offCtx.filter = 'none';
                             drawBGDone = true;
                         }
                     } catch (e) {
@@ -985,11 +987,9 @@ export async function videoRender(audioManager, canvas, renderer, {
                 if (!drawBGDone && exportVideo && exportVideoReady && (exportVideo.duration || exportVideo.videoWidth)) {
                     const bgTarget = Math.max(0, Math.min((exportVideo.duration || 0) - 0.001, t));
                     await seekVideoTo(exportVideo, bgTarget);
-                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (e) { offCtx.filter = 'none'; }
                     const vw = exportVideo.videoWidth || exportVideo.width || boxW;
                     const vh = exportVideo.videoHeight || exportVideo.height || boxH;
                     drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(exportVideo, sx, sy, sw || vw, sh || vh, dx, dy, dw, dh));
-                    offCtx.filter = 'none';
                     drawBGDone = true;
                 }
 
@@ -997,9 +997,16 @@ export async function videoRender(audioManager, canvas, renderer, {
                     const img = editorBackgroundImage;
                     const iw = img.naturalWidth || img.width || boxW;
                     const ih = img.naturalHeight || img.height || boxH;
-                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (e) { offCtx.filter = 'none'; }
                     drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => offCtx.drawImage(img, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh));
-                    offCtx.filter = 'none';
+                    drawBGDone = true;
+                }
+
+                // 高速背景調暗：利用快速單層 Alpha 混合覆蓋取代極耗顯存/CPU的 Canvas 2D ctx.filter 濾鏡處理
+                if (drawBGDone && finalBgBrightness < 1.0) {
+                    offCtx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, 1 - finalBgBrightness))})`;
+                    offCtx.fillRect(0, 0, off.width, off.height);
+                } else if (drawBGDone && finalBgBrightness > 1.0) {
+                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (_) { }
                 }
 
                 /*if (!settings.hideOutline && outlineImage) {
@@ -1066,8 +1073,14 @@ export async function videoRender(audioManager, canvas, renderer, {
             const tsRelative = i * step;
             await videoSource.add(tsRelative, step);
 
-            if (i % 5 === 0 || i === frameCount - 1) {
-                const elapsed = performance.now() - startTime;
+            const nowTime = performance.now();
+            const isLastFrame = i === frameCount - 1;
+            const timeSinceLastUi = nowTime - lastUiUpdateTime;
+
+            // UI 更新節流：每 80ms 或最後一幀更新一次，大幅減輕 DOM 渲染開銷
+            if (timeSinceLastUi > 80 || isLastFrame) {
+                lastUiUpdateTime = nowTime;
+                const elapsed = nowTime - startTime;
                 const avgTimePerFrame = elapsed / (i + 1);
                 const remainingFrames = frameCount - (i + 1);
                 const remainingSec = Math.round((remainingFrames * avgTimePerFrame) / 1000);
@@ -1084,10 +1097,12 @@ export async function videoRender(audioManager, canvas, renderer, {
                 const percent = (((i + 1) / frameCount) * 100).toFixed(2);
                 popup.setProgress(((i + 1) / frameCount) * 100);
                 popup.setContent((i18n('popup.recordVideo.renderingProgress', { current: i + 1, total: frameCount, percent }) || `渲染中：第 ${i + 1} / ${frameCount} 幀 (${percent}%)`) + remainingStr);
+            }
 
-                // 每 5 幀讓出主執行緒；每 30 幀給予 10ms 空閒時間供瀏覽器進行 GC 與 GPU 佇列清空，防止分頁假死重新整理
-                const idleDelay = (i % 30 === 0) ? 10 : 0;
-                await new Promise(resolve => setTimeout(resolve, idleDelay));
+            // 非阻塞讓出主執行緒：基於時間間隔 (60ms) 讓出，避免頻繁計時器延遲阻礙 GPU 編碼吞吐量，並保持 UI 取消回應流暢
+            if (nowTime - lastYieldTime > 60) {
+                lastYieldTime = nowTime;
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
 

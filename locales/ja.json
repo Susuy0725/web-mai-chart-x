@@ -215,7 +215,11 @@
       "richHanabi": "豪華な花火エフェクト",
       "disablePreviewWaveform": "プレビュー波形を無効化",
       "middleDistance": "スライディングスター中距離(middleDistance)",
-      "noteBaseSize": "ノートベースサイズ (noteBaseSize)"
+      "noteBaseSize": "ノートベースサイズ (noteBaseSize)",
+      "invertWheelDirection": "マウスホイールのスクロール方向反転",
+      "smoothScroll": "スムーズスクロール (滑らかなタイムライン移動)",
+      "wheelSensitivity": "ホイール感度",
+      "syntaxColors": "構文強調カスタム色"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -228,6 +232,39 @@
       "computer": "Autoplay (PC)",
       "simulate": "Autoplay (シミュレーション)",
       "off": "マニュアル"
+    },
+    "invertWheelOpts": {
+      "none": "なし (デフォルト)",
+      "preview": "プレビュー軌道のみ反転",
+      "visualEditor": "ビジュアルエディタのみ反転",
+      "both": "両方反転"
+    },
+    "syntaxColorPresets": {
+      "title": "プリセット配色",
+      "custom": "カスタム",
+      "default": "初期値 (Classic WMCX)",
+      "arcade": "maimai DX アーケード風",
+      "vscode": "VS Code Dark+",
+      "monokai": "Monokai Pro",
+      "tokyoNight": "Tokyo Night",
+      "cyberpunk": "ネオン (Cyberpunk)"
+    },
+    "syntaxColorOpts": {
+      "resetColors": "デフォルト色にリセット",
+      "note": "通常ノート / デフォルト文字 (1~8)",
+      "comment": "コメント (/*...*/, ||)",
+      "bpm": "BPM マーカー ( (120) )",
+      "split": "拍分割マーカー ( {4} )",
+      "time": "時間長マーカー ( [1:4] )",
+      "slide": "スライド軌道 (-^v...)",
+      "customSlide": "特殊スライド (<A1>)",
+      "hold": "ホールド (h)",
+      "break": "ブレイク (b)",
+      "ex": "EX ノート (x)",
+      "mine": "地雷ノート (m)",
+      "hanabi": "花火エフェクト (f)",
+      "touch": "タッチセンサー (A1, C)",
+      "comma": "拍区切りカンマ (,)"
     }
   },
   "popup": {
@@ -572,7 +609,10 @@
       "qualityMedium": "標準画質 (~10 Mbps)",
       "qualityLow": "低画質 (~5 Mbps)",
       "qualityLowest": "最低画質 (~2 Mbps)",
-      "customBitrate": "カスタムビットレート (Mbps):"
+      "customBitrate": "カスタムビットレート (Mbps):",
+      "speedMode": "書き出しエンコードモード:",
+      "speedFast": "高速ハードウェア (推奨・リアルタイム級)",
+      "speedQuality": "高圧縮・品質重視 (深層計算)"
     },
     "quickGenerate": {
       "title": "クイック生成",

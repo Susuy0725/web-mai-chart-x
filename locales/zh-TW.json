@@ -215,7 +215,11 @@
       "richHanabi": "絢麗煙火特效",
       "disablePreviewWaveform": "禁用預覽波形",
       "noteBaseSize": "Note 基礎大小 (noteBaseSize)",
-      "middleDistance": "滑星中段距離 (middleDistance)"
+      "middleDistance": "滑星中段距離 (middleDistance)",
+      "invertWheelDirection": "反轉滾輪滑動方向",
+      "smoothScroll": "平滑滾輪 (平滑時間軸滑動)",
+      "wheelSensitivity": "滾輪靈敏度",
+      "syntaxColors": "語法高亮自訂顏色"
     },
     "middleDisplayOpts": {
       "off": "關閉",
@@ -228,6 +232,39 @@
       "computer": "Autoplay (電腦)",
       "simulate": "Autoplay (模擬)",
       "off": "手動遊玩"
+    },
+    "invertWheelOpts": {
+      "none": "無 (預設)",
+      "preview": "僅預覽軌道 (Preview)",
+      "visualEditor": "僅視覺化編輯器 (Visual Editor)",
+      "both": "兩者皆反轉"
+    },
+    "syntaxColorPresets": {
+      "title": "主題色系",
+      "custom": "自訂",
+      "default": "預設 (Classic WMCX)",
+      "arcade": "maimai DX 街機風",
+      "vscode": "VS Code Dark+",
+      "monokai": "Monokai Pro",
+      "tokyoNight": "Tokyo Night",
+      "cyberpunk": "霓虹 (Cyberpunk)"
+    },
+    "syntaxColorOpts": {
+      "resetColors": "重設為預設色彩",
+      "note": "一般音符 / 預設字元 (1~8)",
+      "comment": "註釋 (/*...*/, ||)",
+      "bpm": "BPM 標記 ( (120) )",
+      "split": "分拍標記 ( {4} )",
+      "time": "時值標記 ( [1:4] )",
+      "slide": "滑條路徑 (-^v...)",
+      "customSlide": "特殊滑條 (<A1>)",
+      "hold": "長押 (h)",
+      "break": "絕讚 (b)",
+      "ex": "EX 音符 (x)",
+      "mine": "地雷 / 假鍵 (m)",
+      "hanabi": "煙火特效 (f)",
+      "touch": "Touch 感應區 (A1, C)",
+      "comma": "拍子分隔逗號 (,)"
     }
   },
   "popup": {
@@ -572,7 +609,10 @@
       "qualityMedium": "標準畫質 (~10 Mbps)",
       "qualityLow": "低畫質 (~5 Mbps)",
       "qualityLowest": "極低畫質 (~2 Mbps)",
-      "customBitrate": "自訂碼率 (Mbps):"
+      "customBitrate": "自訂碼率 (Mbps):",
+      "speedMode": "匯出編碼模式:",
+      "speedFast": "極速硬體編碼 (推薦，近乎即時)",
+      "speedQuality": "高壓品質模式 (深度運算壓縮)"
     },
     "quickGenerate": {
       "title": "快速生成",

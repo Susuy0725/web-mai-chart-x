@@ -1,7 +1,7 @@
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from '../Scripts/indexDB.js';
 import { SimaiRenderer } from './renderer.js';
 import { simaiDecode } from '../Scripts/decode.js';
-import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, createCustomSlider, clamp, imgNotExists } from '../Scripts/helper.js';
+import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, clamp, imgNotExists } from '../Scripts/helper.js';
 import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue } from './slidetables.js';
@@ -3580,6 +3580,67 @@ function openSettings() {
         return row;
     };
 
+    const createRangeInput = (value, min = 0, max = 1, step = 0.1, onInputCallback) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'popup-setting-range-wrap';
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.className = 'popup-setting-range';
+        input.min = min;
+        input.max = max;
+        input.step = step;
+        input.value = value;
+
+        const valSpan = document.createElement('span');
+        valSpan.className = 'popup-setting-range-val';
+        const formatVal = (v) => {
+            const num = parseFloat(v);
+            if (isNaN(num)) return v;
+            if (step >= 1) return Math.round(num).toString();
+            const precision = step < 0.01 ? 3 : (step < 0.1 ? 2 : 1);
+            return num.toFixed(precision);
+        };
+
+        const updateVisuals = () => {
+            valSpan.textContent = formatVal(input.value);
+            const minNum = parseFloat(input.min);
+            const maxNum = parseFloat(input.max);
+            const curVal = parseFloat(input.value);
+            const pct = (maxNum <= minNum) ? 0 : Math.max(0, Math.min(100, ((curVal - minNum) / (maxNum - minNum)) * 100));
+            input.style.setProperty('--range-pct', `${pct}%`);
+        };
+
+        updateVisuals();
+
+        input.addEventListener('input', () => {
+            updateVisuals();
+            if (onInputCallback) onInputCallback(parseFloat(input.value));
+        });
+        input.addEventListener('change', () => {
+            updateVisuals();
+        });
+
+        wrap.type = 'range';
+        Object.defineProperty(wrap, 'value', {
+            get: () => input.value,
+            set: (v) => {
+                input.value = v;
+                updateVisuals();
+            }
+        });
+        wrap.min = min;
+        wrap.max = max;
+        wrap.step = step;
+        wrap._updateDisplay = () => {
+            updateVisuals();
+        };
+
+        wrap.appendChild(input);
+        wrap.appendChild(valSpan);
+        return wrap;
+    };
+
     const createCheckbox = (checked, id) => {
         const input = document.createElement('input');
         input.type = 'checkbox';
@@ -3857,7 +3918,7 @@ function openSettings() {
             }
             // C. Range
             else if (item.type === 'range') {
-                el = createCustomSlider(currentVal, item.min, item.max, item.step, (val) => {
+                el = createRangeInput(currentVal, item.min, item.max, item.step, (val) => {
                     targetRef[targetKey] = val;
                     if (item.apply) item.apply(val);
                 });
@@ -3874,7 +3935,7 @@ function openSettings() {
                     const subDefault = item.def[subKey];
                     const subCurrent = currentVal[subKey] ?? subDefault;
 
-                    const subSlider = createCustomSlider(subCurrent, 0, 1, 0.05, (subVal) => {
+                    const subSlider = createRangeInput(subCurrent, 0, 1, 0.05, (subVal) => {
                         el.value[subKey] = subVal;
                         targetRef[targetKey][subKey] = subVal;
                         if (item.apply) item.apply(targetRef[targetKey]);

@@ -224,6 +224,13 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
         };
     }
 
+    if (ctx.defaultSettings.syntaxColors) {
+        settings.syntaxColors = {
+            ...ctx.defaultSettings.syntaxColors,
+            ...(parsedSettings?.syntaxColors || {})
+        };
+    }
+
     // 檢查是否有缺少的新設定項目
     let hasNewKeys = false;
     for (const key in ctx.defaultSettings) {

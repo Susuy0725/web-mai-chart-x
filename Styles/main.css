@@ -853,11 +853,25 @@ body.resizing-panels #canvasContainer canvas {
     user-select: none;
     -webkit-user-select: none;
     pointer-events: none;
-    color: #d4d4d4;
+    color: var(--hl-note, #d4d4d4);
     /* 預設文字顏色 */
     z-index: 1;
     contain: layout style;
 }
+
+#highlight-layer .hl-comment { color: var(--hl-comment, #508564); }
+#highlight-layer .hl-slide { color: var(--hl-slide, #7EBAF0); }
+#highlight-layer .hl-custom-slide { color: var(--hl-custom-slide, #c492bf); }
+#highlight-layer .hl-touch { color: var(--hl-touch, #7EBAF0); }
+#highlight-layer .hl-bpm { color: var(--hl-bpm, #ffbf5f); font-weight: bold; }
+#highlight-layer .hl-split { color: var(--hl-split, #c97554); font-weight: bold; }
+#highlight-layer .hl-time { color: var(--hl-time, #b5cea8); }
+#highlight-layer .hl-hold { color: var(--hl-hold, #9fd47b); }
+#highlight-layer .hl-break { color: var(--hl-break, #FF9707); }
+#highlight-layer .hl-ex { color: var(--hl-ex, #d1c70f); }
+#highlight-layer .hl-mine { color: var(--hl-mine, #c24e61); }
+#highlight-layer .hl-hanabi { color: var(--hl-hanabi, #d092ef); }
+#highlight-layer .hl-comma { color: var(--hl-comma, #656b6d); }
 
 #highlight-layer .highlight-warning {
     background: rgba(255, 77, 77, 0.3);

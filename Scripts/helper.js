@@ -239,6 +239,136 @@ c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135
 c2.closePath();
 touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
 
+export const defaultSyntaxColors = {
+    note: '#d4d4d4',
+    comment: '#508564',
+    bpm: '#ffbf5f',
+    split: '#c97554',
+    time: '#b5cea8',
+    slide: '#7EBAF0',
+    customSlide: '#c492bf',
+    hold: '#9fd47b',
+    break: '#FF9707',
+    ex: '#d1c70f',
+    mine: '#c24e61',
+    hanabi: '#d092ef',
+    touch: '#7EBAF0',
+    comma: '#656b6d',
+};
+
+export const syntaxColorPresets = {
+    default: {
+        name: 'default',
+        colors: { ...defaultSyntaxColors }
+    },
+    arcade: {
+        name: 'arcade',
+        colors: {
+            note: '#ffffff',
+            comment: '#667788',
+            bpm: '#00d2be',
+            split: '#ffb700',
+            time: '#a0e040',
+            slide: '#00a2ff',
+            customSlide: '#e060ff',
+            hold: '#ffcc00',
+            break: '#ff3344',
+            ex: '#ffe600',
+            mine: '#ff2255',
+            hanabi: '#ff66cc',
+            touch: '#00d8ff',
+            comma: '#556677',
+        }
+    },
+    vscode: {
+        name: 'vscode',
+        colors: {
+            note: '#d4d4d4',
+            comment: '#6a9955',
+            bpm: '#4ec9b0',
+            split: '#ce9178',
+            time: '#b5cea8',
+            slide: '#569cd6',
+            customSlide: '#c586c0',
+            hold: '#dcdcaa',
+            break: '#d7ba7d',
+            ex: '#4fc1ff',
+            mine: '#f44747',
+            hanabi: '#c586c0',
+            touch: '#9cdcfe',
+            comma: '#808080',
+        }
+    },
+    monokai: {
+        name: 'monokai',
+        colors: {
+            note: '#fcfcfa',
+            comment: '#727072',
+            bpm: '#ffd866',
+            split: '#fc9867',
+            time: '#a9dc76',
+            slide: '#78dce8',
+            customSlide: '#ab9df2',
+            hold: '#a9dc76',
+            break: '#ff6188',
+            ex: '#ffd866',
+            mine: '#ff6188',
+            hanabi: '#ab9df2',
+            touch: '#78dce8',
+            comma: '#939293',
+        }
+    },
+    tokyoNight: {
+        name: 'tokyoNight',
+        colors: {
+            note: '#c0caf5',
+            comment: '#565f89',
+            bpm: '#e0af68',
+            split: '#ff9e64',
+            time: '#73daca',
+            slide: '#7aa2f7',
+            customSlide: '#bb9af7',
+            hold: '#9ece6a',
+            break: '#ff7a93',
+            ex: '#2ac3de',
+            mine: '#db4b4b',
+            hanabi: '#b4f9f8',
+            touch: '#7dcfff',
+            comma: '#565f89',
+        }
+    },
+    cyberpunk: {
+        name: 'cyberpunk',
+        colors: {
+            note: '#00ffcc',
+            comment: '#525266',
+            bpm: '#ff007f',
+            split: '#ff7700',
+            time: '#ffff00',
+            slide: '#00ffff',
+            customSlide: '#bd00ff',
+            hold: '#39ff14',
+            break: '#ff073a',
+            ex: '#ffe600',
+            mine: '#ff0055',
+            hanabi: '#ff00d4',
+            touch: '#00f0ff',
+            comma: '#6e6e80',
+        }
+    }
+};
+
+export function applySyntaxColors(syntaxColors = {}) {
+    const root = document.documentElement;
+    const highlightLayer = document.getElementById('highlight-layer');
+    const colors = { ...defaultSyntaxColors, ...(syntaxColors || {}) };
+    Object.entries(colors).forEach(([key, color]) => {
+        const cssVar = `--hl-${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+        if (root) root.style.setProperty(cssVar, color);
+        if (highlightLayer) highlightLayer.style.setProperty(cssVar, color);
+    });
+}
+
 const COMBINED_HIGHLIGHT_REGEX = /(\|\*[\s\S]*?\*\||\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|(?:&amp;)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(m)|(([ABCDE])(\d+)|C|C(d+))/gm;
 
 export function getHighlight(text, errpos = []) {
@@ -302,24 +432,24 @@ export function getHighlight(text, errpos = []) {
     const highlightText = (segment) => {
         const escaped = escapeHTML(segment);
         return escaped.replace(COMBINED_HIGHLIGHT_REGEX, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, mine, touch) => {
-            if (comment) return `<span style="color: #508564;">${comment}</span>`;
+            if (comment) return `<span class="hl-comment" style="color: var(--hl-comment, #508564);">${comment}</span>`;
             if (slide) {
                 if (slide === '&amp;') return '&amp;';
                 if (slide.startsWith('&lt;') && slide.endsWith('&gt;')) {
-                    return `<span style="color: #c492bf;">${slide}</span>`;
+                    return `<span class="hl-custom-slide" style="color: var(--hl-custom-slide, #c492bf);">${slide}</span>`;
                 }
-                return `<span style="color: #7EBAF0;">${slide}</span>`;
+                return `<span class="hl-slide" style="color: var(--hl-slide, #7EBAF0);">${slide}</span>`;
             }
-            if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
-            if (bpm) return `<span style="color: #ffbf5f; font-weight: bold;">${bpm}</span>`;
-            if (split) return `<span style="color: #c97554ff; font-weight: bold;">${split}</span>`;
-            if (time) return `<span style="color: #b5cea8;">${time}</span>`;
-            if (hold) return `<span style="color: #9fd47b;">${hold}</span>`;
-            if (bk) return `<span style="color: #FF9707;">${bk}</span>`;
-            if (ex) return `<span style="color: #d1c70f;">${ex}</span>`;
-            if (mine) return `<span style="color: #c24e61;">${mine}</span>`;
-            if (f) return `<span style="color: #d092ef;">${f}</span>`;
-            if (comm) return `<span style="color: #656b6d;">${comm}</span>`;
+            if (touch) return `<span class="hl-touch" style="color: var(--hl-touch, #7EBAF0);">${touch}</span>`;
+            if (bpm) return `<span class="hl-bpm" style="color: var(--hl-bpm, #ffbf5f); font-weight: bold;">${bpm}</span>`;
+            if (split) return `<span class="hl-split" style="color: var(--hl-split, #c97554); font-weight: bold;">${split}</span>`;
+            if (time) return `<span class="hl-time" style="color: var(--hl-time, #b5cea8);">${time}</span>`;
+            if (hold) return `<span class="hl-hold" style="color: var(--hl-hold, #9fd47b);">${hold}</span>`;
+            if (bk) return `<span class="hl-break" style="color: var(--hl-break, #FF9707);">${bk}</span>`;
+            if (ex) return `<span class="hl-ex" style="color: var(--hl-ex, #d1c70f);">${ex}</span>`;
+            if (mine) return `<span class="hl-mine" style="color: var(--hl-mine, #c24e61);">${mine}</span>`;
+            if (f) return `<span class="hl-hanabi" style="color: var(--hl-hanabi, #d092ef);">${f}</span>`;
+            if (comm) return `<span class="hl-comma" style="color: var(--hl-comma, #656b6d);">${comm}</span>`;
             return match;
         });
     };
@@ -1690,210 +1820,6 @@ export const createLabeledInput1 = ({
     return { wrapper, input };
 };
 
-export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, onInputCallback) => {
-    const thumbWidth = 4;
-    const thumbHeight = 34;
-    const trackHeight = 24;
-    const gap = 4; // 滑鈕兩側 4px 間隙
-    const halfThumb = thumbWidth / 2; // 2px
-
-    // 1. 主容器 (模擬 input[type="range"] 讓外部能夠讀取與賦值 .value)
-    const container = document.createElement('div');
-    container.className = 'custom-slider-container';
-    container.setAttribute('type', 'range');
-    container.type = 'range';
-    container.value = initialValue;
-    container.min = min;
-    container.max = max;
-    container.step = step;
-    container.style.cssText = `
-        width: 140px;
-        min-width: 120px;
-        flex-shrink: 0;
-        height: ${trackHeight}px;
-        margin-top: 14px;
-        margin-bottom: 4px;
-        display: flex;
-        align-items: center;
-        position: relative;
-        cursor: pointer;
-        user-select: none;
-        touch-action: none;
-        box-sizing: border-box;
-    `;
-
-    // 2. 軌道主體容器 (Track)
-    const track = document.createElement('div');
-    track.style.cssText = `
-        width: 100%;
-        height: ${trackHeight}px;
-        position: relative;
-        display: flex;
-        align-items: center;
-    `;
-
-    // 3. 填滿進度軌道 (Active Fill)
-    const fill = document.createElement('div');
-    fill.style.cssText = `
-        height: 100%;
-        background: var(--accent-color);
-        border-radius: 999px 4px 4px 999px;
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 0%;
-        pointer-events: none;
-        transition: width 0.15s ease-out;
-    `;
-
-    // 4. 未填滿軌道 (Inactive Track)
-    const unfill = document.createElement('div');
-    unfill.style.cssText = `
-        height: 100%;
-        background: rgba(255, 255, 255, 0.14);
-        border-radius: 4px 999px 999px 4px;
-        position: absolute;
-        right: 0;
-        top: 0;
-        left: 0%;
-        pointer-events: none;
-        transition: left 0.15s ease-out;
-    `;
-
-    // 5. 垂直膠囊滑鈕 (Vertical Capsule Thumb)
-    const thumb = document.createElement('div');
-    thumb.style.cssText = `
-        width: ${thumbWidth}px;
-        height: ${thumbHeight}px;
-        background: var(--accent-color);
-        border-radius: 999px;
-        position: absolute;
-        top: 50%;
-        left: 0%;
-        transform: translate(-50%, -50%);
-        box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
-        box-sizing: border-box;
-        pointer-events: none;
-        transition: left 0.15s ease-out, transform 0.15s ease-out, box-shadow 0.15s ease-out;
-    `;
-
-    // 6. 頂部浮動數值氣泡 (Value Bubble)
-    const bubble = document.createElement('div');
-    bubble.style.cssText = `
-        position: absolute;
-        left: 0%;
-        opacity: 0;
-        transform: translateX(-50%);
-        min-width: 22px;
-        height: 22px;
-        padding: 0 5px;
-        box-sizing: border-box;
-        border-radius: 4px;
-        background: #f2effa;
-        color: #1a1721;
-        font-family: 'mono', monospace, sans-serif;
-        font-size: 11px;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-        pointer-events: none;
-        white-space: nowrap;
-        transition: left 0.3s ease-out, transform 0.1s ease-out, opacity 0.1s ease-out;
-    `;
-
-    track.appendChild(unfill);
-    track.appendChild(fill);
-    track.appendChild(thumb);
-    track.appendChild(bubble);
-    container.appendChild(track);
-
-    // 格式化顯示數值（整數不帶贅餘 0，小數依步長自適應）
-    const formatValue = (v) => {
-        if (step >= 1) return Math.round(v).toString();
-        const precision = step < 0.01 ? 3 : (step < 0.1 ? 2 : 1);
-        return parseFloat(v.toFixed(precision)).toString();
-    };
-
-    // 內部更新視覺與數值函式
-    const updateVisuals = (val) => {
-        val = Math.max(min, Math.min(max, val));
-        const percent = (max === min) ? 0 : Math.max(0, Math.min(1, (val - min) / (max - min)));
-
-        const offsetGap = halfThumb + gap; // 2 + 4 = 6px
-
-        fill.style.display = 'block';
-        fill.style.width = `calc(${percent * 100}% - ${offsetGap}px)`;
-        fill.style.borderRadius = '10px 4px 4px 10px';
-
-        unfill.style.display = 'block';
-        unfill.style.left = `calc(${percent * 100}% + ${offsetGap}px)`;
-        unfill.style.borderRadius = '4px 10px 10px 4px';
-
-        thumb.style.left = `${percent * 100}%`;
-        bubble.style.left = `${percent * 100}%`;
-
-        bubble.textContent = formatValue(val);
-        container.value = val;
-    };
-
-    // 處理拖曳/點擊邏輯
-    let isDragging = false;
-
-    const handlePointerMove = (e) => {
-        const rect = track.getBoundingClientRect();
-        if (rect.width <= 0) return;
-
-        const clickX = e.clientX - rect.left;
-        let pct = Math.max(0, Math.min(1, clickX / rect.width));
-
-        let rawVal = min + pct * (max - min);
-        let steppedVal = Math.round(rawVal / step) * step;
-
-        steppedVal = parseFloat(steppedVal.toFixed(4));
-        steppedVal = Math.max(min, Math.min(max, steppedVal));
-
-        updateVisuals(steppedVal);
-        if (onInputCallback) onInputCallback(steppedVal);
-    };
-
-    container.addEventListener('pointerdown', (e) => {
-        isDragging = true;
-        container.setPointerCapture(e.pointerId);
-        thumb.style.transform = 'translate(-50%, -50%) scaleY(1.1) scaleX(1.3)';
-        bubble.style.opacity = 1;
-        bubble.style.transform = 'translateX(-50%) translateY(-75%)';
-        handlePointerMove(e);
-    });
-
-    container.addEventListener('pointermove', (e) => {
-        if (!isDragging) return;
-        handlePointerMove(e);
-    });
-
-    const stopDrag = () => {
-        if (!isDragging) return;
-        isDragging = false;
-        thumb.style.transform = 'translate(-50%, -50%) scale(1)';
-        bubble.style.opacity = 0;
-        bubble.style.transform = 'translateX(-50%)';
-        updateVisuals(container.value);
-    };
-
-    container.addEventListener('pointerup', stopDrag);
-    container.addEventListener('pointercancel', stopDrag);
-
-    // 初始化數值視覺
-    updateVisuals(initialValue);
-
-    // 提供外部更新或重置介面
-    container._updateDisplay = () => {
-        updateVisuals(container.value);
-    };
-
-    return container;
-};
 
 const activeDebug = () => {
     const debugInfoEl = document.createElement('div');

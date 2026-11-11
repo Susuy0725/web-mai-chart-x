@@ -2,7 +2,7 @@ import { getCurrentLang, getLangSetting, setLang, getAvailableLanguages, detectD
 import { eventBus, EVENTS } from './eventBus.js';
 import { openExportSelectionModal, openImportSelectionModal } from '../modals/maintenanceModal.js';
 import { openResourceManager } from '../modals/resourceManagerModal.js';
-import { simpleToast } from '../helper.js';
+import { simpleToast, defaultSyntaxColors, applySyntaxColors } from '../helper.js';
 
 export const defaultSettings = {
     // Game
@@ -69,6 +69,10 @@ export const defaultSettings = {
         'touchHold_riser': 0.6,
         'hanabi': 0.6,
     },
+    smoothScroll: true, // 啟用平滑滾輪 (消除時間軸跳動)
+    wheelSensitivity: 1.0, // 滾輪靈敏度倍率 (0.2 ~ 3.0)
+    invertWheelDirection: 'none', // 滾輪滑動方向反轉: 'none' (無), 'preview' (僅預覽軌道), 'visualEditor' (僅視覺化編輯器), 'both' (兩者皆反轉)
+    syntaxColors: { ...defaultSyntaxColors },
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     disableSyntaxCheck: false, // 禁用語法檢查
@@ -288,6 +292,74 @@ export const settingsConfig = [
             },
             {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
+            },
+            {
+                id: 'smoothScroll',
+                type: 'checkbox',
+                label: 'settings.items.smoothScroll',
+                def: defaultSettings.smoothScroll ?? true
+            },
+            {
+                id: 'wheelSensitivity',
+                type: 'range',
+                label: 'settings.items.wheelSensitivity',
+                min: 0.2,
+                max: 3.0,
+                step: 0.05,
+                def: defaultSettings.wheelSensitivity || 1.0
+            },
+            {
+                id: 'invertWheelDirection',
+                type: 'dropdown',
+                label: 'settings.items.invertWheelDirection',
+                options: [
+                    { value: 'none', label: 'settings.invertWheelOpts.none' },
+                    { value: 'preview', label: 'settings.invertWheelOpts.preview' },
+                    { value: 'visualEditor', label: 'settings.invertWheelOpts.visualEditor' },
+                    { value: 'both', label: 'settings.invertWheelOpts.both' },
+                ],
+                def: defaultSettings.invertWheelDirection || 'none'
+            },
+            {
+                id: 'syntaxColors',
+                type: 'color-object',
+                label: 'settings.items.syntaxColors',
+                def: defaultSettings.syntaxColors,
+                subLabels: {
+                    note: 'settings.syntaxColorOpts.note',
+                    comment: 'settings.syntaxColorOpts.comment',
+                    bpm: 'settings.syntaxColorOpts.bpm',
+                    split: 'settings.syntaxColorOpts.split',
+                    time: 'settings.syntaxColorOpts.time',
+                    slide: 'settings.syntaxColorOpts.slide',
+                    customSlide: 'settings.syntaxColorOpts.customSlide',
+                    hold: 'settings.syntaxColorOpts.hold',
+                    break: 'settings.syntaxColorOpts.break',
+                    ex: 'settings.syntaxColorOpts.ex',
+                    mine: 'settings.syntaxColorOpts.mine',
+                    hanabi: 'settings.syntaxColorOpts.hanabi',
+                    touch: 'settings.syntaxColorOpts.touch',
+                    comma: 'settings.syntaxColorOpts.comma',
+                },
+                subPreviews: {
+                    note: '1',
+                    comment: '/* 註釋 */',
+                    bpm: '(120)',
+                    split: '{4}',
+                    time: '[1:4]',
+                    slide: '-^v',
+                    customSlide: '<A1>',
+                    hold: 'h',
+                    break: 'b',
+                    ex: 'x',
+                    mine: 'm',
+                    hanabi: 'f',
+                    touch: 'A1',
+                    comma: ',',
+                },
+                apply: (val) => {
+                    applySyntaxColors(val);
+                }
             },
         ]
     },

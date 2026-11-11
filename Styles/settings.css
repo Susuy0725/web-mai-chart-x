@@ -180,42 +180,129 @@
     display: flex;
 }
 
-/* 滑桿容器自訂寬度 (Custom Range Slider in Setting Row) */
-.popup-setting-wrapper>[type="range"],
-.popup-setting-wrapper>.custom-slider-container,
-.custom-slider-container {
-    width: 120px;
-    min-width: 100px;
-    flex: 0 0 120px;
+/* --- 現代原生 Range Slider 樣式 (Range Slider with Live Value) --- */
+.popup-setting-range-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 140px;
+    min-width: 120px;
+    flex: 0 0 140px;
+}
+
+.popup-setting-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    --range-track-unfilled: rgba(255, 255, 255, 0.16);
+    background: linear-gradient(
+        to right,
+        var(--accent-color, #4499ee) 0%,
+        var(--accent-color, #4499ee) var(--range-pct, 0%),
+        var(--range-track-unfilled) var(--range-pct, 0%),
+        var(--range-track-unfilled) 100%
+    );
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    transition: box-shadow 0.15s ease;
+}
+
+.popup-setting-range:hover {
+    --range-track-unfilled: rgba(255, 255, 255, 0.26);
+}
+
+.popup-setting-range:focus-visible {
+    box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.35));
+}
+
+/* WebKit (Chrome, Edge, Safari) Thumb */
+.popup-setting-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--accent-color, #4499ee);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.popup-setting-range:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
+}
+
+.popup-setting-range:active::-webkit-slider-thumb {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 4px var(--popup-accent-glow, rgba(68, 153, 238, 0.35));
+}
+
+/* Firefox Thumb & Track */
+.popup-setting-range::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent-color, #4499ee);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    transition: transform 0.12s ease;
+}
+
+.popup-setting-range::-moz-range-track {
+    height: 6px;
+    background: transparent;
+    border-radius: 999px;
+}
+
+.popup-setting-range::-moz-range-progress {
+    height: 6px;
+    background: var(--accent-color, #4499ee);
+    border-radius: 999px;
+}
+
+.popup-setting-range-val {
+    font-size: 11.5px;
+    font-family: 'mono', monospace, sans-serif;
+    color: var(--popup-text-main, #ffffff);
+    min-width: 32px;
+    text-align: right;
+    user-select: none;
+    font-weight: 600;
+    flex-shrink: 0;
 }
 
 /* --- 自訂核取方塊 (Custom Styled Checkbox) --- */
 .popup-setting-checkbox {
     appearance: none;
     -webkit-appearance: none;
-    width: 20px;
-    height: 20px;
-    flex: 0 0 20px;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
     margin: 0;
     cursor: pointer;
-    background-color: var(--popup-surface, #1e1e1e);
-    border: 2px solid var(--popup-border-light, #444444);
-    border-radius: 6px;
+    background-color: var(--popup-surface, #1e1e22);
+    border: 1.5px solid var(--popup-border-light, rgba(255, 255, 255, 0.22));
+    border-radius: 5px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     position: relative;
     outline: none;
     box-sizing: border-box;
-    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        box-shadow 0.2s ease,
+    transition: background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.18s ease,
         transform 0.1s ease;
 }
 
 .popup-setting-checkbox:hover {
-    border-color: #777777;
-    background-color: var(--popup-surface-hover, #262626);
+    border-color: rgba(255, 255, 255, 0.45);
+    background-color: rgba(255, 255, 255, 0.08);
 }
 
 .popup-setting-checkbox:active {
@@ -227,12 +314,12 @@
 }
 
 .popup-setting-checkbox:checked {
-    background-color: var(--accent-color);
-    border-color: var(--accent-color);
+    background-color: var(--accent-color, #4499ee);
+    border-color: var(--accent-color, #4499ee);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 13px 13px;
+    background-size: 12px 12px;
 }
 
 .popup-setting-checkbox:checked:hover {
@@ -241,64 +328,218 @@
 
 /* --- 下拉選單、按鈕、輸入框 (Dropdown, Buttons, Inputs) --- */
 .popup-setting-dropdown {
-    padding: 5px 8px;
-    border: 1px solid var(--popup-border-light, #555555);
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 5px 28px 5px 9px;
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
     border-radius: 6px;
-    background: var(--popup-surface, #222222);
+    background-color: var(--popup-surface, #202026);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23aaaaaa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 13px 13px;
     color: var(--popup-text-main, #ffffff);
     font-size: 13px;
+    font-family: inherit;
     cursor: pointer;
     outline: none;
     box-sizing: border-box;
-    max-width: 135px;
-    transition: border-color 0.2s, background-color 0.2s;
+    max-width: 140px;
+    transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.popup-setting-dropdown:hover,
+.popup-setting-dropdown:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
 .popup-setting-dropdown:focus {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.25));
+    border-color: var(--accent-color, #4499ee);
+    box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.28));
 }
 
 .popup-setting-dropdown option {
-    background: #202020;
+    background: #1a1a20;
     color: #ffffff;
+    padding: 4px;
 }
 
 .popup-setting-element {
     padding: 5px 12px;
-    background: var(--popup-surface, #333333);
+    background: var(--popup-surface, rgba(255, 255, 255, 0.08));
     color: var(--popup-text-main, #ffffff);
-    border: 1px solid var(--popup-border-light, #555555);
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.16));
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
-    transition: background 0.2s, border-color 0.2s;
+    transition: background 0.2s, border-color 0.2s, transform 0.1s;
     white-space: nowrap;
 }
 
 .popup-setting-element:hover {
-    background: var(--popup-surface-hover, #3e3e3e);
-    border-color: var(--accent-color);
+    background: var(--popup-surface-hover, rgba(255, 255, 255, 0.14));
+    border-color: var(--accent-color, #4499ee);
+}
+
+.popup-setting-element:active {
+    transform: scale(0.97);
 }
 
 .popup-setting-input {
-    width: 76px;
-    flex: 0 0 76px;
-    padding: 5px 8px;
-    border: none;
+    padding: 5px 9px;
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
     border-radius: 6px;
-    background: var(--popup-surface, #222222);
+    background: var(--popup-surface, #202026);
     color: var(--popup-text-main, #ffffff);
     font-size: 13px;
-    text-align: left;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    box-sizing: border-box;
+    font-family: inherit;
     outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.popup-setting-input:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .popup-setting-input:focus {
-    box-shadow: 0 0 0 1.5px var(--accent-color);
+    border-color: var(--accent-color, #4499ee);
+    box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.28));
+}
+
+.popup-setting-input[type="number"],
+.popup-setting-input:not([type="text"]) {
+    width: 78px;
+    flex: 0 0 78px;
+    text-align: right;
+}
+
+.popup-setting-input-text,
+.popup-setting-input[type="text"] {
+    width: 140px;
+    max-width: 180px;
+    text-align: left;
+}
+
+/* --- 語法高亮自訂顏色項目樣式 --- */
+.popup-setting-color-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 4px 10px 4px;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.popup-setting-color-preset-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--popup-text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.popup-setting-color-preset-group label {
+    font-weight: 500;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.popup-setting-preset-dropdown {
+    min-width: 150px;
+    max-width: 180px;
+}
+
+.popup-setting-color-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 3px 8px;
+    transition: border-color 0.18s ease, background-color 0.18s ease;
+    box-sizing: border-box;
+}
+
+.popup-setting-color-wrap:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.popup-setting-color-preview {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: #141419;
+    font-family: 'mono', monospace, sans-serif;
+    font-size: 11.5px;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-sizing: border-box;
+    user-select: none;
+    letter-spacing: 0.5px;
+}
+
+.popup-setting-color-hex {
+    font-family: 'mono', monospace, sans-serif;
+    font-size: 11.5px;
+    color: #a0a0b4;
+    min-width: 60px;
+    text-transform: uppercase;
+    user-select: none;
+    font-weight: 500;
+}
+
+.popup-setting-color-input {
+    -webkit-appearance: none;
+    appearance: none;
+    border: none;
+    width: 26px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+.popup-setting-color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.popup-setting-color-input::-webkit-color-swatch {
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+}
+
+.popup-setting-color-input::-moz-color-swatch {
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+}
+
+.popup-setting-sub-reset-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #c0c0d4;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.popup-setting-sub-reset-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.32);
+    color: #ffffff;
 }
 
 /* --- 響應式佈局：當彈窗寬度縮小時 (Responsive Fullscreen / Narrow Mode) --- */
@@ -327,23 +568,25 @@
         min-height: 36px;
     }
 
-    .popup-setting-input {
-        width: 100%;
-        height: 80%;
+    .popup-setting-input[type="number"] {
+        width: 64px;
+        flex: 0 0 64px;
+    }
+
+    .popup-setting-input-text {
+        width: 100px;
     }
 
     .popup-setting-dropdown {
-        max-width: 105px;
-        padding: 3px 5px;
+        max-width: 110px;
+        padding: 4px 22px 4px 6px;
         font-size: 12px;
     }
 
-    .popup-setting-wrapper>[type="range"],
-    .popup-setting-wrapper>.custom-slider-container,
-    .custom-slider-container {
-        width: 90px;
-        min-width: 85px;
-        flex: 0 0 90px;
+    .popup-setting-range-wrap {
+        width: 105px;
+        min-width: 95px;
+        flex: 0 0 105px;
     }
 
     .popup-setting-section {

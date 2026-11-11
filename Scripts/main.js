@@ -26,7 +26,9 @@ import {
     getButton, disableNavigationGestures, debounce, throttle,
     getHighlight, parseMaidata, popupWindow, loadAllImages,
     simpleToast,
-    clamp, createCustomSlider
+    clamp,
+    defaultSyntaxColors,
+    applySyntaxColors
 } from './helper.js';
 import { SimaiLogicControler } from './core/simaiLogicControler.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
@@ -97,6 +99,8 @@ const projGet = (key) => idbGetProject(currentProjectId, key);
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
+
+try { applySyntaxColors(defaultSyntaxColors); } catch (_) { }
 
 const simaiLogicControler = new SimaiLogicControler(audioManager);
 
@@ -2990,18 +2994,19 @@ const smoothBpmLauncher = initSmoothBpmLauncher({
     t
 });
 
-const { visualScroller, startMomentum, bindScrollerEvents } = initVisualScroller({
+const { visualScroller, startMomentum, stopSmoothWheel, bindScrollerEvents } = initVisualScroller({
     visualEditor,
     previewCanvas,
     getVisualEditorRenderer: () => visualEditorRenderer,
     getPreviewRender: () => previewRender,
-    getRealTime: () => realTime,
+    getRealTime: () => playbackEngine.realTime,
     updateVisualTime,
     slideInputDebounce: (...args) => slideInputDebounce(...args),
     getSettings: () => settings,
     saveSettingsDebounce: (...args) => saveSettingsDebounce(...args),
     draw,
-    getPlayButton: () => playButton
+    getPlayButton: () => playButton,
+    getPlaybackEngine: () => playbackEngine
 });
 
 const pairs = { '(': ')', '{': '}', '[': ']' };
@@ -3141,6 +3146,7 @@ const playbackEngine = new PlaybackEngine({
     t,
     simpleToast,
     getIsImagesLoaded: () => isImagesLoaded,
+    stopSmoothWheel: () => stopSmoothWheel(),
     onTimeUpdate: (rt, gt, lst) => {
         realTime = rt;
         globalTime = gt;
@@ -3171,10 +3177,22 @@ playButton.addEventListener('click', () => {
 resetButton.addEventListener('click', () => playbackEngine.reset());
 stopButton.addEventListener('click', () => playbackEngine.stop());
 
+timeline.addEventListener('pointerdown', () => {
+    playbackEngine.timeControlSliding = true;
+    if (playbackEngine.isPlaying) {
+        audioManager?.stopBGM();
+    }
+});
 timeline.addEventListener('input', () => {
+    playbackEngine.timeControlSliding = true;
     updateVisualTime(parseFloat(timeline.value));
+    slideInputDebounce();
+});
+timeline.addEventListener('pointerup', () => {
+    slideInputDebounce();
 });
 timeline.addEventListener('change', () => {
+    slideInputDebounce();
     projSet('timeControl', playbackEngine.realTime).catch(() => { });
 });
 
@@ -4017,6 +4035,7 @@ async function _init() {
             settings = val;
             appContext.settings = val;
             if (val && val.skin) currentSkin = val.skin;
+            if (val && val.syntaxColors) applySyntaxColors(val.syntaxColors);
             syncVisualSubMenus();
         },
         syncVisualSubMenus,
@@ -4222,6 +4241,9 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     if (key === 'musicVolume') audioManager?.setBGMVolume(value);
     if (key === 'SfxVolume') audioManager?.setSFXVolume(value);
     if (key === 'sfxVolumes') audioManager?.setSFXVolumes(value);
+
+    // 語法高亮自訂顏色
+    if (key === 'syntaxColors') applySyntaxColors(value);
 
     // 3. 背景與影片設定即時生效
     if (key === 'moviebrightness') applyMovieBrightness(value);

@@ -333,6 +333,21 @@ export async function openRecordVideoModal({
     });
 
     // ==========================================
+    // 4.2 編碼加速模式選單
+    // ==========================================
+    const speedField = createLabeledInput1({
+        value: 'fast',
+        labelText: t('popup.recordVideo.speedMode') || '匯出速度模式:',
+        type: 'select',
+        assign: 'record_speed_select',
+        ref: inputRefs,
+        options: [
+            { value: 'fast', label: t('popup.recordVideo.speedFast') || '極速硬體編碼 (推薦，近乎即時)' },
+            { value: 'quality', label: t('popup.recordVideo.speedQuality') || '高壓品質模式 (深度運算壓縮)' }
+        ]
+    });
+
+    // ==========================================
     // 5. 音量與音訊控制項
     // ==========================================
     const bgmVolField = createLabeledInput1({ value: settings.musicVolume ?? 0.8, labelText: t('popup.recordVideo.bgmVolume'), type: 'number', assign: 'record_bgm_vol', ref: inputRefs });
@@ -673,6 +688,7 @@ export async function openRecordVideoModal({
         resField.wrapper,
         fpsField.wrapper,
         qualityField.wrapper,
+        speedField.wrapper,
         bgmVolField.wrapper,
         sfxVolField.wrapper,
         brightSectionTitle,
@@ -753,6 +769,7 @@ export async function openRecordVideoModal({
                     pwCtx.close();
 
                     const curSettings = typeof getSettings === 'function' ? getSettings() : settings;
+                    const speedModeVal = speedField.input?.value || 'fast';
                     videoRender(audioManager, canvas, renderer, {
                         start: startVal,
                         end: endVal,
@@ -760,6 +777,7 @@ export async function openRecordVideoModal({
                         width: widthVal,
                         height: heightVal,
                         quality: qualityVal,
+                        speedMode: speedModeVal,
                         bitrate: bitrateVal,
                         bgmVolume: bgmVolValNum,
                         sfxVolume: sfxVolValNum,

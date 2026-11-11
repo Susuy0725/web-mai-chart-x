@@ -368,7 +368,13 @@ class AudioManager {
         this.bgmStartTime = this.ctx.currentTime;
         this.bgmOffset = Math.max(0, startTime);
 
-        this.bgmSource.start(0, this.bgmOffset);
+        try {
+            if (this.bgmBuffer && this.bgmOffset < this.bgmBuffer.duration) {
+                this.bgmSource.start(0, this.bgmOffset);
+            }
+        } catch (e) {
+            console.warn('[Audio] playBGM start failed:', e);
+        }
     }
 
     /**

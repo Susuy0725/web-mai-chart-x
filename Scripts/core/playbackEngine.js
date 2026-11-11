@@ -332,6 +332,8 @@ export class PlaybackEngine {
         this.opts.editorBackgroundVideo?.pause();
 
         this._isPlaying = false;
+        this.timeControlSliding = false;
+        this.opts.stopSmoothWheel?.();
         this.lastTimestamp = null;
         this.playStartTimestamp = null;
 
@@ -377,6 +379,8 @@ export class PlaybackEngine {
         this.opts.editorBackgroundVideo?.pause();
 
         this._isPlaying = false;
+        this.timeControlSliding = false;
+        this.opts.stopSmoothWheel?.();
         this.bgmUpdateTimer = null;
         this.lastTimestamp = null;
         this.playStartTimestamp = null;
@@ -421,6 +425,8 @@ export class PlaybackEngine {
         this.opts.editorBackgroundVideo?.pause();
 
         this._isPlaying = false;
+        this.timeControlSliding = false;
+        this.opts.stopSmoothWheel?.();
         this.bgmUpdateTimer = null;
         this.lastTimestamp = null;
         this.playStartTimestamp = null;
@@ -518,7 +524,8 @@ export class PlaybackEngine {
         this.videoSeekDebounce(this.realTime);
 
         // 5. 若處於播放狀態，重新定位 BGM 與時鐘
-        if (this._isPlaying) {
+        // 關鍵守衛：若當前處於時間軸滑動/滾動中 (timeControlSliding)，不應在每一幀連續重啟 BGM 避免卡死
+        if (this._isPlaying && !this.timeControlSliding) {
             this.audioManager?.playBGM(this.realTime);
             this.syncPlayTimer();
             this.lastTimestamp = performance.now();
@@ -539,10 +546,21 @@ export class PlaybackEngine {
         }
     }
 
+    finishSlideInput() {
+        this.slideInputDebounce?.cancel?.();
+        this._handleSlideInputDebounce();
+    }
+
     _handleSlideInputDebounce() {
         this.timeControlSliding = false;
         const settings = this.opts.getSettings();
         const editorBackgroundVideo = this.opts.editorBackgroundVideo;
+
+        if (this._isPlaying) {
+            this.audioManager?.playBGM(this.realTime);
+            this.syncPlayTimer();
+            this.lastTimestamp = performance.now();
+        }
 
         if (!settings.disableVideo && editorBackgroundVideo && editorBackgroundVideo.src) {
             const setTimeAndTryPlay = () => {

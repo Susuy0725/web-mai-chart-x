@@ -215,7 +215,11 @@
       "richHanabi": "화려한 불꽃 효과",
       "disablePreviewWaveform": "미리보기 파형 비활성화",
       "middleDistance": "슬라이딩 스타 중간 거리(middleDistance)",
-      "noteBaseSize": "노트 베이스 크기(noteBaseSize)"
+      "noteBaseSize": "노트 베이스 크기(noteBaseSize)",
+      "invertWheelDirection": "마우스 휠 스크롤 방향 반전",
+      "smoothScroll": "부드러운 스크롤 (타임라인 부드럽게 이동)",
+      "wheelSensitivity": "마우스 휠 감도",
+      "syntaxColors": "구문 강조 커스텀 색상"
     },
     "middleDisplayOpts": {
       "off": "끄기",
@@ -228,6 +232,39 @@
       "computer": "Autoplay (컴퓨터)",
       "simulate": "Autoplay (시뮬레이션)",
       "off": "수동 플레이"
+    },
+    "invertWheelOpts": {
+      "none": "없음 (기본값)",
+      "preview": "미리보기 트랙만 반전",
+      "visualEditor": "비주얼 에디터만 반전",
+      "both": "둘 다 반전"
+    },
+    "syntaxColorPresets": {
+      "title": "프리셋 색상",
+      "custom": "사용자 지정",
+      "default": "기본값 (Classic WMCX)",
+      "arcade": "maimai DX 아케이드 스타일",
+      "vscode": "VS Code Dark+",
+      "monokai": "Monokai Pro",
+      "tokyoNight": "Tokyo Night",
+      "cyberpunk": "네온 (Cyberpunk)"
+    },
+    "syntaxColorOpts": {
+      "resetColors": "기본 색상으로 재설정",
+      "note": "일반 노트 / 기본 문자 (1~8)",
+      "comment": "주석 (/*...*/, ||)",
+      "bpm": "BPM 마커 ( (120) )",
+      "split": "박자 분할 마커 ( {4} )",
+      "time": "시간 길이 마커 ( [1:4] )",
+      "slide": "슬라이드 경로 (-^v...)",
+      "customSlide": "특수 슬라이드 (<A1>)",
+      "hold": "홀드 (h)",
+      "break": "브레이크 (b)",
+      "ex": "EX 노트 (x)",
+      "mine": "지뢰 노트 (m)",
+      "hanabi": "불꽃 효과 (f)",
+      "touch": "터치 센서 (A1, C)",
+      "comma": "박자 구분 쉼표 (,)"
     }
   },
   "popup": {
@@ -572,7 +609,10 @@
       "qualityMedium": "표준 화질 (~10 Mbps)",
       "qualityLow": "저화질 (~5 Mbps)",
       "qualityLowest": "최저 화질 (~2 Mbps)",
-      "customBitrate": "사용자 지정 비트레이트 (Mbps):"
+      "customBitrate": "사용자 지정 비트레이트 (Mbps):",
+      "speedMode": "내보내기 인코딩 모드:",
+      "speedFast": "초고속 하드웨어 (권장, 실시간급)",
+      "speedQuality": "품질 우선 압축 (심층 연산)"
     },
     "quickGenerate": {
       "title": "빠른 생성",

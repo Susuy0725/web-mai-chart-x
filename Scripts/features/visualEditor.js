@@ -1244,11 +1244,22 @@ export function initVisualScroller(ctx) {
         getSettings,
         saveSettingsDebounce,
         draw,
-        getPlayButton
+        getPlayButton,
+        getPlaybackEngine
     } = ctx;
 
     const MIN_ZOOM = 15;
     const MAX_ZOOM = 400;
+
+    const setSlidingState = (sliding) => {
+        const pb = getPlaybackEngine ? getPlaybackEngine() : appContext.playbackEngine;
+        if (pb) {
+            pb.timeControlSliding = sliding;
+            if (sliding && pb.isPlaying) {
+                pb.audioManager?.stopBGM();
+            }
+        }
+    };
 
     const visualScroller = {
         isActive: false,
@@ -1268,6 +1279,83 @@ export function initVisualScroller(ctx) {
             const zoom = currentRenderer ? currentRenderer.zoom : 100;
             return px / zoom;
         }
+    };
+
+    // 平滑滾輪控制器 (Smooth Wheel Scroller)
+    let smoothWheelTargetTime = null;
+    let smoothWheelFrame = null;
+    let lastSmoothWheelTime = 0;
+    const SMOOTH_WHEEL_DAMPING = 24; // 每秒逼近係數 (約 120ms 內絲滑抵達，反應迅捷無拖沓)
+
+    const finishWheelSliding = () => {
+        smoothWheelFrame = null;
+        smoothWheelTargetTime = null;
+        const pb = getPlaybackEngine ? getPlaybackEngine() : appContext.playbackEngine;
+        if (pb) {
+            if (typeof pb.finishSlideInput === 'function') {
+                pb.finishSlideInput();
+            } else if (typeof pb._handleSlideInputDebounce === 'function') {
+                pb._handleSlideInputDebounce();
+            } else {
+                slideInputDebounce();
+            }
+        } else {
+            slideInputDebounce();
+        }
+    };
+
+    const stopSmoothWheel = (resumePlayback = false) => {
+        if (smoothWheelFrame !== null) {
+            cancelAnimationFrame(smoothWheelFrame);
+            smoothWheelFrame = null;
+        }
+        smoothWheelTargetTime = null;
+        if (resumePlayback) {
+            finishWheelSliding();
+        }
+    };
+
+    const stepSmoothWheel = (now) => {
+        if (smoothWheelTargetTime === null) {
+            smoothWheelFrame = null;
+            return;
+        }
+
+        const dt = now - lastSmoothWheelTime;
+        lastSmoothWheelTime = now;
+        const clampedDt = Math.min(100, Math.max(1, dt));
+
+        const currentTime = getRealTime();
+        const diff = smoothWheelTargetTime - currentTime;
+
+        // 當與目標差距小於 0.0005 秒時，直接抵達目標並結束補間動畫
+        if (Math.abs(diff) < 0.0005) {
+            updateVisualTime(smoothWheelTargetTime);
+            finishWheelSliding();
+            return;
+        }
+
+        // 指數阻尼平滑插值 (Exponential smoothing)，與螢幕更新率 (60Hz/120Hz/144Hz) 無關的平滑速度
+        const factor = 1 - Math.exp(-SMOOTH_WHEEL_DAMPING * (clampedDt / 1000));
+        const stepDelta = diff * factor;
+        const prevActual = getRealTime();
+        updateVisualTime(prevActual + stepDelta);
+        const nextActual = getRealTime();
+
+        // 碰壁檢測或單步穿透跨越目標檢測：避免過衝震盪或卡在時間軸邊緣
+        const remainingDiff = smoothWheelTargetTime - nextActual;
+        if (
+            (Math.abs(nextActual - prevActual) < 0.00001 && Math.abs(stepDelta) > 0.0005) ||
+            Math.abs(remainingDiff) < 0.0005 ||
+            (diff > 0 && remainingDiff <= 0) ||
+            (diff < 0 && remainingDiff >= 0)
+        ) {
+            updateVisualTime(smoothWheelTargetTime);
+            finishWheelSliding();
+            return;
+        }
+
+        smoothWheelFrame = requestAnimationFrame(stepSmoothWheel);
     };
 
     const startMomentum = () => {
@@ -1310,6 +1398,8 @@ export function initVisualScroller(ctx) {
             }
             if (e.button !== 0) return;
             cancelAnimationFrame(visualScroller.momentumFrame);
+            stopSmoothWheel();
+            setSlidingState(true);
 
             visualScroller.isActive = true;
             visualScroller.axis = axis;
@@ -1381,6 +1471,11 @@ export function initVisualScroller(ctx) {
             if (!renderer) return;
 
             const settings = getSettings();
+            const playButton = getPlayButton();
+            if (playButton && playButton.dataset.playing === 'true' && settings.autoPauseOnScroll) {
+                playButton.click();
+            }
+
             if (e.ctrlKey) {
                 const factor = e.deltaY > 0 ? (1 / 1.15) : 1.15;
                 const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom * factor));
@@ -1389,15 +1484,63 @@ export function initVisualScroller(ctx) {
                 saveSettingsDebounce();
                 draw();
             } else {
-                // 將 deltaY 根據 deltaMode 標準化為像素位移量 (像素模式直接使用，行模式換算為基準行高 24px)
+                // 優先使用符合當前軸向的位移分量 (preview 水平軸優先判斷 deltaX，visualEditor 垂直軸使用 deltaY)
+                const rawDelta = (axis === 'horizontal' && Math.abs(e.deltaX) > Math.abs(e.deltaY))
+                    ? e.deltaX
+                    : e.deltaY;
+
+                // 將 rawDelta 根據 deltaMode 標準化為像素位移量 (像素模式直接使用，行模式換算為基準行高 24px)
                 const deltaPixels = e.deltaMode === 1
-                    ? e.deltaY * 24
-                    : (e.deltaMode === 2 ? e.deltaY * 200 : e.deltaY);
-                // 依據當前實際縮放倍率 (zoom) 動態換算時間位移量
+                    ? rawDelta * 24
+                    : (e.deltaMode === 2 ? rawDelta * 200 : rawDelta);
+
+                // 依據當前實際縮放倍率 (zoom) 動態換算基準時間位移量
                 const currentZoom = renderer.zoom || settings.visualZoom || 100;
-                const scrollDelta = deltaPixels / currentZoom;
-                // 反轉上下方向：向上滾動 (deltaY < 0) 推進時間，向下滾動 (deltaY > 0) 倒退時間，與觸控板操作體驗保持一致
-                updateVisualTime(getRealTime() - scrollDelta);
+
+                // 滾輪靈敏度倍率 (預設 1.0)
+                const sensitivity = (typeof settings.wheelSensitivity === 'number' && !isNaN(settings.wheelSensitivity))
+                    ? Math.max(0.1, settings.wheelSensitivity)
+                    : 1.0;
+
+                const scrollDelta = (deltaPixels / currentZoom) * sensitivity;
+
+                // 判斷是否需要反轉滾輪方向 (支援 'none' | 'preview' | 'visualEditor' | 'both')
+                const targetType = axis === 'vertical' ? 'visualEditor' : 'preview';
+                const invertSetting = settings.invertWheelDirection || 'none';
+                const isReversed = (invertSetting === 'both') || (invertSetting === targetType)
+                    || (targetType === 'preview' && settings.invertPreviewWheel)
+                    || (targetType === 'visualEditor' && settings.invertVisualEditorWheel);
+
+                // 預設 (isReversed === false): 向上滾動 (delta < 0) 推進時間，向下滾動 (delta > 0) 倒退時間
+                // 反轉 (isReversed === true): 向上滾動倒退時間，向下滾動推進時間
+                const directionMultiplier = isReversed ? 1 : -1;
+                const deltaSec = directionMultiplier * scrollDelta;
+
+                // 平滑滾輪控制 (預設啟用)
+                const isSmoothEnabled = settings.smoothScroll !== false;
+
+                if (isSmoothEnabled) {
+                    cancelAnimationFrame(visualScroller.momentumFrame);
+                    setSlidingState(true);
+                    const currentTime = getRealTime();
+                    // 若當前無進行中的平滑滾動或目標偏移偏離過遠，重置目標基準
+                    if (smoothWheelTargetTime === null || Math.abs(smoothWheelTargetTime - currentTime) > 5) {
+                        smoothWheelTargetTime = currentTime;
+                    }
+                    smoothWheelTargetTime += deltaSec;
+
+                    if (smoothWheelFrame === null) {
+                        lastSmoothWheelTime = performance.now();
+                        smoothWheelFrame = requestAnimationFrame(stepSmoothWheel);
+                    }
+                    // 注意：平滑滾動由 stepSmoothWheel 動態驅動時間軸，完成時透過 finishWheelSliding 立即恢復播放，
+                    // 切勿在此重複呼叫 80ms 的 slideInputDebounce()，以避免中途提前重設狀態或結束時畫面卡住
+                } else {
+                    stopSmoothWheel();
+                    setSlidingState(true);
+                    updateVisualTime(getRealTime() + deltaSec);
+                    slideInputDebounce();
+                }
             }
         }, { passive: false });
     };
@@ -1408,6 +1551,7 @@ export function initVisualScroller(ctx) {
     return {
         visualScroller,
         startMomentum,
+        stopSmoothWheel,
         bindScrollerEvents
     };
 }

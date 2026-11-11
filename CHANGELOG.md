@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.11 (1)]
+
+### Added
+- 自訂語法高亮顏色
+- 平滑滾輪
+
+### Changed
+- 改善使用者介面與操作體驗。
+
 ## [2026.11.05 (1)]
 
 ### Changed

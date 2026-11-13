@@ -726,7 +726,11 @@ export class SimaiRenderer {
                     this.simpleHitEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
                 }
             } else if (eff.type === 'hold') {
-                this.simpleHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+                if (this.settings.richHitEffectBeta) {
+                    this.standardHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, eff.rot, true);
+                } else {
+                    this.simpleHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+                }
             }
         }
 
@@ -1248,6 +1252,29 @@ export class SimaiRenderer {
         this.drawImgAtcenter(titimg, s1, -ax, -ay);
         this.drawImgAtcenter(titimg, s2, ax, -ay);
         this.drawImgAtcenter(titimg, s2, -ax, ay);
+
+        ctx.restore();
+    }
+
+    standardHoldEffect(noteT, judge = null, x = 0, y = 0, rot = 0, isBatch = false) {
+        if (!Number.isFinite(noteT)) return;
+        const p = -noteT;
+
+        const img = this.images.HoldEffect;
+        if (!img || -noteT < 0.15) return; // 150 ms
+
+        const nb = this.settings.noteBaseSize
+
+        const titimg = this.getMemoizedTintedImage(img, 0.5, "#fffb00");
+
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        //ctx.globalAlpha = alpha;
+        ctx.translate(x, y);
+
+        // 在旋轉後的局部坐標系中直接繪製，完全無需內部重複 save / restore / translate
+        this.drawImgAtcenter(titimg, nb, 0, 0);
 
         ctx.restore();
     }

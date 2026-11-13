@@ -1,6 +1,6 @@
 /**
  * 遊戲皮膚資源配置與解析器 (Skin Path Resolver)
- * 支援 MajdataPlay 規範的 Default / Shared 多層級備選回退機制：
+ * 支援 Default / Shared 多層級備選回退機制：
  * 1. 優先嘗試 Skin/Default/{type}/{fileName}
  * 2. 若 Default 不存在，嘗試 Skin/Shared/{type}/{fileName} (或 Skin/Shared/{fileName})
  * 3. 降級保底原有的 Skin/{fileName}

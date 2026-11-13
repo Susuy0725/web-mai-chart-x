@@ -5,6 +5,7 @@ import {
     visualNoteRefPos,
     touchRefPos,
 } from './core/chartGeometry.js';
+import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
 import {
     imgNotExists,
     getTintedImage,
@@ -1612,6 +1613,23 @@ export class SimaiRenderer {
             this.drawOutline();
         }
 
+        if (!this._isRenderingVideo && renderOverlayRegistry.hasOverlays('main', 'beforeNotes')) {
+            const minDim = Math.min(w, h);
+            const unitPx = (minDim > 0 && this.scale > 0) ? (minDim / scaleBase * this.scale) : 1;
+            renderOverlayRegistry.run('main', 'beforeNotes', {
+                ctx,
+                width: w,
+                height: h,
+                scale: this.scale,
+                scaleBase,
+                unitPx,
+                globalTime,
+                isPlaying: this.isPlaying,
+                target: 'main',
+                phase: 'beforeNotes'
+            });
+        }
+
         // 4. 繪製順序優化
         if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
 
@@ -1640,6 +1658,23 @@ export class SimaiRenderer {
         if (!this.settings.noBorder) this.drawStaticBackground();
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
         if (this.settings.showUI) this.drawUI(dt, globalTime);
+
+        if (!this._isRenderingVideo && renderOverlayRegistry.hasOverlays('main', 'afterNotes')) {
+            const minDim = Math.min(w, h);
+            const unitPx = (minDim > 0 && this.scale > 0) ? (minDim / scaleBase * this.scale) : 1;
+            renderOverlayRegistry.run('main', 'afterNotes', {
+                ctx,
+                width: w,
+                height: h,
+                scale: this.scale,
+                scaleBase,
+                unitPx,
+                globalTime,
+                isPlaying: this.isPlaying,
+                target: 'main',
+                phase: 'afterNotes'
+            });
+        }
     }
 
     /**
@@ -4016,6 +4051,21 @@ export class SimaiVisualEditor {
         ctx.moveTo(-w, 0);
         ctx.lineTo(w, 0);
         ctx.stroke();
+
+        if (renderOverlayRegistry.hasOverlays('visual', 'beforeNotes')) {
+            renderOverlayRegistry.run('visual', 'beforeNotes', {
+                ctx,
+                width: w,
+                height: h,
+                scale: this.zoom || 1,
+                scaleBase,
+                unitPx: this.zoom || 1,
+                globalTime,
+                isPlaying: false,
+                target: 'visual',
+                phase: 'beforeNotes'
+            });
+        }
         // 僅在音符圖層繪製音符物件（BPM 圖層不繪製任何音符）
         if (this.layerMode === 'note') {
             visualBuckets.slide.forEach(n => this.drawSlide(n));
@@ -4038,6 +4088,21 @@ export class SimaiVisualEditor {
         // 若正處於拖曳 Hold 狀態，繪製拉伸藍框與尾部膠囊手把
         if (this.draggingHold) {
             this._drawHoldBoxAndHandle(this.draggingHold.note, this.draggingHold.currentDuration, true);
+        }
+
+        if (renderOverlayRegistry.hasOverlays('visual', 'afterNotes')) {
+            renderOverlayRegistry.run('visual', 'afterNotes', {
+                ctx,
+                width: w,
+                height: h,
+                scale: this.zoom || 1,
+                scaleBase,
+                unitPx: this.zoom || 1,
+                globalTime,
+                isPlaying: false,
+                target: 'visual',
+                phase: 'afterNotes'
+            });
         }
     }
 

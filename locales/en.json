@@ -68,7 +68,35 @@
     "changelog": "Changelog",
     "about": "About",
     "gotoPlay": "Open Play",
-    "toolsSmoothBpm": "Smooth BPM"
+    "toolsSmoothBpm": "Smooth BPM",
+    "extensions": "Extensions",
+    "manageExtensions": "Manage Extensions"
+  },
+  "extensions": {
+    "title": "Extension Manager",
+    "tabInstalled": "Installed",
+    "empty": "No extensions installed",
+    "emptyHint": "Click \"Import Extension\" below and select a .zip package to install",
+    "statusActive": "Active",
+    "statusInactive": "Disabled",
+    "statusError": "Error",
+    "enable": "Enable",
+    "disable": "Disable",
+    "remove": "Remove",
+    "importZip": "Import Extension",
+    "close": "Close",
+    "cancel": "Cancel",
+    "resetDefaults": "Reset to Defaults",
+    "saved": "Settings saved",
+    "confirmInstallTitle": "Confirm Extension Installation",
+    "confirmInstallDesc": "About to install \"{name}\" v{version}. Please verify the source and review requested permissions:",
+    "requestedPermissions": "Requested Permissions",
+    "noPermissions": "No special permissions requested",
+    "securityWarning": "Warning: Extensions execute scripts in your browser. Only install packages from trusted sources.",
+    "installAndEnable": "Install & Enable",
+    "installSuccess": "Installed and enabled \"{name}\"",
+    "installFailed": "Failed to import extension: {error}",
+    "removedSuccess": "Removed \"{name}\""
   },
   "textarea": {
     "placeholder": "Enter chart data here..."

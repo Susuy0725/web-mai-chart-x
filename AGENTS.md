@@ -107,6 +107,9 @@ flowchart LR
 - 處理影片錄製、匯出或渲染問題（如 `videoRender.js`、`recordVideoModal.js`）時，**切勿直接讀取或分析 `Scripts/mediabunny.cjs`**（該檔為超過 36,000 行、1.4MB 的打包庫，分析極度耗費 Token 且效率低下）。
 - 遇到 Mediabunny 相關問題，**必須優先查閱官方線上 API 文件**：[https://mediabunny.dev/api/](https://mediabunny.dev/api/)。
 
+### 8. 擴充程式系統與文件同步
+- 若對擴充程式核心、權限表、受限上下文介面或相關行為做出任何修改，必須同步更新 [docs/EXTENSIONS.md](file:///d:/Dev/web-mai-chart-x/docs/EXTENSIONS.md) 開發手冊。
+
 ---
 
 ## 🛠️ 開發除錯與測試工具 (Dev & Debugging)
@@ -139,3 +142,4 @@ flowchart LR
 1. **[docs/ARCHITECTURE.md](file:///d:/Githubs/web-mai-chart-beta/docs/ARCHITECTURE.md)**：詳細系統架構、啟動生命週期、事件匯流排常數與資料流。
 2. **[docs/MODULES.md](file:///d:/Githubs/web-mai-chart-beta/docs/MODULES.md)**：所有模組與檔案的 API 導出手冊與細部職責說明。
 3. **[docs/RENDERER_AND_AUDIO.md](file:///d:/Githubs/web-mai-chart-beta/docs/RENDERER_AND_AUDIO.md)**：Canvas 譜面渲染架構、座標幾何、Web Audio 判定音效與快取優化。
+4. **[docs/EXTENSIONS.md](file:///d:/Dev/web-mai-chart-x/docs/EXTENSIONS.md)**：擴充程式系統架構、權限規範與第三方外掛開發手冊。

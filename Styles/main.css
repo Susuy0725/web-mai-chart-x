@@ -1888,3 +1888,404 @@ body.resizing-panels #canvasContainer canvas {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
     }
 }
+
+/* 擴充程式設定 Popover 與管理清單 */
+.extension-popover {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    min-width: 260px;
+    max-width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    background-color: var(--main-color);
+    color: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--button-ouline);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 1px rgba(255, 255, 255, 0.08);
+    z-index: 1250;
+    opacity: 0;
+    transition-property: opacity, transform, display, overlay;
+    transition-duration: 0.18s;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    transition-behavior: allow-discrete;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .extension-popover {
+        transform: translateY(-4px) scale(0.97);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .extension-popover {
+        transition-duration: 0.1s;
+    }
+}
+
+.extension-popover:is(:popover-open, .is-open) {
+    display: block;
+    opacity: 1;
+}
+
+@starting-style {
+    .extension-popover:is(:popover-open, .is-open) {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .extension-popover:is(:popover-open, .is-open) {
+        transform: translateY(0) scale(1);
+    }
+
+    @starting-style {
+        .extension-popover:is(:popover-open, .is-open) {
+            transform: translateY(-4px) scale(0.97);
+        }
+    }
+}
+
+.extension-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.extension-popover-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.extension-popover-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.65);
+    cursor: pointer;
+    padding: 0;
+}
+
+.extension-popover-close:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.extension-popover-close .material-symbols-outlined {
+    font-size: 18px;
+}
+
+.extension-popover-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.extension-popover-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.extension-popover-row.is-toggle {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.extension-popover-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.extension-popover-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--button-ouline);
+    background-color: var(--editor-background);
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 13px;
+}
+
+.extension-popover-input:focus {
+    outline: 1px solid var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.extension-popover-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.extension-popover-reset {
+    border: 1px solid var(--button-ouline);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.extension-popover-reset:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.extension-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 260px;
+    max-width: 420px;
+}
+
+.extension-manager-empty {
+    margin: 8px 0;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 13px;
+    text-align: center;
+}
+
+.extension-manager-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.extension-manager-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+}
+
+.extension-manager-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.58);
+}
+
+.extension-manager-toggle {
+    border: 1px solid var(--button-ouline);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.extension-manager-toggle:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.extension-floating-widget {
+    position: fixed;
+    z-index: 950;
+    pointer-events: auto;
+}
+
+.extension-floating-widget[data-position="right"] {
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.ext-modal-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ext-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.ext-empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 36px 16px;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.ext-empty-title {
+    margin: 0 0 6px;
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.ext-empty-hint {
+    margin: 0;
+    font-size: 13px;
+}
+
+.ext-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--button-ouline);
+}
+
+.ext-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ext-card-title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
+.ext-card-title {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.95);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ext-card-version {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ext-card-id {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.52);
+    font-family: 'mono', monospace;
+}
+
+.ext-status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.ext-status-badge.is-active {
+    background: rgba(68, 153, 238, 0.22);
+    color: #8cc5ff;
+}
+
+.ext-status-badge.is-inactive {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.ext-status-badge.is-error {
+    background: rgba(212, 49, 57, 0.25);
+    color: #ff8a90;
+}
+
+.ext-card-perms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.ext-perm-chip {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.ext-card-error {
+    font-size: 12px;
+    color: #ff8a90;
+    background: rgba(212, 49, 57, 0.12);
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+
+.ext-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 4px;
+}
+
+.ext-card-btn {
+    border: 1px solid var(--button-ouline);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ext-card-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.ext-card-btn.is-danger:hover {
+    background: var(--timeline-color);
+    border-color: var(--timeline-color);
+}
+
+.ext-perm-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.ext-perm-intro,
+.ext-perm-warning {
+    margin: 0;
+}
+
+.ext-perm-title {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.ext-perm-list {
+    margin: 0;
+    padding-left: 18px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.ext-perm-warning {
+    font-size: 12px;
+    color: #ffb86c;
+}

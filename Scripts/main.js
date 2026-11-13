@@ -8,6 +8,10 @@ import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
 export { defaultSettings };
 import { eventBus, EVENTS } from './core/eventBus.js';
 import { appContext } from './core/appContext.js';
+import { commandRegistry } from './core/commandRegistry.js';
+import { extensionManager } from './core/extensionManager.js';
+import { loadStoredExtensions } from './core/extensionLoader.js';
+import { initExtensionMenu } from './features/extensionMenu.js';
 import { PlaybackEngine } from './core/playbackEngine.js';
 import { initServiceWorker } from './core/swManager.js';
 import { runInitModal } from './core/init.js';
@@ -1407,6 +1411,10 @@ function applyDecodeResult(result, simaiDataValue) {
     draw();
     // 立即以 Worker/同步解析出的最新 warningPositions 重新繪製編輯器紅底線
     applyHighlight(editorInput.value, true);
+    eventBus.emit(EVENTS.CHART_DECODED, {
+        difficulty: nowDifficulty,
+        noteCount: Array.isArray(notes) ? notes.length : 0
+    });
 }
 
 /**
@@ -4110,6 +4118,13 @@ async function _init() {
                 },
                 configurable: true
             });
+
+            initExtensionMenu();
+            eventBus.emit(EVENTS.APP_READY);
+            extensionManager.activateAll();
+            loadStoredExtensions().catch((err) => {
+                console.error('[Extensions] 載入已安裝外掛失敗:', err);
+            });
         }
     });
 }
@@ -4217,6 +4232,45 @@ appContext.register('images', () => images);
 appContext.register('editorBackgroundImage', editorBackgroundImage);
 appContext.register('changeDifficulty', changeDifficulty);
 appContext.register('saveMaidata', saveMaidata);
+appContext.register('simpleToast', simpleToast);
+appContext.register('commandRegistry', commandRegistry);
+appContext.register('extensionManager', extensionManager);
+appContext.register('seekToTime', (targetTime) => seekToTime(targetTime));
+appContext.register('getDuration', () => Number(timeline?.max) || 0);
+appContext.register('getChartSnapshot', () => ({
+    difficulty: nowDifficulty,
+    maidata: maidata ? { ...maidata } : {},
+    duration: Number(timeline?.max) || 0,
+    notes: Array.isArray(notes) ? notes.map((n) => ({ ...n })) : [],
+    tags: Array.isArray(decodedTags) ? decodedTags.map((tag) => ({ ...tag })) : []
+}));
+appContext.register('getEditorText', () => (editorInput ? editorInput.value : ''));
+appContext.register('getEditorSelection', () => {
+    if (!editorInput) return { start: 0, end: 0, text: '' };
+    const start = editorInput.selectionStart ?? 0;
+    const end = editorInput.selectionEnd ?? 0;
+    return {
+        start,
+        end,
+        text: editorInput.value.slice(start, end)
+    };
+});
+appContext.register('replaceEditorSelection', (replacement, start, end) => {
+    if (!editorInput) return false;
+    const text = String(replacement ?? '');
+    const value = editorInput.value;
+    const selStart = typeof start === 'number' ? Math.max(0, Math.min(start, value.length)) : (editorInput.selectionStart ?? 0);
+    const selEnd = typeof end === 'number' ? Math.max(selStart, Math.min(end, value.length)) : (editorInput.selectionEnd ?? selStart);
+
+    editorInput.value = value.slice(0, selStart) + text + value.slice(selEnd);
+    const nextCursor = selStart + text.length;
+    editorInput.selectionStart = selStart;
+    editorInput.selectionEnd = nextCursor;
+    applyHighlight(editorInput.value);
+    recordEditorHistory();
+    inputDebounce();
+    return true;
+});
 
 // === 全域 EventBus 事件訂閱 (解耦副作用與跨模組直接調用) ===
 eventBus.on(EVENTS.CANVAS_REDRAW, () => {

@@ -16,7 +16,7 @@ class EventBus {
      * @returns {Function} 取消訂閱函式
      */
     on(event, callback) {
-        if (typeof callback !== 'function') return () => {};
+        if (typeof callback !== 'function') return () => { };
         if (!this.listeners.has(event)) {
             this.listeners.set(event, new Set());
         }
@@ -32,7 +32,7 @@ class EventBus {
      * @returns {Function} 取消訂閱函式
      */
     once(event, callback) {
-        if (typeof callback !== 'function') return () => {};
+        if (typeof callback !== 'function') return () => { };
         const onceWrapper = (...args) => {
             this.off(event, onceWrapper);
             callback(...args);
@@ -111,8 +111,17 @@ export const EVENTS = {
     // 專案與譜面相關
     PROJECT_LOADED: 'project:loaded',
     MAIDATA_CHANGED: 'maidata:changed',
+    CHART_DECODED: 'chart:decoded',
 
     // 播放狀態相關
     PLAYBACK_STATE_CHANGED: 'playback:state-changed', // { isPlaying: boolean }
     PLAYBACK_SEEK: 'playback:seek',                   // { time: number }
+
+    // 應用程式與擴充系統生命週期
+    APP_READY: 'app:ready',
+    EXTENSION_REGISTERED: 'extension:registered',   // { id: string, manifest: object }
+    EXTENSION_ACTIVATED: 'extension:activated',     // { id: string }
+    EXTENSION_DEACTIVATED: 'extension:deactivated', // { id: string }
+    EXTENSION_ERROR: 'extension:error',             // { id: string, error: Error }
+    EXTENSION_MENU_CHANGED: 'extension:menu-changed', // { extensionId: string }
 };

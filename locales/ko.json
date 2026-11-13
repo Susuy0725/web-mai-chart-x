@@ -68,7 +68,35 @@
     "changelog": "변경 내역",
     "about": "정보",
     "gotoPlay": "Play 열기",
-    "toolsSmoothBpm": "스무스 BPM"
+    "toolsSmoothBpm": "스무스 BPM",
+    "extensions": "확장 프로그램",
+    "manageExtensions": "확장 프로그램 관리"
+  },
+  "extensions": {
+    "title": "확장 프로그램 관리",
+    "tabInstalled": "설치됨",
+    "empty": "설치된 확장 프로그램이 없습니다",
+    "emptyHint": "아래 '확장 프로그램 가져오기'를 눌러 .zip 패키지를 선택해 설치하세요",
+    "statusActive": "활성",
+    "statusInactive": "비활성",
+    "statusError": "오류",
+    "enable": "활성화",
+    "disable": "비활성화",
+    "remove": "제거",
+    "importZip": "확장 프로그램 가져오기",
+    "close": "닫기",
+    "cancel": "취소",
+    "resetDefaults": "기본값으로 재설정",
+    "saved": "설정이 저장되었습니다",
+    "confirmInstallTitle": "확장 프로그램 설치 확인",
+    "confirmInstallDesc": "\"{name}\" v{version} 설치를 진행합니다. 출처를 확인하고 요청된 권한을 검토하세요:",
+    "requestedPermissions": "요청된 권한",
+    "noPermissions": "특별한 권한이 필요하지 않습니다",
+    "securityWarning": "주의: 확장 프로그램은 브라우저에서 스크립트를 실행합니다. 신뢰할 수 있는 출처의 파일만 설치하세요.",
+    "installAndEnable": "설치 및 활성화",
+    "installSuccess": "\"{name}\" 설치 및 활성화 완료",
+    "installFailed": "확장 프로그램 가져오기 실패: {error}",
+    "removedSuccess": "\"{name}\" 제거 완료"
   },
   "textarea": {
     "placeholder": "여기에 채보 데이터를 입력하세요..."

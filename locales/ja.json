@@ -68,7 +68,35 @@
     "changelog": "更新履歴",
     "about": "このアプリについて",
     "gotoPlay": "Playを起動する",
-    "toolsSmoothBpm": "スムーズBPM"
+    "toolsSmoothBpm": "スムーズBPM",
+    "extensions": "拡張機能",
+    "manageExtensions": "拡張機能を管理"
+  },
+  "extensions": {
+    "title": "拡張機能管理",
+    "tabInstalled": "インストール済み",
+    "empty": "拡張機能がインストールされていません",
+    "emptyHint": "下の「拡張機能をインポート」から .zip パッケージを選択してインストールできます",
+    "statusActive": "有効",
+    "statusInactive": "無効",
+    "statusError": "エラー",
+    "enable": "有効化",
+    "disable": "無効化",
+    "remove": "削除",
+    "importZip": "拡張機能をインポート",
+    "close": "閉じる",
+    "cancel": "キャンセル",
+    "resetDefaults": "初期値にリセット",
+    "saved": "設定を保存しました",
+    "confirmInstallTitle": "拡張機能のインストール確認",
+    "confirmInstallDesc": "「{name}」v{version} をインストールします。提供元を確認し、以下の権限を許可してください：",
+    "requestedPermissions": "要求される権限",
+    "noPermissions": "特別な権限は不要です",
+    "securityWarning": "注意：拡張機能はブラウザ上でスクリプトを実行します。信頼できる提供元のファイルのみインストールしてください。",
+    "installAndEnable": "インストールして有効化",
+    "installSuccess": "「{name}」をインストールし有効化しました",
+    "installFailed": "インポートに失敗しました：{error}",
+    "removedSuccess": "「{name}」を削除しました"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."

@@ -68,7 +68,35 @@
     "changelog": "變更日誌",
     "about": "關於",
     "gotoPlay": "開啟Play",
-    "toolsSmoothBpm": "平滑變速"
+    "toolsSmoothBpm": "平滑變速",
+    "extensions": "擴充程式",
+    "manageExtensions": "管理插件"
+  },
+  "extensions": {
+    "title": "擴充程式管理",
+    "tabInstalled": "已安裝插件",
+    "empty": "尚未安裝任何擴充程式",
+    "emptyHint": "點擊下方「匯入插件」選擇 .zip 外掛壓縮包即可安裝試用",
+    "statusActive": "啟用中",
+    "statusInactive": "已停用",
+    "statusError": "錯誤",
+    "enable": "啟用",
+    "disable": "停用",
+    "remove": "移除",
+    "importZip": "匯入插件",
+    "close": "關閉",
+    "cancel": "取消",
+    "resetDefaults": "重設為預設值",
+    "saved": "已儲存設定",
+    "confirmInstallTitle": "確認安裝擴充程式",
+    "confirmInstallDesc": "即將安裝「{name}」版本 {version}，請確認是否信任來源並授權以下權限：",
+    "requestedPermissions": "要求的權限",
+    "noPermissions": "無特殊權限要求",
+    "securityWarning": "注意：擴充程式會在瀏覽器中執行腳本，請僅安裝您信任來源的外掛檔案。",
+    "installAndEnable": "安裝並啟用",
+    "installSuccess": "已安裝並啟用「{name}」",
+    "installFailed": "匯入外掛失敗：{error}",
+    "removedSuccess": "已移除「{name}」"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."

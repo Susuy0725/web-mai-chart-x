@@ -319,6 +319,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         try {
             if (renderer && renderer.constructor) {
                 exportRenderer = new renderer.constructor(off, settings);
+                exportRenderer._isRenderingVideo = true;
                 if (renderer.images) exportRenderer.setImages(renderer.images);
                 if (renderer._tintCache) exportRenderer._tintCache = renderer._tintCache;
                 if (renderer.scale) exportRenderer.scale = renderer.scale;

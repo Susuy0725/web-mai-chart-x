@@ -4,6 +4,7 @@
  */
 
 import { ensureJSZip } from '../helper.js';
+import { t } from '../i18n.js';
 import { extensionManager } from './extensionManager.js';
 import {
     listStoredExtensions,
@@ -48,7 +49,7 @@ export async function parseExtensionZip(file) {
 
     const manifestMatch = findZipEntry(zip, 'manifest.json');
     if (!manifestMatch) {
-        throw new Error('壓縮包內找不到 manifest.json');
+        throw new Error(t('extensions.errMissingManifest'));
     }
 
     const manifestRaw = await manifestMatch.file.async('string');
@@ -56,18 +57,18 @@ export async function parseExtensionZip(file) {
     try {
         manifest = JSON.parse(manifestRaw);
     } catch (_) {
-        throw new Error('manifest.json 格式錯誤，無法解析為 JSON');
+        throw new Error(t('extensions.errInvalidManifestJson'));
     }
 
     if (!manifest.id || !manifest.name || !manifest.version) {
-        throw new Error('manifest.json 必須包含 id、name 與 version');
+        throw new Error(t('extensions.errMissingRequiredFields'));
     }
 
     const entryRel = String(manifest.entry || 'index.js').replace(/^\.?\//, '');
     const entryFull = `${manifestMatch.prefix}${entryRel}`;
     const entryFile = zip.files[entryFull];
     if (!entryFile || entryFile.dir) {
-        throw new Error(`找不到進入點檔案: ${entryRel}`);
+        throw new Error(t('extensions.errMissingEntry', { entry: entryRel }));
     }
 
     const entryCode = await entryFile.async('string');
@@ -107,7 +108,7 @@ export async function registerStoredPackage(pkg, autoActivate = true) {
         : (typeof mod?.activate === 'function' ? mod.activate : null);
 
     if (!factory) {
-        throw new Error(`外掛 "${pkg.manifest.id}" 未匯出預設啟動函式`);
+        throw new Error(t('extensions.errMissingActivate', { id: pkg.manifest.id }));
     }
 
     // 若之前已註冊舊版，先移除再重新註冊
@@ -115,12 +116,7 @@ export async function registerStoredPackage(pkg, autoActivate = true) {
         extensionManager.unregister(pkg.manifest.id);
     }
 
-    extensionManager.register(pkg.manifest, factory);
-    if (autoActivate && extensionManager._isReady) {
-        extensionManager.activate(pkg.manifest.id);
-    } else if (!autoActivate) {
-        extensionManager.deactivate(pkg.manifest.id);
-    }
+    extensionManager.register(pkg.manifest, factory, { autoActivate });
 }
 
 /**

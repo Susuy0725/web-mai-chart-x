@@ -70,7 +70,9 @@
     "gotoPlay": "Open Play",
     "toolsSmoothBpm": "Smooth BPM",
     "extensions": "Extensions",
-    "manageExtensions": "Manage Extensions"
+    "manageExtensions": "Manage Extensions",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen"
   },
   "extensions": {
     "title": "Extension Manager",
@@ -96,7 +98,14 @@
     "installAndEnable": "Install & Enable",
     "installSuccess": "Installed and enabled \"{name}\"",
     "installFailed": "Failed to import extension: {error}",
-    "removedSuccess": "Removed \"{name}\""
+    "removedSuccess": "Removed \"{name}\"",
+    "togglePassword": "Show or hide password",
+    "errMissingManifest": "manifest.json not found in archive",
+    "errInvalidManifestJson": "Invalid manifest.json format",
+    "errMissingRequiredFields": "manifest.json must contain id, name, and version",
+    "errMissingEntry": "Entry file not found: {entry}",
+    "errMissingActivate": "Extension \"{id}\" does not export an activate function",
+    "errWorkerUnsupported": "Worker sandbox runtime is not yet enabled"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."

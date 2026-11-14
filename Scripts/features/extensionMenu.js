@@ -132,6 +132,7 @@ export function renderExtensionMenu() {
         if (items.length === 0) {
             const emptyBtn = document.createElement('div');
             emptyBtn.className = 'utilityButton disabled';
+            emptyBtn.setAttribute('data-i18n', 'extensions.empty');
             emptyBtn.textContent = t('extensions.empty');
             submenu.appendChild(emptyBtn);
         } else {
@@ -158,6 +159,12 @@ export function renderExtensionMenu() {
                         commandRegistry.execute(item.commandId, {
                             anchorEl: document.getElementById('extensionsDropdown')
                         });
+                    }
+                });
+                itemBtn.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        itemBtn.click();
                     }
                 });
 
@@ -236,7 +243,7 @@ export function initExtensionMenu() {
 
     const listContainer = document.getElementById('extensionsMenuList');
     if (listContainer) {
-        listContainer.addEventListener('click', (event) => {
+        const handleToggleSubmenu = (event) => {
             if (event.target.closest('.utilitySubmenu .utilityButton')) {
                 return;
             }
@@ -248,15 +255,34 @@ export function initExtensionMenu() {
             if (!isOpen) {
                 titleRow.classList.add('open');
             }
+        };
+        listContainer.addEventListener('click', handleToggleSubmenu);
+        listContainer.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                if (event.target.closest('.utilitySubmenu .utilityButton')) {
+                    return;
+                }
+                if (event.target.closest('.utilityMenuTitle')) {
+                    event.preventDefault();
+                    handleToggleSubmenu(event);
+                }
+            }
         });
     }
 
     const manageBtn = document.querySelector('#extensionsDropdown [data-buttonAction="manageExtensions"]');
     if (manageBtn) {
-        manageBtn.addEventListener('click', (event) => {
+        const handleManageClick = (event) => {
             event.stopPropagation();
             closeExtensionDropdown();
             openManageExtensionsModal();
+        };
+        manageBtn.addEventListener('click', handleManageClick);
+        manageBtn.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleManageClick(event);
+            }
         });
     }
 

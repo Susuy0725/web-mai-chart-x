@@ -1613,9 +1613,24 @@ export class SimaiRenderer {
             this.drawOutline();
         }
 
-        if (!this._isRenderingVideo && renderOverlayRegistry.hasOverlays('main', 'beforeNotes')) {
+        const isRenderingVideo = Boolean(this._isRenderingVideo);
+        const hasBeforeOverlays = renderOverlayRegistry.hasOverlays('main', 'beforeNotes', isRenderingVideo);
+        const hasAfterOverlays = renderOverlayRegistry.hasOverlays('main', 'afterNotes', isRenderingVideo);
+        let overlayMetrics = null;
+        const getOverlayMetrics = () => {
+            if (overlayMetrics) return overlayMetrics;
             const minDim = Math.min(w, h);
             const unitPx = (minDim > 0 && this.scale > 0) ? (minDim / scaleBase * this.scale) : 1;
+            const targetRatio = 16 / 9;
+            const stageRect = (h > 0 && w / h > targetRatio)
+                ? Object.freeze({ x: (w - h * targetRatio) * 0.5, y: 0, width: h * targetRatio, height: h })
+                : Object.freeze({ x: 0, y: 0, width: w, height: h });
+            overlayMetrics = { unitPx, stageRect };
+            return overlayMetrics;
+        };
+
+        if (hasBeforeOverlays) {
+            const { unitPx, stageRect } = getOverlayMetrics();
             renderOverlayRegistry.run('main', 'beforeNotes', {
                 ctx,
                 width: w,
@@ -1623,8 +1638,10 @@ export class SimaiRenderer {
                 scale: this.scale,
                 scaleBase,
                 unitPx,
+                stageRect,
                 globalTime,
                 isPlaying: this.isPlaying,
+                isRenderingVideo,
                 target: 'main',
                 phase: 'beforeNotes'
             });
@@ -1659,9 +1676,8 @@ export class SimaiRenderer {
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
         if (this.settings.showUI) this.drawUI(dt, globalTime);
 
-        if (!this._isRenderingVideo && renderOverlayRegistry.hasOverlays('main', 'afterNotes')) {
-            const minDim = Math.min(w, h);
-            const unitPx = (minDim > 0 && this.scale > 0) ? (minDim / scaleBase * this.scale) : 1;
+        if (hasAfterOverlays) {
+            const { unitPx, stageRect } = getOverlayMetrics();
             renderOverlayRegistry.run('main', 'afterNotes', {
                 ctx,
                 width: w,
@@ -1669,8 +1685,10 @@ export class SimaiRenderer {
                 scale: this.scale,
                 scaleBase,
                 unitPx,
+                stageRect,
                 globalTime,
                 isPlaying: this.isPlaying,
+                isRenderingVideo,
                 target: 'main',
                 phase: 'afterNotes'
             });

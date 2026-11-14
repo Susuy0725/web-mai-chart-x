@@ -42,6 +42,7 @@ class RenderOverlayRegistry {
             target,
             phase,
             order: Number(options.order) || 0,
+            includeInVideo: Boolean(options.includeInVideo),
             draw: options.draw
         });
 
@@ -52,11 +53,14 @@ class RenderOverlayRegistry {
      * 檢查指定目標與階段是否有任何疊加圖層（快速路徑避免無謂配置）
      * @param {'main'|'visual'} target
      * @param {'beforeNotes'|'afterNotes'} phase
+     * @param {boolean} [isRenderingVideo=false]
      * @returns {boolean}
      */
-    hasOverlays(target, phase) {
+    hasOverlays(target, phase, isRenderingVideo = false) {
         for (const entry of this.overlays.values()) {
-            if (entry.target === target && entry.phase === phase) return true;
+            if (entry.target === target && entry.phase === phase) {
+                if (!isRenderingVideo || entry.includeInVideo) return true;
+            }
         }
         return false;
     }
@@ -70,10 +74,13 @@ class RenderOverlayRegistry {
     run(target, phase, renderContext) {
         if (this.overlays.size === 0) return;
 
+        const isRenderingVideo = Boolean(renderContext?.isRenderingVideo);
         const matching = [];
         for (const entry of this.overlays.values()) {
             if (entry.target === target && entry.phase === phase) {
-                matching.push(entry);
+                if (!isRenderingVideo || entry.includeInVideo) {
+                    matching.push(entry);
+                }
             }
         }
         if (matching.length === 0) return;

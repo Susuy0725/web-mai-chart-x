@@ -16,6 +16,7 @@ export const EXTENSION_PERMISSIONS = Object.freeze({
     EDITOR_READ: 'editor:read',
     EDITOR_WRITE: 'editor:write',
     CHART_READ: 'chart:read',
+    VIEW_READ: 'view:read',
     PLAYBACK_READ: 'playback:read',
     PLAYBACK_SEEK: 'playback:seek',
     RENDER_OVERLAY: 'render:overlay',
@@ -35,6 +36,7 @@ const SUBSCRIBABLE_EVENTS = new Set([
     EVENTS.PROJECT_LOADED,
     EVENTS.MAIDATA_CHANGED,
     EVENTS.CHART_DECODED,
+    EVENTS.VIEW_MODE_CHANGED,
     EVENTS.PLAYBACK_STATE_CHANGED,
     EVENTS.PLAYBACK_SEEK,
     EVENTS.CANVAS_REDRAW
@@ -64,7 +66,7 @@ class ExtensionManager {
         if (!manifest || typeof manifest !== 'object') {
             throw new TypeError('[ExtensionManager] 擴充描述必須為物件');
         }
-        if (!manifest.id || typeof manifest.id !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/i.test(manifest.id)) {
+        if (!manifest.id || typeof manifest.id !== 'string' || !/^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$/i.test(manifest.id)) {
             throw new TypeError('[ExtensionManager] 擴充識別碼格式無效');
         }
         if (!manifest.name || typeof manifest.name !== 'string') {
@@ -106,6 +108,24 @@ class ExtensionManager {
             if (permSet.has(EXTENSION_PERMISSIONS.EDITOR_READ)) {
                 editorApi.getText = () => appContext.getEditorText();
                 editorApi.getSelection = () => appContext.getEditorSelection();
+                editorApi.on = (eventName, handler) => {
+                    if (typeof handler !== 'function') return () => { };
+                    const off = appContext.onEditorEvent(eventName, (payload) => {
+                        try {
+                            handler(payload);
+                        } catch (err) {
+                            console.error(`[Extension:${extId}] editor.on(${eventName}) 處理失敗:`, err);
+                        }
+                    });
+                    let disposed = false;
+                    const cleanup = () => {
+                        if (disposed) return;
+                        disposed = true;
+                        off();
+                    };
+                    disposables.push(cleanup);
+                    return cleanup;
+                };
             }
             if (permSet.has(EXTENSION_PERMISSIONS.EDITOR_WRITE)) {
                 editorApi.replaceSelection = (replacement, start, end) =>
@@ -147,7 +167,14 @@ class ExtensionManager {
 
         if (permSet.has(EXTENSION_PERMISSIONS.CHART_READ)) {
             scoped.chart = Object.freeze({
-                getSnapshot: () => appContext.getChartSnapshot()
+                getSnapshot: () => appContext.getChartSnapshot(),
+                getCoverImageUrl: () => appContext.getCoverImageUrl()
+            });
+        }
+
+        if (permSet.has(EXTENSION_PERMISSIONS.VIEW_READ)) {
+            scoped.view = Object.freeze({
+                getMode: () => appContext.getViewMode()
             });
         }
 
@@ -275,9 +302,11 @@ class ExtensionManager {
      * 註冊擴充程式
      * @param {Object} manifest 擴充描述資訊
      * @param {Function} factory 擴充初始化工廠函式，可回傳清理函式或含 dispose 的物件
+     * @param {Object} [options={}]
+     * @param {boolean} [options.autoActivate=true]
      * @returns {boolean}
      */
-    register(manifest, factory) {
+    register(manifest, factory, options = {}) {
         this._validateManifest(manifest);
         if (typeof factory !== 'function') {
             throw new TypeError(`[ExtensionManager] 擴充 "${manifest.id}" 必須提供初始化函式`);
@@ -287,16 +316,20 @@ class ExtensionManager {
             return false;
         }
 
+        const { autoActivate = true } = options || {};
+
         const record = {
             manifest: Object.freeze({
                 id: manifest.id,
                 name: manifest.name,
                 version: manifest.version,
+                description: manifest.description ? String(manifest.description) : '',
+                author: manifest.author ? String(manifest.author) : '',
                 permissions: Object.freeze([...(manifest.permissions || [])]),
                 runtime: manifest.runtime || 'trusted'
             }),
             factory,
-            status: 'registered',
+            status: autoActivate ? 'registered' : 'inactive',
             error: null,
             disposables: []
         };
@@ -304,7 +337,7 @@ class ExtensionManager {
         this.extensions.set(manifest.id, record);
         eventBus.emit(EVENTS.EXTENSION_REGISTERED, { id: manifest.id, manifest: record.manifest });
 
-        if (this._isReady) {
+        if (this._isReady && autoActivate) {
             this.activate(manifest.id);
         }
         return true;
@@ -323,7 +356,7 @@ class ExtensionManager {
         // 本階段先實作主執行緒受限門面，worker 沙箱執行通道將於後續階段接上
         if (record.manifest.runtime === 'worker') {
             record.status = 'error';
-            record.error = new Error('Worker 沙箱執行模式尚未啟用');
+            record.error = new Error(t('extensions.errWorkerUnsupported'));
             eventBus.emit(EVENTS.EXTENSION_ERROR, { id, error: record.error });
             return false;
         }
@@ -377,11 +410,14 @@ class ExtensionManager {
     unregister(id) {
         const record = this.extensions.get(id);
         if (!record) return false;
-        if (record.status === 'active') {
+        const wasActive = record.status === 'active';
+        if (wasActive) {
             this.deactivate(id);
         }
         this.extensions.delete(id);
-        eventBus.emit(EVENTS.EXTENSION_DEACTIVATED, { id });
+        if (!wasActive) {
+            eventBus.emit(EVENTS.EXTENSION_DEACTIVATED, { id });
+        }
         return true;
     }
 

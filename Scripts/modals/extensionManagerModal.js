@@ -13,10 +13,14 @@ import {
 import { popupWindow, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
 
+function getStatusKey(status) {
+    if (status === 'active') return 'extensions.statusActive';
+    if (status === 'error') return 'extensions.statusError';
+    return 'extensions.statusInactive';
+}
+
 function getStatusText(status) {
-    if (status === 'active') return t('extensions.statusActive');
-    if (status === 'error') return t('extensions.statusError');
-    return t('extensions.statusInactive');
+    return t(getStatusKey(status));
 }
 
 function getStatusClass(status) {
@@ -52,6 +56,7 @@ function confirmInstallPermissions(pkg) {
 
         const listTitle = document.createElement('div');
         listTitle.className = 'ext-perm-title';
+        listTitle.setAttribute('data-i18n', 'extensions.requestedPermissions');
         listTitle.textContent = t('extensions.requestedPermissions');
         body.appendChild(listTitle);
 
@@ -60,6 +65,7 @@ function confirmInstallPermissions(pkg) {
         const perms = pkg.manifest.permissions || [];
         if (perms.length === 0) {
             const li = document.createElement('li');
+            li.setAttribute('data-i18n', 'extensions.noPermissions');
             li.textContent = t('extensions.noPermissions');
             permList.appendChild(li);
         } else {
@@ -73,6 +79,7 @@ function confirmInstallPermissions(pkg) {
 
         const warning = document.createElement('p');
         warning.className = 'ext-perm-warning';
+        warning.setAttribute('data-i18n', 'extensions.securityWarning');
         warning.textContent = t('extensions.securityWarning');
         body.appendChild(warning);
 
@@ -147,6 +154,7 @@ export function openExtensionManagerModal() {
     const installedTabBtn = document.createElement('button');
     installedTabBtn.type = 'button';
     installedTabBtn.className = 'pm-tab-btn pm-tab-btn--active';
+    installedTabBtn.setAttribute('data-i18n', 'extensions.tabInstalled');
     installedTabBtn.textContent = t('extensions.tabInstalled');
     tabBar.appendChild(installedTabBtn);
 
@@ -167,10 +175,12 @@ export function openExtensionManagerModal() {
 
             const emptyTitle = document.createElement('p');
             emptyTitle.className = 'ext-empty-title';
+            emptyTitle.setAttribute('data-i18n', 'extensions.empty');
             emptyTitle.textContent = t('extensions.empty');
 
             const emptyHint = document.createElement('p');
             emptyHint.className = 'ext-empty-hint';
+            emptyHint.setAttribute('data-i18n', 'extensions.emptyHint');
             emptyHint.textContent = t('extensions.emptyHint');
 
             emptyBox.append(emptyTitle, emptyHint);
@@ -200,6 +210,7 @@ export function openExtensionManagerModal() {
 
             const statusBadge = document.createElement('span');
             statusBadge.className = `ext-status-badge ${getStatusClass(item.status)}`;
+            statusBadge.setAttribute('data-i18n', getStatusKey(item.status));
             statusBadge.textContent = getStatusText(item.status);
 
             header.append(titleWrap, statusBadge);
@@ -236,6 +247,7 @@ export function openExtensionManagerModal() {
             const toggleBtn = document.createElement('button');
             toggleBtn.type = 'button';
             toggleBtn.className = 'ext-card-btn';
+            toggleBtn.setAttribute('data-i18n', isActive ? 'extensions.disable' : 'extensions.enable');
             toggleBtn.textContent = isActive ? t('extensions.disable') : t('extensions.enable');
             toggleBtn.addEventListener('click', async () => {
                 await toggleInstalledExtension(item.manifest.id, !isActive);
@@ -245,6 +257,7 @@ export function openExtensionManagerModal() {
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
             removeBtn.className = 'ext-card-btn is-danger';
+            removeBtn.setAttribute('data-i18n', 'extensions.remove');
             removeBtn.textContent = t('extensions.remove');
             removeBtn.addEventListener('click', async () => {
                 await uninstallExtension(item.manifest.id);

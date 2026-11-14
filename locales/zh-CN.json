@@ -70,7 +70,9 @@
     "gotoPlay": "打开Play",
     "toolsSmoothBpm": "平滑变速",
     "extensions": "扩展程序",
-    "manageExtensions": "管理插件"
+    "manageExtensions": "管理插件",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏"
   },
   "extensions": {
     "title": "扩展程序管理",
@@ -96,7 +98,14 @@
     "installAndEnable": "安装并启用",
     "installSuccess": "已安装并启用「{name}」",
     "installFailed": "导入插件失败：{error}",
-    "removedSuccess": "已移除「{name}」"
+    "removedSuccess": "已移除「{name}」",
+    "togglePassword": "显示或隐藏密码",
+    "errMissingManifest": "压缩包内找不到 manifest.json",
+    "errInvalidManifestJson": "manifest.json 格式错误，无法解析为 JSON",
+    "errMissingRequiredFields": "manifest.json 必须包含 id、name 与 version",
+    "errMissingEntry": "找不到入口文件：{entry}",
+    "errMissingActivate": "扩展程序「{id}」未导出默认启动函数",
+    "errWorkerUnsupported": "Worker 沙箱执行模式尚未启用"
   },
   "textarea": {
     "placeholder": "在此输入谱面数据..."

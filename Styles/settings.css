@@ -409,17 +409,62 @@
 }
 
 .popup-setting-input[type="number"],
-.popup-setting-input:not([type="text"]) {
+.popup-setting-input:not([type="text"]):not([type="password"]) {
     width: 78px;
     flex: 0 0 78px;
     text-align: right;
 }
 
 .popup-setting-input-text,
-.popup-setting-input[type="text"] {
+.popup-setting-input[type="text"],
+.popup-setting-input[type="password"] {
     width: 140px;
     max-width: 180px;
     text-align: left;
+}
+
+.popup-setting-password-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.popup-setting-password-wrap .popup-setting-input {
+    width: 120px;
+    max-width: 150px;
+}
+
+.popup-setting-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
+    border-radius: 6px;
+    background: var(--popup-surface, #202026);
+    color: var(--popup-text-sub, #a0a0aa);
+    cursor: pointer;
+    transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+
+.popup-setting-toggle-btn:hover {
+    border-color: var(--popup-border-light, rgba(255, 255, 255, 0.32));
+    color: var(--popup-text-main, #ffffff);
+    background: var(--popup-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.popup-setting-toggle-btn .material-symbols-outlined {
+    font-size: 16px;
+}
+
+.popup-setting-notice {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--popup-text-sub, #a0a0aa);
+    margin: -4px 0 4px 0;
+    padding: 0 2px;
 }
 
 /* --- 語法高亮自訂顏色項目樣式 --- */

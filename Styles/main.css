@@ -1889,224 +1889,10 @@ body.resizing-panels #canvasContainer canvas {
     }
 }
 
-/* 擴充程式設定 Popover 與管理清單 */
-.extension-popover {
-    position: fixed;
-    inset: auto;
-    margin: 0;
-    min-width: 260px;
-    max-width: min(360px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
-    background-color: var(--main-color);
-    color: rgba(255, 255, 255, 0.92);
-    border: 1px solid var(--button-ouline);
-    border-radius: 12px;
-    padding: 12px 14px;
-    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 1px rgba(255, 255, 255, 0.08);
-    z-index: 1250;
-    opacity: 0;
-    transition-property: opacity, transform, display, overlay;
-    transition-duration: 0.18s;
-    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-    transition-behavior: allow-discrete;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .extension-popover {
-        transform: translateY(-4px) scale(0.97);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .extension-popover {
-        transition-duration: 0.1s;
-    }
-}
-
-.extension-popover:is(:popover-open, .is-open) {
-    display: block;
-    opacity: 1;
-}
-
-@starting-style {
-    .extension-popover:is(:popover-open, .is-open) {
-        opacity: 0;
-    }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .extension-popover:is(:popover-open, .is-open) {
-        transform: translateY(0) scale(1);
-    }
-
-    @starting-style {
-        .extension-popover:is(:popover-open, .is-open) {
-            transform: translateY(-4px) scale(0.97);
-        }
-    }
-}
-
-.extension-popover-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding-bottom: 8px;
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.extension-popover-title {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.96);
-}
-
-.extension-popover-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.65);
-    cursor: pointer;
-    padding: 0;
-}
-
-.extension-popover-close:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-    color: #fff;
-}
-
-.extension-popover-close .material-symbols-outlined {
-    font-size: 18px;
-}
-
-.extension-popover-body {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.extension-popover-row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.extension-popover-row.is-toggle {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.extension-popover-label {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.85);
-}
-
-.extension-popover-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    border-radius: 6px;
-    border: 1px solid var(--button-ouline);
-    background-color: var(--editor-background);
-    color: rgba(255, 255, 255, 0.95);
-    font-size: 13px;
-}
-
-.extension-popover-input:focus {
-    outline: 1px solid var(--accent-color);
-    border-color: var(--accent-color);
-}
-
-.extension-popover-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 12px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.extension-popover-reset {
-    border: 1px solid var(--button-ouline);
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.85);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.extension-popover-reset:hover {
-    background: rgba(255, 255, 255, 0.14);
-}
-
-.extension-manager-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 260px;
-    max-width: 420px;
-}
-
-.extension-manager-empty {
-    margin: 8px 0;
-    color: rgba(255, 255, 255, 0.65);
-    font-size: 13px;
-    text-align: center;
-}
-
-.extension-manager-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.extension-manager-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 13px;
-}
-
-.extension-manager-meta {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.58);
-}
-
-.extension-manager-toggle {
-    border: 1px solid var(--button-ouline);
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.9);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.extension-manager-toggle:hover {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: #fff;
-}
-
+/* 擴充程式浮動元件與管理彈窗 */
 .extension-floating-widget {
     position: fixed;
-    z-index: 950;
+    z-index: 20;
     pointer-events: auto;
 }
 
@@ -2132,13 +1918,13 @@ body.resizing-panels #canvasContainer canvas {
     grid-column: 1 / -1;
     text-align: center;
     padding: 36px 16px;
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--popup-text-sub, rgba(255, 255, 255, 0.65));
 }
 
 .ext-empty-title {
     margin: 0 0 6px;
     font-size: 15px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--popup-text-main, rgba(255, 255, 255, 0.9));
 }
 
 .ext-empty-hint {
@@ -2151,9 +1937,9 @@ body.resizing-panels #canvasContainer canvas {
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--button-ouline);
+    border-radius: var(--popup-radius-lg, 10px);
+    background: var(--popup-surface, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--popup-border, var(--button-ouline));
 }
 
 .ext-card-header {
@@ -2172,7 +1958,7 @@ body.resizing-panels #canvasContainer canvas {
 
 .ext-card-title {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--popup-text-main, rgba(255, 255, 255, 0.95));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2180,12 +1966,12 @@ body.resizing-panels #canvasContainer canvas {
 
 .ext-card-version {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--popup-text-sub, rgba(255, 255, 255, 0.55));
 }
 
 .ext-card-id {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.52);
+    color: var(--popup-text-sub, rgba(255, 255, 255, 0.52));
     font-family: 'mono', monospace;
 }
 
@@ -2197,18 +1983,18 @@ body.resizing-panels #canvasContainer canvas {
 }
 
 .ext-status-badge.is-active {
-    background: rgba(68, 153, 238, 0.22);
-    color: #8cc5ff;
+    background: var(--popup-accent-glow, rgba(68, 153, 238, 0.22));
+    color: var(--popup-accent-hover, #8cc5ff);
 }
 
 .ext-status-badge.is-inactive {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.7);
+    background: var(--popup-surface-active, rgba(255, 255, 255, 0.1));
+    color: var(--popup-text-sub, rgba(255, 255, 255, 0.7));
 }
 
 .ext-status-badge.is-error {
-    background: rgba(212, 49, 57, 0.25);
-    color: #ff8a90;
+    background: var(--popup-danger-bg, rgba(212, 49, 57, 0.25));
+    color: var(--popup-danger, #ff8a90);
 }
 
 .ext-card-perms {
@@ -2220,17 +2006,17 @@ body.resizing-panels #canvasContainer canvas {
 .ext-perm-chip {
     font-size: 11px;
     padding: 2px 6px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(255, 255, 255, 0.75);
+    border-radius: var(--popup-radius-sm, 4px);
+    background: var(--popup-surface-hover, rgba(255, 255, 255, 0.07));
+    color: var(--popup-text-sub, rgba(255, 255, 255, 0.75));
 }
 
 .ext-card-error {
     font-size: 12px;
-    color: #ff8a90;
-    background: rgba(212, 49, 57, 0.12);
+    color: var(--popup-danger, #ff8a90);
+    background: var(--popup-danger-bg, rgba(212, 49, 57, 0.12));
     padding: 6px 8px;
-    border-radius: 6px;
+    border-radius: var(--popup-radius-md, 6px);
 }
 
 .ext-card-actions {
@@ -2242,10 +2028,10 @@ body.resizing-panels #canvasContainer canvas {
 }
 
 .ext-card-btn {
-    border: 1px solid var(--button-ouline);
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.92);
-    border-radius: 6px;
+    border: 1px solid var(--popup-border-light, var(--button-ouline));
+    background: var(--popup-surface-hover, rgba(255, 255, 255, 0.08));
+    color: var(--popup-text-main, rgba(255, 255, 255, 0.92));
+    border-radius: var(--popup-radius-md, 6px);
     padding: 5px 10px;
     font-size: 12px;
     cursor: pointer;
@@ -2269,23 +2055,23 @@ body.resizing-panels #canvasContainer canvas {
     font-size: 13px;
 }
 
-.ext-perm-intro,
-.ext-perm-warning {
+.ext-perm-intro {
     margin: 0;
 }
 
 .ext-perm-title {
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--popup-text-main, rgba(255, 255, 255, 0.92));
 }
 
 .ext-perm-list {
     margin: 0;
     padding-left: 18px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--popup-text-sub, rgba(255, 255, 255, 0.8));
 }
 
 .ext-perm-warning {
+    margin: 0;
     font-size: 12px;
-    color: #ffb86c;
+    color: var(--toast-warning, #ffb86c);
 }

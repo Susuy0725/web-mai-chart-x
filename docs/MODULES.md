@@ -22,6 +22,11 @@
 | **`swManager.js`** | Service Worker 註冊、更新監聽、手動測試與更新進度彈窗。 | `initServiceWorker()`, `showSwUpdateProgress()`, `showSwUpdateComplete()`, `mockSwUpdateFlow()` |
 | **`frameProfiler.js`** | FPS 監控、每一幀耗時統計、卡頓診斷。 | `frameProfiler` |
 | **`wmcxExtract.js`** | `.wmcx` 專案包二進位解封與資產抽取。 | `extractWmcxPackage()` |
+| **`commandRegistry.js`** | 統一指令註冊與派發中心。 | `commandRegistry` |
+| **`extensionLoader.js`** | 解析、驗證與動態載入第三方 `.zip` 擴充套件。 | `parseExtensionZip()`, `registerStoredPackage()`, `installExtensionPackage()`, `toggleInstalledExtension()`, `uninstallExtension()`, `loadStoredExtensions()` |
+| **`extensionManager.js`** | 擴充程式生命週期、權限門面與資源回收管理器。 | `EXTENSION_API_VERSION`, `EXTENSION_PERMISSIONS`, `extensionManager` |
+| **`extensionStorage.js`** | 使用 IndexedDB 儲存與管理已安裝的擴充套件。 | `listStoredExtensions()`, `saveStoredExtension()`, `setStoredExtensionEnabled()`, `removeStoredExtension()` |
+| **`renderOverlayRegistry.js`** | Canvas 渲染疊加圖層註冊表與狀態隔離呼叫器。 | `renderOverlayRegistry` |
 
 ---
 
@@ -44,6 +49,8 @@
 | **`videoRender.js`** | 結合音訊與畫布逐幀錄製導出 WebM/MP4 譜面預覽影片。<br>⚠️ **重大提醒**：本模組依賴的 `mediabunny.cjs` 逾 36,000 行（1.4MB），排查影片渲染問題時**切勿先分析該代碼**，應優先查閱官方線上 API：[https://mediabunny.dev/api/](https://mediabunny.dev/api/)。 | `renderVideoFromChart()` |
 | **`wmcxPackage.js`** | 專案打包壓縮為 `.wmcx` 檔案。 | `packageProjectToWmcx()` |
 | **`wmcxRestore.js`** | 還原 `.wmcx` 封裝包至 IndexedDB。 | `restoreWmcxPackage()` |
+| **`extensionMenu.js`** | 頂欄拼圖擴充選單渲染與浮動元件建立。 | `registerExtensionMenuItem()`, `unregisterExtensionMenuItems()`, `renderExtensionMenu()`, `createFloatingWidget()`, `openManageExtensionsModal()`, `initExtensionMenu()` |
+| **`extensionPopover.js`** | 復用 `popupWindow` 的擴充程式宣告式設定面板與獨立儲存。 | `getExtensionSettings()`, `openExtensionPopover()`, `closeExtensionPopover()` |
 
 ---
 
@@ -70,6 +77,7 @@
 | **`aboutModal.js`** | 關於軟體資訊、社群連結與彩蛋觸發點。 | `openAboutModal()` |
 | **`changelogModal.js`**| 版本更新日誌彈窗。 | `openChangelogModal()` |
 | **`helpModal.js`** | 譜面代碼語法與快捷鍵操作指引手冊。 | `openHelpModal()` |
+| **`extensionManagerModal.js`** | 擴充程式管理視窗，支援 `.zip` 匯入、權限確認、啟用切換與移除。 | `openExtensionManagerModal()` |
 
 ---
 

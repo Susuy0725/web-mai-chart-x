@@ -70,7 +70,9 @@
     "gotoPlay": "Playを起動する",
     "toolsSmoothBpm": "スムーズBPM",
     "extensions": "拡張機能",
-    "manageExtensions": "拡張機能を管理"
+    "manageExtensions": "拡張機能を管理",
+    "fullscreen": "全画面表示",
+    "exitFullscreen": "全画面表示を終了"
   },
   "extensions": {
     "title": "拡張機能管理",
@@ -96,7 +98,14 @@
     "installAndEnable": "インストールして有効化",
     "installSuccess": "「{name}」をインストールし有効化しました",
     "installFailed": "インポートに失敗しました：{error}",
-    "removedSuccess": "「{name}」を削除しました"
+    "removedSuccess": "「{name}」を削除しました",
+    "togglePassword": "パスワードの表示切替",
+    "errMissingManifest": "アーカイブ内に manifest.json が見つかりません",
+    "errInvalidManifestJson": "manifest.json の形式が正しくありません",
+    "errMissingRequiredFields": "manifest.json には id、name、version が必要です",
+    "errMissingEntry": "エントリファイルが見つかりません：{entry}",
+    "errMissingActivate": "拡張機能「{id}」に起動関数がエクスポートされていません",
+    "errWorkerUnsupported": "Worker サンドボックス実行モードはまだ有効ではありません"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."

@@ -102,6 +102,7 @@ export const EVENTS = {
     // 介面佈局相關
     LAYOUT_SPLIT_RATIO: 'layout:split-ratio', // { ratio: number }
     LAYOUT_RESET: 'layout:reset',
+    VIEW_MODE_CHANGED: 'view:mode-changed',   // { isEditorHidden, isFullscreen, isVerticalMode, showAuxiliaryText }
 
     // 背景相關
     BACKGROUND_VIDEO_TOGGLE: 'bg:video-toggle',

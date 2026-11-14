@@ -54,7 +54,7 @@ timeline-jog-dial.zip
 
 | 欄位名稱 | 型別 | 必填 | 預設值 | 說明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `id` | 字串 | 是 | 無 | 擴充唯一識別碼，僅允許英數字、小數點、底線與連字號，格式須符合 `/^[a-z0-9][a-z0-9._-]*$/i` |
+| `id` | 字串 | 是 | 無 | 擴充唯一識別碼，格式須符合 `/^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$/i`，須採用至少包含一段小數點區隔的反向網域命名空間格式，例如 `com.example.my-plugin` |
 | `name` | 字串 | 是 | 無 | 擴充程式顯示名稱 |
 | `version` | 字串 | 是 | 無 | 語意化版本號，例如 `"1.0.0"` |
 | `description` | 字串 | 否 | `""` | 擴充功能簡要說明 |
@@ -65,13 +65,14 @@ timeline-jog-dial.zip
 
 重要注意事項：
 - `manifest.json` 必須能成功解析為 JSON 物件，且必須具備 `id`、`name` 與 `version` 欄位。
+- 系統註冊與列出擴充清單時，皆會保留 `description` 與 `author` 欄位，未填寫時預設為空字串。
 - `runtime` 若設定為 `"worker"`，由於 Worker 沙箱目前尚未啟用，嘗試啟用時會產生錯誤並標記為錯誤狀態。
 
 ### 2.3 描述檔案範例
 
 ```json
 {
-  "id": "timeline-jog-dial",
+  "id": "com.wmcx.timeline-jog-dial",
   "name": "時間軸微調旋鈕",
   "version": "1.0.0",
   "description": "在畫面右側提供觸控飛梭旋鈕，方便於手機或平板精細微調譜面時間軸。",
@@ -102,6 +103,7 @@ timeline-jog-dial.zip
 | `editor:read` | `EXTENSION_PERMISSIONS.EDITOR_READ` | 讀取編輯器譜面全文與選取區資訊 |
 | `editor:write` | `EXTENSION_PERMISSIONS.EDITOR_WRITE` | 置換編輯器選取區或指定範圍文字 |
 | `chart:read` | `EXTENSION_PERMISSIONS.CHART_READ` | 讀取目前譜面解析結果的唯讀快照 |
+| `view:read` | `EXTENSION_PERMISSIONS.VIEW_READ` | 讀取目前編輯器檢視模式快照 |
 | `playback:read` | `EXTENSION_PERMISSIONS.PLAYBACK_READ` | 讀取播放狀態快照與時間軸總長度 |
 | `playback:seek` | `EXTENSION_PERMISSIONS.PLAYBACK_SEEK` | 跳轉至指定秒數或相對微調播放進度 |
 | `render:overlay` | `EXTENSION_PERMISSIONS.RENDER_OVERLAY` | 註冊畫布自訂疊加圖層與請求畫布重繪 |
@@ -141,6 +143,14 @@ ctx.hasPermission(permissionString);
 - 權限需求：`editor:read`
 - 參數：無
 - 回傳：物件 `{ start: number, end: number, text: string }`，包含選取起點索引、終點索引與選取文字。
+
+#### `ctx.editor.on(eventName, handler)`
+- 權限需求：`editor:read`
+- 參數：
+  - `eventName`：字串，支援 `'input'`、`'keydown'`、`'blur'`、`'selectionchange'`。
+  - `handler`：函式，接收事件快照 `{ text, selectionStart, selectionEnd }`。於 `'keydown'` 事件時額外包含 `key`、`code`、`ctrlKey`、`metaKey`、`altKey`、`shiftKey`、`isComposing`、`preventDefault()` 與 `stopPropagation()`。
+- 回傳：取消訂閱函式。
+- 生命週期：擴充停用時系統會自動移除所有透過此介面綁定的監聽器。
 
 #### `ctx.editor.replaceSelection(replacement, start, end)`
 - 權限需求：`editor:write`
@@ -195,7 +205,25 @@ ctx.hasPermission(permissionString);
   - `notes`：物件陣列，當前難度已解析的音符物件清單淺層拷貝。
   - `tags`：物件陣列，譜面已解析的標籤清單淺層拷貝。
 
-### 3.6 渲染疊加介面：`ctx.render`
+#### `ctx.chart.getCoverImageUrl()`
+- 權限需求：`chart:read`
+- 參數：無
+- 回傳：字串或 `null`。唯讀取得目前專案封面圖片網址，無封面圖時回傳 `null`。
+
+### 3.6 檢視模式介面：`ctx.view`
+
+宣告 `view:read` 權限時注入此介面。未宣告此權限時，`ctx.view` 為 `undefined`。
+
+#### `ctx.view.getMode()`
+- 權限需求：`view:read`
+- 參數：無
+- 回傳：物件，代表目前編輯器檢視模式快照，包含以下欄位：
+  - `isEditorHidden`：布林值，表示編輯器是否處於隱藏狀態。
+  - `isFullscreen`：布林值，表示是否處於全螢幕模式。
+  - `isVerticalMode`：布林值，表示是否處於直式版面模式。
+  - `showAuxiliaryText`：布林值，表示是否顯示環繞輔助文字。
+
+### 3.7 渲染疊加介面：`ctx.render`
 
 宣告 `render:overlay` 權限時注入此介面。未宣告此權限時，`ctx.render` 為 `undefined`。
 
@@ -206,6 +234,7 @@ ctx.hasPermission(permissionString);
     - `target`：字串，選填，目標畫布，可選值為 `'main'` 或 `'visual'`，預設為 `'main'`。
     - `phase`：字串，選填，繪製階段，可選值為 `'beforeNotes'` 或 `'afterNotes'`，預設為 `'afterNotes'`。
     - `order`：數值，選填，排序權重，預設為 `0`，數值小者先繪製。
+    - `includeInVideo`：布林值，選填，預設為 `false`，決定該圖層是否於影片匯出期間一併繪製。
     - `draw`：函式，必填，繪圖回呼函式，每幀繪製時調用，接收 `renderContext` 物件。
 - 行為：註冊時會自動發布 `canvas:redraw` 事件觸發畫布重繪。
 - 回傳：取消註冊函式。調用此函式可提前註銷該圖層，註銷時亦會發布 `canvas:redraw` 事件觸發畫面更新。
@@ -220,8 +249,10 @@ ctx.hasPermission(permissionString);
 - `scale`：數值，當前縮放倍率。於主畫布為渲染器縮放比例，於視覺化編輯器為視圖縮放比例。
 - `scaleBase`：數值，畫布基準縮放長度。
 - `unitPx`：數值，單位像素比例。
+- `stageRect`：唯讀物件，於主畫布繪製時提供，包含 `x`、`y`、`width`、`height` 四個物理像素數值欄位，表示置中的十六比九舞台安全區域座標與尺寸，當畫布寬高比小於或等於十六比九時等同於完整畫布範圍。
 - `globalTime`：數值，當前全域時間秒數。
 - `isPlaying`：布林值，表示當前是否處於播放狀態。
+- `isRenderingVideo`：布林值，表示目前是否處於影片匯出渲染期間，由主畫布提供。
 - `target`：字串，當前繪圖目標畫布，為 `'main'` 或 `'visual'`。
 - `phase`：字串，當前繪圖階段，為 `'beforeNotes'` 或 `'afterNotes'`。
 
@@ -230,7 +261,7 @@ ctx.hasPermission(permissionString);
 系統於呼叫疊加圖層時提供嚴密的狀態防護與例外隔離：
 - 狀態隔離：底層在執行每個圖層的 `draw` 前會自動呼叫 `ctx.save()`，並於繪製完成後的 `finally` 區塊呼叫 `ctx.restore()`，確保各擴充圖層的繪圖狀態、剪裁區域或座標變換矩陣不互相污染，亦不干擾核心渲染引擎。
 - 錯誤隔離：以 `try...catch` 包裹各圖層的 `draw` 呼叫。若圖層繪製時拋出例外，將於控制台記錄錯誤訊息，不會中斷主渲染迴圈或其他圖層的繪製作業。
-- 影片匯出跳過條件：在主畫布進行影片錄製或匯出期間，當 `_isRenderingVideo` 狀態為真時，系統會自動跳過主畫布的所有疊加圖層繪製，確保匯出的影片內容維持純淨譜面影像。
+- 影片匯出控制：預設情況下 `includeInVideo` 為 `false`，影片匯出期間會自動跳過該圖層；若明確設為 `true`，系統會於影片匯出期間執行該圖層的 `draw` 並傳入 `isRenderingVideo: true`，供擴充程式依設定決定是否繪製。
 
 #### `ctx.render.requestRedraw()`
 - 權限需求：`render:overlay`
@@ -238,7 +269,7 @@ ctx.hasPermission(permissionString);
 - 行為：發布 `canvas:redraw` 事件，請求主程式立即排程重新繪製畫布。
 - 回傳：無回傳值。
 
-### 3.7 指令註冊介面：`ctx.commands`
+### 3.8 指令註冊介面：`ctx.commands`
 
 宣告 `commands:register` 權限時注入此介面。
 
@@ -251,7 +282,7 @@ ctx.hasPermission(permissionString);
 - 回傳：清理函式。調用此函式可提前註銷該指令。
 - 生命週期：擴充停用時系統會自動註銷所有透過此介面註冊的指令。
 
-### 3.8 事件訂閱介面：`ctx.events`
+### 3.9 事件訂閱介面：`ctx.events`
 
 宣告 `events:subscribe` 權限時注入此介面。
 
@@ -264,7 +295,7 @@ ctx.hasPermission(permissionString);
 - 回傳：取消訂閱函式。
 - 生命週期：擴充停用時系統會自動移除所有透過此介面綁定的監聽器。
 
-### 3.9 使用者介面：`ctx.ui`
+### 3.10 使用者介面：`ctx.ui`
 
 宣告 `ui:toast`、`ui:menu`、`ui:popover` 或 `ui:overlay` 任一權限時注入此介面。
 
@@ -319,11 +350,11 @@ ctx.hasPermission(permissionString);
     - `id`：字串，元件本地識別碼，預設為 `'default'`。
     - `position`：字串，預設為 `'right'`。
 - 回傳：受控元件物件 `{ element: HTMLElement, dispose: Function }`。
-  - `element`：已掛載至應用程式根節點之 DOM 容器元素。
+  - `element`：已掛載至頁面根容器之 DOM 元素。
   - `dispose()`：提前銷毀並自 DOM 樹移除此容器。
 - 生命週期：擴充停用時系統自動移除該容器並自全域註銷。
 
-### 3.10 國際化多語系介面：`ctx.i18n`
+### 3.11 國際化多語系介面：`ctx.i18n`
 
 宣告 `i18n:register` 權限時注入此介面。
 
@@ -360,6 +391,7 @@ ctx.hasPermission(permissionString);
 | `project:loaded` | 使用者建立、開啟新專案或匯入譜面資料完成 | 無傳入參數 |
 | `maidata:changed` | 譜面資料或解析後結構發生實質變更 | 傳入最新譜面資料物件 |
 | `chart:decoded` | 譜面完成解碼或重新解析，例如切換難度或編輯譜面內容 | `{ difficulty: number, noteCount: number }`，包含當前難度與已解析音符數量 |
+| `view:mode-changed` | 當切換隱藏編輯器、切換全螢幕、直橫版面切換、專案載入或輔助文字顯示設定變更時觸發 | `{ isEditorHidden: boolean, isFullscreen: boolean, isVerticalMode: boolean, showAuxiliaryText: boolean }`，為最新檢視模式快照物件 |
 | `playback:state-changed` | 播放引擎切換播放或暫停狀態 | `{ isPlaying: boolean }` |
 | `playback:seek` | 使用者或程式主動調整時間軸進度 | `{ time: number }`，為目標秒數 |
 | `canvas:redraw` | 畫布完成一次重繪週期 | 無傳入參數 |
@@ -378,12 +410,13 @@ ctx.events.on('playback:state-changed', ({ isPlaying }) => {
 
 ## 5. 原生設定面板與資料隔離持久化
 
-### 5.1 原生 Popover 行為與邊界防裁切
+### 5.1 系統彈窗整合與層級行為
 
-Web mai Chart X 設定面板底層基於原生 HTML Popover API 建構。面板具備以下特性：
-- 原生彈層階層：在支援原生 Popover 的現代瀏覽器中位於最頂層，不與主編輯器 z-index 衝突。
-- 輕量點擊關閉：點擊面板外部或按下 Escape 鍵會自動觸發關閉。
-- 邊界防裁切定位：若提供 `anchorEl`，面板會自動計算錨點位置，並確保彈窗邊界維持在可視視窗內，避免邊緣溢出。
+Web mai Chart X 設定面板透過 `ctx.ui.openPopover` 開啟，現已復用主程式統一的 `popupWindow` 系統彈窗與 `.popup-backdrop` 模糊背景遮罩。具備以下特性：
+- 統一視覺風格：繼承主程式對話框規格與毛玻璃背景遮罩，保有整體一致的視覺呈現。
+- 直覺關閉行為：支援點擊遮罩背景外部或按下 Escape 鍵關閉面板。
+- 遮罩層級防護：`.extension-floating-widget` 層級處於模糊遮罩之下，開啟系統彈窗時浮動掛件會被統一模糊遮罩覆蓋，避免畫面元件互相干擾。
+- 參數相容處理：`openPopover` 選項中若傳入 `anchorEl`，系統仍維持相容性，並以置中彈窗呈現。
 
 ### 5.2 資料隔離持久化機制
 
@@ -394,7 +427,7 @@ Web mai Chart X 設定面板底層基於原生 HTML Popover API 建構。面板�
 
 ### 5.3 宣告式設定欄位格式
 
-設定面板透過傳入 schema 陣列動態生成表單控制項。支援四種型別：
+設定面板透過傳入 schema 陣列動態生成表單控制項。支援五種型別，所有欄位皆可選填 `notice` 或 `noticeKey` 於欄位下方顯示說明文字：
 
 #### 布林開關：`boolean`
 呈現為核取方塊控制項。
@@ -404,7 +437,7 @@ Web mai Chart X 設定面板底層基於原生 HTML Popover API 建構。面板�
   type: 'boolean',
   default: true,
   label: '顯示微調旋鈕',
-  labelKey: 'ext.timeline-jog-dial.optVisible'
+  labelKey: 'ext.com.wmcx.timeline-jog-dial.optVisible'
 }
 ```
 
@@ -419,18 +452,31 @@ Web mai Chart X 設定面板底層基於原生 HTML Popover API 建構。面板�
   max: 30,
   step: 0.5,
   label: '每轉一圈秒數',
-  labelKey: 'ext.timeline-jog-dial.optSecPerTurn'
+  labelKey: 'ext.com.wmcx.timeline-jog-dial.optSecPerTurn'
 }
 ```
 
 #### 單行文字：`string`
-呈現為文字輸入框。若省略 `type` 屬性，預設即為 `string`。
+呈現為文字輸入框。若省略 `type` 屬性，預設即為 `string`。支援選填 `placeholder` 或 `placeholderKey`。
 ```javascript
 {
   key: 'titleText',
   type: 'string',
   default: '預設標題',
   label: '顯示文字'
+}
+```
+
+#### 密碼輸入：`password`
+呈現為遮罩密碼輸入框，並附帶顯示與隱藏切換按鈕。支援選填 `placeholder` 或 `placeholderKey`。
+```javascript
+{
+  key: 'apiKey',
+  type: 'password',
+  default: '',
+  label: 'API 金鑰',
+  placeholder: '輸入金鑰',
+  notice: '金鑰僅儲存於本機瀏覽器。'
 }
 ```
 
@@ -586,12 +632,12 @@ Compress-Archive -Path "manifest.json", "index.js" -DestinationPath "timeline-jo
 
 1. 開啟 Web mai Chart X 編輯器首頁。
 2. 點擊頂欄右側的拼圖圖示，展開擴充程式選單。
-3. 點選選單最下方的「管理插件」選項，開啟擴充程式管理視窗。
-4. 點選視窗右下角之「匯入插件」按鈕。
+3. 點選選單最下方的「管理擴充程式」選項，開啟擴充程式管理視窗。
+4. 點選視窗右下角之「匯入擴充程式」按鈕。
 5. 於系統檔案瀏覽視窗選取剛才打包完成的 `.zip` 檔案。
 6. 系統解析完成後，會跳出「確認安裝擴充程式」權限清單對話框，顯示該外掛所請求之所有權限與安全提示。
 7. 點選「安裝並啟用」，外掛程式即刻生效：
    - 頂欄拼圖選單內將即時渲染該外掛的專屬二級功能項目。
    - 浮動元件會自動掛載於畫面指定方位。
-8. 如需停用或移除，可隨時回到「管理插件」面板中點擊「停用」或「移除」按鈕。
+8. 如需停用或移除，可隨時回到「管理擴充程式」面板中點擊「停用」或「移除」按鈕。
 

@@ -70,7 +70,9 @@
     "gotoPlay": "Play 열기",
     "toolsSmoothBpm": "스무스 BPM",
     "extensions": "확장 프로그램",
-    "manageExtensions": "확장 프로그램 관리"
+    "manageExtensions": "확장 프로그램 관리",
+    "fullscreen": "전체 화면",
+    "exitFullscreen": "전체 화면 종료"
   },
   "extensions": {
     "title": "확장 프로그램 관리",
@@ -96,7 +98,14 @@
     "installAndEnable": "설치 및 활성화",
     "installSuccess": "\"{name}\" 설치 및 활성화 완료",
     "installFailed": "확장 프로그램 가져오기 실패: {error}",
-    "removedSuccess": "\"{name}\" 제거 완료"
+    "removedSuccess": "\"{name}\" 제거 완료",
+    "togglePassword": "비밀번호 표시 전환",
+    "errMissingManifest": "압축 파일에서 manifest.json을 찾을 수 없습니다",
+    "errInvalidManifestJson": "manifest.json 형식이 올바르지 않습니다",
+    "errMissingRequiredFields": "manifest.json에 id, name, version이 포함되어야 합니다",
+    "errMissingEntry": "진입점 파일을 찾을 수 없습니다: {entry}",
+    "errMissingActivate": "확장 프로그램 \"{id}\"에서 시작 함수를 내보내지 않았습니다",
+    "errWorkerUnsupported": "Worker 샌드박스 실행 모드가 아직 활성화되지 않았습니다"
   },
   "textarea": {
     "placeholder": "여기에 채보 데이터를 입력하세요..."

@@ -231,6 +231,18 @@ class AppContext {
     }
 
     /**
+     * 訂閱編輯器事件並回傳取消訂閱函式
+     * @param {string} eventName
+     * @param {Function} handler
+     * @returns {Function}
+     */
+    onEditorEvent(eventName, handler) {
+        const fn = this.services.get('onEditorEvent');
+        if (typeof fn !== 'function') return () => { };
+        return fn(eventName, handler);
+    }
+
+    /**
      * 取得目前播放狀態唯讀快照
      * @returns {{ isPlaying: boolean, realTime: number, globalTime: number }}
      */
@@ -289,6 +301,43 @@ class AppContext {
             duration: this.getDuration(),
             notes: [],
             tags: []
+        };
+    }
+
+    /**
+     * 取得目前專案封面圖片網址（唯讀）
+     * @returns {string|null}
+     */
+    getCoverImageUrl() {
+        const imgEl = this.services.get('editorBackgroundImage');
+        if (imgEl && typeof imgEl.getAttribute === 'function') {
+            const rawSrc = imgEl.getAttribute('src');
+            if (rawSrc && rawSrc.trim() && !rawSrc.endsWith('no_image.png')) {
+                return imgEl.src || rawSrc;
+            }
+        }
+        const getBg = this.services.get('getBackgroundImage');
+        const bg = typeof getBg === 'function' ? getBg() : null;
+        if (typeof bg === 'string' && bg.trim() && !bg.endsWith('no_image.png')) {
+            return bg;
+        }
+        return null;
+    }
+
+    /**
+     * 取得目前編輯器檢視模式快照（唯讀）
+     * @returns {{ isEditorHidden: boolean, isFullscreen: boolean, isVerticalMode: boolean, showAuxiliaryText: boolean }}
+     */
+    getViewMode() {
+        const fn = this.services.get('getViewMode');
+        if (typeof fn === 'function') {
+            return fn();
+        }
+        return {
+            isEditorHidden: false,
+            isFullscreen: false,
+            isVerticalMode: false,
+            showAuxiliaryText: Boolean(this.settings?.renderSurroundingAuxiliaryText)
         };
     }
 }

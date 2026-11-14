@@ -55,13 +55,13 @@
     </noscript>
 
     <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,description,download,drag_indicator,edit,error,extension,file_open,find_replace,folder_open,folder_zip,fullscreen,fullscreen_exit,graphic_eq,help,ink_eraser,input,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,open_in_new,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,speed,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,description,download,drag_indicator,edit,error,extension,file_open,find_replace,folder_open,folder_zip,fullscreen,fullscreen_exit,graphic_eq,help,ink_eraser,input,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,open_in_new,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,speed,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,visibility_off,warning">
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,description,download,drag_indicator,edit,error,extension,file_open,find_replace,folder_open,folder_zip,fullscreen,fullscreen_exit,graphic_eq,help,ink_eraser,input,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,open_in_new,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,speed,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,description,download,drag_indicator,edit,error,extension,file_open,find_replace,folder_open,folder_zip,fullscreen,fullscreen_exit,graphic_eq,help,ink_eraser,input,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,open_in_new,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,speed,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,visibility_off,warning"
         media="print" onload="this.media='all'">
     <noscript>
         <link rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,description,download,drag_indicator,edit,error,extension,file_open,find_replace,folder_open,folder_zip,fullscreen,fullscreen_exit,graphic_eq,help,ink_eraser,input,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,open_in_new,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,speed,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,warning">
+            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=account_circle,add,arrow_back,arrow_drop_down,arrow_selector_tool,block,check_circle,chevron_right,close,close_small,cloud_done,cloud_download,cloud_off,cloud_sync,cloud_upload,delete,description,download,drag_indicator,edit,error,extension,file_open,find_replace,folder_open,folder_zip,fullscreen,fullscreen_exit,graphic_eq,help,ink_eraser,input,keyboard,keyboard_arrow_up,keyboard_arrow_down,menu,my_location,open_in_new,pause,play_arrow,redo,remove,right_panel_close,right_panel_open,rotate_left,rotate_right,search,select_all,settings,skip_next,skip_previous,south_west,speed,stop,swap_horiz,swap_vert,sync,undo,videocam,visibility,visibility_off,warning">
     </noscript>
 
     <!-- Stylesheets -->
@@ -353,7 +353,8 @@
                         </span>
                     </div>
                     <div class="utilityButton" data-buttonAction="fullscreen" role="button" tabindex="0"
-                        aria-label="全螢幕切換" title="全螢幕">
+                        data-i18n-aria-label="menu.fullscreen" data-i18n-title="menu.fullscreen"
+                        aria-label="全螢幕" title="全螢幕">
                         <span class="material-symbols-outlined" translate="no">
                             fullscreen
                         </span>
@@ -536,8 +537,8 @@
                             <div id="extensionsMenuList"></div>
                             <hr id="extensionsMenuDivider" style="display: none;">
                             <div class="utilityButton" data-buttonAction="manageExtensions" role="button" tabindex="0"
-                                data-i18n-aria-label="menu.manageExtensions" aria-label="管理插件">
-                                <span data-i18n="menu.manageExtensions">管理插件</span>
+                                data-i18n-aria-label="menu.manageExtensions" aria-label="管理擴充程式">
+                                <span data-i18n="menu.manageExtensions">管理擴充程式</span>
                                 <span class="utilityItemIcon material-symbols-outlined" translate="no">extension</span>
                             </div>
                         </div>

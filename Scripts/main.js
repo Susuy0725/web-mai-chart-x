@@ -372,7 +372,13 @@ if (fullscreenButton) {
         if (iconSpan) {
             iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
         }
-        fullscreenButton.title = isFullscreen ? '退出全螢幕' : '全螢幕';
+        const i18nKey = isFullscreen ? 'menu.exitFullscreen' : 'menu.fullscreen';
+        const labelText = t(i18nKey);
+        fullscreenButton.setAttribute('data-i18n-title', i18nKey);
+        fullscreenButton.setAttribute('data-i18n-aria-label', i18nKey);
+        fullscreenButton.title = labelText;
+        fullscreenButton.setAttribute('aria-label', labelText);
+        emitViewModeChanged();
     };
 
     document.addEventListener('fullscreenchange', updateFullscreenIcon);
@@ -1514,6 +1520,7 @@ function saveMaidataImmediate() {
 
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
+    eventBus.emit(EVENTS.MAIDATA_CHANGED, { ...maidata });
 
     return projSet('maidata', maidata).catch((error) => {
         console.error("儲存maidata到IndexedDB失敗:", error);
@@ -2447,6 +2454,7 @@ hideEditorButton.addEventListener('click', () => {
     setEditorCss(currentlyHidden);
     editorContainer.dataset.hidden = currentlyHidden ? 'false' : 'true';
     resize();
+    emitViewModeChanged();
     console.log(`編輯器已${currentlyHidden === 'true' ? '顯示' : '隱藏'}`);
 });
 
@@ -3505,6 +3513,7 @@ function resize(force = false) {
     }
 
     draw();
+    emitViewModeChanged();
 }
 
 const secondaryWindow = new SecondaryWindowManager();
@@ -3939,6 +3948,7 @@ async function loadProjectData(step, expectedGen = null) {
         hideEditorButton.children[0].textContent = "right_panel_close";
         delete editorContainer.dataset.hidden;
     }
+    emitViewModeChanged();
 
     if (myGen !== loadGeneration) return;
 
@@ -3946,6 +3956,7 @@ async function loadProjectData(step, expectedGen = null) {
     playbackEngine.resetNotesPlaybackState(playbackEngine.globalTime);
     draw();
     updateSlider(playbackEngine.realTime, true);
+    eventBus.emit(EVENTS.PROJECT_LOADED);
 }
 
 /**
@@ -4237,6 +4248,29 @@ appContext.register('commandRegistry', commandRegistry);
 appContext.register('extensionManager', extensionManager);
 appContext.register('seekToTime', (targetTime) => seekToTime(targetTime));
 appContext.register('getDuration', () => Number(timeline?.max) || 0);
+function getCurrentViewMode() {
+    const isEditorHidden = editorContainer?.dataset?.hidden === 'true';
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+    const w = document.documentElement.clientWidth || window.innerWidth || 1;
+    const h = document.documentElement.clientHeight || window.innerHeight || 1;
+    return {
+        isEditorHidden,
+        isFullscreen,
+        isVerticalMode: (w / h) <= 0.587,
+        showAuxiliaryText: Boolean(settings?.renderSurroundingAuxiliaryText)
+    };
+}
+
+let lastViewModeKey = '';
+function emitViewModeChanged(force = false) {
+    const mode = getCurrentViewMode();
+    const key = `${mode.isEditorHidden}|${mode.isFullscreen}|${mode.isVerticalMode}|${mode.showAuxiliaryText}`;
+    if (!force && key === lastViewModeKey) return;
+    lastViewModeKey = key;
+    eventBus.emit(EVENTS.VIEW_MODE_CHANGED, mode);
+}
+
+appContext.register('getViewMode', () => getCurrentViewMode());
 appContext.register('getChartSnapshot', () => ({
     difficulty: nowDifficulty,
     maidata: maidata ? { ...maidata } : {},
@@ -4271,6 +4305,44 @@ appContext.register('replaceEditorSelection', (replacement, start, end) => {
     inputDebounce();
     return true;
 });
+appContext.register('onEditorEvent', (eventName, handler) => {
+    if (!editorInput || typeof handler !== 'function') return () => { };
+    const allowed = new Set(['input', 'keydown', 'blur', 'selectionchange']);
+    if (!allowed.has(eventName)) return () => { };
+
+    const buildSnapshot = () => ({
+        text: editorInput.value,
+        selectionStart: editorInput.selectionStart ?? 0,
+        selectionEnd: editorInput.selectionEnd ?? 0
+    });
+
+    if (eventName === 'selectionchange') {
+        const onSelectionChange = () => {
+            if (document.activeElement !== editorInput) return;
+            handler(buildSnapshot());
+        };
+        document.addEventListener('selectionchange', onSelectionChange);
+        return () => document.removeEventListener('selectionchange', onSelectionChange);
+    }
+
+    const listener = (e) => {
+        const payload = buildSnapshot();
+        if (eventName === 'keydown') {
+            payload.key = e.key;
+            payload.code = e.code;
+            payload.ctrlKey = e.ctrlKey;
+            payload.metaKey = e.metaKey;
+            payload.altKey = e.altKey;
+            payload.shiftKey = e.shiftKey;
+            payload.isComposing = e.isComposing;
+            payload.preventDefault = () => e.preventDefault();
+            payload.stopPropagation = () => e.stopPropagation();
+        }
+        handler(payload);
+    };
+    editorInput.addEventListener(eventName, listener);
+    return () => editorInput.removeEventListener(eventName, listener);
+});
 
 // === 全域 EventBus 事件訂閱 (解耦副作用與跨模組直接調用) ===
 eventBus.on(EVENTS.CANVAS_REDRAW, () => {
@@ -4303,6 +4375,9 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     if (key === 'moviebrightness') applyMovieBrightness(value);
     if (['disableVideo', 'hideBackgroundWhenPaused', 'showCoverWhenPaused'].includes(key)) {
         updateVideoBackgroundDisplay();
+    }
+    if (key === 'renderSurroundingAuxiliaryText') {
+        emitViewModeChanged();
     }
 
     // 4. 判定圈顯示開關

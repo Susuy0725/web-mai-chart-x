@@ -169,6 +169,22 @@
       "storage": {
         "title": "Read and write isolated extension storage",
         "desc": "Store and read extension-specific data in an isolated namespace that is automatically cleared on removal."
+      },
+      "settings_read": {
+        "title": "Read native settings",
+        "desc": "Read a read-only snapshot of active editor, rendering, and audio settings."
+      },
+      "settings_override": {
+        "title": "Temporarily override native settings",
+        "desc": "Temporarily override native settings while active without modifying persisted user settings; automatically restored on deactivation."
+      },
+      "assets_read": {
+        "title": "List native media assets",
+        "desc": "Query the list of available image texture and sound effect keys."
+      },
+      "assets_override": {
+        "title": "Temporarily override textures and sound assets",
+        "desc": "Temporarily replace note textures, effects, and hit sounds while active; automatically restored on deactivation."
       }
     },
     "securityWarning": "Warning: Extensions execute scripts in your browser. Only install packages from trusted sources.",

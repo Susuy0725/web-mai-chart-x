@@ -8,6 +8,7 @@ import { appContext } from './appContext.js';
 import { commandRegistry } from './commandRegistry.js';
 import { eventBus, EVENTS } from './eventBus.js';
 import { renderOverlayRegistry } from './renderOverlayRegistry.js';
+import { extensionOverrideRegistry } from './extensionOverrideRegistry.js';
 import {
     getExtensionData,
     setExtensionData,
@@ -29,6 +30,10 @@ export const EXTENSION_PERMISSIONS = Object.freeze({
     RENDER_OVERLAY: 'render:overlay',
     COMMANDS_REGISTER: 'commands:register',
     EVENTS_SUBSCRIBE: 'events:subscribe',
+    SETTINGS_READ: 'settings:read',
+    SETTINGS_OVERRIDE: 'settings:override',
+    ASSETS_READ: 'assets:read',
+    ASSETS_OVERRIDE: 'assets:override',
     UI_TOAST: 'ui:toast',
     UI_MENU: 'ui:menu',
     UI_POPOVER: 'ui:popover',
@@ -47,7 +52,8 @@ const SUBSCRIBABLE_EVENTS = new Set([
     EVENTS.VIEW_MODE_CHANGED,
     EVENTS.PLAYBACK_STATE_CHANGED,
     EVENTS.PLAYBACK_SEEK,
-    EVENTS.CANVAS_REDRAW
+    EVENTS.CANVAS_REDRAW,
+    EVENTS.SETTINGS_CHANGED
 ]);
 
 class ExtensionManager {
@@ -104,6 +110,8 @@ class ExtensionManager {
         const permSet = new Set(record.manifest.permissions);
         const disposables = record.disposables;
         const extId = record.manifest.id;
+        const expectedGen = record.activationGen;
+        const isContextActive = () => record.status === 'active' && record.activationGen === expectedGen;
 
         const scoped = {
             apiVersion: EXTENSION_API_VERSION,
@@ -117,7 +125,7 @@ class ExtensionManager {
                 editorApi.getText = () => appContext.getEditorText();
                 editorApi.getSelection = () => appContext.getEditorSelection();
                 editorApi.on = (eventName, handler) => {
-                    if (typeof handler !== 'function') return () => { };
+                    if (typeof handler !== 'function' || !isContextActive()) return () => { };
                     const off = appContext.onEditorEvent(eventName, (payload) => {
                         try {
                             handler(payload);
@@ -189,6 +197,7 @@ class ExtensionManager {
         if (permSet.has(EXTENSION_PERMISSIONS.RENDER_OVERLAY)) {
             scoped.render = Object.freeze({
                 registerOverlay: (options) => {
+                    if (!isContextActive()) return () => { };
                     const dispose = renderOverlayRegistry.register({
                         ...options,
                         extensionId: extId,
@@ -208,6 +217,7 @@ class ExtensionManager {
         if (permSet.has(EXTENSION_PERMISSIONS.COMMANDS_REGISTER)) {
             scoped.commands = Object.freeze({
                 register: (localCommandId, handler, meta = {}) => {
+                    if (!isContextActive()) return () => { };
                     // 強制加上擴充識別碼前綴，防止覆寫核心指令或與其他擴充衝突
                     const fullId = `ext.${extId}.${localCommandId}`;
                     const dispose = commandRegistry.register(fullId, handler, {
@@ -223,6 +233,7 @@ class ExtensionManager {
         if (permSet.has(EXTENSION_PERMISSIONS.EVENTS_SUBSCRIBE)) {
             scoped.events = Object.freeze({
                 on: (eventName, callback) => {
+                    if (!isContextActive()) return () => {};
                     if (!SUBSCRIBABLE_EVENTS.has(eventName)) {
                         console.warn(`[ExtensionManager] 擴充 "${extId}" 嘗試訂閱未開放事件 "${eventName}"`);
                         return () => {};
@@ -251,7 +262,7 @@ class ExtensionManager {
             }
             if (hasUiMenu) {
                 uiApi.registerMenuItem = (item) => {
-                    if (!this._uiBridge || typeof this._uiBridge.registerMenuItem !== 'function') {
+                    if (!isContextActive() || !this._uiBridge || typeof this._uiBridge.registerMenuItem !== 'function') {
                         return () => {};
                     }
                     const dispose = this._uiBridge.registerMenuItem(extId, item);
@@ -261,7 +272,7 @@ class ExtensionManager {
             }
             if (hasUiPopover) {
                 uiApi.openPopover = (options = {}) => {
-                    if (!this._uiBridge || typeof this._uiBridge.openPopover !== 'function') {
+                    if (!isContextActive() || !this._uiBridge || typeof this._uiBridge.openPopover !== 'function') {
                         return { close: () => {}, getValues: () => ({}) };
                     }
                     const handle = this._uiBridge.openPopover({
@@ -282,7 +293,7 @@ class ExtensionManager {
             }
             if (hasUiOverlay) {
                 uiApi.createFloatingWidget = (options = {}) => {
-                    if (!this._uiBridge || typeof this._uiBridge.createFloatingWidget !== 'function') {
+                    if (!isContextActive() || !this._uiBridge || typeof this._uiBridge.createFloatingWidget !== 'function') {
                         return null;
                     }
                     const widget = this._uiBridge.createFloatingWidget(extId, options);
@@ -299,6 +310,7 @@ class ExtensionManager {
             const namespace = `ext.${extId}`;
             scoped.i18n = Object.freeze({
                 registerTranslations: (localeMap) => {
+                    if (!isContextActive()) return () => {};
                     const dispose = registerTranslations(namespace, localeMap);
                     disposables.push(dispose);
                     return dispose;
@@ -315,6 +327,93 @@ class ExtensionManager {
                 clear: () => clearExtensionData(extId),
                 keys: () => listExtensionDataKeys(extId)
             });
+        }
+
+        const hasSettingsRead = permSet.has(EXTENSION_PERMISSIONS.SETTINGS_READ);
+        const hasSettingsOverride = permSet.has(EXTENSION_PERMISSIONS.SETTINGS_OVERRIDE);
+        if (hasSettingsRead || hasSettingsOverride) {
+            const cloneReadonly = (val) => {
+                if (val === null || typeof val !== 'object') return val;
+                if (Array.isArray(val)) return Object.freeze(val.map(cloneReadonly));
+                const out = {};
+                for (const k of Object.keys(val)) {
+                    out[k] = cloneReadonly(val[k]);
+                }
+                return Object.freeze(out);
+            };
+            const settingsApi = {
+                get: (key, defaultValue = undefined) => {
+                    if (typeof key !== 'string' || !key) return defaultValue;
+                    const segments = key.split('.');
+                    let cur = appContext.settings;
+                    for (const seg of segments) {
+                        if (cur === null || cur === undefined || typeof cur !== 'object') {
+                            return defaultValue;
+                        }
+                        cur = cur[seg];
+                    }
+                    return cur !== undefined ? cloneReadonly(cur) : defaultValue;
+                },
+                getAll: () => cloneReadonly(appContext.settings || {})
+            };
+            if (hasSettingsOverride) {
+                settingsApi.override = (key, value) => {
+                    if (!isContextActive()) return () => {};
+                    const dispose = extensionOverrideRegistry.overrideSetting(extId, key, value);
+                    disposables.push(dispose);
+                    return dispose;
+                };
+                settingsApi.overrideMany = (entries) => {
+                    if (!isContextActive()) return () => {};
+                    const dispose = extensionOverrideRegistry.overrideSettings(extId, entries);
+                    disposables.push(dispose);
+                    return dispose;
+                };
+                settingsApi.clearOverrides = () => {
+                    extensionOverrideRegistry.clearSettingOverrides(extId);
+                };
+            }
+            scoped.settings = Object.freeze(settingsApi);
+        }
+
+        const hasAssetsRead = permSet.has(EXTENSION_PERMISSIONS.ASSETS_READ);
+        const hasAssetsOverride = permSet.has(EXTENSION_PERMISSIONS.ASSETS_OVERRIDE);
+        if (hasAssetsRead || hasAssetsOverride) {
+            const assetsApi = {
+                listImageKeys: () => extensionOverrideRegistry.listImageKeys(),
+                listSoundKeys: () => extensionOverrideRegistry.listSoundKeys()
+            };
+            if (hasAssetsOverride) {
+                assetsApi.overrideImage = async (key, source) => {
+                    if (!isContextActive()) return () => {};
+                    const dispose = await extensionOverrideRegistry.overrideImage(extId, key, source);
+                    disposables.push(dispose);
+                    return dispose;
+                };
+                assetsApi.overrideImages = async (entries) => {
+                    if (!isContextActive()) return () => {};
+                    const dispose = await extensionOverrideRegistry.overrideImages(extId, entries);
+                    disposables.push(dispose);
+                    return dispose;
+                };
+                assetsApi.overrideSound = async (key, source) => {
+                    if (!isContextActive()) return () => {};
+                    const dispose = await extensionOverrideRegistry.overrideSound(extId, key, source);
+                    disposables.push(dispose);
+                    return dispose;
+                };
+                assetsApi.overrideSounds = async (entries) => {
+                    if (!isContextActive()) return () => {};
+                    const dispose = await extensionOverrideRegistry.overrideSounds(extId, entries);
+                    disposables.push(dispose);
+                    return dispose;
+                };
+                assetsApi.clearOverrides = () => {
+                    extensionOverrideRegistry.clearImageOverrides(extId);
+                    extensionOverrideRegistry.clearSoundOverrides(extId);
+                };
+            }
+            scoped.assets = Object.freeze(assetsApi);
         }
 
         return Object.freeze(scoped);
@@ -353,6 +452,7 @@ class ExtensionManager {
             factory,
             status: autoActivate ? 'registered' : 'inactive',
             error: null,
+            activationGen: 0,
             disposables: []
         };
 
@@ -385,16 +485,53 @@ class ExtensionManager {
 
         record.disposables = [];
         record.error = null;
+        record.activationGen = (record.activationGen || 0) + 1;
+        const currentGen = record.activationGen;
+        record.status = 'active';
         const context = this._createScopedContext(record);
 
         try {
-            const teardown = record.factory(context);
-            if (typeof teardown === 'function') {
-                record.disposables.push(teardown);
-            } else if (teardown && typeof teardown.dispose === 'function') {
-                record.disposables.push(() => teardown.dispose());
+            const registerTeardown = (teardown) => {
+                if (typeof teardown === 'function') {
+                    if (record.status === 'active' && record.activationGen === currentGen) {
+                        record.disposables.push(teardown);
+                    } else {
+                        try {
+                            teardown();
+                        } catch (cleanupErr) {
+                            console.warn(`[ExtensionManager] 清理已停用擴充 "${id}" 資源失敗:`, cleanupErr);
+                        }
+                    }
+                } else if (teardown && typeof teardown.dispose === 'function') {
+                    if (record.status === 'active' && record.activationGen === currentGen) {
+                        record.disposables.push(() => teardown.dispose());
+                    } else {
+                        try {
+                            teardown.dispose();
+                        } catch (cleanupErr) {
+                            console.warn(`[ExtensionManager] 清理已停用擴充 "${id}" 資源失敗:`, cleanupErr);
+                        }
+                    }
+                }
+            };
+
+            const result = record.factory(context);
+            if (result && typeof result.then === 'function') {
+                result.then((teardown) => {
+                    registerTeardown(teardown);
+                }).catch((error) => {
+                    console.error(`[ExtensionManager] 擴充 "${id}" 非同步啟用失敗:`, error);
+                    if (record.status === 'active' && record.activationGen === currentGen) {
+                        this._uiBridge?.closePopover?.(id);
+                        this._runDisposables(record);
+                        record.status = 'error';
+                        record.error = error;
+                        eventBus.emit(EVENTS.EXTENSION_ERROR, { id, error });
+                    }
+                });
+            } else {
+                registerTeardown(result);
             }
-            record.status = 'active';
             eventBus.emit(EVENTS.EXTENSION_ACTIVATED, { id });
             return true;
         } catch (error) {
@@ -454,6 +591,11 @@ class ExtensionManager {
             } catch (error) {
                 console.error(`[ExtensionManager] 清理擴充 "${record.manifest.id}" 資源失敗:`, error);
             }
+        }
+        try {
+            extensionOverrideRegistry.clearAllOverrides(record.manifest.id);
+        } catch (error) {
+            console.error(`[ExtensionManager] 清理擴充 "${record.manifest.id}" 覆寫資源失敗:`, error);
         }
     }
 

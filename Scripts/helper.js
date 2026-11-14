@@ -535,11 +535,12 @@ export function popupWindow({
 
     const applyContent = (container, value) => {
         container.innerHTML = '';
+        container.style.display = '';
         if (!value) {
-            container.style.display = 'none';
+            container.classList.remove('has-content');
             return;
         }
-        container.style.display = 'block';
+        container.classList.add('has-content');
         if (value instanceof Node) {
             container.appendChild(value);
             return;

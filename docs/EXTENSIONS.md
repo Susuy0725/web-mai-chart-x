@@ -109,6 +109,10 @@ timeline-jog-dial.zip
 | `render:overlay` | `EXTENSION_PERMISSIONS.RENDER_OVERLAY` | 註冊畫布自訂疊加圖層與請求畫布重繪 |
 | `commands:register` | `EXTENSION_PERMISSIONS.COMMANDS_REGISTER` | 註冊具備擴充名稱空間的自訂指令 |
 | `events:subscribe` | `EXTENSION_PERMISSIONS.EVENTS_SUBSCRIBE` | 訂閱系統開放白名單事件 |
+| `settings:read` | `EXTENSION_PERMISSIONS.SETTINGS_READ` | 讀取應用程式原生設定的深層凍結唯讀快照 |
+| `settings:override` | `EXTENSION_PERMISSIONS.SETTINGS_OVERRIDE` | 動態層疊覆寫應用程式原生設定 |
+| `assets:read` | `EXTENSION_PERMISSIONS.ASSETS_READ` | 讀取系統目前載入的圖片貼圖與音效素材鍵名清單 |
+| `assets:override` | `EXTENSION_PERMISSIONS.ASSETS_OVERRIDE` | 動態層疊覆寫圖片貼圖與判定打擊音效素材 |
 | `ui:toast` | `EXTENSION_PERMISSIONS.UI_TOAST` | 呼叫全域吐司提示訊息 |
 | `ui:menu` | `EXTENSION_PERMISSIONS.UI_MENU` | 於頂欄拼圖選單註冊二級選單項目 |
 | `ui:popover` | `EXTENSION_PERMISSIONS.UI_POPOVER` | 開啟原生設定面板與存取隔離設定值 |
@@ -419,6 +423,106 @@ ctx.hasPermission(permissionString);
   - `params`：物件，內嵌參數替換字典。
 - 回傳：字串，當前使用者系統語言之翻譯結果。若找不到翻譯則回傳完整鍵名路徑。
 
+### 3.13 原生設定介面：`ctx.settings`
+
+宣告 `settings:read` 或 `settings:override` 權限時注入此介面。未宣告任何設定權限時，`ctx.settings` 為 `undefined`。
+
+本介面提供外掛以非破壞性方式讀取或層疊覆寫編輯器的原生運作設定。所有覆寫皆具備以下關鍵特質：
+- 執行期層疊堆疊：多個外掛覆寫同一設定項時依啟用順序堆疊，後啟用者優先；當上層外掛釋放覆寫或停用時，系統自動回退至次一層外掛之覆寫值或原始基準值。
+- 持久化隔離保護：外掛所進行的設定覆寫僅於記憶體中生效，絕不污染使用者在本機儲存的持久化設定。當使用者手動儲存設定時，系統會自動濾除所有外掛覆寫，僅保存純淨的使用者原生基準設定。
+- 即時連動與重繪：覆寫生效或還原時會自動發布 `settings:changed` 事件，其酬載包含 `isExtensionOverride: true` 旗標，並觸發畫布即時重繪。若使用者在原生設定面板修改了被外掛覆寫的項目，系統會更新底層基準值，並在外掛覆寫存在期間繼續保持外掛設定值優先。
+- 自動生命週期還原：外掛停用或卸載時，系統自動清理該外掛的所有設定覆寫並還原基準設定。
+
+#### `ctx.settings.get(key, defaultValue = undefined)`
+- 權限需求：`settings:read` 或 `settings:override`
+- 參數：
+  - `key`：字串，設定鍵名。支援以小數點分隔的多層路徑，例如 `'noteSpeed'` 或 `'skin.note'`。
+  - `defaultValue`：任意型別，選填，預設為 `undefined`。當路徑不存在或鍵名非有效字串時回傳。
+- 回傳：該設定項目之深層複製且經 `Object.freeze` 凍結之唯讀物件或原始型別值。若設定不存在則回傳 `defaultValue`。
+
+#### `ctx.settings.getAll()`
+- 權限需求：`settings:read` 或 `settings:override`
+- 參數：無
+- 回傳：目前應用程式所有原生設定的深層複製且凍結之唯讀快照物件。
+
+#### `ctx.settings.override(key, value)`
+- 權限需求：`settings:override`
+- 參數：
+  - `key`：字串，目標設定鍵名。支援以小數點分隔的多層路徑，例如 `'noteSpeed'` 或 `'judgeVolume'`。系統內建防護機制，嚴格禁止傳入包含 `__proto__`、`constructor` 或 `prototype` 之不安全路徑。
+  - `value`：任意型別，欲覆寫設定之目標數值。內部會自動深層複製，避免物件參照外洩。
+- 行為：將覆寫條目推入該設定鍵之堆疊頂端，更新現行設定物件，發布 `settings:changed` 事件並自動呼叫 `appContext.draw()` 重繪畫面。
+- 回傳：清理函式。呼叫此函式可提前撤銷該筆設定覆寫並自動恢復前一層或原始基準值。
+- 生命週期：外掛停用時系統會自動執行所有已註冊的清理函式，恢復原始設定。
+
+#### `ctx.settings.overrideMany(entries)`
+- 權限需求：`settings:override`
+- 參數：
+  - `entries`：物件，包含複數設定路徑與目標數值的鍵值對，例如 `{ 'noteSpeed': 7.5, 'touchEffect': false }`。
+- 行為：批次套用多項設定覆寫。若套用過程中任一路徑驗證失敗，會自動回復本次呼叫已套用的所有覆寫。
+- 回傳：清理函式。呼叫此函式可一次撤銷本次批次套用的所有設定覆寫。
+
+#### `ctx.settings.clearOverrides()`
+- 權限需求：`settings:override`
+- 參數：無
+- 行為：立即撤銷當前擴充程式註冊的所有設定覆寫，還原受影響的設定項目至次層覆寫或原始基準值，並觸發重繪。
+
+### 3.14 素材覆寫介面：`ctx.assets`
+
+宣告 `assets:read` 或 `assets:override` 權限時注入此介面。未宣告任何素材權限時，`ctx.assets` 為 `undefined`。
+
+本介面提供外掛以非破壞性方式查詢與動態置換遊戲內的圖片貼圖與打擊音效緩衝。具備以下關鍵特質：
+- 支援豐富來源格式：圖片素材支援 HTMLImageElement、HTMLCanvasElement、ImageBitmap、Blob 以及網址或字串；音效素材支援 AudioBuffer、ArrayBuffer、ArrayBufferView、Blob 以及音訊網址或字串。
+- 堆疊管理與自動還原：素材覆寫採用分層堆疊架構，多個外掛可安全層疊覆寫相同素材。外掛停用或卸載時，系統自動還原原始素材、釋放建立的二進位物件網址，並取消非同步載入中的請求。
+- 切換外觀自動重套用：當使用者在設定中切換 Skin 重新載入整套原生素材時，系統會自動更新底層素材基準，並自動重新套用現行已啟用的外掛圖片覆寫，無須外掛手動重設。
+- 支援錄影匯出渲染：覆寫後的材質貼圖直接同步至渲染引擎與預覽畫布，解碼後的音效亦直接駐留於音效緩衝映射表中。進行譜面影片錄製與離線匯出渲染時，自訂材質與音效皆能完整生效。
+
+#### `ctx.assets.listImageKeys()`
+- 權限需求：`assets:read` 或 `assets:override`
+- 參數：無
+- 回傳：字串陣列，列出系統目前圖片字典中的所有素材鍵名，包含各類音符外觀、點擊特效、判定字樣與按鍵圖樣。
+
+#### `ctx.assets.listSoundKeys()`
+- 權限需求：`assets:read` 或 `assets:override`
+- 參數：無
+- 回傳：字串陣列，列出系統目前音訊管理器中註冊的所有打擊音效鍵名，包含 tap、each、break、slide、judge 等音效。
+
+#### `ctx.assets.overrideImage(key, source)`
+- 權限需求：`assets:override`
+- 參數：
+  - `key`：字串，欲覆寫的圖片素材鍵名。
+  - `source`：支援的圖片來源格式，可傳入 HTMLImageElement、HTMLCanvasElement、ImageBitmap、Blob，或圖片網址、物件網址、Base64 字串。
+- 行為：非同步將來源解析為已載入的 HTMLImageElement，推入該鍵之覆寫堆疊頂端，並自動同步至主畫布渲染器、視覺化編輯器與預覽畫布，隨後觸發畫面重繪。
+- 回傳：Promise 物件，解析為清理函式。呼叫清理函式可撤銷該筆覆寫、釋放暫存之物件網址，並還原上一層覆寫或原始素材。
+- 生命週期：外掛停用時自動復原原始貼圖並釋放相關物件網址。
+
+#### `ctx.assets.overrideImages(entries)`
+- 權限需求：`assets:override`
+- 參數：
+  - `entries`：物件，鍵名為圖片素材識別碼，值為對應之圖片來源格式。
+- 行為：非同步批次解析並覆寫多組圖片素材。若任一素材解析失敗，系統會自動還原該次呼叫已套用的所有圖片覆寫。
+- 回傳：Promise 物件，解析為清理函式。呼叫清理函式可一次撤銷本次批次套用的所有圖片覆寫。
+
+#### `ctx.assets.overrideSound(key, source)`
+- 權限需求：`assets:override`
+- 參數：
+  - `key`：字串，欲覆寫的音效素材鍵名。
+  - `source`：支援的音訊來源格式，可傳入 AudioBuffer、ArrayBuffer、ArrayBufferView、Blob，或音訊檔案網址、Data URL 字串。
+- 行為：非同步解碼音訊資料為 AudioBuffer，系統會自動濾除 ID3 標籤並呼叫音訊上下文完成解碼，推入音效覆寫堆疊頂端，並更新音訊管理器的緩衝映射表。
+- 回傳：Promise 物件，解析為清理函式。呼叫清理函式可撤銷該筆音效覆寫並還原上一層音效或原始音效。
+- 生命週期：外掛停用時自動還原原始音效緩衝。
+
+#### `ctx.assets.overrideSounds(entries)`
+- 權限需求：`assets:override`
+- 參數：
+  - `entries`：物件，鍵名為音效素材識別碼，值為對應之音訊來源格式。
+- 行為：非同步批次解碼並覆寫多組音效素材。若任一音效解碼失敗，系統會自動復原本次呼叫已套用的所有音效覆寫。
+- 回傳：Promise 物件，解析為清理函式。呼叫清理函式可一次撤銷本次批次套用的所有音效覆寫。
+
+#### `ctx.assets.clearOverrides()`
+- 權限需求：`assets:override`
+- 參數：無
+- 行為：立即撤銷當前擴充程式註冊的所有圖片貼圖與打擊音效覆寫，釋放相關暫存資源，還原受影響的素材並同步至各畫布渲染器。
+
 ---
 
 ## 4. 可訂閱事件清單
@@ -435,6 +539,7 @@ ctx.hasPermission(permissionString);
 | `playback:state-changed` | 播放引擎切換播放或暫停狀態 | `{ isPlaying: boolean }` |
 | `playback:seek` | 使用者或程式主動調整時間軸進度 | `{ time: number }`，為目標秒數 |
 | `canvas:redraw` | 畫布完成一次重繪週期 | 無傳入參數 |
+| `settings:changed` | 應用程式原生設定變更，或由擴充程式套用或解除設定覆寫時觸發 | `{ key: string, value: any, oldVal: any, allSettings: Object, isExtensionOverride?: boolean }`，包含異動的最上層設定鍵名、新值、舊值、最新完整設定快照，以及是否由擴充覆寫所引發之布林旗標 |
 
 使用範例：
 
@@ -603,6 +708,9 @@ export default function activate(ctx) {
 - 自動註銷透過 `ctx.render.registerOverlay` 註冊的疊加圖層並觸發畫布重繪。
 - 自動移除透過 `ctx.ui.registerMenuItem` 註冊的選單項目。
 - 自動卸載透過 `ctx.i18n.registerTranslations` 註冊的多語系詞典。
+- 自動還原透過 `ctx.settings` 套用的所有原生設定覆寫並觸發畫面重繪。
+- 自動還原透過 `ctx.assets` 套用的所有圖片貼圖與打擊音效覆寫，釋放暫存物件網址並同步更新渲染器。
+- 取消所有尚未完成的素材非同步載入或解碼作業。
 - 執行擴充啟動函式所回傳的清理函式。
 
 ---
@@ -650,6 +758,7 @@ shadow.append(style, container);
 - 指令命名空間：擴充註冊之指令強制冠上 `ext.${extensionId}.` 前綴，無法覆寫主編輯器原生快捷鍵或指令。
 - 語系命名空間：擴充字典強制掛載於 `ext.${extensionId}.` 命名空間下，無法竄改系統核心多語系文案。
 - 儲存鍵隔離：擴充設定固定冠上前綴 `wmcx_ext_settings_`，不得跨擴充讀取或竄改其他外掛之設定值。
+- 設定覆寫防護：設定路徑嚴格禁止包含 `__proto__`、`constructor` 或 `prototype` 等原型鏈屬性，且覆寫僅存於記憶體堆疊中，持久化儲存時會由系統自動濾除，絕不污染使用者本機設定。
 
 ---
 

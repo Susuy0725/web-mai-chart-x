@@ -186,6 +186,10 @@
     line-height: 1.5;
 }
 
+.popup-content.has-content {
+    display: block;
+}
+
 .popup-custom-content {
     padding: 10px;
     background: var(--popup-background);
@@ -194,6 +198,10 @@
     display: none;
     height: 100%;
     box-sizing: border-box;
+}
+
+.popup-custom-content.has-content {
+    display: block;
 }
 
 .popup-buttons {
@@ -1967,7 +1975,7 @@
     }
 
     /* 自訂內容在全螢幕下完全滿版展開 */
-    .popup-custom-content {
+    .popup-custom-content.has-content {
         background: transparent !important;
         border: none !important;
         padding: 0 !important;

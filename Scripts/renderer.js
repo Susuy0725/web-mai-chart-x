@@ -301,6 +301,7 @@ export class SimaiRenderer {
     setImages(images) {
         this.images = images;
         this._touchBorderCache = null;
+        this._tintCache?.clear();
     }
 
     /**
@@ -3339,6 +3340,7 @@ export class SimaiVisualEditor {
 
     setImages(images) {
         this.images = images;
+        this._tintCache?.clear();
     }
 
     setContext(ctx) {

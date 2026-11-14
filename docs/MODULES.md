@@ -25,6 +25,7 @@
 | **`commandRegistry.js`** | 統一指令註冊與派發中心。 | `commandRegistry` |
 | **`extensionLoader.js`** | 解析、驗證與動態載入第三方 `.zip` 擴充套件。 | `parseExtensionZip()`, `registerStoredPackage()`, `installExtensionPackage()`, `toggleInstalledExtension()`, `uninstallExtension()`, `loadStoredExtensions()` |
 | **`extensionManager.js`** | 擴充程式生命週期、權限門面與資源回收管理器。 | `EXTENSION_API_VERSION`, `EXTENSION_PERMISSIONS`, `extensionManager` |
+| **`extensionOverrideRegistry.js`** | 擴充程式層疊覆寫註冊表，管理設定、圖片與音效的非破壞性覆寫與自動還原。 | `extensionOverrideRegistry` |
 | **`extensionStorage.js`** | 使用 IndexedDB 儲存與管理已安裝的擴充套件。 | `listStoredExtensions()`, `saveStoredExtension()`, `setStoredExtensionEnabled()`, `removeStoredExtension()` |
 | **`renderOverlayRegistry.js`** | Canvas 渲染疊加圖層註冊表與狀態隔離呼叫器。 | `renderOverlayRegistry` |
 

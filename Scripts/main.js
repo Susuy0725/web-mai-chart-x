@@ -10,6 +10,7 @@ import { eventBus, EVENTS } from './core/eventBus.js';
 import { appContext } from './core/appContext.js';
 import { commandRegistry } from './core/commandRegistry.js';
 import { extensionManager } from './core/extensionManager.js';
+import { extensionOverrideRegistry } from './core/extensionOverrideRegistry.js';
 import { loadStoredExtensions } from './core/extensionLoader.js';
 import { initExtensionMenu } from './features/extensionMenu.js';
 import { PlaybackEngine } from './core/playbackEngine.js';
@@ -65,7 +66,7 @@ let
     isInitComplete = false,
     isImagesLoaded = false,
     isDatabaseEmpty = false,
-    images,
+    images = {},
     readyBeat = false,
     maidata = {},
     nowDifficulty = 5,
@@ -107,6 +108,9 @@ window.simpleToast = simpleToast;
 try { applySyntaxColors(defaultSyntaxColors); } catch (_) { }
 
 const simaiLogicControler = new SimaiLogicControler(audioManager);
+audioManager.onSoundLoaded = (key, audioBuffer) => {
+    extensionOverrideRegistry.applyDefaultSoundBuffer(key, audioBuffer);
+};
 
 const isVisualMode = () => settings.displayMode === 'visual';
 
@@ -117,10 +121,11 @@ const saveSettingsDebounce = debounce(() => {
     if (!isInitComplete || !settings || Object.keys(settings).length < 5) {
         return;
     }
+    const cleanSettings = extensionOverrideRegistry.getCleanSettings(settings);
     if (majdataWs.isConnected()) {
-        majdataWs.sendSetting(settings);
+        majdataWs.sendSetting(cleanSettings);
     }
-    const settingsStr = JSON.stringify(settings);
+    const settingsStr = JSON.stringify(cleanSettings);
     idbSet('simai_settings', settingsStr).catch((error) => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
     });
@@ -4114,7 +4119,11 @@ async function _init() {
         updateDiscordRPC,
         getMaidata: () => maidata,
         getNowDifficulty: () => nowDifficulty,
-        setImages: (val) => { images = val; },
+        setImages: (val) => {
+            extensionOverrideRegistry.refreshImagesBase(val);
+            images = val;
+            appContext.state.images = val;
+        },
         setRenderer: (val) => { renderer = val; },
         setVisualEditorRenderer: (val) => {
             visualEditorRenderer = val;
@@ -4181,6 +4190,7 @@ export async function switchSkin(newSkin) {
     isSwitchingSkin = true;
     try {
         const newImages = await loadAllImages(null, newSkin);
+        extensionOverrideRegistry.refreshImagesBase(newImages);
         images = newImages;
         currentSkin = newSkin;
         appContext.state.images = newImages;

@@ -72,6 +72,7 @@ const ASSETS = [
     './Scripts/core/eventBus.js',
     './Scripts/core/extensionLoader.js',
     './Scripts/core/extensionManager.js',
+    './Scripts/core/extensionOverrideRegistry.js',
     './Scripts/core/extensionStorage.js',
     './Scripts/core/frameProfiler.js',
     './Scripts/core/init.js',

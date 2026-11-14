@@ -2059,7 +2059,7 @@ body.resizing-panels #canvasContainer canvas {
 .ext-card-btn:hover {
     background: var(--accent-color);
     border-color: var(--accent-color);
-    color: #fff;
+    color: var(--popup-text-main, #ffffff);
 }
 
 .ext-card-btn.is-danger:hover {
@@ -2235,5 +2235,26 @@ body.resizing-panels #canvasContainer canvas {
         max-height: none;
         flex: 1 1 auto;
         padding-right: 0;
+    }
+
+    .ext-perm-confirm {
+        height: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .ext-perm-intro,
+    .ext-detail-meta-card,
+    .ext-perm-title,
+    .ext-perm-warning,
+    .ext-perm-confirm .ext-card-error {
+        flex-shrink: 0;
+    }
+
+    .ext-perm-detail-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        padding-bottom: 12px;
     }
 }

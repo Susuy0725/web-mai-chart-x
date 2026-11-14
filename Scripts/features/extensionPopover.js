@@ -20,7 +20,9 @@ function readStorage(extId) {
             const raw = localStorage.getItem(storageKey);
             if (raw) return JSON.parse(raw);
         }
-    } catch (_) { }
+    } catch (err) {
+        console.warn(`[ExtensionPopover] 讀取擴充 "${extId}" 設定失敗:`, err);
+    }
     return memoryFallbackStore.get(storageKey) || {};
 }
 
@@ -31,7 +33,9 @@ function writeStorage(extId, values) {
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem(storageKey, JSON.stringify(values));
         }
-    } catch (_) { }
+    } catch (err) {
+        console.warn(`[ExtensionPopover] 儲存擴充 "${extId}" 設定失敗:`, err);
+    }
 }
 
 /**

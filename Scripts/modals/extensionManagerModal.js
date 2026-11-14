@@ -28,7 +28,11 @@ const PERMISSION_I18N_MAP = Object.freeze({
     [EXTENSION_PERMISSIONS.UI_POPOVER]: 'ui_popover',
     [EXTENSION_PERMISSIONS.UI_OVERLAY]: 'ui_overlay',
     [EXTENSION_PERMISSIONS.I18N_REGISTER]: 'i18n_register',
-    [EXTENSION_PERMISSIONS.STORAGE]: 'storage'
+    [EXTENSION_PERMISSIONS.STORAGE]: 'storage',
+    [EXTENSION_PERMISSIONS.SETTINGS_READ]: 'settings_read',
+    [EXTENSION_PERMISSIONS.SETTINGS_OVERRIDE]: 'settings_override',
+    [EXTENSION_PERMISSIONS.ASSETS_READ]: 'assets_read',
+    [EXTENSION_PERMISSIONS.ASSETS_OVERRIDE]: 'assets_override'
 });
 
 function getPermissionDescription(perm) {
@@ -90,15 +94,6 @@ function buildExtensionDetailContent(manifest, options = {}) {
     const body = document.createElement('div');
     body.className = 'ext-perm-confirm';
 
-    if (mode === 'install') {
-        const intro = document.createElement('p');
-        intro.className = 'ext-perm-intro';
-        intro.textContent = t('extensions.confirmInstallDesc', {
-            name: manifest.name
-        });
-        body.appendChild(intro);
-    }
-
     const metaCard = document.createElement('div');
     metaCard.className = 'ext-detail-meta-card';
 
@@ -146,10 +141,6 @@ function buildExtensionDetailContent(manifest, options = {}) {
 
     const authorText = manifest.author || t('extensions.metaAuthorUnknown');
     metaGrid.appendChild(createMetaRow('extensions.metaAuthor', authorText));
-
-    if (manifest.entry) {
-        metaGrid.appendChild(createMetaRow('extensions.metaEntry', manifest.entry, true));
-    }
 
     const runtimeKey = manifest.runtime === 'worker'
         ? 'extensions.runtimeWorker'

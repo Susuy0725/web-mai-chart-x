@@ -105,7 +105,9 @@
     "errMissingRequiredFields": "manifest.json 必須包含 id、name 與 version",
     "errMissingEntry": "找不到進入點檔案：{entry}",
     "errMissingActivate": "擴充程式「{id}」未匯出預設啟動函式",
-    "errWorkerUnsupported": "Worker 沙箱執行模式尚未啟用"
+    "errWorkerUnsupported": "Worker 沙箱執行模式尚未啟用",
+    "crashAutoDisabled": "擴充程式「{id}」疑似在啟動時發生嚴重錯誤，已自動停用",
+    "overlayAutoDisabled": "擴充程式「{name}」繪製耗時過高，已自動停用其疊加圖層"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."

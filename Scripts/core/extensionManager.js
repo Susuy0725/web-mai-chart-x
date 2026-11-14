@@ -181,7 +181,11 @@ class ExtensionManager {
         if (permSet.has(EXTENSION_PERMISSIONS.RENDER_OVERLAY)) {
             scoped.render = Object.freeze({
                 registerOverlay: (options) => {
-                    const dispose = renderOverlayRegistry.register(options);
+                    const dispose = renderOverlayRegistry.register({
+                        ...options,
+                        extensionId: extId,
+                        extensionName: record.manifest.name || extId
+                    });
                     disposables.push(() => {
                         dispose();
                         eventBus.emit(EVENTS.CANVAS_REDRAW);

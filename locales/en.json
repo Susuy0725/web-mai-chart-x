@@ -105,7 +105,9 @@
     "errMissingRequiredFields": "manifest.json must contain id, name, and version",
     "errMissingEntry": "Entry file not found: {entry}",
     "errMissingActivate": "Extension \"{id}\" does not export an activate function",
-    "errWorkerUnsupported": "Worker sandbox runtime is not yet enabled"
+    "errWorkerUnsupported": "Worker sandbox runtime is not yet enabled",
+    "crashAutoDisabled": "Extension \"{id}\" appears to have caused a startup crash and has been automatically disabled",
+    "overlayAutoDisabled": "Extension \"{name}\" took too long to render and its overlay layer has been automatically disabled"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."

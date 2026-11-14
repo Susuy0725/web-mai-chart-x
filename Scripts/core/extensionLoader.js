@@ -3,7 +3,7 @@
  * @description 解析、驗證並動態載入使用者匯入的第三方外掛壓縮包。
  */
 
-import { ensureJSZip } from '../helper.js';
+import { ensureJSZip, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
 import { extensionManager } from './extensionManager.js';
 import {
@@ -151,16 +151,70 @@ export async function uninstallExtension(id) {
     await removeStoredExtension(id);
 }
 
+const ACTIVATING_GUARD_KEY = 'wmcx_ext_activating';
+
+function isSafeModeEnabled() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get('safeMode');
+    return value === '1' || value === 'true';
+}
+
 /**
  * 於應用程式啟動時從 IndexedDB 還原所有已安裝的外掛
  */
 export async function loadStoredExtensions() {
     const storedList = await listStoredExtensions();
-    for (const pkg of storedList) {
+    const safeMode = isSafeModeEnabled();
+
+    let crashedId = null;
+    try {
+        crashedId = sessionStorage.getItem(ACTIVATING_GUARD_KEY);
+        if (crashedId) {
+            sessionStorage.removeItem(ACTIVATING_GUARD_KEY);
+        }
+    } catch (error) {
+        console.warn('[ExtensionLoader] 無法存取 sessionStorage 崩潰防護狀態:', error);
+    }
+
+    if (crashedId) {
         try {
-            await registerStoredPackage(pkg, pkg.enabled);
+            await setStoredExtensionEnabled(crashedId, false);
+        } catch (error) {
+            console.error(`[ExtensionLoader] 自動停用異常擴充程式 "${crashedId}" 失敗:`, error);
+        }
+        const crashedPkg = storedList.find((item) => item.id === crashedId);
+        if (crashedPkg) {
+            crashedPkg.enabled = false;
+        }
+        simpleToast({
+            content: t('extensions.crashAutoDisabled', { id: crashedId }),
+            type: 'warning',
+            timeout: 5000
+        });
+    }
+
+    for (const pkg of storedList) {
+        const shouldAutoActivate = Boolean(pkg.enabled) && !safeMode;
+        if (shouldAutoActivate) {
+            try {
+                sessionStorage.setItem(ACTIVATING_GUARD_KEY, pkg.id);
+            } catch (error) {
+                console.warn('[ExtensionLoader] 無法寫入啟動防護標記:', error);
+            }
+        }
+        try {
+            await registerStoredPackage(pkg, shouldAutoActivate);
         } catch (error) {
             console.error(`[ExtensionLoader] 還原外掛 "${pkg.id}" 失敗:`, error);
+        } finally {
+            if (shouldAutoActivate) {
+                try {
+                    sessionStorage.removeItem(ACTIVATING_GUARD_KEY);
+                } catch (error) {
+                    console.warn('[ExtensionLoader] 無法清除啟動防護標記:', error);
+                }
+            }
         }
     }
 }

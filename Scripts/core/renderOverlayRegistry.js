@@ -4,8 +4,13 @@
  * 供渲染核心於特定繪製階段呼叫已註冊的輔助圖層，並以 save/restore 與 try/catch 隔離狀態污染與例外。
  */
 
+import { appContext } from './appContext.js';
+import { t } from '../i18n.js';
+
 const VALID_TARGETS = new Set(['main', 'visual']);
 const VALID_PHASES = new Set(['beforeNotes', 'afterNotes']);
+const OVERLAY_BUDGET_MS = 12;
+const OVERLAY_MAX_SLOW_FRAMES = 30;
 
 class RenderOverlayRegistry {
     constructor() {
@@ -39,10 +44,13 @@ class RenderOverlayRegistry {
         const id = `overlay_${this._nextId++}`;
         this.overlays.set(id, {
             id,
+            extensionId: typeof options.extensionId === 'string' ? options.extensionId : '',
+            extensionName: typeof options.extensionName === 'string' ? options.extensionName : '',
             target,
             phase,
             order: Number(options.order) || 0,
             includeInVideo: Boolean(options.includeInVideo),
+            slowFrames: 0,
             draw: options.draw
         });
 
@@ -87,18 +95,46 @@ class RenderOverlayRegistry {
 
         matching.sort((a, b) => a.order - b.order);
         const canvasCtx = renderContext?.ctx;
+        const measurePerf = !isRenderingVideo && typeof performance !== 'undefined' && typeof performance.now === 'function';
 
         for (const entry of matching) {
             if (canvasCtx && typeof canvasCtx.save === 'function') {
                 canvasCtx.save();
             }
+            const startMs = measurePerf ? performance.now() : 0;
+            let drawFailed = false;
             try {
                 entry.draw(renderContext);
             } catch (error) {
+                drawFailed = true;
                 console.error(`[RenderOverlayRegistry] 疊加圖層 "${entry.id}" 繪製失敗:`, error);
             } finally {
                 if (canvasCtx && typeof canvasCtx.restore === 'function') {
                     canvasCtx.restore();
+                }
+            }
+
+            if (measurePerf && !drawFailed) {
+                const elapsedMs = performance.now() - startMs;
+                if (elapsedMs > OVERLAY_BUDGET_MS) {
+                    entry.slowFrames += 1;
+                    if (entry.slowFrames >= OVERLAY_MAX_SLOW_FRAMES) {
+                        this.overlays.delete(entry.id);
+                        const displayName = entry.extensionName || entry.extensionId || entry.id;
+                        console.warn(
+                            `[RenderOverlayRegistry] 疊加圖層 "${entry.id}" [${displayName}] 連續 ${OVERLAY_MAX_SLOW_FRAMES} 幀耗時超過 ${OVERLAY_BUDGET_MS}ms，已自動停用`
+                        );
+                        const toast = appContext.get('simpleToast');
+                        if (typeof toast === 'function') {
+                            toast({
+                                content: t('extensions.overlayAutoDisabled', { name: displayName }),
+                                type: 'warning',
+                                timeout: 4500
+                            });
+                        }
+                    }
+                } else {
+                    entry.slowFrames = 0;
                 }
             }
         }

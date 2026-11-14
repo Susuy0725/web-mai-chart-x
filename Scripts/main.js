@@ -301,6 +301,7 @@ let lastCursorIndex = -1;
 let visualCtx = null;
 let warnings = [], warningPositions = [], warningPositionsConst = [];
 let decodedTags = [];
+let cachedChartSnapshot = null;
 let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
 
 let lastCanvasSize = { w: 0, h: 0 };
@@ -1229,6 +1230,7 @@ function setDataEmpty(skipPersist = false) {
         playStartTimestamp = null;
     }
     maidata = {};
+    cachedChartSnapshot = null;
     nowDifficulty = 5;
     backgroundImage = null;
     backgroundVideo = null;
@@ -1383,6 +1385,7 @@ function applyDecodeResult(result, simaiDataValue) {
 
     notes = result.notes;
     decodedTags = result.tags || [];
+    cachedChartSnapshot = null;
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
 
@@ -1520,6 +1523,7 @@ function saveMaidataImmediate() {
 
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
+    cachedChartSnapshot = null;
     eventBus.emit(EVENTS.MAIDATA_CHANGED, { ...maidata });
 
     return projSet('maidata', maidata).catch((error) => {
@@ -3954,6 +3958,7 @@ async function loadProjectData(step, expectedGen = null) {
 
     playbackEngine.setTime(targetRealTime);
     playbackEngine.resetNotesPlaybackState(playbackEngine.globalTime);
+    cachedChartSnapshot = null;
     draw();
     updateSlider(playbackEngine.realTime, true);
     eventBus.emit(EVENTS.PROJECT_LOADED);
@@ -4230,7 +4235,10 @@ appContext.register('updatePauseBackgroundDisplay', updatePauseBackgroundDisplay
 appContext.register('applySplitRatio', applySplitRatio);
 appContext.register('snapRestoreCanvas', snapRestoreCanvas);
 appContext.register('getMaidata', () => maidata);
-appContext.register('setMaidata', (val) => { maidata = val; });
+appContext.register('setMaidata', (val) => {
+    maidata = val;
+    cachedChartSnapshot = null;
+});
 appContext.register('getCurrentProjectId', () => currentProjectId);
 appContext.register('setCurrentProjectId', (val) => { currentProjectId = val; });
 appContext.register('projSet', projSet);
@@ -4271,13 +4279,31 @@ function emitViewModeChanged(force = false) {
 }
 
 appContext.register('getViewMode', () => getCurrentViewMode());
-appContext.register('getChartSnapshot', () => ({
-    difficulty: nowDifficulty,
-    maidata: maidata ? { ...maidata } : {},
-    duration: Number(timeline?.max) || 0,
-    notes: Array.isArray(notes) ? notes.map((n) => ({ ...n })) : [],
-    tags: Array.isArray(decodedTags) ? decodedTags.map((tag) => ({ ...tag })) : []
-}));
+appContext.register('getChartSnapshot', () => {
+    const currentDuration = Number(timeline?.max) || 0;
+    if (cachedChartSnapshot &&
+        cachedChartSnapshot.difficulty === nowDifficulty &&
+        cachedChartSnapshot.duration === currentDuration) {
+        return cachedChartSnapshot;
+    }
+
+    const frozenMaidata = Object.freeze(maidata ? { ...maidata } : {});
+    const frozenNotes = Object.freeze(
+        Array.isArray(notes) ? notes.map((n) => Object.freeze({ ...n })) : []
+    );
+    const frozenTags = Object.freeze(
+        Array.isArray(decodedTags) ? decodedTags.map((tag) => Object.freeze({ ...tag })) : []
+    );
+
+    cachedChartSnapshot = Object.freeze({
+        difficulty: nowDifficulty,
+        maidata: frozenMaidata,
+        duration: currentDuration,
+        notes: frozenNotes,
+        tags: frozenTags
+    });
+    return cachedChartSnapshot;
+});
 appContext.register('getEditorText', () => (editorInput ? editorInput.value : ''));
 appContext.register('getEditorSelection', () => {
     if (!editorInput) return { start: 0, end: 0, text: '' };

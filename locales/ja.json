@@ -105,7 +105,9 @@
     "errMissingRequiredFields": "manifest.json には id、name、version が必要です",
     "errMissingEntry": "エントリファイルが見つかりません：{entry}",
     "errMissingActivate": "拡張機能「{id}」に起動関数がエクスポートされていません",
-    "errWorkerUnsupported": "Worker サンドボックス実行モードはまだ有効ではありません"
+    "errWorkerUnsupported": "Worker サンドボックス実行モードはまだ有効ではありません",
+    "crashAutoDisabled": "拡張機能「{id}」の起動時に重大なエラーが発生した可能性があるため、自動的に無効化されました",
+    "overlayAutoDisabled": "拡張機能「{name}」の描画処理時間が長すぎるため、オーバーレイレイヤーが自動的に無効化されました"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."

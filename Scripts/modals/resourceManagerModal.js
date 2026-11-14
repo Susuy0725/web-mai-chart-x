@@ -202,10 +202,6 @@ export async function openResourceManager() {
                                         console.error("清除素材失敗:", e);
                                     }
                                 }
-                            },
-                            {
-                                text: t('popup.close'),
-                                hideOnClick: true
                             }
                         ]
                     });

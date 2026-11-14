@@ -13,6 +13,15 @@
     --main-color: #131313;
     --button-ouline: #2c2c2c;
     --timeline-color: rgb(212, 49, 57);
+    --submenu-top: 0;
+    --submenu-left: 100%;
+    --submenu-arrow-rotate: 0deg;
+    --submenu-arrow-rotate-open: 0deg;
+    --submenu-transform-closed: translateX(-4px) scale(0.97);
+    --submenu-hover-opacity: 1;
+    --submenu-hover-visibility: visible;
+    --submenu-hover-transform: translate(0, 0) scale(1);
+    --submenu-hover-pointer-events: auto;
 }
 
 @font-face {
@@ -558,6 +567,15 @@ body.editor-hidden #playControls #showPlayControlsBtn,
         --utility-rows: 2;
         --utility-row-height: 35px;
         --utility-height: 75px;
+        --submenu-top: 100%;
+        --submenu-left: 0;
+        --submenu-arrow-rotate: 90deg;
+        --submenu-arrow-rotate-open: -90deg;
+        --submenu-transform-closed: translateY(-4px) scale(0.97);
+        --submenu-hover-opacity: 0;
+        --submenu-hover-visibility: hidden;
+        --submenu-hover-transform: translateY(-4px) scale(0.97);
+        --submenu-hover-pointer-events: none;
     }
 
     #topUtilityBtns {
@@ -859,19 +877,59 @@ body.resizing-panels #canvasContainer canvas {
     contain: layout style;
 }
 
-#highlight-layer .hl-comment { color: var(--hl-comment, #508564); }
-#highlight-layer .hl-slide { color: var(--hl-slide, #7EBAF0); }
-#highlight-layer .hl-custom-slide { color: var(--hl-custom-slide, #c492bf); }
-#highlight-layer .hl-touch { color: var(--hl-touch, #7EBAF0); }
-#highlight-layer .hl-bpm { color: var(--hl-bpm, #ffbf5f); font-weight: bold; }
-#highlight-layer .hl-split { color: var(--hl-split, #c97554); font-weight: bold; }
-#highlight-layer .hl-time { color: var(--hl-time, #b5cea8); }
-#highlight-layer .hl-hold { color: var(--hl-hold, #9fd47b); }
-#highlight-layer .hl-break { color: var(--hl-break, #FF9707); }
-#highlight-layer .hl-ex { color: var(--hl-ex, #d1c70f); }
-#highlight-layer .hl-mine { color: var(--hl-mine, #c24e61); }
-#highlight-layer .hl-hanabi { color: var(--hl-hanabi, #d092ef); }
-#highlight-layer .hl-comma { color: var(--hl-comma, #656b6d); }
+#highlight-layer .hl-comment {
+    color: var(--hl-comment, #508564);
+}
+
+#highlight-layer .hl-slide {
+    color: var(--hl-slide, #7EBAF0);
+}
+
+#highlight-layer .hl-custom-slide {
+    color: var(--hl-custom-slide, #c492bf);
+}
+
+#highlight-layer .hl-touch {
+    color: var(--hl-touch, #7EBAF0);
+}
+
+#highlight-layer .hl-bpm {
+    color: var(--hl-bpm, #ffbf5f);
+    font-weight: bold;
+}
+
+#highlight-layer .hl-split {
+    color: var(--hl-split, #c97554);
+    font-weight: bold;
+}
+
+#highlight-layer .hl-time {
+    color: var(--hl-time, #b5cea8);
+}
+
+#highlight-layer .hl-hold {
+    color: var(--hl-hold, #9fd47b);
+}
+
+#highlight-layer .hl-break {
+    color: var(--hl-break, #FF9707);
+}
+
+#highlight-layer .hl-ex {
+    color: var(--hl-ex, #d1c70f);
+}
+
+#highlight-layer .hl-mine {
+    color: var(--hl-mine, #c24e61);
+}
+
+#highlight-layer .hl-hanabi {
+    color: var(--hl-hanabi, #d092ef);
+}
+
+#highlight-layer .hl-comma {
+    color: var(--hl-comma, #656b6d);
+}
 
 #highlight-layer .highlight-warning {
     background: rgba(255, 77, 77, 0.3);
@@ -948,35 +1006,20 @@ body.resizing-panels #canvasContainer canvas {
     color: #ffffff;
 }
 
-.utilityDropdown-content .utilityButton .utilityItemIcon {
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.52);
-    margin-left: auto;
-    padding-left: 14px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 16;
-    transition: color 0.12s ease;
-}
-
-.utilityDropdown-content .utilityButton:hover .utilityItemIcon {
-    color: rgba(255, 255, 255, 0.95);
-}
-
 .utilityDropdown-content .utilityMenuTitle {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 14px;
     cursor: default;
     overflow: visible;
 }
 
 .utilityDropdown-content .utilityMenuTitle .utilityMenuArrow {
     margin-left: auto;
-    padding-left: 14px;
+    width: 16px;
+    height: 16px;
     font-size: 16px;
     color: rgba(255, 255, 255, 0.45);
     display: inline-flex;
@@ -984,18 +1027,24 @@ body.resizing-panels #canvasContainer canvas {
     justify-content: center;
     pointer-events: none;
     font-variation-settings: 'FILL' 1, 'wght' 350, 'GRAD' 0, 'opsz' 16;
-    transition: color 0.12s ease;
+    transform: rotate(var(--submenu-arrow-rotate, 0deg));
+    transition: color 0.12s ease, transform 0.16s ease;
 }
 
 .utilityDropdown-content .utilityMenuTitle:hover .utilityMenuArrow {
     color: rgba(255, 255, 255, 0.95);
 }
 
+.utilityDropdown-content .utilityMenuTitle.open .utilityMenuArrow {
+    color: rgba(255, 255, 255, 0.95);
+    transform: rotate(var(--submenu-arrow-rotate-open, 0deg));
+}
+
 .utilitySubmenu {
     display: flex;
     position: absolute;
-    top: 0;
-    left: 100%;
+    top: var(--submenu-top, 0);
+    left: var(--submenu-left, 100%);
     min-width: 155px;
     background-color: var(--main-color);
     border: 1px solid var(--button-ouline);
@@ -1007,16 +1056,23 @@ body.resizing-panels #canvasContainer canvas {
     z-index: 1110;
     opacity: 0;
     visibility: hidden;
-    transform: translateX(-4px) scale(0.97);
+    transform: var(--submenu-transform-closed, translateX(-4px) scale(0.97));
     transform-origin: top left;
     pointer-events: none;
     transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
 }
 
 .utilityDropdown-content .utilityMenuTitle:hover .utilitySubmenu {
+    opacity: var(--submenu-hover-opacity, 1);
+    visibility: var(--submenu-hover-visibility, visible);
+    transform: var(--submenu-hover-transform, translate(0, 0) scale(1));
+    pointer-events: var(--submenu-hover-pointer-events, auto);
+}
+
+.utilityDropdown-content .utilityMenuTitle.open .utilitySubmenu {
     opacity: 1;
     visibility: visible;
-    transform: translateX(0) scale(1);
+    transform: translate(0, 0) scale(1);
     pointer-events: auto;
 }
 

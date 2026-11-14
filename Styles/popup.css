@@ -205,6 +205,16 @@
     flex-shrink: 0;
 }
 
+.popup-dialog .popup-buttons.popup-buttons-vertical {
+    flex-direction: column;
+    gap: 8px;
+}
+
+.popup-dialog .popup-buttons.popup-buttons-vertical .popup-button {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .popup-button {
     background: #202020;
     color: #ffffff;
@@ -1821,14 +1831,6 @@
         display: flex !important;
         gap: 8px !important;
         justify-content: flex-end !important;
-    }
-
-    .popup-dialog .popup-buttons.popup-buttons-vertical {
-        flex-direction: column !important;
-    }
-
-    .popup-dialog .popup-buttons.popup-buttons-vertical .popup-button {
-        width: 100% !important;
     }
 
     .popup-dialog .popup-buttons:not(.popup-buttons-vertical) .popup-button {

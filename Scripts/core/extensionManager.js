@@ -8,6 +8,13 @@ import { appContext } from './appContext.js';
 import { commandRegistry } from './commandRegistry.js';
 import { eventBus, EVENTS } from './eventBus.js';
 import { renderOverlayRegistry } from './renderOverlayRegistry.js';
+import {
+    getExtensionData,
+    setExtensionData,
+    removeExtensionData,
+    clearExtensionData,
+    listExtensionDataKeys
+} from './extensionStorage.js';
 import { registerTranslations, t } from '../i18n.js';
 
 export const EXTENSION_API_VERSION = 1;
@@ -26,7 +33,8 @@ export const EXTENSION_PERMISSIONS = Object.freeze({
     UI_MENU: 'ui:menu',
     UI_POPOVER: 'ui:popover',
     UI_OVERLAY: 'ui:overlay',
-    I18N_REGISTER: 'i18n:register'
+    I18N_REGISTER: 'i18n:register',
+    STORAGE: 'storage'
 });
 
 const ALLOWED_PERMISSION_SET = new Set(Object.values(EXTENSION_PERMISSIONS));
@@ -296,6 +304,16 @@ class ExtensionManager {
                     return dispose;
                 },
                 t: (key, params = {}) => t(`${namespace}.${key}`, params)
+            });
+        }
+
+        if (permSet.has(EXTENSION_PERMISSIONS.STORAGE)) {
+            scoped.storage = Object.freeze({
+                get: (key, defaultValue = null) => getExtensionData(extId, key, defaultValue),
+                set: (key, value) => setExtensionData(extId, key, value),
+                remove: (key) => removeExtensionData(extId, key),
+                clear: () => clearExtensionData(extId),
+                keys: () => listExtensionDataKeys(extId)
             });
         }
 

@@ -300,3 +300,21 @@ export function closeExtensionPopover(extensionId) {
         currentExtensionId = null;
     }
 }
+
+/**
+ * 清除指定擴充程式在設定面板儲存的隔離設定資料
+ * @param {string} extensionId
+ */
+export function clearExtensionSettings(extensionId) {
+    if (!extensionId) return;
+    closeExtensionPopover(extensionId);
+    const storageKey = `${STORAGE_PREFIX}${extensionId}`;
+    memoryFallbackStore.delete(storageKey);
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(storageKey);
+        }
+    } catch (error) {
+        console.warn(`[ExtensionPopover] 清除擴充 "${extensionId}" 設定失敗:`, error);
+    }
+}

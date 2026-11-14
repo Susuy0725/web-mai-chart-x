@@ -113,6 +113,7 @@ timeline-jog-dial.zip
 | `ui:menu` | `EXTENSION_PERMISSIONS.UI_MENU` | 於頂欄拼圖選單註冊二級選單項目 |
 | `ui:popover` | `EXTENSION_PERMISSIONS.UI_POPOVER` | 開啟原生設定面板與存取隔離設定值 |
 | `ui:overlay` | `EXTENSION_PERMISSIONS.UI_OVERLAY` | 建立受控的浮動元件掛載容器 |
+| `storage` | `EXTENSION_PERMISSIONS.STORAGE` | 於系統分配的隔離儲存空間讀寫擴充專屬資料，移除擴充時自動清除 |
 | `i18n:register` | `EXTENSION_PERMISSIONS.I18N_REGISTER` | 註冊多語系字典並使用擴充翻譯函式 |
 
 ### 3.2 受限上下文基礎屬性
@@ -356,7 +357,44 @@ ctx.hasPermission(permissionString);
   - `dispose()`：提前銷毀並自 DOM 樹移除此容器。
 - 生命週期：擴充停用時系統自動移除該容器並自全域註銷。
 
-### 3.11 國際化多語系介面：`ctx.i18n`
+### 3.11 資料儲存介面：`ctx.storage`
+
+宣告 `storage` 權限時注入此介面。未宣告此權限時，`ctx.storage` 為 `undefined`。
+
+說明資料以擴充識別碼隔離存放於 `wmcx_ext_data_<id>`，且移除擴充程式時會一併清除 `wmcx_ext_settings_<id>` 與 `wmcx_ext_data_<id>`。
+
+#### `ctx.storage.get(key, defaultValue = null)`
+- 權限需求：`storage`
+- 參數：
+  - `key`：字串，儲存鍵名。
+  - `defaultValue`：任意型別，選填，當該鍵不存在時回傳的預設值，預設為 `null`。
+- 回傳：自隔離儲存區讀取對應鍵的數值，若不存在則回傳 `defaultValue`。
+
+#### `ctx.storage.set(key, value)`
+- 權限需求：`storage`
+- 參數：
+  - `key`：字串，儲存鍵名。
+  - `value`：任意型別，欲寫入的數值（內部會透過 JSON 序列化儲存）。
+- 回傳：布林值，表示寫入是否成功。
+
+#### `ctx.storage.remove(key)`
+- 權限需求：`storage`
+- 參數：
+  - `key`：字串，欲移除的儲存鍵名。
+- 回傳：布林值，表示移除是否成功。
+
+#### `ctx.storage.clear()`
+- 權限需求：`storage`
+- 參數：無
+- 行為：清空當前擴充在隔離儲存空間內的所有資料。
+- 回傳：布林值，表示清空是否成功。
+
+#### `ctx.storage.keys()`
+- 權限需求：`storage`
+- 參數：無
+- 回傳：字串陣列，包含當前擴充在隔離儲存空間內所有已儲存的鍵名列表。
+
+### 3.12 國際化多語系介面：`ctx.i18n`
 
 宣告 `i18n:register` 權限時注入此介面。
 

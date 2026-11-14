@@ -10,8 +10,10 @@ import {
     listStoredExtensions,
     saveStoredExtension,
     setStoredExtensionEnabled,
-    removeStoredExtension
+    removeStoredExtension,
+    clearExtensionData
 } from './extensionStorage.js';
+import { clearExtensionSettings } from '../features/extensionPopover.js';
 
 /**
  * 支援根目錄或單層子資料夾尋找檔案，避免使用者直接壓縮資料夾時找不到 manifest.json
@@ -143,12 +145,14 @@ export async function toggleInstalledExtension(id, enabled) {
 }
 
 /**
- * 停用並移除已安裝外掛
+ * 停用並移除已安裝外掛，同時清除其設定與隔離儲存資料
  * @param {string} id
  */
 export async function uninstallExtension(id) {
     extensionManager.unregister(id);
     await removeStoredExtension(id);
+    clearExtensionSettings(id);
+    clearExtensionData(id);
 }
 
 const ACTIVATING_GUARD_KEY = 'wmcx_ext_activating';
@@ -206,7 +210,14 @@ export async function loadStoredExtensions() {
         try {
             await registerStoredPackage(pkg, shouldAutoActivate);
         } catch (error) {
-            console.error(`[ExtensionLoader] 還原外掛 "${pkg.id}" 失敗:`, error);
+            console.warn(`[ExtensionLoader] 還原外掛 "${pkg.id}" 失敗，將自動移除無法辨識的殘留外掛:`, error);
+            try {
+                await removeStoredExtension(pkg.id);
+                clearExtensionSettings(pkg.id);
+                clearExtensionData(pkg.id);
+            } catch (cleanupError) {
+                console.error(`[ExtensionLoader] 自動移除無效外掛 "${pkg.id}" 失敗:`, cleanupError);
+            }
         } finally {
             if (shouldAutoActivate) {
                 try {

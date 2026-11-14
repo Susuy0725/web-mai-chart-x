@@ -3,7 +3,7 @@
  * @description 參照專案總管版面設計的擴充程式管理視窗，支援手動匯入 .zip 外掛、權限確認、啟用切換與移除。
  */
 
-import { extensionManager } from '../core/extensionManager.js';
+import { extensionManager, EXTENSION_PERMISSIONS } from '../core/extensionManager.js';
 import {
     parseExtensionZip,
     installExtensionPackage,
@@ -12,6 +12,38 @@ import {
 } from '../core/extensionLoader.js';
 import { popupWindow, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
+
+const PERMISSION_I18N_MAP = Object.freeze({
+    [EXTENSION_PERMISSIONS.EDITOR_READ]: 'editor_read',
+    [EXTENSION_PERMISSIONS.EDITOR_WRITE]: 'editor_write',
+    [EXTENSION_PERMISSIONS.CHART_READ]: 'chart_read',
+    [EXTENSION_PERMISSIONS.VIEW_READ]: 'view_read',
+    [EXTENSION_PERMISSIONS.PLAYBACK_READ]: 'playback_read',
+    [EXTENSION_PERMISSIONS.PLAYBACK_SEEK]: 'playback_seek',
+    [EXTENSION_PERMISSIONS.RENDER_OVERLAY]: 'render_overlay',
+    [EXTENSION_PERMISSIONS.COMMANDS_REGISTER]: 'commands_register',
+    [EXTENSION_PERMISSIONS.EVENTS_SUBSCRIBE]: 'events_subscribe',
+    [EXTENSION_PERMISSIONS.UI_TOAST]: 'ui_toast',
+    [EXTENSION_PERMISSIONS.UI_MENU]: 'ui_menu',
+    [EXTENSION_PERMISSIONS.UI_POPOVER]: 'ui_popover',
+    [EXTENSION_PERMISSIONS.UI_OVERLAY]: 'ui_overlay',
+    [EXTENSION_PERMISSIONS.I18N_REGISTER]: 'i18n_register',
+    [EXTENSION_PERMISSIONS.STORAGE]: 'storage'
+});
+
+function getPermissionDescription(perm) {
+    const key = PERMISSION_I18N_MAP[perm];
+    if (!key) {
+        return {
+            titleKey: 'extensions.unknownPermissionTitle',
+            descKey: 'extensions.unknownPermissionDesc'
+        };
+    }
+    return {
+        titleKey: `extensions.perm.${key}.title`,
+        descKey: `extensions.perm.${key}.desc`
+    };
+}
 
 function getStatusKey(status) {
     if (status === 'active') return 'extensions.statusActive';
@@ -29,6 +61,197 @@ function getStatusClass(status) {
     return 'is-inactive';
 }
 
+function createMetaRow(labelKey, valueText, isMono = false) {
+    const row = document.createElement('div');
+    row.className = 'ext-detail-meta-row';
+
+    const dt = document.createElement('dt');
+    dt.className = 'ext-detail-meta-label';
+    dt.setAttribute('data-i18n', labelKey);
+    dt.textContent = t(labelKey);
+
+    const dd = document.createElement('dd');
+    dd.className = isMono ? 'ext-detail-meta-value is-mono' : 'ext-detail-meta-value';
+    dd.textContent = valueText;
+
+    row.append(dt, dd);
+    return row;
+}
+
+/**
+ * 建構共用的擴充程式詳情內容（供安裝確認與已安裝檢視子彈窗復用）
+ * @param {Object} manifest
+ * @param {Object} [options={}]
+ * @returns {HTMLElement}
+ */
+function buildExtensionDetailContent(manifest, options = {}) {
+    const { mode = 'detail', status = null, error = null } = options;
+
+    const body = document.createElement('div');
+    body.className = 'ext-perm-confirm';
+
+    if (mode === 'install') {
+        const intro = document.createElement('p');
+        intro.className = 'ext-perm-intro';
+        intro.textContent = t('extensions.confirmInstallDesc', {
+            name: manifest.name
+        });
+        body.appendChild(intro);
+    }
+
+    const metaCard = document.createElement('div');
+    metaCard.className = 'ext-detail-meta-card';
+
+    const headRow = document.createElement('div');
+    headRow.className = 'ext-detail-head';
+
+    const titleWrap = document.createElement('div');
+    titleWrap.className = 'ext-card-title-wrap';
+
+    const nameEl = document.createElement('strong');
+    nameEl.className = 'ext-detail-name';
+    nameEl.textContent = manifest.name;
+
+    const versionEl = document.createElement('span');
+    versionEl.className = 'ext-card-version';
+    versionEl.textContent = `v${manifest.version}`;
+
+    titleWrap.append(nameEl, versionEl);
+    headRow.appendChild(titleWrap);
+
+    if (mode === 'detail' && status) {
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `ext-status-badge ${getStatusClass(status)}`;
+        statusBadge.setAttribute('data-i18n', getStatusKey(status));
+        statusBadge.textContent = getStatusText(status);
+        headRow.appendChild(statusBadge);
+    }
+
+    metaCard.appendChild(headRow);
+
+    const descEl = document.createElement('p');
+    if (manifest.description) {
+        descEl.className = 'ext-detail-desc';
+        descEl.textContent = manifest.description;
+    } else {
+        descEl.className = 'ext-detail-desc is-empty';
+        descEl.setAttribute('data-i18n', 'extensions.noDescription');
+        descEl.textContent = t('extensions.noDescription');
+    }
+    metaCard.appendChild(descEl);
+
+    const metaGrid = document.createElement('dl');
+    metaGrid.className = 'ext-detail-meta-grid';
+    metaGrid.appendChild(createMetaRow('extensions.metaId', manifest.id, true));
+
+    const authorText = manifest.author || t('extensions.metaAuthorUnknown');
+    metaGrid.appendChild(createMetaRow('extensions.metaAuthor', authorText));
+
+    if (manifest.entry) {
+        metaGrid.appendChild(createMetaRow('extensions.metaEntry', manifest.entry, true));
+    }
+
+    const runtimeKey = manifest.runtime === 'worker'
+        ? 'extensions.runtimeWorker'
+        : 'extensions.runtimeTrusted';
+    metaGrid.appendChild(createMetaRow('extensions.metaRuntime', t(runtimeKey)));
+
+    metaCard.appendChild(metaGrid);
+    body.appendChild(metaCard);
+
+    if (mode === 'detail' && error) {
+        const errEl = document.createElement('div');
+        errEl.className = 'ext-card-error';
+        errEl.textContent = error;
+        body.appendChild(errEl);
+    }
+
+    const listTitleKey = mode === 'install'
+        ? 'extensions.requestedPermissions'
+        : 'extensions.grantedPermissions';
+
+    const listTitle = document.createElement('div');
+    listTitle.className = 'ext-perm-title';
+    listTitle.setAttribute('data-i18n', listTitleKey);
+    listTitle.textContent = t(listTitleKey);
+    body.appendChild(listTitle);
+
+    const permList = document.createElement('ul');
+    permList.className = 'ext-perm-detail-list';
+    const perms = manifest.permissions || [];
+    if (perms.length === 0) {
+        const emptyLi = document.createElement('li');
+        emptyLi.className = 'ext-perm-detail-empty';
+        emptyLi.setAttribute('data-i18n', 'extensions.noPermissions');
+        emptyLi.textContent = t('extensions.noPermissions');
+        permList.appendChild(emptyLi);
+    } else {
+        for (const perm of perms) {
+            const { titleKey, descKey } = getPermissionDescription(perm);
+            const li = document.createElement('li');
+            li.className = 'ext-perm-detail-item';
+
+            const permHeader = document.createElement('div');
+            permHeader.className = 'ext-perm-detail-header';
+
+            const permTitle = document.createElement('strong');
+            permTitle.className = 'ext-perm-detail-title';
+            permTitle.setAttribute('data-i18n', titleKey);
+            permTitle.textContent = t(titleKey);
+
+            const permCode = document.createElement('code');
+            permCode.className = 'ext-perm-code';
+            permCode.textContent = perm;
+
+            permHeader.append(permTitle, permCode);
+
+            const permDesc = document.createElement('p');
+            permDesc.className = 'ext-perm-detail-desc';
+            permDesc.setAttribute('data-i18n', descKey);
+            permDesc.textContent = t(descKey);
+
+            li.append(permHeader, permDesc);
+            permList.appendChild(li);
+        }
+    }
+    body.appendChild(permList);
+
+    if (mode === 'install') {
+        const warning = document.createElement('p');
+        warning.className = 'ext-perm-warning';
+        warning.setAttribute('data-i18n', 'extensions.securityWarning');
+        warning.textContent = t('extensions.securityWarning');
+        body.appendChild(warning);
+    }
+
+    return body;
+}
+
+/**
+ * 開啟已安裝擴充程式的詳細資訊子彈窗
+ * @param {{ manifest: Object, status: string, error: string|null }} item
+ */
+function openExtensionDetailModal(item) {
+    const body = buildExtensionDetailContent(item.manifest, {
+        mode: 'detail',
+        status: item.status,
+        error: item.error
+    });
+
+    popupWindow({
+        title: t('extensions.detailTitle'),
+        customContent: body,
+        width: 520,
+        maxWidth: 600,
+        buttons: [
+            {
+                text: t('extensions.close'),
+                hideOnClick: true
+            }
+        ]
+    });
+}
+
 /**
  * 顯示安裝前權限確認視窗，避免未經授權即執行第三方腳本
  * @param {Object} pkg
@@ -43,50 +266,13 @@ function confirmInstallPermissions(pkg) {
             resolve(accepted);
         };
 
-        const body = document.createElement('div');
-        body.className = 'ext-perm-confirm';
-
-        const intro = document.createElement('p');
-        intro.className = 'ext-perm-intro';
-        intro.textContent = t('extensions.confirmInstallDesc', {
-            name: pkg.manifest.name,
-            version: pkg.manifest.version
-        });
-        body.appendChild(intro);
-
-        const listTitle = document.createElement('div');
-        listTitle.className = 'ext-perm-title';
-        listTitle.setAttribute('data-i18n', 'extensions.requestedPermissions');
-        listTitle.textContent = t('extensions.requestedPermissions');
-        body.appendChild(listTitle);
-
-        const permList = document.createElement('ul');
-        permList.className = 'ext-perm-list';
-        const perms = pkg.manifest.permissions || [];
-        if (perms.length === 0) {
-            const li = document.createElement('li');
-            li.setAttribute('data-i18n', 'extensions.noPermissions');
-            li.textContent = t('extensions.noPermissions');
-            permList.appendChild(li);
-        } else {
-            for (const perm of perms) {
-                const li = document.createElement('li');
-                li.textContent = perm;
-                permList.appendChild(li);
-            }
-        }
-        body.appendChild(permList);
-
-        const warning = document.createElement('p');
-        warning.className = 'ext-perm-warning';
-        warning.setAttribute('data-i18n', 'extensions.securityWarning');
-        warning.textContent = t('extensions.securityWarning');
-        body.appendChild(warning);
+        const body = buildExtensionDetailContent(pkg.manifest, { mode: 'install' });
 
         popupWindow({
             title: t('extensions.confirmInstallTitle'),
-            content: body,
-            width: 420,
+            customContent: body,
+            width: 520,
+            maxWidth: 600,
             onClose: () => finish(false),
             buttons: [
                 {
@@ -221,27 +407,31 @@ export function openExtensionManagerModal() {
             idEl.textContent = item.manifest.id;
             card.appendChild(idEl);
 
-            if (item.manifest.permissions && item.manifest.permissions.length > 0) {
-                const permWrap = document.createElement('div');
-                permWrap.className = 'ext-card-perms';
-                for (const perm of item.manifest.permissions) {
-                    const chip = document.createElement('span');
-                    chip.className = 'ext-perm-chip';
-                    chip.textContent = perm;
-                    permWrap.appendChild(chip);
-                }
-                card.appendChild(permWrap);
-            }
-
+            const summaryEl = document.createElement('div');
             if (item.error) {
-                const errEl = document.createElement('div');
-                errEl.className = 'ext-card-error';
-                errEl.textContent = item.error;
-                card.appendChild(errEl);
+                summaryEl.className = 'ext-card-summary is-error';
+                summaryEl.setAttribute('data-i18n', 'extensions.hasErrorHint');
+                summaryEl.textContent = t('extensions.hasErrorHint');
+            } else {
+                const permCount = (item.manifest.permissions || []).length;
+                summaryEl.className = 'ext-card-summary';
+                summaryEl.textContent = permCount > 0
+                    ? t('extensions.permCount', { count: permCount })
+                    : t('extensions.noPermissions');
             }
+            card.appendChild(summaryEl);
 
             const actions = document.createElement('div');
             actions.className = 'ext-card-actions';
+
+            const viewBtn = document.createElement('button');
+            viewBtn.type = 'button';
+            viewBtn.className = 'ext-card-btn';
+            viewBtn.setAttribute('data-i18n', 'extensions.view');
+            viewBtn.textContent = t('extensions.view');
+            viewBtn.addEventListener('click', () => {
+                openExtensionDetailModal(item);
+            });
 
             const isActive = item.status === 'active';
             const toggleBtn = document.createElement('button');
@@ -268,7 +458,7 @@ export function openExtensionManagerModal() {
                 renderGrid();
             });
 
-            actions.append(toggleBtn, removeBtn);
+            actions.append(viewBtn, toggleBtn, removeBtn);
             card.appendChild(actions);
             grid.appendChild(card);
         }

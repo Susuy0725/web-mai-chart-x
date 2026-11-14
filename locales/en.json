@@ -84,16 +84,93 @@
     "statusError": "Error",
     "enable": "Enable",
     "disable": "Disable",
+    "view": "Details",
     "remove": "Remove",
     "importZip": "Import Extension",
     "close": "Close",
     "cancel": "Cancel",
     "resetDefaults": "Reset to Defaults",
     "saved": "Settings saved",
+    "permCount": "{count} permissions requested",
+    "hasErrorHint": "An error occurred. Click Details to inspect.",
+    "detailTitle": "Extension Details",
+    "metaId": "ID",
+    "metaAuthor": "Author",
+    "metaAuthorUnknown": "Not provided",
+    "metaEntry": "Entry",
+    "metaRuntime": "Runtime",
+    "runtimeTrusted": "Standard browser context",
+    "runtimeWorker": "Worker sandbox",
+    "noDescription": "No description provided.",
+    "grantedPermissions": "Declared Permissions & Capabilities",
     "confirmInstallTitle": "Confirm Extension Installation",
-    "confirmInstallDesc": "About to install \"{name}\" v{version}. Please verify the source and review requested permissions:",
-    "requestedPermissions": "Requested Permissions",
+    "confirmInstallDesc": "About to install \"{name}\". Please verify the source and review the manifest details and requested permissions:",
+    "requestedPermissions": "Requested Permissions & Capabilities",
     "noPermissions": "No special permissions requested",
+    "unknownPermissionTitle": "Unknown permission",
+    "unknownPermissionDesc": "This permission is not defined in the system allowlist and may fail validation.",
+    "perm": {
+      "editor_read": {
+        "title": "Read editor chart text",
+        "desc": "Read the full chart text, current selection range, and listen to editor input events."
+      },
+      "editor_write": {
+        "title": "Modify editor chart text",
+        "desc": "Replace selected text or edit chart content within a specified range in the editor."
+      },
+      "chart_read": {
+        "title": "Read decoded chart data",
+        "desc": "Access a read-only snapshot of the decoded chart and the track cover image."
+      },
+      "view_read": {
+        "title": "Read view mode",
+        "desc": "Read the current view mode state of the editor."
+      },
+      "playback_read": {
+        "title": "Read playback state",
+        "desc": "Read current audio and chart playback state, playhead position, and total duration."
+      },
+      "playback_seek": {
+        "title": "Control playback position",
+        "desc": "Seek the timeline to a specific timestamp or nudge playback forward and backward."
+      },
+      "render_overlay": {
+        "title": "Draw canvas overlays",
+        "desc": "Register custom overlay layers on the chart preview canvas and request redraws."
+      },
+      "commands_register": {
+        "title": "Register extension commands",
+        "desc": "Register custom namespaced commands in the application command registry."
+      },
+      "events_subscribe": {
+        "title": "Subscribe to system events",
+        "desc": "Listen to allowlisted events such as project load, chart change, playback, and redraw."
+      },
+      "ui_toast": {
+        "title": "Show toast notifications",
+        "desc": "Display floating toast notifications for status updates or action feedback."
+      },
+      "ui_menu": {
+        "title": "Add toolbar menu items",
+        "desc": "Add clickable items under the Extensions menu in the top toolbar."
+      },
+      "ui_popover": {
+        "title": "Open settings panel & store settings",
+        "desc": "Open an extension settings popover and read/write isolated extension settings."
+      },
+      "ui_overlay": {
+        "title": "Create floating UI widgets",
+        "desc": "Create and mount floating UI containers positioned over the workspace."
+      },
+      "i18n_register": {
+        "title": "Register translations",
+        "desc": "Register localized translation dictionaries for the extension and resolve translated keys."
+      },
+      "storage": {
+        "title": "Read and write isolated extension storage",
+        "desc": "Store and read extension-specific data in an isolated namespace that is automatically cleared on removal."
+      }
+    },
     "securityWarning": "Warning: Extensions execute scripts in your browser. Only install packages from trusted sources.",
     "installAndEnable": "Install & Enable",
     "installSuccess": "Installed and enabled \"{name}\"",

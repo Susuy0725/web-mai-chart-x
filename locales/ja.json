@@ -84,16 +84,93 @@
     "statusError": "エラー",
     "enable": "有効化",
     "disable": "無効化",
+    "view": "詳細",
     "remove": "削除",
     "importZip": "拡張機能をインポート",
     "close": "閉じる",
     "cancel": "キャンセル",
     "resetDefaults": "初期値にリセット",
     "saved": "設定を保存しました",
+    "permCount": "{count} 件の権限を要求",
+    "hasErrorHint": "エラーが発生しました。「詳細」から確認してください",
+    "detailTitle": "拡張機能の詳細",
+    "metaId": "識別子",
+    "metaAuthor": "作成者",
+    "metaAuthorUnknown": "未設定",
+    "metaEntry": "エントリ",
+    "metaRuntime": "実行モード",
+    "runtimeTrusted": "標準ブラウザ環境",
+    "runtimeWorker": "Worker サンドボックス",
+    "noDescription": "説明は提供されていません。",
+    "grantedPermissions": "宣言された権限と機能",
     "confirmInstallTitle": "拡張機能のインストール確認",
-    "confirmInstallDesc": "「{name}」v{version} をインストールします。提供元を確認し、以下の権限を許可してください：",
-    "requestedPermissions": "要求される権限",
+    "confirmInstallDesc": "「{name}」をインストールします。提供元を確認し、拡張機能情報と要求される権限を確認してください：",
+    "requestedPermissions": "要求される権限と具体的な機能",
     "noPermissions": "特別な権限は不要です",
+    "unknownPermissionTitle": "未定義の権限",
+    "unknownPermissionDesc": "この権限はシステム許可リストに定義されていないため、読み込み時に検証エラーとなる可能性があります。",
+    "perm": {
+      "editor_read": {
+        "title": "エディタ譜面テキストの読み取り",
+        "desc": "現在のエディタ内の譜面テキスト全文や選択範囲を取得し、入力イベントを監視します。"
+      },
+      "editor_write": {
+        "title": "エディタ譜面テキストの変更",
+        "desc": "エディタで選択中のテキストを置換、または指定範囲の譜面内容を変更します。"
+      },
+      "chart_read": {
+        "title": "解析済み譜面データの読み取り",
+        "desc": "現在読み込まれている譜面の読み取り専用スナップショットとジャケット画像を取得します。"
+      },
+      "view_read": {
+        "title": "表示モードの読み取り",
+        "desc": "現在のエディタの表示モード状態を取得します。"
+      },
+      "playback_read": {
+        "title": "再生状態の読み取り",
+        "desc": "現在の音声および譜面の再生状態、再生位置、総再生時間を取得します。"
+      },
+      "playback_seek": {
+        "title": "再生位置の制御",
+        "desc": "タイムラインを指定秒数へ移動、または前後に微調整します。"
+      },
+      "render_overlay": {
+        "title": "キャンバスオーバーレイ描画",
+        "desc": "譜面プレビューキャンバスにカスタム描画レイヤーを登録し、再描画を要求します。"
+      },
+      "commands_register": {
+        "title": "拡張コマンドの登録",
+        "desc": "システムのコマンドレジストリに拡張機能固有のカスタムコマンドを登録します。"
+      },
+      "events_subscribe": {
+        "title": "システムイベントの購読",
+        "desc": "プロジェクト読み込み、譜面変更、再生状態、再描画などの許可イベントを監視します。"
+      },
+      "ui_toast": {
+        "title": "トースト通知の表示",
+        "desc": "操作結果や状態を知らせるフローティング通知を画面に表示します。"
+      },
+      "ui_menu": {
+        "title": "ツールバーメニュー項目の追加",
+        "desc": "上部ツールバーの拡張機能メニューにクリック可能な項目を追加します。"
+      },
+      "ui_popover": {
+        "title": "設定パネルの表示と設定保存",
+        "desc": "拡張機能専用の設定パネルを開き、分離された設定値を読み書きします。"
+      },
+      "ui_overlay": {
+        "title": "フローティング UI 要素の作成",
+        "desc": "ワークスペース上の任意の位置に配置できるフローティング UI コンテナを作成します。"
+      },
+      "i18n_register": {
+        "title": "多言語翻訳の登録",
+        "desc": "拡張機能独自の多言語辞書を登録し、翻訳関数を使用します。"
+      },
+      "storage": {
+        "title": "分離ストレージへの読み書き",
+        "desc": "拡張機能ごとに割り当てられた分離ストレージへデータを保存・取得し、削除時に自動消去されます。"
+      }
+    },
     "securityWarning": "注意：拡張機能はブラウザ上でスクリプトを実行します。信頼できる提供元のファイルのみインストールしてください。",
     "installAndEnable": "インストールして有効化",
     "installSuccess": "「{name}」をインストールし有効化しました",

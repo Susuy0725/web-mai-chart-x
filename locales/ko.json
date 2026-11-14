@@ -84,16 +84,93 @@
     "statusError": "오류",
     "enable": "활성화",
     "disable": "비활성화",
+    "view": "상세 보기",
     "remove": "제거",
     "importZip": "확장 프로그램 가져오기",
     "close": "닫기",
     "cancel": "취소",
     "resetDefaults": "기본값으로 재설정",
     "saved": "설정이 저장되었습니다",
+    "permCount": "{count}개 권한 요청됨",
+    "hasErrorHint": "오류가 발생했습니다. 상세 보기에서 확인하세요",
+    "detailTitle": "확장 프로그램 상세 정보",
+    "metaId": "식별자",
+    "metaAuthor": "작성자",
+    "metaAuthorUnknown": "제공되지 않음",
+    "metaEntry": "진입점",
+    "metaRuntime": "실행 모드",
+    "runtimeTrusted": "표준 브라우저 환경",
+    "runtimeWorker": "Worker 샌드박스",
+    "noDescription": "설명이 제공되지 않았습니다.",
+    "grantedPermissions": "선언된 권한 및 기능",
     "confirmInstallTitle": "확장 프로그램 설치 확인",
-    "confirmInstallDesc": "\"{name}\" v{version} 설치를 진행합니다. 출처를 확인하고 요청된 권한을 검토하세요:",
-    "requestedPermissions": "요청된 권한",
+    "confirmInstallDesc": "\"{name}\" 설치를 진행합니다. 출처를 확인하고 상세 정보와 요청된 권한을 검토하세요:",
+    "requestedPermissions": "요청된 권한 및 세부 기능",
     "noPermissions": "특별한 권한이 필요하지 않습니다",
+    "unknownPermissionTitle": "정의되지 않은 권한",
+    "unknownPermissionDesc": "시스템 허용 목록에 정의되지 않은 권한이므로 로드 시 검증에 실패할 수 있습니다.",
+    "perm": {
+      "editor_read": {
+        "title": "에디터 채보 텍스트 읽기",
+        "desc": "현재 에디터의 전체 채보 텍스트와 선택 영역을 읽고 입력 이벤트를 수신합니다."
+      },
+      "editor_write": {
+        "title": "에디터 채보 텍스트 수정",
+        "desc": "에디터에서 현재 선택한 텍스트를 바꾸거나 지정 범위의 채보 내용을 수정합니다."
+      },
+      "chart_read": {
+        "title": "파싱된 채보 데이터 읽기",
+        "desc": "현재 불러온 채보의 읽기 전용 스냅샷과 곡 커버 이미지를 가져옵니다."
+      },
+      "view_read": {
+        "title": "보기 모드 읽기",
+        "desc": "현재 에디터의 보기 모드 상태를 확인합니다."
+      },
+      "playback_read": {
+        "title": "재생 상태 읽기",
+        "desc": "현재 오디오 및 채보의 재생 상태, 재생 위치, 전체 길이를 읽습니다."
+      },
+      "playback_seek": {
+        "title": "재생 위치 제어",
+        "desc": "타임라인을 지정한 시간으로 이동하거나 앞뒤로 미세 조정합니다."
+      },
+      "render_overlay": {
+        "title": "캔버스 오버레이 그리기",
+        "desc": "채보 미리보기 캔버스에 사용자 정의 레이어를 등록하고 다시 그리기를 요청합니다."
+      },
+      "commands_register": {
+        "title": "확장 명령 등록",
+        "desc": "시스템 명령 레지스트리에 이 확장 프로그램 전용 사용자 정의 명령을 등록합니다."
+      },
+      "events_subscribe": {
+        "title": "시스템 이벤트 구독",
+        "desc": "프로젝트 로드, 채보 변경, 재생 상태, 다시 그리기 등 허용된 이벤트를 수신합니다."
+      },
+      "ui_toast": {
+        "title": "토스트 알림 표시",
+        "desc": "작업 결과나 상태 안내를 알리는 플로팅 알림을 화면에 표시합니다."
+      },
+      "ui_menu": {
+        "title": "도구 모음 메뉴 항목 추가",
+        "desc": "상단 도구 모음의 확장 프로그램 메뉴에 클릭 가능한 항목을 추가합니다."
+      },
+      "ui_popover": {
+        "title": "설정 패널 열기 및 설정 저장",
+        "desc": "확장 프로그램 전용 설정 패널을 열고 분리된 설정 값을 읽고 씁니다."
+      },
+      "ui_overlay": {
+        "title": "플로팅 UI 위젯 생성",
+        "desc": "작업 영역 위에 자유롭게 배치할 수 있는 플로팅 UI 컨테이너를 생성합니다."
+      },
+      "i18n_register": {
+        "title": "다국어 번역 등록",
+        "desc": "확장 프로그램 고유의 다국어 사전을 등록하고 번역 함수를 사용합니다."
+      },
+      "storage": {
+        "title": "분리된 확장 저장소 읽기 및 쓰기",
+        "desc": "확장 프로그램 전용으로 분리된 저장 공간에 데이터를 읽고 쓰며, 제거 시 자동으로 삭제됩니다."
+      }
+    },
     "securityWarning": "주의: 확장 프로그램은 브라우저에서 스크립트를 실행합니다. 신뢰할 수 있는 출처의 파일만 설치하세요.",
     "installAndEnable": "설치 및 활성화",
     "installSuccess": "\"{name}\" 설치 및 활성화 완료",

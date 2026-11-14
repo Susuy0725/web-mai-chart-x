@@ -158,6 +158,21 @@
       "other": "其他",
       "maintenance": "维护"
     },
+    "sections": {
+      "speedAndNotes": "流速与音符",
+      "language": "语言",
+      "appearanceAndNotes": "外观与音符",
+      "effectsAndJudge": "特效与判定",
+      "backgroundAndSensor": "背景与感应器",
+      "canvasInfo": "画布信息",
+      "volume": "音量设置",
+      "sfxBehavior": "播放行为",
+      "editorAssist": "编辑器辅助",
+      "timelineAndPanel": "时间轴与面板",
+      "wheelControl": "滚轮控制",
+      "performanceAndUi": "性能与界面",
+      "externalConnection": "外部连接"
+    },
     "items": {
       "skin": "游戏皮肤",
       "speed": " Tap/Hold 速度",

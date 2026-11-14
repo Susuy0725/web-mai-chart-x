@@ -368,6 +368,14 @@ export function openSettingsModal(options = {}) {
         }
 
         (category.items || []).forEach(item => {
+            if (item.type === 'header') {
+                const headerEl = document.createElement('div');
+                headerEl.className = 'popup-setting-section-title';
+                headerEl.textContent = t(item.label);
+                section.appendChild(headerEl);
+                return;
+            }
+
             const targetRef = item.ref || settings;
             const targetKey = item.key || item.id;
             const currentVal = item.get ? item.get() : (targetRef[targetKey] ?? item.def);

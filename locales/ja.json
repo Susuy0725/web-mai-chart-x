@@ -158,6 +158,21 @@
       "other": "その他",
       "maintenance": "メンテナンス"
     },
+    "sections": {
+      "speedAndNotes": "スピード・ノーツ",
+      "language": "言語",
+      "appearanceAndNotes": "外観・ノーツ",
+      "effectsAndJudge": "エフェクト・判定",
+      "backgroundAndSensor": "背景・センサー",
+      "canvasInfo": "キャンバス情報",
+      "volume": "音量設定",
+      "sfxBehavior": "再生動作",
+      "editorAssist": "エディター補助",
+      "timelineAndPanel": "タイムライン・パネル",
+      "wheelControl": "ホイール操作",
+      "performanceAndUi": "パフォーマンス・UI",
+      "externalConnection": "外部接続"
+    },
     "items": {
       "skin": "ゲームスキン",
       "speed": "Tap/Hold速度",

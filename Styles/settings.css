@@ -87,6 +87,21 @@
     display: flex;
 }
 
+.popup-setting-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-color, #49e);
+    letter-spacing: 0.04em;
+    padding-bottom: 4px;
+    margin-top: 10px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+}
+
+.popup-setting-section-title:first-child {
+    margin-top: 0;
+}
+
 /* 單項設定列 (Setting Rows & Wrappers) */
 .popup-setting-row {
     display: flex;

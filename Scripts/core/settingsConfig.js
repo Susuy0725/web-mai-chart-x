@@ -88,32 +88,17 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.basic',
         items: [
+            { type: 'header', label: 'settings.sections.speedAndNotes' },
             { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.25, min: -1, max: 40, def: defaultSettings.speed },
             { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed },
             { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.25, min: -1, max: 40, def: defaultSettings.touchSpeed },
-            { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.scorePlus' }, { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }], def: defaultSettings.middleDisplay },
-            {
-                id: 'moviebrightness',
-                type: 'dropdown',
-                label: 'settings.items.moviebrightness',
-                options: [
-                    { value: '0', label: 'settings.items.bright' },
-                    { value: '-1', label: 'settings.items.normal' },
-                    { value: '-2', label: 'settings.items.dark' },
-                    { value: '-3', label: 'settings.items.veryDark' },
-                ],
-                def: defaultSettings.moviebrightness ?? -3,
-                apply: (val) => {
-                    const fn = window.applyMovieBrightness;
-                    if (fn) fn(val);
-                }
-            },
             {
                 id: 'pinkStars',
                 type: 'checkbox',
                 label: 'settings.items.pinkStars',
                 def: defaultSettings.pinkStars || false
             },
+            { type: 'header', label: 'settings.sections.language' },
             {
                 id: 'lang',
                 type: 'dropdown',
@@ -138,6 +123,7 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.display',
         items: [
+            { type: 'header', label: 'settings.sections.appearanceAndNotes' },
             {
                 id: 'skin',
                 type: 'dropdown',
@@ -147,30 +133,6 @@ export const settingsConfig = [
                     { value: 'Deluxe', label: 'Deluxe' },
                 ],
                 def: defaultSettings.skin || 'Default',
-            },
-            {
-                id: 'showSensor',
-                type: 'checkbox',
-                label: 'settings.items.showSensor',
-                def: defaultSettings.showSensor
-            },
-            {
-                id: 'showSensorTextWhenPaused',
-                type: 'checkbox',
-                label: 'settings.items.showSensorTextWhenPaused',
-                def: defaultSettings.showSensorTextWhenPaused
-            },
-            {
-                id: 'hideBackgroundWhenPaused',
-                type: 'checkbox',
-                label: 'settings.items.hideBackgroundWhenPaused',
-                def: defaultSettings.hideBackgroundWhenPaused,
-            },
-            {
-                id: 'disableVideo',
-                type: 'checkbox',
-                label: 'settings.items.disableVideo',
-                def: defaultSettings.disableVideo || false,
             },
             {
                 id: 'rotateStars',
@@ -191,11 +153,12 @@ export const settingsConfig = [
                 def: defaultSettings.hideOutline || false,
             },
             {
-                id: 'showCoverWhenPaused',
+                id: 'noBorder',
                 type: 'checkbox',
-                label: 'settings.items.showCoverWhenPaused',
-                def: defaultSettings.showCoverWhenPaused || false,
+                label: 'settings.items.noBorder',
+                def: defaultSettings.noBorder || false
             },
+            { type: 'header', label: 'settings.sections.effectsAndJudge' },
             {
                 id: 'drawHitEffect',
                 type: 'checkbox',
@@ -215,12 +178,6 @@ export const settingsConfig = [
                 def: defaultSettings.richHanabi || true
             },
             {
-                id: 'disablePreviewWaveform',
-                type: 'checkbox',
-                label: 'settings.items.disablePreviewWaveform',
-                def: defaultSettings.disablePreviewWaveform || false
-            },
-            {
                 id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,
             },
             {
@@ -229,38 +186,67 @@ export const settingsConfig = [
             {
                 id: 'showBreakCriticalPerfect', type: 'checkbox', label: 'settings.items.showBreakCriticalPerfect', def: defaultSettings.showBreakCriticalPerfect ?? true,
             },
+            { type: 'header', label: 'settings.sections.backgroundAndSensor' },
             {
-                id: 'lowRes',
-                type: 'checkbox',
-                label: 'settings.items.lowRes',
-                def: defaultSettings.lowRes || false,
-            }, {
-                id: 'noBorder',
-                type: 'checkbox',
-                label: 'settings.items.noBorder',
-                def: defaultSettings.noBorder || false
+                id: 'moviebrightness',
+                type: 'dropdown',
+                label: 'settings.items.moviebrightness',
+                options: [
+                    { value: '0', label: 'settings.items.bright' },
+                    { value: '-1', label: 'settings.items.normal' },
+                    { value: '-2', label: 'settings.items.dark' },
+                    { value: '-3', label: 'settings.items.veryDark' },
+                ],
+                def: defaultSettings.moviebrightness ?? -3,
+                apply: (val) => {
+                    const fn = window.applyMovieBrightness;
+                    if (fn) fn(val);
+                }
             },
+            {
+                id: 'disableVideo',
+                type: 'checkbox',
+                label: 'settings.items.disableVideo',
+                def: defaultSettings.disableVideo || false,
+            },
+            {
+                id: 'hideBackgroundWhenPaused',
+                type: 'checkbox',
+                label: 'settings.items.hideBackgroundWhenPaused',
+                def: defaultSettings.hideBackgroundWhenPaused,
+            },
+            {
+                id: 'showCoverWhenPaused',
+                type: 'checkbox',
+                label: 'settings.items.showCoverWhenPaused',
+                def: defaultSettings.showCoverWhenPaused || false,
+            },
+            {
+                id: 'showSensor',
+                type: 'checkbox',
+                label: 'settings.items.showSensor',
+                def: defaultSettings.showSensor
+            },
+            {
+                id: 'showSensorTextWhenPaused',
+                type: 'checkbox',
+                label: 'settings.items.showSensorTextWhenPaused',
+                def: defaultSettings.showSensorTextWhenPaused
+            },
+            { type: 'header', label: 'settings.sections.canvasInfo' },
+            { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.scorePlus' }, { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }], def: defaultSettings.middleDisplay },
             {
                 id: 'renderSurroundingAuxiliaryText',
                 type: 'checkbox',
                 label: 'settings.items.renderSurroundingAuxiliaryText',
                 def: defaultSettings.renderSurroundingAuxiliaryText ?? true
             },
-            {
-                id: 'resetPanelRatio',
-                type: 'button',
-                label: 'settings.items.resetPanelRatio',
-                btnText: 'popup.reset',
-                onClick: () => {
-                    eventBus.emit(EVENTS.LAYOUT_RESET);
-                    simpleToast({ content: t('toast.panelRatioReset'), type: 'info', timeout: 1500 });
-                }
-            }
         ]
     },
     {
         label: 'settings.tabs.sfx',
         items: [
+            { type: 'header', label: 'settings.sections.volume' },
             {
                 id: 'globalVolume', type: 'range', label: 'settings.items.globalVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.globalVolume,
             },
@@ -273,6 +259,7 @@ export const settingsConfig = [
             {
                 id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,
             },
+            { type: 'header', label: 'settings.sections.sfxBehavior' },
             {
                 id: 'notPlayHoldEnd',
                 type: 'checkbox',
@@ -284,47 +271,12 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.operation',
         items: [
+            { type: 'header', label: 'settings.sections.editorAssist' },
             {
                 id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
             },
             {
                 id: 'disableSyntaxCheck', type: 'checkbox', label: 'settings.items.disableSyntaxCheck', def: defaultSettings.disableSyntaxCheck || false
-            },
-            {
-                id: 'autoPauseOnScroll', type: 'checkbox', label: 'settings.items.autoPauseOnScroll', def: defaultSettings.autoPauseOnScroll
-            },
-            {
-                id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
-            },
-            {
-                id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
-            },
-            {
-                id: 'smoothScroll',
-                type: 'checkbox',
-                label: 'settings.items.smoothScroll',
-                def: defaultSettings.smoothScroll ?? true
-            },
-            {
-                id: 'wheelSensitivity',
-                type: 'range',
-                label: 'settings.items.wheelSensitivity',
-                min: 0.2,
-                max: 3.0,
-                step: 0.05,
-                def: defaultSettings.wheelSensitivity || 1.0
-            },
-            {
-                id: 'invertWheelDirection',
-                type: 'dropdown',
-                label: 'settings.items.invertWheelDirection',
-                options: [
-                    { value: 'none', label: 'settings.invertWheelOpts.none' },
-                    { value: 'preview', label: 'settings.invertWheelOpts.preview' },
-                    { value: 'visualEditor', label: 'settings.invertWheelOpts.visualEditor' },
-                    { value: 'both', label: 'settings.invertWheelOpts.both' },
-                ],
-                def: defaultSettings.invertWheelDirection || 'none'
             },
             {
                 id: 'syntaxColors',
@@ -367,13 +319,64 @@ export const settingsConfig = [
                     applySyntaxColors(val);
                 }
             },
+            { type: 'header', label: 'settings.sections.timelineAndPanel' },
+            {
+                id: 'autoPauseOnScroll', type: 'checkbox', label: 'settings.items.autoPauseOnScroll', def: defaultSettings.autoPauseOnScroll
+            },
+            {
+                id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
+            },
+            {
+                id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
+            },
+            { type: 'header', label: 'settings.sections.wheelControl' },
+            {
+                id: 'smoothScroll',
+                type: 'checkbox',
+                label: 'settings.items.smoothScroll',
+                def: defaultSettings.smoothScroll ?? true
+            },
+            {
+                id: 'wheelSensitivity',
+                type: 'range',
+                label: 'settings.items.wheelSensitivity',
+                min: 0.2,
+                max: 3.0,
+                step: 0.05,
+                def: defaultSettings.wheelSensitivity || 1.0
+            },
+            {
+                id: 'invertWheelDirection',
+                type: 'dropdown',
+                label: 'settings.items.invertWheelDirection',
+                options: [
+                    { value: 'none', label: 'settings.invertWheelOpts.none' },
+                    { value: 'preview', label: 'settings.invertWheelOpts.preview' },
+                    { value: 'visualEditor', label: 'settings.invertWheelOpts.visualEditor' },
+                    { value: 'both', label: 'settings.invertWheelOpts.both' },
+                ],
+                def: defaultSettings.invertWheelDirection || 'none'
+            },
         ]
     },
     {
         label: 'settings.tabs.other',
         items: [
+            { type: 'header', label: 'settings.sections.performanceAndUi' },
             {
                 id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
+            },
+            {
+                id: 'lowRes',
+                type: 'checkbox',
+                label: 'settings.items.lowRes',
+                def: defaultSettings.lowRes || false,
+            },
+            {
+                id: 'disablePreviewWaveform',
+                type: 'checkbox',
+                label: 'settings.items.disablePreviewWaveform',
+                def: defaultSettings.disablePreviewWaveform || false
             },
             {
                 id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount
@@ -381,6 +384,17 @@ export const settingsConfig = [
             {
                 id: 'inputDebounceTime', type: 'number', label: 'settings.items.inputDebounceTime', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
             },
+            {
+                id: 'resetPanelRatio',
+                type: 'button',
+                label: 'settings.items.resetPanelRatio',
+                btnText: 'popup.reset',
+                onClick: () => {
+                    eventBus.emit(EVENTS.LAYOUT_RESET);
+                    simpleToast({ content: t('toast.panelRatioReset'), type: 'info', timeout: 1500 });
+                }
+            },
+            { type: 'header', label: 'settings.sections.externalConnection' },
             {
                 id: 'majdataWsUrl',
                 type: 'text',

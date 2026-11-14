@@ -158,6 +158,21 @@
       "other": "기타",
       "maintenance": "관리"
     },
+    "sections": {
+      "speedAndNotes": "속도 및 노트",
+      "language": "언어",
+      "appearanceAndNotes": "외관 및 노트",
+      "effectsAndJudge": "이펙트 및 판정",
+      "backgroundAndSensor": "배경 및 센서",
+      "canvasInfo": "캔버스 정보",
+      "volume": "음량 설정",
+      "sfxBehavior": "재생 동작",
+      "editorAssist": "에디터 보조",
+      "timelineAndPanel": "타임라인 및 패널",
+      "wheelControl": "마우스 휠",
+      "performanceAndUi": "성능 및 UI",
+      "externalConnection": "외부 연결"
+    },
     "items": {
       "skin": "게임 스킨",
       "speed": " Tap/Hold 속도",

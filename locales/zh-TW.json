@@ -158,6 +158,21 @@
       "other": "其他",
       "maintenance": "維護"
     },
+    "sections": {
+      "speedAndNotes": "流速與音符",
+      "language": "語言",
+      "appearanceAndNotes": "外觀與音符",
+      "effectsAndJudge": "特效與判定",
+      "backgroundAndSensor": "背景與感應器",
+      "canvasInfo": "畫布資訊",
+      "volume": "音量設定",
+      "sfxBehavior": "播放行為",
+      "editorAssist": "編輯器輔助",
+      "timelineAndPanel": "時間軸與面板",
+      "wheelControl": "滾輪控制",
+      "performanceAndUi": "效能與介面",
+      "externalConnection": "外部連線"
+    },
     "items": {
       "skin": "遊戲皮膚",
       "speed": " Tap/Hold 速度",

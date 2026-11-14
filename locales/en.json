@@ -212,6 +212,7 @@
       "showFastLate": "Show Fast / Late",
       "autoPlay": "Play Mode",
       "noBorder": "No borders",
+      "renderSurroundingAuxiliaryText": "Show Surrounding Auxiliary Info",
       "richHanabi": "Rich Hanabi Effects",
       "disablePreviewWaveform": "Disable Preview Waveform",
       "noteBaseSize": "Note Base Size (noteBaseSize)",

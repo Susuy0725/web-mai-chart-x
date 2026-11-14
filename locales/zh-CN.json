@@ -212,6 +212,7 @@
       "showFastLate": "显示 fast / late",
       "autoPlay": "游玩模式",
       "noBorder": "无边框",
+      "renderSurroundingAuxiliaryText": "显示画布两侧信息",
       "richHanabi": "绚丽烟火特效",
       "disablePreviewWaveform": "禁用预览波形",
       "noteBaseSize": "Note 基础大小 (noteBaseSize)",

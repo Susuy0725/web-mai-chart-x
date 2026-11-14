@@ -212,6 +212,7 @@
       "showFastLate": "Fast / Late 表示",
       "autoPlay": "プレイモード",
       "noBorder": "枠なし",
+      "renderSurroundingAuxiliaryText": "キャンバス両側の補助情報を表示",
       "richHanabi": "豪華な花火エフェクト",
       "disablePreviewWaveform": "プレビュー波形を無効化",
       "middleDistance": "スライディングスター中距離(middleDistance)",

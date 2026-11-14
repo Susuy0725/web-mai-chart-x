@@ -241,6 +241,12 @@ export const settingsConfig = [
                 def: defaultSettings.noBorder || false
             },
             {
+                id: 'renderSurroundingAuxiliaryText',
+                type: 'checkbox',
+                label: 'settings.items.renderSurroundingAuxiliaryText',
+                def: defaultSettings.renderSurroundingAuxiliaryText ?? true
+            },
+            {
                 id: 'resetPanelRatio',
                 type: 'button',
                 label: 'settings.items.resetPanelRatio',

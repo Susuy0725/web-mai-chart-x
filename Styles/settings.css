@@ -87,6 +87,21 @@
     display: flex;
 }
 
+.popup-setting-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-color, #49e);
+    letter-spacing: 0.04em;
+    padding-bottom: 4px;
+    margin-top: 10px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+}
+
+.popup-setting-section-title:first-child {
+    margin-top: 0;
+}
+
 /* 單項設定列 (Setting Rows & Wrappers) */
 .popup-setting-row {
     display: flex;
@@ -111,6 +126,17 @@
     cursor: pointer;
     color: var(--popup-text-main, #f0f0f0);
     font-size: 14px;
+}
+
+.popup-setting-wrapper-range {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+.popup-setting-wrapper-range .popup-setting-text {
+    white-space: normal;
 }
 
 .popup-setting-text {
@@ -185,9 +211,9 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    width: 140px;
-    min-width: 120px;
-    flex: 0 0 140px;
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
 }
 
 .popup-setting-range {
@@ -626,12 +652,6 @@
         max-width: 110px;
         padding: 4px 22px 4px 6px;
         font-size: 12px;
-    }
-
-    .popup-setting-range-wrap {
-        width: 105px;
-        min-width: 95px;
-        flex: 0 0 105px;
     }
 
     .popup-setting-section {

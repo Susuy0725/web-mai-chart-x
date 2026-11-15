@@ -295,6 +295,21 @@
       "other": "기타",
       "maintenance": "관리"
     },
+    "sections": {
+      "speedAndNotes": "속도 및 노트",
+      "language": "언어",
+      "appearanceAndNotes": "외관 및 노트",
+      "effectsAndJudge": "이펙트 및 판정",
+      "backgroundAndSensor": "배경 및 센서",
+      "canvasInfo": "캔버스 정보",
+      "volume": "음량 설정",
+      "sfxBehavior": "재생 동작",
+      "editorAssist": "에디터 보조",
+      "timelineAndPanel": "타임라인 및 패널",
+      "wheelControl": "마우스 휠",
+      "performanceAndUi": "성능 및 UI",
+      "externalConnection": "외부 연결"
+    },
     "items": {
       "skin": "게임 스킨",
       "speed": " Tap/Hold 속도",
@@ -349,6 +364,7 @@
       "showFastLate": "Fast / Late 표시",
       "autoPlay": "플레이 모드",
       "noBorder": "테두리 없음",
+      "renderSurroundingAuxiliaryText": "캔버스 양쪽 보조 정보 표시",
       "richHanabi": "화려한 불꽃 효과",
       "disablePreviewWaveform": "미리보기 파형 비활성화",
       "middleDistance": "슬라이딩 스타 중간 거리(middleDistance)",
@@ -402,6 +418,20 @@
       "hanabi": "불꽃 효과 (f)",
       "touch": "터치 센서 (A1, C)",
       "comma": "박자 구분 쉼표 (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "카운트다운 비트음",
+      "answer": "정답음",
+      "judge": "일반 판정음",
+      "judge_ex": "EX 노트 판정음",
+      "judge_break": "Break 판정음",
+      "judge_break_slide": "Break 슬라이드 판정음",
+      "break": "Break 효과음",
+      "slide": "슬라이드 효과음",
+      "break_slide_start": "Break 슬라이드 시작음",
+      "touch": "Touch 효과음",
+      "touchHold_riser": "Touch Hold 차징음",
+      "hanabi": "불꽃 효과음"
     }
   },
   "popup": {
@@ -871,6 +901,11 @@
     "stepsChange": "박자 수",
     "apply": "변환 적용",
     "appliedToast": "박자 세분화 및 변환을 적용했습니다"
+  },
+  "splitter": {
+    "direction": "좌우 / 상하 레이아웃 전환",
+    "drag": "드래그하여 비율 조절 (더블 클릭 시 가운데 맞춤)",
+    "swap": "패널 위치 전환"
   },
   "skinChange": {
     "restart": "스킨이 적용되었습니다! 다음 실행 시 적용됩니다"

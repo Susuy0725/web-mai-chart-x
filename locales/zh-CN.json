@@ -295,6 +295,21 @@
       "other": "其他",
       "maintenance": "维护"
     },
+    "sections": {
+      "speedAndNotes": "流速与音符",
+      "language": "语言",
+      "appearanceAndNotes": "外观与音符",
+      "effectsAndJudge": "特效与判定",
+      "backgroundAndSensor": "背景与感应器",
+      "canvasInfo": "画布信息",
+      "volume": "音量设置",
+      "sfxBehavior": "播放行为",
+      "editorAssist": "编辑器辅助",
+      "timelineAndPanel": "时间轴与面板",
+      "wheelControl": "滚轮控制",
+      "performanceAndUi": "性能与界面",
+      "externalConnection": "外部连接"
+    },
     "items": {
       "skin": "游戏皮肤",
       "speed": " Tap/Hold 速度",
@@ -349,6 +364,7 @@
       "showFastLate": "显示 fast / late",
       "autoPlay": "游玩模式",
       "noBorder": "无边框",
+      "renderSurroundingAuxiliaryText": "显示画布两侧信息",
       "richHanabi": "绚丽烟火特效",
       "disablePreviewWaveform": "禁用预览波形",
       "noteBaseSize": "Note 基础大小 (noteBaseSize)",
@@ -402,6 +418,20 @@
       "hanabi": "烟花特效 (f)",
       "touch": "Touch 感应区 (A1, C)",
       "comma": "拍子分隔逗号 (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "倒数节拍音",
+      "answer": "正解音",
+      "judge": "一般判定音",
+      "judge_ex": "EX 音符判定音",
+      "judge_break": "Break 判定音",
+      "judge_break_slide": "Break 滑星判定音",
+      "break": "Break 音效",
+      "slide": "滑星音效",
+      "break_slide_start": "Break 滑星起始音",
+      "touch": "Touch 触控音",
+      "touchHold_riser": "Touch Hold 蓄力音",
+      "hanabi": "烟火音效"
     }
   },
   "popup": {
@@ -871,6 +901,11 @@
     "stepsChange": "拍数",
     "apply": "应用转换",
     "appliedToast": "已成功应用切分细分与转换"
+  },
+  "splitter": {
+    "direction": "切换左右或上下布局",
+    "drag": "拖拽调整面板比例，双击居中",
+    "swap": "互换面板位置"
   },
   "skinChange": {
     "restart": "皮肤已应用！将在下次启动时生效"

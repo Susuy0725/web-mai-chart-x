@@ -295,6 +295,21 @@
       "other": "その他",
       "maintenance": "メンテナンス"
     },
+    "sections": {
+      "speedAndNotes": "スピード・ノーツ",
+      "language": "言語",
+      "appearanceAndNotes": "外観・ノーツ",
+      "effectsAndJudge": "エフェクト・判定",
+      "backgroundAndSensor": "背景・センサー",
+      "canvasInfo": "キャンバス情報",
+      "volume": "音量設定",
+      "sfxBehavior": "再生動作",
+      "editorAssist": "エディター補助",
+      "timelineAndPanel": "タイムライン・パネル",
+      "wheelControl": "ホイール操作",
+      "performanceAndUi": "パフォーマンス・UI",
+      "externalConnection": "外部接続"
+    },
     "items": {
       "skin": "ゲームスキン",
       "speed": "Tap/Hold速度",
@@ -349,6 +364,7 @@
       "showFastLate": "Fast / Late 表示",
       "autoPlay": "プレイモード",
       "noBorder": "枠なし",
+      "renderSurroundingAuxiliaryText": "キャンバス両側の補助情報を表示",
       "richHanabi": "豪華な花火エフェクト",
       "disablePreviewWaveform": "プレビュー波形を無効化",
       "middleDistance": "スライディングスター中距離(middleDistance)",
@@ -402,6 +418,20 @@
       "hanabi": "花火エフェクト (f)",
       "touch": "タッチセンサー (A1, C)",
       "comma": "拍区切りカンマ (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "カウントダウン音",
+      "answer": "アンサー音",
+      "judge": "通常判定音",
+      "judge_ex": "EX ノート判定音",
+      "judge_break": "Break 判定音",
+      "judge_break_slide": "Break スライド判定音",
+      "break": "Break 効果音",
+      "slide": "スライド効果音",
+      "break_slide_start": "Break スライド開始音",
+      "touch": "Touch 効果音",
+      "touchHold_riser": "Touch Hold チャージ音",
+      "hanabi": "花火効果音"
     }
   },
   "popup": {
@@ -871,6 +901,11 @@
     "stepsChange": "拍数",
     "apply": "変換を適用",
     "appliedToast": "拍の細分化・変換を適用しました"
+  },
+  "splitter": {
+    "direction": "左右・上下レイアウトを切り替え",
+    "drag": "ドラッグで比率調整・ダブルクリックで中央に戻す",
+    "swap": "パネル位置を入れ替え"
   },
   "skinChange": {
     "restart": "スキンが適用されました！次回起動時に有効になります"

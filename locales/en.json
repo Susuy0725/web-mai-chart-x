@@ -295,6 +295,21 @@
       "other": "Other",
       "maintenance": "Maint."
     },
+    "sections": {
+      "speedAndNotes": "Speed & Notes",
+      "language": "Language",
+      "appearanceAndNotes": "Appearance & Notes",
+      "effectsAndJudge": "Effects & Judgment",
+      "backgroundAndSensor": "Background & Sensors",
+      "canvasInfo": "Canvas Info",
+      "volume": "Volume",
+      "sfxBehavior": "Playback Behavior",
+      "editorAssist": "Editor Assist",
+      "timelineAndPanel": "Timeline & Panel",
+      "wheelControl": "Mouse Wheel",
+      "performanceAndUi": "Performance & UI",
+      "externalConnection": "External Connection"
+    },
     "items": {
       "skin": "Game Skin",
       "speed": "Tap/Hold Speed",
@@ -349,6 +364,7 @@
       "showFastLate": "Show Fast / Late",
       "autoPlay": "Play Mode",
       "noBorder": "No borders",
+      "renderSurroundingAuxiliaryText": "Show Surrounding Auxiliary Info",
       "richHanabi": "Rich Hanabi Effects",
       "disablePreviewWaveform": "Disable Preview Waveform",
       "noteBaseSize": "Note Base Size (noteBaseSize)",
@@ -402,6 +418,20 @@
       "hanabi": "Fireworks (f)",
       "touch": "Touch Sensors (A1, C)",
       "comma": "Beat Comma (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "Countdown Beat",
+      "answer": "Answer Sound",
+      "judge": "Normal Judgment Sound",
+      "judge_ex": "EX Note Judgment Sound",
+      "judge_break": "Break Judgment Sound",
+      "judge_break_slide": "Break Slide Judgment Sound",
+      "break": "Break SFX",
+      "slide": "Slide SFX",
+      "break_slide_start": "Break Slide Start Sound",
+      "touch": "Touch SFX",
+      "touchHold_riser": "Touch Hold Charge Sound",
+      "hanabi": "Fireworks SFX"
     }
   },
   "popup": {
@@ -871,6 +901,11 @@
     "stepsChange": "Beats",
     "apply": "Apply",
     "appliedToast": "Beat subdivision & conversion applied successfully"
+  },
+  "splitter": {
+    "direction": "Toggle Horizontal / Vertical Layout",
+    "drag": "Drag to Resize Panels (Double-Click to Center)",
+    "swap": "Swap Panel Positions"
   },
   "skinChange": {
     "restart": "Skin applied! Will take effect on next launch"

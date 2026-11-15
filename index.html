@@ -65,9 +65,9 @@
     </noscript>
 
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="Styles/main.css?v=visual_17">
+    <link rel="stylesheet" href="Styles/main.css?v=visual_27">
     <link rel="stylesheet" href="Styles/settings.css">
-    <link rel="stylesheet" href="Styles/popup.css">
+    <link rel="stylesheet" href="Styles/popup.css?v=1">
     <link rel="stylesheet" href="Styles/drive.css">
     <link rel="stylesheet" href="Styles/welcome.css">
 </head>
@@ -137,8 +137,25 @@
                 </span>
             </div>
         </div>
-        <div id="panelSplitter" title="拖曳調整面板比例" role="separator" aria-label="調整面板比例" tabindex="0" aria-valuenow="50"
-            aria-valuemin="0" aria-valuemax="100"></div>
+        <div id="panelSplitter" class="orientation-horizontal" title="拖曳調整面板比例" role="separator" aria-label="調整面板比例" tabindex="0" aria-valuenow="50"
+            aria-valuemin="0" aria-valuemax="100">
+            <div id="panelSplitterToolbar" class="splitter-toolbar" role="toolbar" aria-label="分割線操作">
+                <button type="button" id="splitterDirectionBtn" class="splitter-toolbar-btn" data-splitter-action="direction"
+                    data-i18n-title="splitter.direction" data-i18n-aria-label="splitter.direction" title="切換左右或上下布局" aria-label="切換左右或上下布局">
+                    <svg class="splitter-icon splitter-direction-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                        <path class="splitter-direction-line" d="M12 4v16" stroke="currentColor" stroke-width="1.8"/>
+                    </svg>
+                </button>
+                <div id="splitterDragHandle" class="splitter-toolbar-handle" data-splitter-action="drag" data-i18n-title="splitter.drag" title="拖曳調整面板比例，雙擊置中" aria-hidden="true">
+                    <span class="splitter-handle-bars"></span>
+                </div>
+                <button type="button" id="splitterSwapBtn" class="splitter-toolbar-btn" data-splitter-action="swap"
+                    data-i18n-title="splitter.swap" data-i18n-aria-label="splitter.swap" title="互換面板位置" aria-label="互換面板位置">
+                    <span class="material-symbols-outlined splitter-swap-icon" translate="no">swap_horiz</span>
+                </button>
+            </div>
+        </div>
         <div id="editorContainer">
             <div id="findReplaceBar" class="find-replace-bar" style="display: none;">
                 <div class="findbar-row">
@@ -375,8 +392,6 @@
                                     <div class="utilityButton" data-buttonAction="projectManager" role="button"
                                         tabindex="0" aria-label="專案總管">
                                         <span data-i18n="menu.fileProjectManager">專案總管</span>
-                                        <span class="utilityItemIcon material-symbols-outlined"
-                                            translate="no">folder_open</span>
                                     </div>
                                     <hr>
                                     <div class="utilityButton" data-buttonAction="addMusic"
@@ -397,8 +412,6 @@
                                     <div class="utilityButton" data-buttonAction="download" role="button" tabindex="0"
                                         aria-label="下載檔案">
                                         <span data-i18n="menu.fileDownload">下載</span>
-                                        <span class="utilityItemIcon material-symbols-outlined"
-                                            translate="no">download</span>
                                     </div>
                                 </div>
                             </div>
@@ -418,8 +431,6 @@
                                     <div class="utilityButton" data-buttonAction="recordVideo" role="button"
                                         tabindex="0" aria-label="錄製影片">
                                         <span data-i18n="menu.toolsRecordVideo">錄製影片</span>
-                                        <span class="utilityItemIcon material-symbols-outlined"
-                                            translate="no">videocam</span>
                                     </div>
                                     <div class="utilityButton" data-buttonAction="editMusic"
                                         data-i18n="menu.toolsEditMusic" role="button" tabindex="0" aria-label="編輯音樂開頭">
@@ -442,8 +453,6 @@
                                     <div class="utilityButton" data-buttonAction="popup" role="button" tabindex="0"
                                         aria-label="預覽彈出">
                                         <span data-i18n="menu.toolsPopup">預覽彈出</span>
-                                        <span class="utilityItemIcon material-symbols-outlined"
-                                            translate="no">open_in_new</span>
                                     </div>
                                     <div class="utilityButton" data-buttonAction="connectMajdataView"
                                         data-i18n="menu.toolsConnectMajdataView" role="button" tabindex="0"
@@ -455,12 +464,10 @@
                             <div class="utilityButton" data-buttonAction="gotoPlay" role="button" tabindex="0"
                                 aria-label="前往Play" onclick="window.open('./_play/', '_blank')">
                                 <span data-i18n="menu.gotoPlay">前往Play</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">play_arrow</span>
                             </div>
                             <div class="utilityButton" data-buttonAction="settings" role="button" tabindex="0"
                                 aria-label="設定">
                                 <span data-i18n="menu.settings">設定</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">settings</span>
                             </div>
                         </div>
                     </div>
@@ -471,41 +478,34 @@
                             <span class="material-symbols-outlined" translate="no">edit</span>
                         </div>
                         <div class="utilityDropdown-content">
-                            <div class="utilityButton" data-buttonAction="undo" role="button"
-                                tabindex="0" aria-label="復原">
+                            <div class="utilityButton" data-buttonAction="undo" role="button" tabindex="0"
+                                aria-label="復原">
                                 <span data-i18n="menu.editUndo">復原</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">undo</span>
                             </div>
-                            <div class="utilityButton" data-buttonAction="redo" role="button"
-                                tabindex="0" aria-label="重作">
+                            <div class="utilityButton" data-buttonAction="redo" role="button" tabindex="0"
+                                aria-label="重作">
                                 <span data-i18n="menu.editRedo">重作</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">redo</span>
                             </div>
                             <hr>
-                            <div class="utilityButton" data-buttonAction="rotateClockwise"
-                                role="button" tabindex="0" aria-label="順時針旋轉">
+                            <div class="utilityButton" data-buttonAction="rotateClockwise" role="button" tabindex="0"
+                                aria-label="順時針旋轉">
                                 <span data-i18n="menu.editRotateClockwise">順時針旋轉</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">rotate_right</span>
                             </div>
-                            <div class="utilityButton" data-buttonAction="rotateCounterClockwise"
-                                role="button" tabindex="0" aria-label="逆時針旋轉">
+                            <div class="utilityButton" data-buttonAction="rotateCounterClockwise" role="button"
+                                tabindex="0" aria-label="逆時針旋轉">
                                 <span data-i18n="menu.editRotateCounterClockwise">逆時針旋轉</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">rotate_left</span>
                             </div>
-                            <div class="utilityButton" data-buttonAction="rotate180"
-                                role="button" tabindex="0" aria-label="180度旋轉">
+                            <div class="utilityButton" data-buttonAction="rotate180" role="button" tabindex="0"
+                                aria-label="180度旋轉">
                                 <span data-i18n="menu.editRotate180">180度旋轉</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">sync</span>
                             </div>
-                            <div class="utilityButton" data-buttonAction="flipVertical"
-                                role="button" tabindex="0" aria-label="上下反轉">
+                            <div class="utilityButton" data-buttonAction="flipVertical" role="button" tabindex="0"
+                                aria-label="上下反轉">
                                 <span data-i18n="menu.editFlipVertical">上下反轉</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">swap_vert</span>
                             </div>
-                            <div class="utilityButton" data-buttonAction="flipHorizontal"
-                                role="button" tabindex="0" aria-label="左右反轉">
+                            <div class="utilityButton" data-buttonAction="flipHorizontal" role="button" tabindex="0"
+                                aria-label="左右反轉">
                                 <span data-i18n="menu.editFlipHorizontal">左右反轉</span>
-                                <span class="utilityItemIcon material-symbols-outlined" translate="no">swap_horiz</span>
                             </div>
                             <hr>
                             <div class="utilityButton" data-buttonAction="findReplace" data-i18n="menu.toolsFindReplace"

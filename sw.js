@@ -76,6 +76,7 @@ const ASSETS = [
     './Scripts/core/extensionStorage.js',
     './Scripts/core/frameProfiler.js',
     './Scripts/core/init.js',
+    './Scripts/core/panelLayout.js',
     './Scripts/core/playbackEngine.js',
     './Scripts/core/renderOverlayRegistry.js',
     './Scripts/core/settingsConfig.js',

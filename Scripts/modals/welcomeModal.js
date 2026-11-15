@@ -7,8 +7,7 @@
 
 import { t, getCurrentLang, getLangSetting, setLang, getAvailableLanguages, detectDefaultLanguage } from '../i18n.js';
 import { openImportSelectionModal } from './maintenanceModal.js';
-
-const STORAGE_KEY = 'wmcx_first_run_completed';
+import { hasAnyAcceptRecord, appendAcceptLog } from '../core/legalVersionManager.js';
 
 /**
  * 各支援語言的「你好」清單
@@ -27,7 +26,7 @@ const GREETINGS = [
 function renderLanguageOptions() {
     const currentLang = getLangSetting();
     const detected = detectDefaultLanguage();
-    const autoLabel = `${t('settings.items.langAuto', {}, detected) || '自動 (Auto)'} 🖥️`;
+    const autoLabel = t('settings.items.langAuto', {}, detected) || '自動 (Auto)';
     const available = getAvailableLanguages();
 
     let html = `<option value="auto" ${currentLang === 'auto' ? 'selected' : ''}>${autoLabel}</option>`;
@@ -53,7 +52,7 @@ export function isTriDentDomain() {
 
 /**
  * 檢查是否需要顯示初次啟動導覽彈窗
- * 僅在初次啟動（資料庫中原本無專案）或網址帶有 first_time=1 時觸發
+ * 僅在初次啟動（資料庫中原本無專案且無任何同意紀錄）或網址帶有 first_time=1 時觸發
  * @param {Object} [param0]
  * @param {boolean} [param0.isDatabaseEmpty] 資料庫是否為全新純淨狀態
  * @returns {boolean}
@@ -65,14 +64,12 @@ export function shouldShowWelcomeModal({ isDatabaseEmpty = false } = {}) {
             return true;
         }
 
-        const isCompleted = localStorage.getItem(STORAGE_KEY) === 'true';
-        if (isCompleted) {
+        if (hasAnyAcceptRecord()) {
             return false;
         }
 
-        // 若資料庫內已有專案（既有使用者），自動標記完成且不跳出彈窗
+        // 若資料庫內已有專案（既有使用者），跳過歡迎導覽，交由條款更新彈窗處理確認
         if (!isDatabaseEmpty) {
-            localStorage.setItem(STORAGE_KEY, 'true');
             return false;
         }
 
@@ -86,18 +83,19 @@ export function shouldShowWelcomeModal({ isDatabaseEmpty = false } = {}) {
 /**
  * 開啟初次啟動導覽彈窗
  * @param {boolean|Object} [options] 若傳入 boolean 則視為 force；亦可傳入 { force, isDatabaseEmpty }
+ * @returns {boolean} 是否實際顯示了導覽彈窗
  */
 export function showWelcomeModal(options = {}) {
     const force = (typeof options === 'boolean') ? options : !!options?.force;
     const isDatabaseEmpty = (typeof options === 'object') ? !!options?.isDatabaseEmpty : false;
 
     if (!force && !shouldShowWelcomeModal({ isDatabaseEmpty })) {
-        return;
+        return false;
     }
 
     // 若已存在則避免重複建立
     if (document.getElementById('wmc-welcome-overlay')) {
-        return;
+        return false;
     }
 
     const showMigrateStep = isTriDentDomain();
@@ -224,6 +222,10 @@ export function showWelcomeModal(options = {}) {
         if (targetStep) {
             targetStep.classList.add('active');
         }
+        const langSelector = overlay.querySelector('#wmc-welcome-lang-selector');
+        if (langSelector) {
+            langSelector.style.display = stepNum === 1 ? '' : 'none';
+        }
     }
 
     /**
@@ -254,9 +256,10 @@ export function showWelcomeModal(options = {}) {
             next1Btn.disabled = !agreeCheckbox.checked;
         });
         next1Btn.addEventListener('click', () => {
-            if (agreeCheckbox.checked) {
-                goToNextStep();
-            }
+            if (!agreeCheckbox.checked) return;
+            next1Btn.disabled = true;
+            appendAcceptLog();
+            goToNextStep();
         });
     }
 
@@ -518,12 +521,6 @@ export function showWelcomeModal(options = {}) {
     const finishBtn = overlay.querySelector('#wmc-welcome-finish');
     if (finishBtn) {
         finishBtn.addEventListener('click', () => {
-            try {
-                localStorage.setItem(STORAGE_KEY, 'true');
-            } catch (err) {
-                console.error('[welcomeModal] 寫入 localStorage 失敗:', err);
-            }
-
             cleanup();
         });
     }
@@ -538,4 +535,6 @@ export function showWelcomeModal(options = {}) {
     overlay.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
     });
+
+    return true;
 }

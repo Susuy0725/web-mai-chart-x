@@ -719,6 +719,16 @@
       "importBackup": "匯入備份包",
       "welcomeTitle": "歡迎使用",
       "confirm": "確定"
+    },
+    "legalUpdate": {
+      "titleInitial": "條款與隱私權政策確認",
+      "titleUpdated": "條款與隱私權政策已更新",
+      "descInitial": "在繼續使用前，請先檢視並確認以下現行條款與政策內容。",
+      "descUpdated": "以下條款或隱私權政策已發布新版本，請先檢視並確認後再繼續使用。",
+      "badgeReview": "待確認",
+      "badgeUpdated": "已更新",
+      "agreeLabel": "我已閱讀並同意上述最新版本的條款與政策內容",
+      "confirmButton": "確認並繼續"
     }
   },
   "rpc": {

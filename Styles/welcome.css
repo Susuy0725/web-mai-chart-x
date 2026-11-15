@@ -5,10 +5,12 @@
 
 .wmc-welcome-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    padding: 16px;
+    box-sizing: border-box;
+    overflow-y: auto;
     background: rgba(0, 0, 0, 0.86);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -35,6 +37,7 @@
     box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.15);
     width: 460px;
     max-width: calc(100vw - 32px);
+    margin: auto;
     padding: 38px 28px 28px 28px;
     display: flex;
     flex-direction: column;
@@ -530,4 +533,87 @@
 
 .wmc-welcome-btn-confirm:active {
     transform: scale(0.98);
+}
+
+/* ==========================================================================
+   條款與隱私權政策更新確認彈窗
+   ========================================================================== */
+.wmc-welcome-dialog.wmc-legal-update-dialog {
+    width: fit-content;
+    min-width: min(460px, calc(100vw - 32px));
+    max-width: min(600px, calc(100vw - 32px));
+}
+
+.wmc-legal-update-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 14px;
+    border-radius: 14px;
+    background: rgba(96, 165, 250, 0.14);
+    border: 1px solid rgba(96, 165, 250, 0.28);
+    color: #93c5fd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wmc-legal-update-desc {
+    margin-bottom: 18px;
+}
+
+.wmc-legal-doc-list {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.wmc-legal-doc-item {
+    flex: 1 0 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+    text-decoration: none;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.wmc-legal-doc-item:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(96, 165, 250, 0.5);
+}
+
+.wmc-legal-doc-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.wmc-legal-doc-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.wmc-legal-doc-version {
+    font-size: 12px;
+    color: #9ca3af;
+    font-family: 'ShareTechMono', monospace;
+}
+
+.wmc-legal-agree-row {
+    justify-content: center;
+    text-align: center;
+    line-height: 1.45;
 }

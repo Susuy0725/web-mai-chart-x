@@ -719,6 +719,16 @@
       "importBackup": "Import Backup",
       "welcomeTitle": "Welcome to",
       "confirm": "Get Started"
+    },
+    "legalUpdate": {
+      "titleInitial": "Terms & Privacy Confirmation",
+      "titleUpdated": "Terms & Privacy Policy Updated",
+      "descInitial": "Before continuing, please review and confirm the current terms and policy below.",
+      "descUpdated": "The following terms or privacy policy have been updated. Please review and confirm to continue.",
+      "badgeReview": "Review",
+      "badgeUpdated": "Updated",
+      "agreeLabel": "I have read and agree to the latest versions of the terms and policies above",
+      "confirmButton": "Confirm and Continue"
     }
   },
   "rpc": {

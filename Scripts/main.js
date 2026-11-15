@@ -55,6 +55,7 @@ import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 import { showWelcomeModal } from './modals/welcomeModal.js';
+import { showLegalUpdateModal } from './modals/legalUpdateModal.js';
 import { openSubdivisionModal } from './modals/subdivisionModal.js';
 import { generateSmoothBpmByDuration, initSmoothBpmLauncher } from './features/smoothBpm.js';
 import { openSmoothBpmModal } from './modals/smoothBpmModal.js';
@@ -4353,7 +4354,10 @@ async function _init() {
             checkAndHandleDriveOpenWith({
                 loadProject
             });
-            showWelcomeModal({ isDatabaseEmpty });
+            const welcomeShown = showWelcomeModal({ isDatabaseEmpty });
+            if (!welcomeShown) {
+                showLegalUpdateModal();
+            }
 
             window.settings = settings;
             Object.defineProperty(window, 'globalTime', {
@@ -4580,6 +4584,7 @@ eventBus.on(EVENTS.LAYOUT_RESET, () => {
     saveSettingsDebounce();
 });
 window.openWelcomeModal = () => showWelcomeModal(true);
+window.openLegalUpdateModal = () => showLegalUpdateModal(true);
 window.openSubdivisionModal = () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
 window.formatDocument = () => handleFormatDocument(editorInput, { simpleToast, t });
 

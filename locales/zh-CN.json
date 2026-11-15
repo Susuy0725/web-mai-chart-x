@@ -719,6 +719,16 @@
       "importBackup": "导入备份包",
       "welcomeTitle": "欢迎使用",
       "confirm": "确定"
+    },
+    "legalUpdate": {
+      "titleInitial": "条款与隐私权政策确认",
+      "titleUpdated": "条款与隐私权政策已更新",
+      "descInitial": "在继续使用前，请先查看并确认以下现行条款与政策内容。",
+      "descUpdated": "以下条款或隐私权政策已发布新版本，请先查看并确认后再继续使用。",
+      "badgeReview": "待确认",
+      "badgeUpdated": "已更新",
+      "agreeLabel": "我已阅读并同意上述最新版本的条款与政策内容",
+      "confirmButton": "确认并继续"
     }
   },
   "rpc": {

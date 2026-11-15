@@ -65,6 +65,7 @@ const ASSETS = [
     './Scripts/core/eventBus.js',
     './Scripts/core/frameProfiler.js',
     './Scripts/core/init.js',
+    './Scripts/core/panelLayout.js',
     './Scripts/core/playbackEngine.js',
     './Scripts/core/settingsConfig.js',
     './Scripts/core/simaiLogicControler.js',

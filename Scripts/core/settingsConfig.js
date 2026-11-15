@@ -37,6 +37,8 @@ export const defaultSettings = {
     visualSelectedNoteType: 'tap', // SimaiVisualEditor 選擇的音符類型: 'tap', 'hold', 'slide', 'touch', 'touchhold'
     visualSelectedModifier: 'none', // SimaiVisualEditor 選擇的附加效果: 'none', 'ex', 'break', 'mine', 'firework'
     splitRatio: 0.5, // 左右面板分割比例
+    layoutDirection: 'horizontal', // 面板分割方向: 'horizontal' (左右) 或 'vertical' (上下)
+    panelSwapped: false, // 面板是否互換位置
     canvasSnapped: false, // Canvas 是否被 snap 隱藏
     slideIllegalRed: false,
     slideArrowHideBySensor: true, // 滑星依感應器消失

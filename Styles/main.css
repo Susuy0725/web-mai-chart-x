@@ -7,6 +7,8 @@
     --const-max-playControls-height: 150px;
     --const-collapsed-playControls-height: 90px;
     --playControls-height: 150px;
+    --workspace-top: var(--utility-height, 40px);
+    --workspace-height: calc(100% - var(--playControls-height) - var(--utility-height, 40px));
     --editor-background: #1F1F1F;
     --player-background: #111;
     --accent-color: #49e;
@@ -95,16 +97,42 @@ body {
 #canvasContainer {
     position: absolute;
     width: calc(var(--split-ratio) * 100%);
-    height: calc(100% - var(--playControls-height) - var(--utility-height, 40px));
-    top: var(--utility-height, 40px);
+    height: var(--workspace-height);
+    top: var(--workspace-top);
     left: 0;
     user-select: none;
     -webkit-user-select: none;
 }
 
+body.panels-swapped #canvasContainer {
+    left: calc((1 - var(--split-ratio)) * 100%);
+}
+
+body.layout-vertical #canvasContainer {
+    left: 0;
+    width: 100%;
+    height: calc(var(--split-ratio) * var(--workspace-height));
+}
+
+body.layout-vertical.panels-swapped #canvasContainer {
+    left: 0;
+    top: calc(var(--workspace-top) + (1 - var(--split-ratio)) * var(--workspace-height));
+}
+
+body.editor-hidden #canvasContainer,
+body.layout-vertical.editor-hidden #canvasContainer,
+body.panels-swapped.editor-hidden #canvasContainer {
+    left: 0;
+    top: var(--workspace-top, var(--utility-height, 40px));
+    width: 100%;
+    height: var(--workspace-height, calc(100% - var(--playControls-height) - var(--utility-height, 40px)));
+}
+
 #canvasContainer.expanded {
-    height: calc(100% - var(--playControls-height));
-    top: 0;
+    --workspace-top: 0px;
+    --workspace-height: calc(100% - var(--playControls-height));
+    height: var(--workspace-height);
+    top: var(--workspace-top);
     left: 0;
 }
 
@@ -274,6 +302,16 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     opacity: 0.85;
 }
 
+body.panels-swapped #playControls #showPlayControlsBtn {
+    left: auto;
+    right: 0;
+}
+
+body.layout-vertical #playControls #showPlayControlsBtn {
+    left: auto;
+    right: 0;
+}
+
 #miniPreviewContainer #miniPreview {
     background: black;
     position: absolute;
@@ -409,7 +447,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     height: calc(var(--utility-height, 40px) + var(--utility-hidden-height));
     top: 0;
     right: 0;
-    z-index: 10;
+    z-index: 110;
     isolation: isolate;
     user-select: none;
     -webkit-user-select: none;
@@ -456,7 +494,7 @@ body.editor-hidden #playControls #showPlayControlsBtn,
     height: var(--utility-hidden-height);
     top: 0;
     right: 0;
-    z-index: 5;
+    z-index: 110;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -727,19 +765,39 @@ body.editor-hidden #playControls #showPlayControlsBtn,
 
 #editorContainer {
     position: absolute;
-    top: var(--utility-height, 40px);
+    top: var(--workspace-top);
     left: calc(var(--split-ratio) * 100%);
     width: calc((1 - var(--split-ratio)) * 100%);
-    height: calc(100% - var(--playControls-height) - var(--utility-height, 40px));
+    height: var(--workspace-height);
     background: var(--editor-background);
     /* 背景深色 */
     overflow: hidden;
 }
 
-body.resizing-panels * {
+body.panels-swapped #editorContainer {
+    left: 0;
+}
+
+body.layout-vertical #editorContainer {
+    left: 0;
+    width: 100%;
+    top: calc(var(--workspace-top) + var(--split-ratio) * var(--workspace-height));
+    height: calc((1 - var(--split-ratio)) * var(--workspace-height));
+}
+
+body.layout-vertical.panels-swapped #editorContainer {
+    top: var(--workspace-top);
+}
+
+body.resizing-panels *:not(.splitter-toolbar) {
     user-select: none !important;
     -webkit-user-select: none !important;
     transition: none !important;
+}
+
+body.resizing-panels .splitter-toolbar {
+    user-select: none !important;
+    -webkit-user-select: none !important;
 }
 
 body.resizing-panels #canvasContainer img,
@@ -750,8 +808,8 @@ body.resizing-panels #canvasContainer canvas {
 
 #panelSplitter {
     position: absolute;
-    top: var(--utility-height, 40px);
-    height: calc(100% - var(--playControls-height) - var(--utility-height, 40px));
+    top: var(--workspace-top);
+    height: var(--workspace-height);
     left: calc(var(--split-ratio) * 100% - 3px);
     width: 6px;
     cursor: col-resize;
@@ -763,6 +821,23 @@ body.resizing-panels #canvasContainer canvas {
     touch-action: none;
 }
 
+body.panels-swapped #panelSplitter {
+    left: calc((1 - var(--split-ratio)) * 100% - 3px);
+}
+
+body.layout-vertical #panelSplitter {
+    left: 0;
+    width: 100%;
+    height: 6px;
+    top: calc(var(--workspace-top) + var(--split-ratio) * var(--workspace-height) - 3px);
+    cursor: row-resize;
+}
+
+body.layout-vertical.panels-swapped #panelSplitter {
+    left: 0;
+    top: calc(var(--workspace-top) + (1 - var(--split-ratio)) * var(--workspace-height) - 3px);
+}
+
 #panelSplitter::after {
     content: '';
     position: absolute;
@@ -770,8 +845,18 @@ body.resizing-panels #canvasContainer canvas {
     bottom: 0;
     left: 2px;
     width: 2px;
+    z-index: 1;
     background: #3a3a3a;
-    transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
+    transition: background 0.15s ease, width 0.15s ease, height 0.15s ease, left 0.15s ease, top 0.15s ease;
+}
+
+body.layout-vertical #panelSplitter::after {
+    top: 2px;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 2px;
 }
 
 #panelSplitter:hover::after,
@@ -781,14 +866,22 @@ body.resizing-panels #canvasContainer canvas {
     background: var(--accent-color);
 }
 
+body.layout-vertical #panelSplitter:hover::after,
+body.layout-vertical #panelSplitter.dragging::after {
+    left: 0;
+    width: auto;
+    top: 1px;
+    height: 4px;
+}
+
 #panelSplitter.expanded {
-    top: 0;
-    height: calc(100% - var(--playControls-height));
+    --workspace-top: 0px;
+    --workspace-height: calc(100% - var(--playControls-height));
 }
 
 /* snap 狀態：canvas 被隱藏，splitter 固定在左緣並變粗 */
 #panelSplitter.snapped {
-    left: 0 !important;
+    left: 0;
     width: 10px;
     cursor: e-resize;
     z-index: 100;
@@ -814,6 +907,203 @@ body.resizing-panels #canvasContainer canvas {
     background: var(--accent-color);
 }
 
+body.panels-swapped #panelSplitter.snapped {
+    left: auto;
+    right: 0;
+    cursor: w-resize;
+}
+
+body.layout-vertical #panelSplitter.snapped {
+    left: 0;
+    right: auto;
+    top: var(--workspace-top);
+    width: 100%;
+    height: 10px;
+    cursor: s-resize;
+}
+
+body.layout-vertical.panels-swapped #panelSplitter.snapped {
+    top: calc(var(--workspace-top) + var(--workspace-height) - 10px);
+    cursor: n-resize;
+}
+
+body.layout-vertical #panelSplitter.snapped::after {
+    top: 3px;
+    height: 4px;
+    left: 0;
+    right: 0;
+    width: auto;
+}
+
+body.layout-vertical #panelSplitter.snapped:hover::after,
+body.layout-vertical #panelSplitter.snapped.dragging::after {
+    top: 2px;
+    height: 8px;
+    left: 0;
+    width: auto;
+}
+
+#panelSplitter:hover,
+#panelSplitter.toolbar-active,
+#panelSplitter.dragging {
+    z-index: 100;
+}
+
+.splitter-toolbar {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px;
+    background: var(--main-color);
+    border: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    border-radius: 7px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 3;
+    transition:
+        opacity 0.16s ease,
+        transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+        border-radius 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+        background-color 0.15s ease;
+}
+
+#panelSplitter.orientation-horizontal .splitter-toolbar {
+    flex-direction: column;
+    width: 48px;
+    box-sizing: border-box;
+    top: 50%;
+    left: calc(50% + var(--toolbar-dock-offset, 0px));
+    transform: translate(-50%, -50%) scale(0.92);
+}
+
+#panelSplitter.orientation-vertical .splitter-toolbar {
+    flex-direction: row;
+    height: 48px;
+    box-sizing: border-box;
+    left: 50%;
+    top: calc(50% + var(--toolbar-dock-offset, 0px));
+    transform: translate(-50%, -50%) scale(0.92);
+}
+
+#panelSplitter:hover .splitter-toolbar,
+#panelSplitter.toolbar-active .splitter-toolbar,
+#panelSplitter.dragging .splitter-toolbar {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+/* 貼邊時移除緊貼螢幕邊緣那一側的圓角，拖離邊緣時會依上方 transition 平滑恢復圓角 */
+#panelSplitter.orientation-horizontal .splitter-toolbar.docked-start {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+#panelSplitter.orientation-horizontal .splitter-toolbar.docked-end {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+#panelSplitter.orientation-vertical .splitter-toolbar.docked-start {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+#panelSplitter.orientation-vertical .splitter-toolbar.docked-end {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.splitter-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.splitter-toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.splitter-toolbar-btn:active {
+    background: #484852;
+    color: #ffffff;
+    transform: scale(0.94);
+}
+
+.splitter-toolbar-btn .splitter-icon {
+    width: 24px;
+    height: 24px;
+    display: block;
+    transition: transform 0.2s ease;
+}
+
+.splitter-toolbar-btn .splitter-direction-icon {
+    transform: rotate(90deg);
+}
+
+#panelSplitter.orientation-vertical .splitter-toolbar-btn .splitter-direction-icon {
+    transform: rotate(0deg);
+}
+
+.splitter-toolbar-btn .splitter-swap-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.splitter-toolbar-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 24px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+#panelSplitter.orientation-vertical .splitter-toolbar-handle {
+    width: 24px;
+    height: 38px;
+    cursor: row-resize;
+}
+
+#panelSplitter.dragging .splitter-toolbar-handle {
+    color: var(--accent-color);
+}
+
+.splitter-handle-bars {
+    display: block;
+    width: 7px;
+    height: 17px;
+    border-left: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    border-radius: 1px;
+    transition: color 0.15s ease;
+}
+
+#panelSplitter.orientation-vertical .splitter-handle-bars {
+    width: 17px;
+    height: 7px;
+    border-left: none;
+    border-right: none;
+    border-top: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+}
+
 #visualEditor {
     position: absolute;
     left: 0;
@@ -822,8 +1112,8 @@ body.resizing-panels #canvasContainer canvas {
 }
 
 #editorContainer.expanded {
-    top: 0;
-    height: calc(100% - var(--playControls-height));
+    --workspace-top: 0px;
+    --workspace-height: calc(100% - var(--playControls-height));
 }
 
 .editor-layer {

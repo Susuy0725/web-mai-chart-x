@@ -765,6 +765,11 @@
     "apply": "套用轉換",
     "appliedToast": "已成功套用切分細分與轉換"
   },
+  "splitter": {
+    "direction": "切換左右或上下布局",
+    "drag": "拖曳調整面板比例，雙擊置中",
+    "swap": "互換面板位置"
+  },
   "skinChange": {
     "restart": "皮膚已套用！將在下次啟動時生效"
   },

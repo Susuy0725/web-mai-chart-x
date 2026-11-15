@@ -60,6 +60,7 @@ import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 import { showWelcomeModal } from './modals/welcomeModal.js';
+import { showLegalUpdateModal } from './modals/legalUpdateModal.js';
 import { openSubdivisionModal } from './modals/subdivisionModal.js';
 import { generateSmoothBpmByDuration, initSmoothBpmLauncher } from './features/smoothBpm.js';
 import { openSmoothBpmModal } from './modals/smoothBpmModal.js';
@@ -800,8 +801,8 @@ const noteTypeSubMenu = new VisualSubMenu({
         tap: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
         hold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
         slide: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
-        touch: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchSkins/touch.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
-        touchhold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TouchHoldSkins/touchhold_1.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` }
+        touch: { render: () => `<img id="currentNoteIcon" src="./Skin/Shared/TouchSkins/touch.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        touchhold: { render: () => `<img id="currentNoteIcon" src="./Skin/Shared/TouchHoldSkins/touchhold_1.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` }
     },
     onSelect: (noteType) => {
         settings.visualSelectedNoteType = noteType;
@@ -4386,7 +4387,10 @@ async function _init() {
             checkAndHandleDriveOpenWith({
                 loadProject
             });
-            showWelcomeModal({ isDatabaseEmpty });
+            const welcomeShown = showWelcomeModal({ isDatabaseEmpty });
+            if (!welcomeShown) {
+                showLegalUpdateModal();
+            }
 
             window.settings = settings;
             Object.defineProperty(window, 'globalTime', {
@@ -4745,6 +4749,7 @@ eventBus.on(EVENTS.LAYOUT_RESET, () => {
     saveSettingsDebounce();
 });
 window.openWelcomeModal = () => showWelcomeModal(true);
+window.openLegalUpdateModal = () => showLegalUpdateModal(true);
 window.openSubdivisionModal = () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
 window.formatDocument = () => handleFormatDocument(editorInput, { simpleToast, t });
 

@@ -1,6 +1,7 @@
 import { openDB, idbGet } from '../indexDB.js';
 import { popupWindow, formatSize, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
+import { clearAcceptLog } from '../core/legalVersionManager.js';
 
 /**
  * 清除特定 IndexedDB 鍵值或清空 store
@@ -163,8 +164,8 @@ export async function openResourceManager() {
                                     if (!confirm(t('popup.resource.confirmClearAll'))) return;
                                     try {
                                         await clearStoreKeys();
+                                        clearAcceptLog();
                                         try {
-                                            localStorage.removeItem('wmcx_first_run_completed');
                                             localStorage.removeItem('simai_lastProjectId');
                                         } catch {}
                                         await renderContent(container);

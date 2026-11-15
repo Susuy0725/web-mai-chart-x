@@ -1,6 +1,7 @@
 import { popupWindow } from '../helper.js';
 import { t } from '../i18n.js';
 import { openDB } from '../indexDB.js';
+import { clearAcceptLog } from './legalVersionManager.js';
 
 /**
  * 執行編輯器初始化載入流程彈窗
@@ -416,8 +417,8 @@ function handleInitError(e) {
                     if (!confirm(t('popup.init.confirmClearAll'))) return;
                     try {
                         await clearIndexedDBStore();
+                        clearAcceptLog();
                         try {
-                            localStorage.removeItem('wmcx_first_run_completed');
                             localStorage.removeItem('simai_lastProjectId');
                         } catch { }
                         console.log("已清除 IndexedDB 中的所有資料");

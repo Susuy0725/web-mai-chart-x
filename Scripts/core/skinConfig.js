@@ -302,12 +302,54 @@ export const sharedAssetKeys = new Set([
     'TouchEffparts_02'
 ]);
 
+export const sharedSkinFolders = new Set([
+    'Effects',
+    'JudgeTextSkins',
+    'NoteGuideSkins',
+    'SlideOKSkins',
+    'TouchHoldSkins',
+    'TouchSkins',
+    'WifiSkins'
+]);
+
+function appendCandidateUrls(urls, targetKey, baseURL, skin) {
+    const rel = defaultSkinMap[targetKey] || defaultSkinMap[targetKey.toLowerCase()];
+
+    if (rel) {
+        const folder = rel.split('/')[0];
+        if (sharedSkinFolders.has(folder)) {
+            urls.push(`${baseURL}Shared/${rel}`);
+        }
+        urls.push(`${baseURL}${skin}/${rel}`);
+        if (skin !== 'Default') urls.push(`${baseURL}Default/${rel}`);
+        urls.push(`${baseURL}Shared/${rel}`);
+        urls.push(`${baseURL}Shared/${targetKey}.png`);
+        urls.push(`${baseURL}${targetKey}.png`);
+        return;
+    }
+
+    const type = inferSkinType(targetKey);
+    if (type) {
+        if (sharedSkinFolders.has(type)) {
+            urls.push(`${baseURL}Shared/${type}/${targetKey}.png`);
+        }
+        urls.push(`${baseURL}${skin}/${type}/${targetKey}.png`);
+        if (skin !== 'Default') urls.push(`${baseURL}Default/${type}/${targetKey}.png`);
+        urls.push(`${baseURL}Shared/${type}/${targetKey}.png`);
+    }
+    urls.push(`${baseURL}${skin}/${targetKey}.png`);
+    if (skin !== 'Default') urls.push(`${baseURL}Default/${targetKey}.png`);
+    urls.push(`${baseURL}Shared/${targetKey}.png`);
+    urls.push(`${baseURL}${targetKey}.png`);
+}
+
 /**
  * 取得指定 key 的所有可能皮膚候選路徑 (依優先序排列)
- * 1. Skin/{skinName}/{type}/{fileName} (若指定如 Deluxe 則優先嘗試)
- * 2. Skin/Default/{type}/{fileName} (若 skinName 非 Default 則作為備用)
- * 3. Skin/Shared/{type}/{fileName} 或 Skin/Shared/{fileName}
- * 4. Skin/{fileName} (根目錄 fallback)
+ * 1. 若屬於共用資料夾 (Shared)，優先嘗試 Skin/Shared/{type}/{fileName}
+ * 2. Skin/{skinName}/{type}/{fileName} (若指定如 Deluxe 則優先嘗試)
+ * 3. Skin/Default/{type}/{fileName} (若 skinName 非 Default 則作為備用)
+ * 4. Skin/Shared/{type}/{fileName} 或 Skin/Shared/{fileName}
+ * 5. Skin/{fileName} (根目錄 fallback)
  * @param {string} key 
  * @param {string} baseURL 
  * @param {string} [skinName='Default']
@@ -334,50 +376,12 @@ export function getSkinCandidateUrls(key, baseURL, skinName = 'Default') {
     }
 
     const urls = [];
-    const rel = defaultSkinMap[key] || defaultSkinMap[key.toLowerCase()];
-
-    if (rel) {
-        // rel 形如 "TapSkins/tap.png"
-        urls.push(`${baseURL}${skin}/${rel}`);
-        if (skin !== 'Default') urls.push(`${baseURL}Default/${rel}`);
-        urls.push(`${baseURL}Shared/${rel}`);
-        urls.push(`${baseURL}Shared/${key}.png`);
-        urls.push(`${baseURL}${key}.png`);
-    } else {
-        const type = inferSkinType(key);
-        if (type) {
-            urls.push(`${baseURL}${skin}/${type}/${key}.png`);
-            if (skin !== 'Default') urls.push(`${baseURL}Default/${type}/${key}.png`);
-            urls.push(`${baseURL}Shared/${type}/${key}.png`);
-        }
-        urls.push(`${baseURL}${skin}/${key}.png`);
-        if (skin !== 'Default') urls.push(`${baseURL}Default/${key}.png`);
-        urls.push(`${baseURL}Shared/${key}.png`);
-        urls.push(`${baseURL}${key}.png`);
-    }
+    appendCandidateUrls(urls, key, baseURL, skin);
 
     // 若有別名且目前候選可能失敗，追加別名的候選路徑作為後備
     const alias = skinAliases[key];
     if (alias && alias !== key) {
-        const aliasRel = defaultSkinMap[alias] || defaultSkinMap[alias.toLowerCase()];
-        if (aliasRel) {
-            urls.push(`${baseURL}${skin}/${aliasRel}`);
-            if (skin !== 'Default') urls.push(`${baseURL}Default/${aliasRel}`);
-            urls.push(`${baseURL}Shared/${aliasRel}`);
-            urls.push(`${baseURL}Shared/${alias}.png`);
-            urls.push(`${baseURL}${alias}.png`);
-        } else {
-            const aliasType = inferSkinType(alias);
-            if (aliasType) {
-                urls.push(`${baseURL}${skin}/${aliasType}/${alias}.png`);
-                if (skin !== 'Default') urls.push(`${baseURL}Default/${aliasType}/${alias}.png`);
-                urls.push(`${baseURL}Shared/${aliasType}/${alias}.png`);
-            }
-            urls.push(`${baseURL}${skin}/${alias}.png`);
-            if (skin !== 'Default') urls.push(`${baseURL}Default/${alias}.png`);
-            urls.push(`${baseURL}Shared/${alias}.png`);
-            urls.push(`${baseURL}${alias}.png`);
-        }
+        appendCandidateUrls(urls, alias, baseURL, skin);
     }
 
     // 針對 judge_text_break 與 no_image 特殊回退保護

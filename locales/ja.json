@@ -859,6 +859,16 @@
       "importBackup": "バックアップをインポート",
       "welcomeTitle": "ようこそ",
       "confirm": "確定"
+    },
+    "legalUpdate": {
+      "titleInitial": "規約とプライバシーポリシーの確認",
+      "titleUpdated": "規約とプライバシーポリシーが更新されました",
+      "descInitial": "続行する前に、以下の現行の規約およびポリシーをご確認ください。",
+      "descUpdated": "以下の規約またはプライバシーポリシーが更新されました。続行するには内容をご確認のうえ同意してください。",
+      "badgeReview": "要確認",
+      "badgeUpdated": "更新",
+      "agreeLabel": "上記の最新版の規約およびポリシーを読み、同意します",
+      "confirmButton": "同意して続行"
     }
   },
   "rpc": {

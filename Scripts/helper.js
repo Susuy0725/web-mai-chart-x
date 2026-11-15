@@ -1983,7 +1983,15 @@ export function disableNavigationGestures() {
             }
         }
 
-        const isPullingDown = currentY > touchStartY;
+        const deltaX = Math.abs(currentX - touchStartX);
+        const deltaY = Math.abs(currentY - touchStartY);
+        const isPullingDown = currentY > touchStartY && deltaY > deltaX;
+
+        // 橫向滑動為主或位於頂部水平工具列內時，不阻斷原生觸控捲動
+        if (!isPullingDown) return;
+        if (e.target && e.target.closest('#topUtilityBtns, .utility-row')) {
+            return;
+        }
 
         let el = e.target;
         let canScrollDown = false;
@@ -1992,7 +2000,7 @@ export function disableNavigationGestures() {
             const overflowY = style.overflowY;
             if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
                 // 如果已經在最頂端還往下拉，阻斷它以避免觸發 pull-to-refresh
-                if (isPullingDown && el.scrollTop <= 0) {
+                if (el.scrollTop <= 0) {
                     canScrollDown = false;
                 } else {
                     canScrollDown = true;
@@ -2002,7 +2010,7 @@ export function disableNavigationGestures() {
             el = el.parentElement;
         }
 
-        if (!canScrollDown && isPullingDown) {
+        if (!canScrollDown) {
             e.preventDefault();
         }
     }, { passive: false });

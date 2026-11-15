@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - 修正分割線互動藍線覆蓋頂部工具列收納按鍵的問題，並調整彈窗遮罩圖層層級避免被工具列遮擋。
 - 修正設定視窗點擊還原面板比例時未正確恢復畫布貼齊收合狀態的問題。
+- 修正素材引用路徑錯誤的問題
 
 ## [2026.11.15 (1)]
 

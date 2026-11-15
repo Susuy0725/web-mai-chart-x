@@ -189,8 +189,8 @@
         "desc": "Temporarily replace note textures, effects, and hit sounds while active; automatically restored on deactivation."
       }
     },
-    "betaNotice": "The extension system is currently in Beta. Extensions execute scripts in your browser; only install packages from trusted sources.",
-    "securityWarning": "Warning: Extensions execute scripts in your browser. Only install packages from trusted sources.",
+    "betaNotice": "The extension system is currently in Beta. Extensions run freely in your browser without full isolation. Only install packages from fully trusted sources and back up your chart projects regularly.",
+    "securityWarning": "Warning: These permissions only cover the editor interfaces requested by the extension and do not restrict it from accessing local data or making network requests. Only install extensions from fully trusted sources and back up important projects.",
     "installAndEnable": "Install & Enable",
     "installSuccess": "Installed and enabled \"{name}\"",
     "installFailed": "Failed to import extension: {error}",

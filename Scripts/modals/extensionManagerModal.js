@@ -94,6 +94,9 @@ function buildExtensionDetailContent(manifest, options = {}) {
     const body = document.createElement('div');
     body.className = 'ext-perm-confirm';
 
+    const scrollBody = document.createElement('div');
+    scrollBody.className = 'ext-detail-scroll-body';
+
     const metaCard = document.createElement('div');
     metaCard.className = 'ext-detail-meta-card';
 
@@ -193,13 +196,13 @@ function buildExtensionDetailContent(manifest, options = {}) {
         metaCard.appendChild(linksSection);
     }
 
-    body.appendChild(metaCard);
+    scrollBody.appendChild(metaCard);
 
     if (mode === 'detail' && error) {
         const errEl = document.createElement('div');
         errEl.className = 'ext-card-error';
         errEl.textContent = error;
-        body.appendChild(errEl);
+        scrollBody.appendChild(errEl);
     }
 
     const listTitleKey = mode === 'install'
@@ -210,7 +213,7 @@ function buildExtensionDetailContent(manifest, options = {}) {
     listTitle.className = 'ext-perm-title';
     listTitle.setAttribute('data-i18n', listTitleKey);
     listTitle.textContent = t(listTitleKey);
-    body.appendChild(listTitle);
+    scrollBody.appendChild(listTitle);
 
     const permList = document.createElement('ul');
     permList.className = 'ext-perm-detail-list';
@@ -250,7 +253,8 @@ function buildExtensionDetailContent(manifest, options = {}) {
             permList.appendChild(li);
         }
     }
-    body.appendChild(permList);
+    scrollBody.appendChild(permList);
+    body.appendChild(scrollBody);
 
     if (mode === 'install') {
         const warning = document.createElement('p');

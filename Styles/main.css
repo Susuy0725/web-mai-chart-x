@@ -2420,6 +2420,16 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     font-size: 13px;
 }
 
+.ext-detail-scroll-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: min(56vh, 420px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+}
+
 .ext-perm-intro {
     margin: 0;
     color: var(--popup-text-sub, rgba(255, 255, 255, 0.8));
@@ -2512,9 +2522,6 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 240px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .ext-perm-detail-item {
@@ -2598,17 +2605,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     }
 
     .ext-perm-intro,
-    .ext-detail-meta-card,
-    .ext-perm-title,
-    .ext-perm-warning,
-    .ext-perm-confirm .ext-card-error {
+    .ext-perm-warning {
         flex-shrink: 0;
     }
 
-    .ext-perm-detail-list {
+    .ext-detail-scroll-body {
         flex: 1 1 auto;
         min-height: 0;
         max-height: none;
-        padding-bottom: 12px;
+        padding-right: 0;
+        padding-bottom: 8px;
     }
 }

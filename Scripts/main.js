@@ -4558,9 +4558,21 @@ eventBus.on(EVENTS.LAYOUT_RESET, () => {
     settings.layoutDirection = LAYOUT_DIRECTIONS.HORIZONTAL;
     settings.panelSwapped = false;
     settings.canvasSnapped = false;
-    applySplitRatio(0.5);
-    if (window.canvasSnapped) {
-        snapRestoreCanvas();
+    if (canvasSnapped) {
+        if (editorContainer?.dataset.hidden === 'true') {
+            canvasSnapped = false;
+            noRender = false;
+            canvasContainer.style.display = '';
+            clearSnappedEditorLayout();
+            if (panelSplitter) {
+                panelSplitter.classList.remove('snapped');
+            }
+            applySplitRatio(0.5);
+        } else {
+            snapRestoreCanvas();
+        }
+    } else {
+        applySplitRatio(0.5);
     }
     setEditorCss();
     resize(true);

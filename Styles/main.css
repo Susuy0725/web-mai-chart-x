@@ -447,7 +447,7 @@ body.layout-vertical #playControls #showPlayControlsBtn {
     height: calc(var(--utility-height, 40px) + var(--utility-hidden-height));
     top: 0;
     right: 0;
-    z-index: 10;
+    z-index: 110;
     isolation: isolate;
     user-select: none;
     -webkit-user-select: none;
@@ -494,7 +494,7 @@ body.layout-vertical #playControls #showPlayControlsBtn {
     height: var(--utility-hidden-height);
     top: 0;
     right: 0;
-    z-index: 5;
+    z-index: 110;
     user-select: none;
     -webkit-user-select: none;
 }

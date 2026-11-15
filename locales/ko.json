@@ -281,6 +281,20 @@
       "hanabi": "불꽃 효과 (f)",
       "touch": "터치 센서 (A1, C)",
       "comma": "박자 구분 쉼표 (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "카운트다운 비트음",
+      "answer": "정답음",
+      "judge": "일반 판정음",
+      "judge_ex": "EX 노트 판정음",
+      "judge_break": "Break 판정음",
+      "judge_break_slide": "Break 슬라이드 판정음",
+      "break": "Break 효과음",
+      "slide": "슬라이드 효과음",
+      "break_slide_start": "Break 슬라이드 시작음",
+      "touch": "Touch 효과음",
+      "touchHold_riser": "Touch Hold 차징음",
+      "hanabi": "불꽃 효과음"
     }
   },
   "popup": {

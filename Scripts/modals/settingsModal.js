@@ -88,13 +88,11 @@ export function openSettingsModal(options = {}) {
         // 2. Range (自訂 div 滑桿主容器)
         if (element.type === 'range') {
             const wrapper = document.createElement('label');
-            wrapper.className = 'popup-setting-wrapper';
+            wrapper.className = 'popup-setting-wrapper popup-setting-wrapper-range';
             const text = document.createElement('span');
             text.textContent = labelText;
             text.className = 'popup-setting-text';
 
-            element.style.width = '140px';
-            element.style.flexShrink = '0';
             wrapper.appendChild(text);
             wrapper.appendChild(element);
             row.appendChild(wrapper);
@@ -475,7 +473,9 @@ export function openSettingsModal(options = {}) {
 
                     el._subRefs[subKey] = subSlider;
 
-                    const subRow = createRow(subKey, subSlider);
+                    const subLabelKey = `settings.sfxVolumeOpts.${subKey}`;
+                    const subLabel = t(subLabelKey);
+                    const subRow = createRow(subLabel !== subLabelKey ? subLabel : subKey, subSlider);
                     el.appendChild(subRow);
                 });
 

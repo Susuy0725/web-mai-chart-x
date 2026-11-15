@@ -281,6 +281,20 @@
       "hanabi": "Fireworks (f)",
       "touch": "Touch Sensors (A1, C)",
       "comma": "Beat Comma (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "Countdown Beat",
+      "answer": "Answer Sound",
+      "judge": "Normal Judgment Sound",
+      "judge_ex": "EX Note Judgment Sound",
+      "judge_break": "Break Judgment Sound",
+      "judge_break_slide": "Break Slide Judgment Sound",
+      "break": "Break SFX",
+      "slide": "Slide SFX",
+      "break_slide_start": "Break Slide Start Sound",
+      "touch": "Touch SFX",
+      "touchHold_riser": "Touch Hold Charge Sound",
+      "hanabi": "Fireworks SFX"
     }
   },
   "popup": {

@@ -281,6 +281,20 @@
       "hanabi": "烟花特效 (f)",
       "touch": "Touch 感应区 (A1, C)",
       "comma": "拍子分隔逗号 (,)"
+    },
+    "sfxVolumeOpts": {
+      "clock": "倒数节拍音",
+      "answer": "正解音",
+      "judge": "一般判定音",
+      "judge_ex": "EX 音符判定音",
+      "judge_break": "Break 判定音",
+      "judge_break_slide": "Break 滑星判定音",
+      "break": "Break 音效",
+      "slide": "滑星音效",
+      "break_slide_start": "Break 滑星起始音",
+      "touch": "Touch 触控音",
+      "touchHold_riser": "Touch Hold 蓄力音",
+      "hanabi": "烟火音效"
     }
   },
   "popup": {

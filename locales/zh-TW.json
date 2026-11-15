@@ -187,6 +187,7 @@
         "desc": "於擴充程式啟用期間暫時替換音符貼圖、特效圖片與打擊音效，停用或移除時自動還原。"
       }
     },
+    "betaNotice": "擴充程式系統目前為 Beta 版，外掛會在瀏覽器中執行腳本，請僅安裝受信任來源的擴充檔案。",
     "securityWarning": "注意：擴充程式會在瀏覽器中執行腳本，請僅安裝您信任來源的擴充檔案。",
     "installAndEnable": "安裝並啟用",
     "installSuccess": "已安裝並啟用「{name}」",
@@ -199,6 +200,10 @@
     "errMissingEntry": "找不到進入點檔案：{entry}",
     "errMissingActivate": "擴充程式「{id}」未匯出預設啟動函式",
     "errWorkerUnsupported": "Worker 沙箱執行模式尚未啟用",
+    "errInvalidIdFormat": "manifest.json 的 id 格式無效，須使用反向網域命名格式",
+    "errUnsupportedApiVersion": "不支援的擴充 API 版本：{version}，目前支援版本上限為 {supported}",
+    "errInvalidPermission": "manifest.json 包含未定義權限：{permission}",
+    "errUnsupportedRuntime": "不支援的執行模式：{runtime}",
     "crashAutoDisabled": "擴充程式「{id}」疑似在啟動時發生嚴重錯誤，已自動停用",
     "overlayAutoDisabled": "擴充程式「{name}」繪製耗時過高，已自動停用其疊加圖層"
   },

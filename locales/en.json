@@ -187,6 +187,7 @@
         "desc": "Temporarily replace note textures, effects, and hit sounds while active; automatically restored on deactivation."
       }
     },
+    "betaNotice": "The extension system is currently in Beta. Extensions execute scripts in your browser; only install packages from trusted sources.",
     "securityWarning": "Warning: Extensions execute scripts in your browser. Only install packages from trusted sources.",
     "installAndEnable": "Install & Enable",
     "installSuccess": "Installed and enabled \"{name}\"",
@@ -199,6 +200,10 @@
     "errMissingEntry": "Entry file not found: {entry}",
     "errMissingActivate": "Extension \"{id}\" does not export an activate function",
     "errWorkerUnsupported": "Worker sandbox runtime is not yet enabled",
+    "errInvalidIdFormat": "Invalid id format in manifest.json; reverse-domain notation is required",
+    "errUnsupportedApiVersion": "Unsupported extension API version: {version} (max supported: {supported})",
+    "errInvalidPermission": "manifest.json contains an undefined permission: {permission}",
+    "errUnsupportedRuntime": "Unsupported runtime mode: {runtime}",
     "crashAutoDisabled": "Extension \"{id}\" appears to have caused a startup crash and has been automatically disabled",
     "overlayAutoDisabled": "Extension \"{name}\" took too long to render and its overlay layer has been automatically disabled"
   },

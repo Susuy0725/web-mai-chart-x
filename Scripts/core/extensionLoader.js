@@ -5,7 +5,11 @@
 
 import { ensureJSZip, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
-import { extensionManager } from './extensionManager.js';
+import {
+    extensionManager,
+    validateExtensionManifest,
+    EXTENSION_API_VERSION
+} from './extensionManager.js';
 import {
     listStoredExtensions,
     saveStoredExtension,
@@ -74,17 +78,24 @@ export async function parseExtensionZip(file) {
     }
 
     const entryCode = await entryFile.async('string');
+    const parsedManifest = {
+        id: String(manifest.id),
+        name: String(manifest.name),
+        version: String(manifest.version),
+        apiVersion: manifest.apiVersion !== undefined && manifest.apiVersion !== null
+            ? manifest.apiVersion
+            : EXTENSION_API_VERSION,
+        description: manifest.description ? String(manifest.description) : '',
+        author: manifest.author ? String(manifest.author) : '',
+        entry: entryRel,
+        permissions: Array.isArray(manifest.permissions) ? manifest.permissions.map(String) : [],
+        runtime: manifest.runtime || 'trusted'
+    };
+
+    validateExtensionManifest(parsedManifest);
+
     return {
-        manifest: {
-            id: String(manifest.id),
-            name: String(manifest.name),
-            version: String(manifest.version),
-            description: manifest.description ? String(manifest.description) : '',
-            author: manifest.author ? String(manifest.author) : '',
-            entry: entryRel,
-            permissions: Array.isArray(manifest.permissions) ? manifest.permissions.map(String) : [],
-            runtime: manifest.runtime || 'trusted'
-        },
+        manifest: parsedManifest,
         entryCode
     };
 }
@@ -126,8 +137,19 @@ export async function registerStoredPackage(pkg, autoActivate = true) {
  * @param {{ manifest: Object, entryCode: string }} pkg
  */
 export async function installExtensionPackage(pkg) {
-    await saveStoredExtension(pkg, true);
+    const id = pkg.manifest.id;
+    const isUpdate = extensionManager.extensions.has(id);
     await registerStoredPackage(pkg, true);
+    try {
+        await saveStoredExtension(pkg, true);
+    } catch (error) {
+        extensionManager.unregister(id);
+        if (!isUpdate) {
+            clearExtensionSettings(id);
+            clearExtensionData(id);
+        }
+        throw error;
+    }
 }
 
 /**

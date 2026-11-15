@@ -112,6 +112,7 @@ export function renderExtensionMenu() {
         if (record.status !== 'active') continue;
         const extId = record.manifest.id;
         const items = menuItemsByExtension.get(extId) || [];
+        if (items.length === 0) continue;
 
         const titleRow = document.createElement('div');
         titleRow.className = 'utilityButton utilityMenuTitle';

@@ -456,7 +456,13 @@ export function openExtensionManagerModal() {
     };
 
     renderGrid();
-    mainWrapper.append(tabBar, listContainer);
+
+    const betaBanner = document.createElement('p');
+    betaBanner.className = 'ext-perm-warning';
+    betaBanner.setAttribute('data-i18n', 'extensions.betaNotice');
+    betaBanner.textContent = t('extensions.betaNotice');
+
+    mainWrapper.append(tabBar, betaBanner, listContainer);
 
     return popupWindow({
         title: t('extensions.title'),

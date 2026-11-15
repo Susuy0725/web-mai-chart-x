@@ -20,6 +20,8 @@ import { registerTranslations, t } from '../i18n.js';
 
 export const EXTENSION_API_VERSION = 1;
 
+const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$/i;
+
 export const EXTENSION_PERMISSIONS = Object.freeze({
     EDITOR_READ: 'editor:read',
     EDITOR_WRITE: 'editor:write',
@@ -56,6 +58,43 @@ const SUBSCRIBABLE_EVENTS = new Set([
     EVENTS.SETTINGS_CHANGED
 ]);
 
+/**
+ * 驗證擴充描述檔格式、權限白名單與 API 版本相容性
+ * @param {Object} manifest
+ */
+export function validateExtensionManifest(manifest) {
+    if (!manifest || typeof manifest !== 'object') {
+        throw new TypeError('[ExtensionManager] 擴充描述必須為物件');
+    }
+    if (!manifest.id || typeof manifest.id !== 'string' || !EXTENSION_ID_PATTERN.test(manifest.id)) {
+        throw new TypeError(t('extensions.errInvalidIdFormat'));
+    }
+    if (!manifest.name || typeof manifest.name !== 'string') {
+        throw new TypeError(t('extensions.errMissingRequiredFields'));
+    }
+    if (!manifest.version || typeof manifest.version !== 'string') {
+        throw new TypeError(t('extensions.errMissingRequiredFields'));
+    }
+    if (manifest.apiVersion !== undefined && manifest.apiVersion !== null) {
+        if (typeof manifest.apiVersion !== 'number' || !Number.isInteger(manifest.apiVersion) || manifest.apiVersion < 1 || manifest.apiVersion > EXTENSION_API_VERSION) {
+            throw new TypeError(t('extensions.errUnsupportedApiVersion', {
+                version: String(manifest.apiVersion),
+                supported: String(EXTENSION_API_VERSION)
+            }));
+        }
+    }
+    const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+    for (const perm of permissions) {
+        if (!ALLOWED_PERMISSION_SET.has(perm)) {
+            throw new TypeError(t('extensions.errInvalidPermission', { permission: String(perm) }));
+        }
+    }
+    const runtime = manifest.runtime || 'trusted';
+    if (runtime !== 'trusted' && runtime !== 'worker') {
+        throw new TypeError(t('extensions.errUnsupportedRuntime', { runtime: String(runtime) }));
+    }
+}
+
 class ExtensionManager {
     constructor() {
         /** @type {Map<string, Object>} */
@@ -77,28 +116,7 @@ class ExtensionManager {
      * @param {Object} manifest
      */
     _validateManifest(manifest) {
-        if (!manifest || typeof manifest !== 'object') {
-            throw new TypeError('[ExtensionManager] 擴充描述必須為物件');
-        }
-        if (!manifest.id || typeof manifest.id !== 'string' || !/^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$/i.test(manifest.id)) {
-            throw new TypeError('[ExtensionManager] 擴充識別碼格式無效');
-        }
-        if (!manifest.name || typeof manifest.name !== 'string') {
-            throw new TypeError(`[ExtensionManager] 擴充 "${manifest.id}" 缺少名稱`);
-        }
-        if (!manifest.version || typeof manifest.version !== 'string') {
-            throw new TypeError(`[ExtensionManager] 擴充 "${manifest.id}" 缺少版本號`);
-        }
-        const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
-        for (const perm of permissions) {
-            if (!ALLOWED_PERMISSION_SET.has(perm)) {
-                throw new TypeError(`[ExtensionManager] 擴充 "${manifest.id}" 包含未定義權限: ${perm}`);
-            }
-        }
-        const runtime = manifest.runtime || 'trusted';
-        if (runtime !== 'trusted' && runtime !== 'worker') {
-            throw new TypeError(`[ExtensionManager] 擴充 "${manifest.id}" 使用不支援的執行模式: ${runtime}`);
-        }
+        validateExtensionManifest(manifest);
     }
 
     /**
@@ -444,6 +462,7 @@ class ExtensionManager {
                 id: manifest.id,
                 name: manifest.name,
                 version: manifest.version,
+                apiVersion: manifest.apiVersion ?? EXTENSION_API_VERSION,
                 description: manifest.description ? String(manifest.description) : '',
                 author: manifest.author ? String(manifest.author) : '',
                 permissions: Object.freeze([...(manifest.permissions || [])]),

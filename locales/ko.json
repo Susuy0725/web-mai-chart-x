@@ -187,6 +187,7 @@
         "desc": "확장 프로그램이 활성화된 동안 노트 텍스처, 이펙트 이미지 및 효과음을 임시로 교체하며 비활성화 시 자동 복원됩니다."
       }
     },
+    "betaNotice": "확장 프로그램 시스템은 현재 Beta 버전입니다. 브라우저에서 스크립트를 실행하므로 신뢰할 수 있는 출처의 파일만 설치하세요.",
     "securityWarning": "주의: 확장 프로그램은 브라우저에서 스크립트를 실행합니다. 신뢰할 수 있는 출처의 파일만 설치하세요.",
     "installAndEnable": "설치 및 활성화",
     "installSuccess": "\"{name}\" 설치 및 활성화 완료",
@@ -199,6 +200,10 @@
     "errMissingEntry": "진입점 파일을 찾을 수 없습니다: {entry}",
     "errMissingActivate": "확장 프로그램 \"{id}\"에서 시작 함수를 내보내지 않았습니다",
     "errWorkerUnsupported": "Worker 샌드박스 실행 모드가 아직 활성화되지 않았습니다",
+    "errInvalidIdFormat": "manifest.json의 id 형식이 올바르지 않습니다. 역방향 도메인 형식을 사용하세요",
+    "errUnsupportedApiVersion": "지원되지 않는 확장 API 버전입니다: {version} (최대 지원 버전: {supported})",
+    "errInvalidPermission": "manifest.json에 정의되지 않은 권한이 포함되어 있습니다: {permission}",
+    "errUnsupportedRuntime": "지원되지 않는 실행 모드입니다: {runtime}",
     "crashAutoDisabled": "확장 프로그램 \"{id}\" 시작 중 심각한 오류가 발생한 것으로 의심되어 자동으로 비활성화되었습니다",
     "overlayAutoDisabled": "확장 프로그램 \"{name}\"의 렌더링 시간이 너무 길어 오버레이 레이어가 자동으로 비활성화되었습니다"
   },

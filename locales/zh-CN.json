@@ -187,6 +187,7 @@
         "desc": "在扩展程序启用期间暂时替换音符贴图、特效图片与打击音效，停用或移除时自动还原。"
       }
     },
+    "betaNotice": "扩展程序系统目前为 Beta 版，插件会在浏览器中执行脚本，请仅安装受信任来源的插件文件。",
     "securityWarning": "注意：扩展程序会在浏览器中执行脚本，请仅安装您信任来源的插件文件。",
     "installAndEnable": "安装并启用",
     "installSuccess": "已安装并启用「{name}」",
@@ -199,6 +200,10 @@
     "errMissingEntry": "找不到入口文件：{entry}",
     "errMissingActivate": "扩展程序「{id}」未导出默认启动函数",
     "errWorkerUnsupported": "Worker 沙箱执行模式尚未启用",
+    "errInvalidIdFormat": "manifest.json 的 id 格式无效，须使用反向域名命名格式",
+    "errUnsupportedApiVersion": "不支持的扩展 API 版本：{version}，当前支持版本上限为 {supported}",
+    "errInvalidPermission": "manifest.json 包含未定义权限：{permission}",
+    "errUnsupportedRuntime": "不支持的执行模式：{runtime}",
     "crashAutoDisabled": "扩展程序「{id}」疑似在启动时发生严重错误，已自动停用",
     "overlayAutoDisabled": "扩展程序「{name}」绘制耗时过高，已自动停用其叠加图层"
   },

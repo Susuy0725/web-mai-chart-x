@@ -57,6 +57,7 @@ timeline-jog-dial.zip
 | `id` | 字串 | 是 | 無 | 擴充唯一識別碼，格式須符合 `/^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$/i`，須採用至少包含一段小數點區隔的反向網域命名空間格式，例如 `com.example.my-plugin` |
 | `name` | 字串 | 是 | 無 | 擴充程式顯示名稱 |
 | `version` | 字串 | 是 | 無 | 語意化版本號，例如 `"1.0.0"` |
+| `apiVersion` | 整數 | 否 | `1` | 目標擴充 API 版本，須為正整數且不可高於系統支援版本 |
 | `description` | 字串 | 否 | `""` | 擴充功能簡要說明 |
 | `author` | 字串 | 否 | `""` | 作者或維護組織名稱 |
 | `entry` | 字串 | 否 | `"index.js"` | JavaScript 進入點模組相對路徑 |
@@ -65,8 +66,10 @@ timeline-jog-dial.zip
 
 重要注意事項：
 - `manifest.json` 必須能成功解析為 JSON 物件，且必須具備 `id`、`name` 與 `version` 欄位。
+- 匯入 `.zip` 壓縮包時即會驗證 `id` 命名格式、`permissions` 白名單、`runtime` 值域與 `apiVersion` 相容性。
 - 系統註冊與列出擴充清單時，皆會保留 `description` 與 `author` 欄位，未填寫時預設為空字串。
 - `runtime` 若設定為 `"worker"`，由於 Worker 沙箱目前尚未啟用，嘗試啟用時會產生錯誤並標記為錯誤狀態。
+- 擴充程式系統目前為 Beta 版，外掛會在瀏覽器主環境執行，安裝前請確認來源可信。
 
 ### 2.3 描述檔案範例
 

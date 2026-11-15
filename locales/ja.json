@@ -187,6 +187,7 @@
         "desc": "有効化中にノーツ画像や効果音を一時的に差し替え、無効化または削除時に自動復元します。"
       }
     },
+    "betaNotice": "拡張機能システムは現在 Beta 版です。ブラウザ上でスクリプトを実行するため、信頼できる提供元のファイルのみインストールしてください。",
     "securityWarning": "注意：拡張機能はブラウザ上でスクリプトを実行します。信頼できる提供元のファイルのみインストールしてください。",
     "installAndEnable": "インストールして有効化",
     "installSuccess": "「{name}」をインストールし有効化しました",
@@ -199,6 +200,10 @@
     "errMissingEntry": "エントリファイルが見つかりません：{entry}",
     "errMissingActivate": "拡張機能「{id}」に起動関数がエクスポートされていません",
     "errWorkerUnsupported": "Worker サンドボックス実行モードはまだ有効ではありません",
+    "errInvalidIdFormat": "manifest.json の id 形式が無効です。逆ドメイン形式を使用してください",
+    "errUnsupportedApiVersion": "未対応の拡張 API バージョンです：{version}（対応上限：{supported}）",
+    "errInvalidPermission": "manifest.json に未定義の権限が含まれています：{permission}",
+    "errUnsupportedRuntime": "未対応の実行モードです：{runtime}",
     "crashAutoDisabled": "拡張機能「{id}」の起動時に重大なエラーが発生した可能性があるため、自動的に無効化されました",
     "overlayAutoDisabled": "拡張機能「{name}」の描画処理時間が長すぎるため、オーバーレイレイヤーが自動的に無効化されました"
   },

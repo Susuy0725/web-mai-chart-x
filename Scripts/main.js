@@ -6,6 +6,15 @@ import { openTouchGroupModal } from './modals/touchGroupModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
 export { defaultSettings };
+import {
+    LAYOUT_DIRECTIONS,
+    normalizeLayoutDirection,
+    getSplitterPositionRatio,
+    computeDraggedSplitRatio,
+    computeEditorSlideAnimation,
+    computeFloatingToolbarDock,
+    computeCanvasAnimationRect,
+} from './core/panelLayout.js';
 import { eventBus, EVENTS } from './core/eventBus.js';
 import { appContext } from './core/appContext.js';
 import { PlaybackEngine } from './core/playbackEngine.js';
@@ -265,6 +274,10 @@ const previewZoomInButton = document.getElementById('mpzoomIn');
 const previewZoomOutButton = document.getElementById('mpzoomOut');
 const editorContainer = document.getElementById('editorContainer');
 const panelSplitter = document.getElementById('panelSplitter');
+const panelSplitterToolbar = document.getElementById('panelSplitterToolbar');
+const splitterDirectionBtn = document.getElementById('splitterDirectionBtn');
+const splitterDragHandle = document.getElementById('splitterDragHandle');
+const splitterSwapBtn = document.getElementById('splitterSwapBtn');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
 const findReplaceBar = document.getElementById('findReplaceBar');
@@ -302,8 +315,117 @@ let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, br
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
 
+function getWorkspaceRect() {
+    const appEl = document.getElementById('app');
+    const utilityEl = document.getElementById('utilityContainer');
+    const playEl = document.getElementById('playControls');
+    const appRect = appEl
+        ? appEl.getBoundingClientRect()
+        : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+
+    const isExpanded = canvasContainer?.classList.contains('expanded') || panelSplitter?.classList.contains('expanded');
+    const top = isExpanded ? 0 : (utilityEl ? utilityEl.getBoundingClientRect().height : 40);
+    const playH = playEl ? playEl.getBoundingClientRect().height : 150;
+    const height = Math.max(1, appRect.height - top - playH);
+    return {
+        left: 0,
+        top,
+        width: Math.max(1, appRect.width),
+        height,
+        appLeft: appRect.left,
+        appTop: appRect.top,
+    };
+}
+
+function applyPanelSwapState() {
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const swapped = Boolean(settings.panelSwapped);
+
+    document.body.classList.toggle('layout-vertical', isVertical);
+    document.body.classList.toggle('panels-swapped', swapped);
+
+    if (panelSplitter) {
+        panelSplitter.classList.toggle('orientation-vertical', isVertical);
+        panelSplitter.classList.toggle('orientation-horizontal', !isVertical);
+    }
+    if (splitterSwapBtn) {
+        const swapIcon = splitterSwapBtn.querySelector('.splitter-swap-icon');
+        if (swapIcon) {
+            swapIcon.textContent = isVertical ? 'swap_vert' : 'swap_horiz';
+        }
+    }
+}
+
+function updateSplitterToolbarDock() {
+    if (!panelSplitter || !panelSplitterToolbar) return;
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const swapped = Boolean(settings.panelSwapped);
+    const ws = getWorkspaceRect();
+    const viewportSizePx = isVertical ? ws.height : ws.width;
+    if (!viewportSizePx) return;
+
+    const splitterCenterPx = canvasSnapped
+        ? (swapped ? viewportSizePx - 5 : 5)
+        : getSplitterPositionRatio({ splitRatio: settings.splitRatio ?? 0.5, swapped }) * viewportSizePx;
+
+    const toolbarCrossSizePx = isVertical
+        ? (panelSplitterToolbar.offsetHeight || 48)
+        : (panelSplitterToolbar.offsetWidth || 48);
+
+    const { dockedSide, offsetPx } = computeFloatingToolbarDock({
+        splitterCenterPx,
+        viewportSizePx,
+        toolbarCrossSizePx,
+        edgePadding: 0,
+    });
+
+    panelSplitter.style.setProperty('--toolbar-dock-offset', `${offsetPx}px`);
+    panelSplitterToolbar.classList.toggle('docked-start', dockedSide === 'start');
+    panelSplitterToolbar.classList.toggle('docked-end', dockedSide === 'end');
+}
+
+function applySnappedEditorLayout() {
+    const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
+    const swapped = Boolean(settings.panelSwapped);
+
+    if (isVertical) {
+        editorContainer.style.left = '';
+        editorContainer.style.width = '';
+        editorContainer.style.marginLeft = '';
+        editorContainer.style.marginRight = '';
+        editorContainer.style.top = 'var(--workspace-top)';
+        editorContainer.style.height = 'calc(var(--workspace-height) - 10px)';
+        editorContainer.style.marginTop = swapped ? '0' : '10px';
+        editorContainer.style.marginBottom = swapped ? '10px' : '0';
+    } else {
+        editorContainer.style.top = '';
+        editorContainer.style.height = '';
+        editorContainer.style.marginTop = '';
+        editorContainer.style.marginBottom = '';
+        editorContainer.style.left = '0';
+        editorContainer.style.width = 'calc(100% - 10px)';
+        editorContainer.style.marginLeft = swapped ? '0' : '10px';
+        editorContainer.style.marginRight = swapped ? '10px' : '0';
+    }
+}
+
+function clearSnappedEditorLayout() {
+    editorContainer.style.left = '';
+    editorContainer.style.width = '';
+    editorContainer.style.marginLeft = '';
+    editorContainer.style.marginRight = '';
+    editorContainer.style.top = '';
+    editorContainer.style.height = '';
+    editorContainer.style.marginTop = '';
+    editorContainer.style.marginBottom = '';
+}
+
 function applySplitRatio(ratio) {
+    applyPanelSwapState();
     document.documentElement.style.setProperty('--split-ratio', ratio);
+    updateSplitterToolbarDock();
 }
 
 let canvasSnapped = false, noRender = false;
@@ -312,13 +434,13 @@ function snapHideCanvas() {
     canvasSnapped = true;
     noRender = true;
     canvasContainer.style.display = 'none';
-    editorContainer.style.left = '0';
-    editorContainer.style.width = '100%';
-    editorContainer.style.marginLeft = '10px';
+    applyPanelSwapState();
+    applySnappedEditorLayout();
     if (panelSplitter) {
         panelSplitter.style.display = 'block';
         panelSplitter.classList.add('snapped');
     }
+    updateSplitterToolbarDock();
     resize(true);
     settings.canvasSnapped = true;
     saveSettingsDebounce();
@@ -328,9 +450,7 @@ function snapRestoreCanvas() {
     canvasSnapped = false;
     noRender = false;
     canvasContainer.style.display = '';
-    editorContainer.style.left = '';
-    editorContainer.style.width = '';
-    editorContainer.style.marginLeft = '';
+    clearSnappedEditorLayout();
     if (panelSplitter) {
         panelSplitter.classList.remove('snapped');
     }
@@ -407,15 +527,60 @@ initFindReplace({
 
 if (panelSplitter) {
     let isDraggingSplitter = false;
-    let dragStartX = 0;
+    let hasDraggedDistance = false;
+    let dragStartCoord = 0;
     let dragStartRatio = 0.5;
+    let dragStartTarget = null;
+    let lastHandleTapTime = 0;
     let pendingRatio = null;
     let resizeRafId = null;
 
+    if (splitterDirectionBtn) {
+        splitterDirectionBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        splitterDirectionBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
+            settings.layoutDirection = isVertical ? LAYOUT_DIRECTIONS.HORIZONTAL : LAYOUT_DIRECTIONS.VERTICAL;
+            applyPanelSwapState();
+            if (canvasSnapped) {
+                applySnappedEditorLayout();
+            }
+            updateSplitterToolbarDock();
+            saveSettingsDebounce();
+            resize(true);
+        });
+    }
+
+    if (splitterSwapBtn) {
+        splitterSwapBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        splitterSwapBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settings.panelSwapped = !settings.panelSwapped;
+            applyPanelSwapState();
+            if (canvasSnapped) {
+                applySnappedEditorLayout();
+            }
+            updateSplitterToolbarDock();
+            saveSettingsDebounce();
+            resize(true);
+        });
+    }
+
+    panelSplitter.addEventListener('pointerenter', () => {
+        updateSplitterToolbarDock();
+    });
+
     panelSplitter.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
+        const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
         isDraggingSplitter = true;
-        dragStartX = e.clientX;
+        hasDraggedDistance = false;
+        dragStartTarget = e.target;
+        dragStartCoord = isVertical ? e.clientY : e.clientX;
 
         if (canvasSnapped) {
             // 從 snap 狀態開始拖動：先還原 canvas，從 0 開始計算 ratio
@@ -424,6 +589,7 @@ if (panelSplitter) {
         } else {
             dragStartRatio = settings.splitRatio ?? 0.5;
             canvasContainer.style.width = '';
+            canvasContainer.style.height = '';
         }
 
         document.body.classList.add('resizing-panels');
@@ -434,17 +600,23 @@ if (panelSplitter) {
 
     panelSplitter.addEventListener('pointermove', (e) => {
         if (!isDraggingSplitter) return;
-        const windowWidth = window.innerWidth;
-        if (windowWidth <= 0) return;
-        const deltaX = e.clientX - dragStartX;
-        let newRatio = dragStartRatio + (deltaX / windowWidth);
-        if (newRatio < 0.15) {
-            newRatio = 0;
-        } else {
-            newRatio = Math.min(0.85, newRatio);
+        const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
+        const ws = getWorkspaceRect();
+        const containerSizePx = isVertical ? ws.height : ws.width;
+        if (containerSizePx <= 0) return;
+
+        const currentCoord = isVertical ? e.clientY : e.clientX;
+        const deltaPx = currentCoord - dragStartCoord;
+        if (Math.abs(deltaPx) >= 4) {
+            hasDraggedDistance = true;
         }
 
-        pendingRatio = newRatio;
+        pendingRatio = computeDraggedSplitRatio({
+            dragStartRatio,
+            deltaPx,
+            containerSizePx,
+            swapped: Boolean(settings.panelSwapped),
+        });
 
         if (!resizeRafId) {
             resizeRafId = requestAnimationFrame(() => {
@@ -481,10 +653,46 @@ if (panelSplitter) {
             saveSettingsDebounce();
             resize(true);
         }
+
+        // 未拖曳僅點擊分割線時：手把雙擊置中，單擊切換浮動工具列顯示狀態
+        if (!hasDraggedDistance && e.type === 'pointerup') {
+            const clickedHandle = Boolean(dragStartTarget?.closest?.('#splitterDragHandle'));
+            if (clickedHandle) {
+                const now = performance.now();
+                if (now - lastHandleTapTime < 350) {
+                    lastHandleTapTime = 0;
+                    if (canvasSnapped) {
+                        snapRestoreCanvas();
+                    }
+                    settings.splitRatio = 0.5;
+                    applySplitRatio(0.5);
+                    saveSettingsDebounce();
+                    resize(true);
+                    dragStartTarget = null;
+                    return;
+                }
+                lastHandleTapTime = now;
+            } else {
+                lastHandleTapTime = 0;
+            }
+            updateSplitterToolbarDock();
+            panelSplitter.classList.toggle('toolbar-active');
+        }
+        dragStartTarget = null;
     };
 
     panelSplitter.addEventListener('pointerup', stopDraggingSplitter);
     panelSplitter.addEventListener('pointercancel', stopDraggingSplitter);
+
+    document.addEventListener('pointerdown', (e) => {
+        if (!panelSplitter.contains(e.target)) {
+            panelSplitter.classList.remove('toolbar-active');
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        updateSplitterToolbarDock();
+    });
 }
 
 function updateTimebase() {
@@ -1531,13 +1739,48 @@ function setElementDisplay(element, visible, value = 'block') {
     element.style.display = visible ? value : 'none';
 }
 
+let currentCanvasAnimation = null;
+
 function animateCanvasWidth(visible) {
+    if (currentCanvasAnimation) {
+        currentCanvasAnimation.cancel();
+        currentCanvasAnimation = null;
+    }
+
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const swapped = Boolean(settings.panelSwapped);
     const targetRatio = settings.splitRatio ?? 0.5;
-    const targetWidth = visible ? `${targetRatio * 100}%` : '100%';
+    const ws = getWorkspaceRect();
+    const curRect = canvasContainer.getBoundingClientRect();
+
+    const startFrame = {
+        left: `${curRect.left - ws.appLeft}px`,
+        top: `${curRect.top - ws.appTop}px`,
+        width: `${curRect.width}px`,
+        height: `${curRect.height}px`,
+    };
+    const endFrame = computeCanvasAnimationRect({
+        direction,
+        swapped,
+        visible,
+        splitRatio: targetRatio,
+        workspaceRect: ws,
+    });
+
+    if (!isInitComplete) {
+        canvasContainer.style.left = '';
+        canvasContainer.style.top = '';
+        canvasContainer.style.width = '';
+        canvasContainer.style.height = '';
+        resize(true);
+        return;
+    }
+
     const canvasAnimation = canvasContainer.animate(
-        [{ width: targetWidth }],
+        [startFrame, endFrame],
         { duration: 400, fill: 'forwards', easing: 'ease' }
     );
+    currentCanvasAnimation = canvasAnimation;
 
     let animationRunning = true;
     const throttledResize = throttle(() => resize(true), 16); // 限制每 16ms 最多调用一次（约 60fps）
@@ -1551,12 +1794,14 @@ function animateCanvasWidth(visible) {
 
     canvasAnimation.onfinish = () => {
         animationRunning = false;
-        canvasAnimation.cancel();
-        if (visible) {
-            canvasContainer.style.width = '';
-        } else {
-            canvasContainer.style.width = '100%';
+        if (currentCanvasAnimation === canvasAnimation) {
+            currentCanvasAnimation = null;
         }
+        canvasAnimation.cancel();
+        canvasContainer.style.left = '';
+        canvasContainer.style.top = '';
+        canvasContainer.style.width = '';
+        canvasContainer.style.height = '';
         resize(true);
     };
 
@@ -1568,12 +1813,21 @@ let currentSplitterAnimation = null;
 function animateEditorContainer(visible) {
     if (!editorContainer) return;
 
-    // 計算分割線平移距離（與 editorContainer 等寬）
-    const width = editorContainer.offsetWidth || (window.innerWidth * (1 - (settings.splitRatio ?? 0.5)));
-    const targetDistance = `${width}px`;
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const ws = getWorkspaceRect();
+    const fallbackSize = (isVertical ? ws.height : ws.width) * (1 - (settings.splitRatio ?? 0.5));
+    const editorSizePx = (isVertical ? editorContainer.offsetHeight : editorContainer.offsetWidth) || fallbackSize;
 
-    let editorStart = visible ? 'translateX(100%)' : 'translateX(0)';
-    let splitterStart = visible ? `translateX(${targetDistance})` : 'translateX(0)';
+    const slideAnim = computeEditorSlideAnimation({
+        direction,
+        swapped: Boolean(settings.panelSwapped),
+        visible,
+        editorSizePx,
+    });
+
+    let editorStart = slideAnim.editorStart;
+    let splitterStart = slideAnim.splitterStart;
 
     if (currentEditorAnimation) {
         const computed = window.getComputedStyle(editorContainer).transform;
@@ -1606,8 +1860,8 @@ function animateEditorContainer(visible) {
         return;
     }
 
-    const editorEnd = visible ? 'translateX(0)' : 'translateX(100%)';
-    const splitterEnd = visible ? 'translateX(0)' : `translateX(${targetDistance})`;
+    const editorEnd = slideAnim.editorEnd;
+    const splitterEnd = slideAnim.splitterEnd;
 
     setElementDisplay(editorContainer, true);
     if (panelSplitter) {
@@ -1772,15 +2026,13 @@ const setEditorCss = (visible = null) => {
         if (canvasSnapped) {
             noRender = true;
             canvasContainer.style.display = 'none';
-            editorContainer.style.left = '0';
-            editorContainer.style.width = '100%';
+            applySnappedEditorLayout();
             setElementDisplay(panelSplitter, true);
             if (panelSplitter) panelSplitter.classList.add('snapped');
         } else {
             noRender = false;
             canvasContainer.style.display = '';
-            editorContainer.style.left = '';
-            editorContainer.style.width = '';
+            clearSnappedEditorLayout();
             setElementDisplay(panelSplitter, true);
             if (panelSplitter) panelSplitter.classList.remove('snapped');
         }
@@ -4303,6 +4555,8 @@ eventBus.on(EVENTS.SETTINGS_SAVED, () => {
 
 eventBus.on(EVENTS.LAYOUT_RESET, () => {
     settings.splitRatio = 0.5;
+    settings.layoutDirection = LAYOUT_DIRECTIONS.HORIZONTAL;
+    settings.panelSwapped = false;
     settings.canvasSnapped = false;
     applySplitRatio(0.5);
     if (window.canvasSnapped) {

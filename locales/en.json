@@ -751,6 +751,11 @@
     "apply": "Apply",
     "appliedToast": "Beat subdivision & conversion applied successfully"
   },
+  "splitter": {
+    "direction": "Toggle Horizontal / Vertical Layout",
+    "drag": "Drag to Resize Panels (Double-Click to Center)",
+    "swap": "Swap Panel Positions"
+  },
   "skinChange": {
     "restart": "Skin applied! Will take effect on next launch"
   },

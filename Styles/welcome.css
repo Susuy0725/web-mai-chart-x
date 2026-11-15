@@ -62,25 +62,8 @@
     left: 16px;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px 4px 8px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    gap: 6px;
     z-index: 10;
-}
-
-.wmc-welcome-lang-selector:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.28);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-}
-
-.wmc-welcome-lang-selector:focus-within {
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
 }
 
 .wmc-welcome-lang-icon {
@@ -90,35 +73,9 @@
     transition: color 0.2s ease;
 }
 
-.wmc-welcome-lang-selector:hover .wmc-welcome-lang-icon {
+.wmc-welcome-lang-selector:hover .wmc-welcome-lang-icon,
+.wmc-welcome-lang-selector:focus-within .wmc-welcome-lang-icon {
     color: #60a5fa;
-}
-
-.wmc-welcome-lang-select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #e5e7eb;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    font-family: inherit;
-    padding-right: 2px;
-}
-
-.wmc-welcome-lang-select option {
-    background-color: #1f2937;
-    color: #f3f4f6;
-}
-
-.wmc-welcome-lang-chevron {
-    color: #9ca3af;
-    flex-shrink: 0;
-    pointer-events: none;
-    transition: transform 0.2s ease;
 }
 
 /* 步驟切換容器 */

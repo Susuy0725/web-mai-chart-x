@@ -12,8 +12,8 @@ export const LEGACY_FIRST_RUN_KEY = 'wmcx_first_run_completed';
  * 修改服務條款或隱私權政策時，請同步更新對應版本字串以觸發使用者確認提示。
  */
 export const CURRENT_LEGAL_VERSIONS = Object.freeze({
-    terms: '2026-09-30',
-    privacy: '2026-09-30'
+    terms: '2026-11-16',
+    privacy: '2026-11-16'
 });
 
 /**

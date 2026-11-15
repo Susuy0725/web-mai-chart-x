@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.16 (1)]
+
+### Added
+- 服務條款與隱私權政策更新
+
 ## [2026.11.15 (2)]
 
 ### Added

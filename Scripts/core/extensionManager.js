@@ -93,6 +93,21 @@ export function validateExtensionManifest(manifest) {
     if (runtime !== 'trusted' && runtime !== 'worker') {
         throw new TypeError(t('extensions.errUnsupportedRuntime', { runtime: String(runtime) }));
     }
+    for (const urlField of ['homepage', 'termsUrl', 'privacyUrl']) {
+        const raw = manifest[urlField];
+        if (raw === undefined || raw === null || raw === '') continue;
+        if (typeof raw !== 'string') {
+            throw new TypeError(t('extensions.errInvalidUrl', { field: urlField }));
+        }
+        try {
+            const parsed = new URL(raw);
+            if (parsed.protocol !== 'https:') {
+                throw new TypeError(t('extensions.errInvalidUrl', { field: urlField }));
+            }
+        } catch (_) {
+            throw new TypeError(t('extensions.errInvalidUrl', { field: urlField }));
+        }
+    }
 }
 
 class ExtensionManager {
@@ -466,7 +481,10 @@ class ExtensionManager {
                 description: manifest.description ? String(manifest.description) : '',
                 author: manifest.author ? String(manifest.author) : '',
                 permissions: Object.freeze([...(manifest.permissions || [])]),
-                runtime: manifest.runtime || 'trusted'
+                runtime: manifest.runtime || 'trusted',
+                homepage: manifest.homepage ? String(manifest.homepage) : '',
+                termsUrl: manifest.termsUrl ? String(manifest.termsUrl) : '',
+                privacyUrl: manifest.privacyUrl ? String(manifest.privacyUrl) : ''
             }),
             factory,
             status: autoActivate ? 'registered' : 'inactive',

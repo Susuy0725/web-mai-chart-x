@@ -78,6 +78,11 @@ export async function parseExtensionZip(file) {
     }
 
     const entryCode = await entryFile.async('string');
+    const normalizeOptionalUrl = (val) => {
+        if (val === undefined || val === null) return '';
+        return typeof val === 'string' ? val.trim() : val;
+    };
+
     const parsedManifest = {
         id: String(manifest.id),
         name: String(manifest.name),
@@ -89,7 +94,10 @@ export async function parseExtensionZip(file) {
         author: manifest.author ? String(manifest.author) : '',
         entry: entryRel,
         permissions: Array.isArray(manifest.permissions) ? manifest.permissions.map(String) : [],
-        runtime: manifest.runtime || 'trusted'
+        runtime: manifest.runtime || 'trusted',
+        homepage: normalizeOptionalUrl(manifest.homepage),
+        termsUrl: normalizeOptionalUrl(manifest.termsUrl),
+        privacyUrl: normalizeOptionalUrl(manifest.privacyUrl)
     };
 
     validateExtensionManifest(parsedManifest);

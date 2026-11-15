@@ -148,6 +148,51 @@ function buildExtensionDetailContent(manifest, options = {}) {
     metaGrid.appendChild(createMetaRow('extensions.metaRuntime', t(runtimeKey)));
 
     metaCard.appendChild(metaGrid);
+
+    const linkEntries = [
+        { url: manifest.homepage, labelKey: 'extensions.linkHomepage' },
+        { url: manifest.privacyUrl, labelKey: 'popup.about.privacyPolicy' },
+        { url: manifest.termsUrl, labelKey: 'popup.about.termsOfService' }
+    ].filter((entry) => {
+        if (!entry.url || typeof entry.url !== 'string') return false;
+        try {
+            return new URL(entry.url).protocol === 'https:';
+        } catch (_) {
+            return false;
+        }
+    });
+
+    if (linkEntries.length > 0) {
+        const linksSection = document.createElement('div');
+        linksSection.className = 'ext-detail-links-section';
+
+        const linksTitle = document.createElement('div');
+        linksTitle.className = 'ext-detail-meta-label';
+        linksTitle.setAttribute('data-i18n', 'extensions.metaLinks');
+        linksTitle.textContent = t('extensions.metaLinks');
+
+        const linksWrap = document.createElement('div');
+        linksWrap.className = 'about-legal-links';
+
+        for (const entry of linkEntries) {
+            const anchor = document.createElement('a');
+            anchor.href = entry.url;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.className = 'about-legal-link';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.setAttribute('data-i18n', entry.labelKey);
+            labelSpan.textContent = t(entry.labelKey);
+            anchor.appendChild(labelSpan);
+
+            linksWrap.appendChild(anchor);
+        }
+
+        linksSection.append(linksTitle, linksWrap);
+        metaCard.appendChild(linksSection);
+    }
+
     body.appendChild(metaCard);
 
     if (mode === 'detail' && error) {

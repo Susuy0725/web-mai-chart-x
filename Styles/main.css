@@ -2492,6 +2492,14 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     font-family: 'mono', monospace;
 }
 
+.ext-detail-links-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+}
+
 .ext-perm-title {
     font-weight: 600;
     color: var(--popup-text-main, rgba(255, 255, 255, 0.92));

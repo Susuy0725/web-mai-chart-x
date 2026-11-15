@@ -99,6 +99,8 @@
     "metaAuthorUnknown": "Not provided",
     "metaEntry": "Entry",
     "metaRuntime": "Runtime",
+    "metaLinks": "Links",
+    "linkHomepage": "Project Homepage",
     "runtimeTrusted": "Standard browser context",
     "runtimeWorker": "Worker sandbox",
     "noDescription": "No description provided.",
@@ -204,6 +206,7 @@
     "errUnsupportedApiVersion": "Unsupported extension API version: {version} (max supported: {supported})",
     "errInvalidPermission": "manifest.json contains an undefined permission: {permission}",
     "errUnsupportedRuntime": "Unsupported runtime mode: {runtime}",
+    "errInvalidUrl": "Invalid URL in field \"{field}\". Only https:// URLs are allowed.",
     "crashAutoDisabled": "Extension \"{id}\" appears to have caused a startup crash and has been automatically disabled",
     "overlayAutoDisabled": "Extension \"{name}\" took too long to render and its overlay layer has been automatically disabled"
   },

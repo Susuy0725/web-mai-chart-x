@@ -99,6 +99,8 @@
     "metaAuthorUnknown": "未提供",
     "metaEntry": "進入點",
     "metaRuntime": "執行模式",
+    "metaLinks": "相關連結",
+    "linkHomepage": "專案首頁",
     "runtimeTrusted": "標準網頁環境",
     "runtimeWorker": "Worker 沙箱",
     "noDescription": "此擴充程式未提供說明。",
@@ -204,6 +206,7 @@
     "errUnsupportedApiVersion": "不支援的擴充 API 版本：{version}，目前支援版本上限為 {supported}",
     "errInvalidPermission": "manifest.json 包含未定義權限：{permission}",
     "errUnsupportedRuntime": "不支援的執行模式：{runtime}",
+    "errInvalidUrl": "欄位 {field} 的網址格式無效，僅支援 https:// 協定",
     "crashAutoDisabled": "擴充程式「{id}」疑似在啟動時發生嚴重錯誤，已自動停用",
     "overlayAutoDisabled": "擴充程式「{name}」繪製耗時過高，已自動停用其疊加圖層"
   },

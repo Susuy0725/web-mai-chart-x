@@ -99,6 +99,8 @@
     "metaAuthorUnknown": "未提供",
     "metaEntry": "入口文件",
     "metaRuntime": "运行模式",
+    "metaLinks": "相关链接",
+    "linkHomepage": "项目主页",
     "runtimeTrusted": "标准网页环境",
     "runtimeWorker": "Worker 沙箱",
     "noDescription": "此扩展程序未提供说明。",
@@ -204,6 +206,7 @@
     "errUnsupportedApiVersion": "不支持的扩展 API 版本：{version}，当前支持版本上限为 {supported}",
     "errInvalidPermission": "manifest.json 包含未定义权限：{permission}",
     "errUnsupportedRuntime": "不支持的执行模式：{runtime}",
+    "errInvalidUrl": "字段 {field} 的网址格式无效，仅支持 https:// 协议",
     "crashAutoDisabled": "扩展程序「{id}」疑似在启动时发生严重错误，已自动停用",
     "overlayAutoDisabled": "扩展程序「{name}」绘制耗时过高，已自动停用其叠加图层"
   },

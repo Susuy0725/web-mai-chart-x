@@ -99,6 +99,8 @@
     "metaAuthorUnknown": "未設定",
     "metaEntry": "エントリ",
     "metaRuntime": "実行モード",
+    "metaLinks": "関連リンク",
+    "linkHomepage": "プロジェクトページ",
     "runtimeTrusted": "標準ブラウザ環境",
     "runtimeWorker": "Worker サンドボックス",
     "noDescription": "説明は提供されていません。",
@@ -204,6 +206,7 @@
     "errUnsupportedApiVersion": "未対応の拡張 API バージョンです：{version}（対応上限：{supported}）",
     "errInvalidPermission": "manifest.json に未定義の権限が含まれています：{permission}",
     "errUnsupportedRuntime": "未対応の実行モードです：{runtime}",
+    "errInvalidUrl": "フィールド「{field}」の URL が無効です。https:// のみ対応しています。",
     "crashAutoDisabled": "拡張機能「{id}」の起動時に重大なエラーが発生した可能性があるため、自動的に無効化されました",
     "overlayAutoDisabled": "拡張機能「{name}」の描画処理時間が長すぎるため、オーバーレイレイヤーが自動的に無効化されました"
   },

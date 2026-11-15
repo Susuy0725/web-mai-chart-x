@@ -99,6 +99,8 @@
     "metaAuthorUnknown": "제공되지 않음",
     "metaEntry": "진입점",
     "metaRuntime": "실행 모드",
+    "metaLinks": "관련 링크",
+    "linkHomepage": "프로젝트 홈페이지",
     "runtimeTrusted": "표준 브라우저 환경",
     "runtimeWorker": "Worker 샌드박스",
     "noDescription": "설명이 제공되지 않았습니다.",
@@ -204,6 +206,7 @@
     "errUnsupportedApiVersion": "지원되지 않는 확장 API 버전입니다: {version} (최대 지원 버전: {supported})",
     "errInvalidPermission": "manifest.json에 정의되지 않은 권한이 포함되어 있습니다: {permission}",
     "errUnsupportedRuntime": "지원되지 않는 실행 모드입니다: {runtime}",
+    "errInvalidUrl": "'{field}' 필드의 URL 형식이 올바르지 않습니다. https:// 프로토콜만 지원됩니다.",
     "crashAutoDisabled": "확장 프로그램 \"{id}\" 시작 중 심각한 오류가 발생한 것으로 의심되어 자동으로 비활성화되었습니다",
     "overlayAutoDisabled": "확장 프로그램 \"{name}\"의 렌더링 시간이 너무 길어 오버레이 레이어가 자동으로 비활성화되었습니다"
   },

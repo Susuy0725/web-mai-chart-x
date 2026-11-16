@@ -53,6 +53,8 @@ export async function listStoredExtensions() {
                     id: meta.id,
                     enabled: meta.enabled !== false,
                     installedAt: meta.installedAt || pkg.installedAt || Date.now(),
+                    sourceRepoUrl: meta.sourceRepoUrl || null,
+                    packageSha256: meta.packageSha256 || null,
                     manifest: pkg.manifest,
                     entryCode: pkg.entryCode
                 });
@@ -76,13 +78,33 @@ export async function listStoredExtensions() {
 }
 
 /**
+ * 讀取已安裝外掛的中繼索引（含來源追蹤資訊）
+ * @returns {Promise<Array<{ id: string, enabled: boolean, installedAt: number, sourceRepoUrl: string|null, packageSha256: string|null }>>}
+ */
+export async function listStoredExtensionMeta() {
+    const indexList = await readIndex();
+    return indexList
+        .filter((item) => item && item.id)
+        .map((item) => ({
+            id: item.id,
+            enabled: item.enabled !== false,
+            installedAt: item.installedAt || 0,
+            sourceRepoUrl: item.sourceRepoUrl || null,
+            packageSha256: item.packageSha256 || null
+        }));
+}
+
+/**
  * 儲存或更新外掛封裝至 IndexedDB
  * @param {Object} pkg
  * @param {Object} pkg.manifest
  * @param {string} pkg.entryCode
  * @param {boolean} [enabled=true]
+ * @param {Object} [meta={}]
+ * @param {string|null} [meta.sourceRepoUrl]
+ * @param {string|null} [meta.packageSha256]
  */
-export async function saveStoredExtension(pkg, enabled = true) {
+export async function saveStoredExtension(pkg, enabled = true, meta = {}) {
     const id = pkg?.manifest?.id;
     if (!id) {
         throw new TypeError('[ExtensionStorage] 外掛封裝缺少 manifest.id');
@@ -97,7 +119,13 @@ export async function saveStoredExtension(pkg, enabled = true) {
 
     const indexList = await readIndex();
     const existingIdx = indexList.findIndex((item) => item.id === id);
-    const nextMeta = { id, enabled: Boolean(enabled), installedAt: now };
+    const nextMeta = {
+        id,
+        enabled: Boolean(enabled),
+        installedAt: now,
+        sourceRepoUrl: typeof meta.sourceRepoUrl === 'string' && meta.sourceRepoUrl ? meta.sourceRepoUrl : null,
+        packageSha256: typeof meta.packageSha256 === 'string' && meta.packageSha256 ? meta.packageSha256.toLowerCase() : null
+    };
     if (existingIdx >= 0) {
         indexList[existingIdx] = nextMeta;
     } else {

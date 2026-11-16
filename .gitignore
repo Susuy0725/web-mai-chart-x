@@ -9,3 +9,5 @@ node_modules/
 vite.config.js
 scratch/
 examples/
+package.json
+package-lock.json

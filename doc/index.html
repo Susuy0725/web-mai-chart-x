@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Web mai Chart X 開發者手冊與 API 參考文件，涵蓋擴充程式受限上下文介面、事件訂閱、原生設定面板、WERP 儲存庫協定與核心架構說明。">
+    <title>Web mai Chart X 開發者手冊</title>
+    <link rel="icon" type="image/x-icon" href="../favicon.ico">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+
+    <link rel="stylesheet" href="../Styles/popup.css">
+    <link rel="stylesheet" href="./doc.css">
+</head>
+
+<body>
+    <a class="doc-skip-link" href="#docMainHeading">跳至主要內容</a>
+
+    <header class="doc-topbar">
+        <div class="doc-topbar-left">
+            <button type="button" id="mobileMenuBtn" class="doc-icon-btn doc-mobile-only" aria-label="開啟側邊導覽"
+                aria-expanded="false" aria-controls="docSidebar">
+                <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+            </button>
+            <a href="#guide-overview" class="doc-brand" id="brandHomeLink">
+                <img src="../favicon.png" alt="Web mai Chart X" width="24" height="24" class="doc-brand-icon"
+                    onerror="this.style.display='none'">
+                <span class="doc-brand-title">WMCX</span>
+                <span class="doc-brand-badge">Docs</span>
+            </a>
+        </div>
+
+        <nav class="doc-topnav" id="topCategoryNav" aria-label="手冊主分類">
+            <!-- 由 doc.js 動態渲染主分類頁籤 -->
+        </nav>
+
+        <div class="doc-topbar-right">
+            <search class="doc-search-wrap" id="globalSearchWrap">
+                <span class="material-symbols-outlined doc-search-icon" aria-hidden="true">search</span>
+                <input type="search" id="globalSearchInput" class="doc-search-input" placeholder="搜尋 API、權限或主題..."
+                    aria-label="全站搜尋文件" autocomplete="off" spellcheck="false">
+                <kbd class="doc-search-kbd" aria-hidden="true">/</kbd>
+                <div id="globalSearchResults" class="doc-search-results" role="listbox" aria-label="搜尋結果" hidden></div>
+            </search>
+
+            <a href="../index.html" class="doc-action-link">
+                <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                <span class="doc-action-text">返回編輯器</span>
+            </a>
+        </div>
+    </header>
+
+    <div class="doc-breadcrumb-bar" id="docBreadcrumbBar">
+        <nav id="breadcrumbNav" class="doc-breadcrumb" aria-label="目前位置">
+            <!-- 由 doc.js 動態渲染麵包屑 -->
+        </nav>
+        <div class="doc-breadcrumb-meta">
+            <span class="doc-meta-pill">API v1</span>
+            <a href="../_play/" target="_blank" rel="noopener noreferrer" class="doc-meta-link">
+                <span>遊玩模式</span>
+                <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="doc-backdrop" id="sidebarBackdrop" hidden></div>
+
+    <div class="doc-layout">
+        <aside id="docSidebar" class="doc-sidebar" aria-label="文件樹狀目錄">
+            <search class="doc-sidebar-filter">
+                <span class="material-symbols-outlined doc-filter-icon" aria-hidden="true">filter_alt</span>
+                <input type="text" id="sidebarFilterInput" class="doc-filter-input" placeholder="篩選條目..."
+                    aria-label="篩選側邊欄條目" autocomplete="off" spellcheck="false">
+                <button type="button" id="sidebarFilterClear" class="doc-filter-clear" aria-label="清除篩選" hidden>
+                    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                </button>
+            </search>
+
+            <div class="doc-sidebar-scroll">
+                <div class="doc-sidebar-header-row">
+                    <span class="doc-sidebar-heading">參考目錄</span>
+                    <button type="button" id="toggleAllGroupsBtn" class="doc-text-btn">全部收合</button>
+                </div>
+                <nav id="sidebarNav" class="doc-tree" aria-label="API 與文件索引">
+                    <!-- 由 doc.js 動態渲染樹狀目錄 -->
+                </nav>
+                <div id="sidebarEmptyState" class="doc-sidebar-empty" hidden>
+                    找不到符合篩選條件的條目。
+                </div>
+            </div>
+        </aside>
+
+        <main class="doc-main" id="docMain">
+            <article id="docArticle" class="doc-article">
+                <!-- 由 doc.js 動態渲染單篇詞條內容 -->
+            </article>
+        </main>
+
+        <aside class="doc-toc" aria-label="本頁目錄">
+            <div class="doc-toc-sticky">
+                <h2 class="doc-toc-title">本頁目錄</h2>
+                <nav aria-label="章節錨點">
+                    <ul id="tocList" class="doc-toc-list">
+                        <!-- 由 doc.js 動態渲染本頁章節 -->
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+    </div>
+
+    <script type="module" src="./doc.js"></script>
+</body>
+
+</html>

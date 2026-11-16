@@ -143,13 +143,16 @@ export async function registerStoredPackage(pkg, autoActivate = true) {
 /**
  * 儲存並啟用解析後的外掛封裝
  * @param {{ manifest: Object, entryCode: string }} pkg
+ * @param {Object} [meta={}]
+ * @param {string|null} [meta.sourceRepoUrl]
+ * @param {string|null} [meta.packageSha256]
  */
-export async function installExtensionPackage(pkg) {
+export async function installExtensionPackage(pkg, meta = {}) {
     const id = pkg.manifest.id;
     const isUpdate = extensionManager.extensions.has(id);
     await registerStoredPackage(pkg, true);
     try {
-        await saveStoredExtension(pkg, true);
+        await saveStoredExtension(pkg, true, meta);
     } catch (error) {
         extensionManager.unregister(id);
         if (!isUpdate) {

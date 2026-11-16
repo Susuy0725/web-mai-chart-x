@@ -1568,19 +1568,7 @@ export class SimaiRenderer {
         this.updateCanvasMetrics();
         const { _hw: hw, _hh: hh, canvas: { width: w, height: h } } = this;
 
-        // 2. 清除畫面 (座標系已經 transform 過的話，注意清除範圍)
-        if (!state.skipClear) {
-            ctx.clearRect(-hw, -hh, w, h);
-        }
-
-        // 3. 繪製外框輪廓 (若未隱藏外框)
-        if (!this.settings?.hideOutline) {
-            this.drawOutline();
-        }
-
         const isRenderingVideo = Boolean(this._isRenderingVideo);
-        const hasBeforeOverlays = renderOverlayRegistry.hasOverlays('main', 'beforeNotes', isRenderingVideo);
-        const hasAfterOverlays = renderOverlayRegistry.hasOverlays('main', 'afterNotes', isRenderingVideo);
         let overlayMetrics = null;
         const getOverlayMetrics = () => {
             if (overlayMetrics) return overlayMetrics;
@@ -1593,10 +1581,10 @@ export class SimaiRenderer {
             overlayMetrics = { unitPx, stageRect };
             return overlayMetrics;
         };
-
-        if (hasBeforeOverlays) {
+        const runOverlay = (phase) => {
+            if (!renderOverlayRegistry.hasOverlays('main', phase, isRenderingVideo)) return;
             const { unitPx, stageRect } = getOverlayMetrics();
-            renderOverlayRegistry.run('main', 'beforeNotes', {
+            renderOverlayRegistry.run('main', phase, {
                 ctx,
                 width: w,
                 height: h,
@@ -1608,15 +1596,29 @@ export class SimaiRenderer {
                 isPlaying: this.isPlaying,
                 isRenderingVideo,
                 target: 'main',
-                phase: 'beforeNotes'
+                phase
             });
+        };
+
+        // 2. 清除畫面 (座標系已經 transform 過的話，注意清除範圍)
+        if (!state.skipClear) {
+            ctx.clearRect(-hw, -hh, w, h);
         }
+        runOverlay('afterClear');
+
+        // 3. 繪製外框輪廓 (若未隱藏外框)
+        if (!this.settings?.hideOutline) {
+            this.drawOutline();
+        }
+        runOverlay('beforeNotes');
 
         // 4. 繪製順序優化
         if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
+        runOverlay('afterSensors');
 
         // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
         this.drawMiddleDisplay();
+        runOverlay('afterMiddleDisplay');
 
         if (this.settings.drawHanabiEffect) {
             const touchBucket = buckets.touch;
@@ -1632,32 +1634,19 @@ export class SimaiRenderer {
         }
         const touchBucket = buckets.touch;
         for (let i = 0; i < touchBucket.length; i++) this.drawTouch(touchBucket[i]);
+        runOverlay('afterNoteObjects');
 
         // 獨立分離的打擊特效層 (Hit Effects Pass)
         this.drawHitEffects();
         this.drawJudgeEffects();
+        runOverlay('afterEffects');
 
         if (!this.settings.noBorder) this.drawStaticBackground();
+        runOverlay('afterBorder');
+
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
         if (this.settings.showUI) this.drawUI(dt, globalTime);
-
-        if (hasAfterOverlays) {
-            const { unitPx, stageRect } = getOverlayMetrics();
-            renderOverlayRegistry.run('main', 'afterNotes', {
-                ctx,
-                width: w,
-                height: h,
-                scale: this.scale,
-                scaleBase,
-                unitPx,
-                stageRect,
-                globalTime,
-                isPlaying: this.isPlaying,
-                isRenderingVideo,
-                target: 'main',
-                phase: 'afterNotes'
-            });
-        }
+        runOverlay('afterNotes');
     }
 
     /**
@@ -4055,8 +4044,9 @@ export class SimaiVisualEditor {
         ctx.lineTo(w, 0);
         ctx.stroke();
 
-        if (renderOverlayRegistry.hasOverlays('visual', 'beforeNotes')) {
-            renderOverlayRegistry.run('visual', 'beforeNotes', {
+        const runVisualOverlay = (phase) => {
+            if (!renderOverlayRegistry.hasOverlays('visual', phase)) return;
+            renderOverlayRegistry.run('visual', phase, {
                 ctx,
                 width: w,
                 height: h,
@@ -4066,9 +4056,11 @@ export class SimaiVisualEditor {
                 globalTime,
                 isPlaying: false,
                 target: 'visual',
-                phase: 'beforeNotes'
+                phase
             });
-        }
+        };
+
+        runVisualOverlay('beforeNotes');
         // 僅在音符圖層繪製音符物件（BPM 圖層不繪製任何音符）
         if (this.layerMode === 'note') {
             visualBuckets.slide.forEach(n => this.drawSlide(n));
@@ -4079,6 +4071,7 @@ export class SimaiVisualEditor {
             });
             visualBuckets.touch.forEach(n => this.drawTouch(n));
         }
+        runVisualOverlay('afterNoteObjects');
 
         // 繪製選擇高亮與拉框
         this._drawSelection();
@@ -4093,20 +4086,7 @@ export class SimaiVisualEditor {
             this._drawHoldBoxAndHandle(this.draggingHold.note, this.draggingHold.currentDuration, true);
         }
 
-        if (renderOverlayRegistry.hasOverlays('visual', 'afterNotes')) {
-            renderOverlayRegistry.run('visual', 'afterNotes', {
-                ctx,
-                width: w,
-                height: h,
-                scale: this.zoom || 1,
-                scaleBase,
-                unitPx: this.zoom || 1,
-                globalTime,
-                isPlaying: false,
-                target: 'visual',
-                phase: 'afterNotes'
-            });
-        }
+        runVisualOverlay('afterNotes');
     }
 
     _upd() {

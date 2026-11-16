@@ -10,6 +10,7 @@
 
 import { ensureMediabunny, simpleToast, popupWindow } from '../helper.js';
 import { SimaiLogicControler } from '../core/simaiLogicControler.js';
+import { renderOverlayRegistry } from '../core/renderOverlayRegistry.js';
 import { t as i18n } from '../i18n.js';
 
 async function resampleAudioBuffer(audioBuffer, targetSampleRate = 44100) {
@@ -264,10 +265,12 @@ export async function videoRender(audioManager, canvas, renderer, {
     let exportRenderer = null;
     let isUsingCustomRenderer = false;
 
+    const exportAbortController = new AbortController();
     const popup = popupWindow({
         title: i18n('popup.recordVideo.renderTitle') || '渲染影片',
         content: i18n('popup.recordVideo.preparing') || '準備中...',
         unclosable: true,
+        onClose: () => exportAbortController.abort(),
         buttons: [{ text: i18n('popup.cancel') || '取消', hideOnClick: true }],
     });
     try {
@@ -1031,6 +1034,22 @@ export async function videoRender(audioManager, canvas, renderer, {
                 offCtx.filter = 'none';
             }
 
+            if (renderOverlayRegistry.hasVideoPrepareHooks()) {
+                await renderOverlayRegistry.prepareVideoFrames({
+                    globalTime: globalT,
+                    frameIndex: i,
+                    frameCount,
+                    dt: step,
+                    width: targetW,
+                    height: targetH,
+                    signal: exportAbortController.signal
+                });
+                if (popup.isClosed || exportAbortController.signal.aborted) {
+                    console.log('逐幀渲染已取消');
+                    return;
+                }
+            }
+
             exportRenderer.drawFrame({
                 globalTime: globalT,
                 buckets,
@@ -1136,6 +1155,9 @@ export async function videoRender(audioManager, canvas, renderer, {
         simpleToast({ content: i18n('toast.renderFailed', { error: String(err) }) || ('渲染失敗：' + String(err)), type: 'error' });
         try { popup.setContent(i18n('popup.recordVideo.renderError', { error: String(err) }) || ('錯誤：' + String(err))); } catch (e) { }
     } finally {
+        if (!exportAbortController.signal.aborted) {
+            exportAbortController.abort();
+        }
         if (target) {
             target.buffer = null;
             target._buffer = null;

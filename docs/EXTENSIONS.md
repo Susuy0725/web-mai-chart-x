@@ -246,9 +246,24 @@ ctx.hasPermission(permissionString);
 - 參數：
   - `options`：物件，疊加圖層設定項：
     - `target`：字串，選填，目標畫布，可選值為 `'main'` 或 `'visual'`，預設為 `'main'`。
-    - `phase`：字串，選填，繪製階段，可選值為 `'beforeNotes'` 或 `'afterNotes'`，預設為 `'afterNotes'`。
+    - `phase`：字串，選填，繪製階段，預設為 `'afterNotes'`。若傳入目標畫布不支援的 `phase`，系統將拋出 `TypeError`。各目標畫布支援的階段依由底層至頂層繪製順序如下：
+      - 主畫布 `'main'`：
+        - `'afterClear'`：清除畫布後、外框輪廓前。
+        - `'beforeNotes'`：外框輪廓後、感應區前。
+        - `'afterSensors'`：感應區後、中央顯示前。
+        - `'afterMiddleDisplay'`：中央顯示後、音符與花火前。
+        - `'afterNoteObjects'`：音符本體後、打擊與判定特效前。
+        - `'afterEffects'`：打擊與判定特效後、圓外黑色遮罩前。
+        - `'afterBorder'`：黑色遮罩後、周邊輔助文字與介面之前。
+        - `'afterNotes'`：所有原生圖層與介面之後的最頂層。
+      - 視覺化編輯器 `'visual'`：
+        - `'beforeNotes'`：背景、波形、標籤與時間基準線後、音符前。
+        - `'afterNoteObjects'`：音符本體後、選取框與預覽標記前。
+        - `'afterNotes'`：所有編輯互動覆蓋層之後的最頂層。
     - `order`：數值，選填，排序權重，預設為 `0`，數值小者先繪製。
     - `includeInVideo`：布林值，選填，預設為 `false`，決定該圖層是否於影片匯出期間一併繪製。
+    - `prepareVideoFrame`：函式，選填，離線影片匯出前置非同步準備回呼，僅於 `target` 為 `'main'` 且 `includeInVideo` 為 `true` 時於每幀同步繪製前依 `order` 順序執行，接收物件 `{ globalTime, frameIndex, frameCount, dt, width, height, signal }`，可回傳 Promise。其中 `signal` 為 `AbortSignal`，使用者取消匯出時會觸發中斷。
+    - `prepareTimeoutMs`：數值，選填，單幀 `prepareVideoFrame` 逾時保護毫秒數，預設為 `3000`，允許範圍為 `100` 至 `30000`。
     - `draw`：函式，必填，繪圖回呼函式，每幀繪製時調用，接收 `renderContext` 物件。
 - 行為：註冊時會自動發布 `canvas:redraw` 事件觸發畫布重繪。
 - 回傳：取消註冊函式。調用此函式可提前註銷該圖層，註銷時亦會發布 `canvas:redraw` 事件觸發畫面更新。
@@ -268,7 +283,7 @@ ctx.hasPermission(permissionString);
 - `isPlaying`：布林值，表示當前是否處於播放狀態。
 - `isRenderingVideo`：布林值，表示目前是否處於影片匯出渲染期間，由主畫布提供。
 - `target`：字串，當前繪圖目標畫布，為 `'main'` 或 `'visual'`。
-- `phase`：字串，當前繪圖階段，為 `'beforeNotes'` 或 `'afterNotes'`。
+- `phase`：字串，當前繪圖階段，對應註冊時指定的圖層階段名稱。
 
 #### 畫布狀態與錯誤隔離機制
 
@@ -276,7 +291,7 @@ ctx.hasPermission(permissionString);
 - 狀態隔離：底層在執行每個圖層的 `draw` 前會自動呼叫 `ctx.save()`，並於繪製完成後的 `finally` 區塊呼叫 `ctx.restore()`，確保各擴充圖層的繪圖狀態、剪裁區域或座標變換矩陣不互相污染，亦不干擾核心渲染引擎。
 - 錯誤隔離：以 `try...catch` 包裹各圖層的 `draw` 呼叫。若圖層繪製時拋出例外，將於控制台記錄錯誤訊息，不會中斷主渲染迴圈或其他圖層的繪製作業。
 - 渲染耗時預算保護：若單一疊加圖層在非影片匯出渲染時連續 30 幀的單幀繪製時間超過 12 毫秒，註冊表會自動移除該疊加圖層並透過提示訊息通知使用者，避免持續拖慢主畫面幀率；影片匯出時的逐幀離線渲染不計入此熔斷限制。
-- 影片匯出控制：預設情況下 `includeInVideo` 為 `false`，影片匯出期間會自動跳過該圖層；若明確設為 `true`，系統會於影片匯出期間執行該圖層的 `draw` 並傳入 `isRenderingVideo: true`，供擴充程式依設定決定是否繪製。
+- 影片匯出控制：預設情況下 `includeInVideo` 為 `false`，影片匯出期間會自動跳過該圖層；若明確設為 `true`，系統會於影片匯出期間執行該圖層的 `draw` 並傳入 `isRenderingVideo: true`，供擴充程式依設定決定是否繪製。若同時提供 `prepareVideoFrame`，系統會於每幀同步繪製前 `await` 該非同步鉤子並套用 `try...catch` 例外隔離與單幀逾時保護；若單一圖層連續逾時達 10 幀，該次匯出將自動略過其前置等待以防卡死。
 
 #### `ctx.render.requestRedraw()`
 - 權限需求：`render:overlay`

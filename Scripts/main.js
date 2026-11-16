@@ -5,6 +5,7 @@ import { openSlideEditorModal } from './modals/slideEditorModal.js';
 import { openTouchGroupModal } from './modals/touchGroupModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
+import { resolveKeybindingMatch } from './core/keybindings.js';
 export { defaultSettings };
 import {
     LAYOUT_DIRECTIONS,
@@ -328,15 +329,25 @@ let lastVisualEditorSize = { w: 0, h: 0 };
 
 function getWorkspaceRect() {
     const appEl = document.getElementById('app');
-    const utilityEl = document.getElementById('utilityContainer');
+    const topUtilityEl = document.getElementById('topUtilityBtns');
     const playEl = document.getElementById('playControls');
     const appRect = appEl
         ? appEl.getBoundingClientRect()
         : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
 
     const isExpanded = canvasContainer?.classList.contains('expanded') || panelSplitter?.classList.contains('expanded');
-    const top = isExpanded ? 0 : (utilityEl ? utilityEl.getBoundingClientRect().height : 40);
-    const playH = playEl ? playEl.getBoundingClientRect().height : 150;
+    let top = 0;
+    if (!isExpanded) {
+        const measuredUtilityH = topUtilityEl ? topUtilityEl.getBoundingClientRect().height : 0;
+        if (measuredUtilityH > 0) {
+            top = measuredUtilityH;
+        } else {
+            const cssUtilityH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--utility-height'));
+            top = Number.isFinite(cssUtilityH) && cssUtilityH > 0 ? cssUtilityH : 40;
+        }
+    }
+    const isPlayHidden = hideButton?.dataset.hidden === 'true';
+    const playH = isPlayHidden ? 0 : (playEl ? playEl.getBoundingClientRect().height : 150);
     const height = Math.max(1, appRect.height - top - playH);
     return {
         left: 0,
@@ -1187,85 +1198,18 @@ if (visualToolModeSelect) {
     });
 }
 
-window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
-
-    // 支援 Shift + Alt + F (VS Code 標準 Format Document / Selection)
-    if (e.shiftKey && e.altKey && (e.key === 'f' || e.key === 'F')) {
-        e.preventDefault();
-        handleFormatDocument(editorInput, { simpleToast, t });
-        return;
+function switchVisualTool(mode, persist = true) {
+    settings.visualToolMode = mode;
+    setVisualToolUI(mode);
+    if (visualToolModeSelect) visualToolModeSelect.value = mode;
+    if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+        visualEditorRenderer.setEditMode(mode);
     }
-
-    // 支援 Ctrl + Shift + I (格式化快捷鍵)
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
-        e.preventDefault();
-        handleFormatDocument(editorInput, { simpleToast, t });
-        return;
+    if (persist) {
+        saveSettingsDebounce();
+        draw();
     }
-
-    // 支援 Ctrl+Z / Cmd+Z (復原) 與 Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (重做)
-    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        const key = e.key.toLowerCase();
-        if (key === 'z') {
-            if (isVisualMode() || e.target !== editorInput) {
-                e.preventDefault();
-                if (e.shiftKey) {
-                    redoButton.click();
-                } else {
-                    undoButton.click();
-                }
-                return;
-            }
-        } else if (key === 'y') {
-            if (isVisualMode() || e.target !== editorInput) {
-                e.preventDefault();
-                redoButton.click();
-                return;
-            }
-        }
-    }
-
-    if (e.target.tagName === 'TEXTAREA') return;
-
-    if (isVisualMode()) {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (visualEditorRenderer && visualEditorRenderer.selectedNotes && visualEditorRenderer.selectedNotes.size > 0) {
-                const selectedList = Array.from(visualEditorRenderer.selectedNotes);
-                visualDeleteNote(selectedList);
-                visualEditorRenderer.clearSelection();
-            }
-        } else if (e.key === 'Escape') {
-            if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
-                visualEditorRenderer.clearSelection();
-            }
-        } else if (e.key === 'e' || e.key === 'E') {
-            settings.visualToolMode = 'edit';
-            setVisualToolUI('edit');
-            if (visualToolModeSelect) visualToolModeSelect.value = 'edit';
-            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
-                visualEditorRenderer.setEditMode('edit');
-            }
-            saveSettingsDebounce();
-            draw();
-        } else if (e.key === 'v' || e.key === 'V' || e.key === 's' || e.key === 'S') {
-            settings.visualToolMode = 'select';
-            setVisualToolUI('select');
-            if (visualToolModeSelect) visualToolModeSelect.value = 'select';
-            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
-                visualEditorRenderer.setEditMode('select');
-            }
-        } else if (e.key === 'b' || e.key === 'B') {
-            settings.visualToolMode = 'boxSelect';
-            setVisualToolUI('boxSelect');
-            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
-                visualEditorRenderer.setEditMode('boxSelect');
-            }
-            saveSettingsDebounce();
-            draw();
-        }
-    }
-});
+}
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
 let rawCharOffsets = new Int32Array(0);
@@ -1765,32 +1709,21 @@ function setElementDisplay(element, visible, value = 'block') {
 }
 
 let currentCanvasAnimation = null;
+let currentCanvasSyncRafId = null;
 
-function animateCanvasWidth(visible) {
+function stopCanvasSyncResize() {
+    if (currentCanvasSyncRafId !== null) {
+        cancelAnimationFrame(currentCanvasSyncRafId);
+        currentCanvasSyncRafId = null;
+    }
+}
+
+function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = false) {
+    stopCanvasSyncResize();
     if (currentCanvasAnimation) {
         currentCanvasAnimation.cancel();
         currentCanvasAnimation = null;
     }
-
-    const direction = normalizeLayoutDirection(settings.layoutDirection);
-    const swapped = Boolean(settings.panelSwapped);
-    const targetRatio = settings.splitRatio ?? 0.5;
-    const ws = getWorkspaceRect();
-    const curRect = canvasContainer.getBoundingClientRect();
-
-    const startFrame = {
-        left: `${curRect.left - ws.appLeft}px`,
-        top: `${curRect.top - ws.appTop}px`,
-        width: `${curRect.width}px`,
-        height: `${curRect.height}px`,
-    };
-    const endFrame = computeCanvasAnimationRect({
-        direction,
-        swapped,
-        visible,
-        splitRatio: targetRatio,
-        workspaceRect: ws,
-    });
 
     if (!isInitComplete) {
         canvasContainer.style.left = '';
@@ -1801,6 +1734,35 @@ function animateCanvasWidth(visible) {
         return;
     }
 
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const swapped = Boolean(settings.panelSwapped);
+    const targetRatio = settings.splitRatio ?? 0.5;
+    const effectiveRatio = (visible && canvasSnapped) ? 0 : targetRatio;
+    const ws = getWorkspaceRect();
+
+    const startFrame = (!wasCanvasHidden && prevCanvasRect && prevCanvasRect.width > 0 && prevCanvasRect.height > 0)
+        ? {
+            left: `${prevCanvasRect.left - ws.appLeft}px`,
+            top: `${prevCanvasRect.top - ws.appTop}px`,
+            width: `${prevCanvasRect.width}px`,
+            height: `${prevCanvasRect.height}px`,
+        }
+        : computeCanvasAnimationRect({
+            direction,
+            swapped,
+            visible: true,
+            splitRatio: 0,
+            workspaceRect: ws,
+        });
+
+    const endFrame = computeCanvasAnimationRect({
+        direction,
+        swapped,
+        visible,
+        splitRatio: effectiveRatio,
+        workspaceRect: ws,
+    });
+
     const canvasAnimation = canvasContainer.animate(
         [startFrame, endFrame],
         { duration: 400, fill: 'forwards', easing: 'ease' }
@@ -1808,17 +1770,30 @@ function animateCanvasWidth(visible) {
     currentCanvasAnimation = canvasAnimation;
 
     let animationRunning = true;
-    const throttledResize = throttle(() => resize(true), 16); // 限制每 16ms 最多调用一次（约 60fps）
+    const throttledResize = throttle(() => resize(false), 16); // 限制每 16ms 最多调用一次（约 60fps）
+
+    const stopSync = () => {
+        animationRunning = false;
+        stopCanvasSyncResize();
+    };
 
     function syncResize() {
-        if (animationRunning) {
-            throttledResize();
-            requestAnimationFrame(syncResize);
+        if (!animationRunning || currentCanvasAnimation !== canvasAnimation) return;
+        throttledResize();
+        if (animationRunning && currentCanvasAnimation === canvasAnimation) {
+            currentCanvasSyncRafId = requestAnimationFrame(syncResize);
         }
     }
 
+    canvasAnimation.oncancel = () => {
+        stopSync();
+        if (currentCanvasAnimation === canvasAnimation) {
+            currentCanvasAnimation = null;
+        }
+    };
+
     canvasAnimation.onfinish = () => {
-        animationRunning = false;
+        stopSync();
         if (currentCanvasAnimation === canvasAnimation) {
             currentCanvasAnimation = null;
         }
@@ -1827,6 +1802,10 @@ function animateCanvasWidth(visible) {
         canvasContainer.style.top = '';
         canvasContainer.style.width = '';
         canvasContainer.style.height = '';
+        if (visible && canvasSnapped) {
+            noRender = true;
+            canvasContainer.style.display = 'none';
+        }
         resize(true);
     };
 
@@ -1838,36 +1817,22 @@ let currentSplitterAnimation = null;
 function animateEditorContainer(visible) {
     if (!editorContainer) return;
 
-    const direction = normalizeLayoutDirection(settings.layoutDirection);
-    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
-    const ws = getWorkspaceRect();
-    const fallbackSize = (isVertical ? ws.height : ws.width) * (1 - (settings.splitRatio ?? 0.5));
-    const editorSizePx = (isVertical ? editorContainer.offsetHeight : editorContainer.offsetWidth) || fallbackSize;
-
-    const slideAnim = computeEditorSlideAnimation({
-        direction,
-        swapped: Boolean(settings.panelSwapped),
-        visible,
-        editorSizePx,
-    });
-
-    let editorStart = slideAnim.editorStart;
-    let splitterStart = slideAnim.splitterStart;
-
+    let interruptedEditorTransform = null;
     if (currentEditorAnimation) {
         const computed = window.getComputedStyle(editorContainer).transform;
         if (computed && computed !== 'none') {
-            editorStart = computed;
+            interruptedEditorTransform = computed;
         }
         currentEditorAnimation.cancel();
         currentEditorAnimation = null;
     }
 
+    let interruptedSplitterTransform = null;
     if (currentSplitterAnimation) {
         if (panelSplitter) {
             const computedS = window.getComputedStyle(panelSplitter).transform;
             if (computedS && computedS !== 'none') {
-                splitterStart = computedS;
+                interruptedSplitterTransform = computedS;
             }
         }
         currentSplitterAnimation.cancel();
@@ -1885,13 +1850,29 @@ function animateEditorContainer(visible) {
         return;
     }
 
-    const editorEnd = slideAnim.editorEnd;
-    const splitterEnd = slideAnim.splitterEnd;
-
     setElementDisplay(editorContainer, true);
     if (panelSplitter) {
         setElementDisplay(panelSplitter, true);
     }
+
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const ws = getWorkspaceRect();
+    const effectiveRatio = canvasSnapped ? 0 : (settings.splitRatio ?? 0.5);
+    const fallbackSize = (isVertical ? ws.height : ws.width) * (1 - effectiveRatio);
+    const editorSizePx = (isVertical ? editorContainer.offsetHeight : editorContainer.offsetWidth) || fallbackSize;
+
+    const slideAnim = computeEditorSlideAnimation({
+        direction,
+        swapped: Boolean(settings.panelSwapped),
+        visible,
+        editorSizePx,
+    });
+
+    const editorStart = interruptedEditorTransform ?? slideAnim.editorStart;
+    const splitterStart = interruptedSplitterTransform ?? slideAnim.splitterStart;
+    const editorEnd = slideAnim.editorEnd;
+    const splitterEnd = slideAnim.splitterEnd;
 
     currentEditorAnimation = editorContainer.animate(
         [
@@ -2019,6 +2000,10 @@ const setEditorCss = (visible = null) => {
     const visualVisible = visible && visualMode;
     const isHidden = hideButton.dataset.hidden === 'true';
 
+    // 必須在修改 body class、canvas display 與 playControls 高度前擷取畫布目前幾何尺寸，供動畫 startFrame 使用
+    const wasCanvasHidden = canvasContainer.style.display === 'none';
+    const prevCanvasRect = !wasCanvasHidden ? canvasContainer.getBoundingClientRect() : null;
+
     if (visible) {
         setElementDisplay(editorInput, editorVisible);
         setElementDisplay(highlightLayer, editorVisible);
@@ -2049,11 +2034,17 @@ const setEditorCss = (visible = null) => {
         document.body.classList.remove('editor-hidden');
         // 當顯示 Editor 時：還原到目前的 Snap 狀態
         if (canvasSnapped) {
-            noRender = true;
-            canvasContainer.style.display = 'none';
             applySnappedEditorLayout();
             setElementDisplay(panelSplitter, true);
             if (panelSplitter) panelSplitter.classList.add('snapped');
+            if (!isInitComplete) {
+                noRender = true;
+                canvasContainer.style.display = 'none';
+            } else {
+                // 動畫期間保持畫布可見以便平滑收合，動畫結束後再隱藏
+                noRender = false;
+                canvasContainer.style.display = '';
+            }
         } else {
             noRender = false;
             canvasContainer.style.display = '';
@@ -2065,7 +2056,7 @@ const setEditorCss = (visible = null) => {
 
     updatePlaycontrol(visualVisible, !isHidden);
 
-    animateCanvasWidth(visible);
+    animateCanvasWidth(visible, prevCanvasRect, wasCanvasHidden);
     animateEditorContainer(visible);
 };
 
@@ -2713,11 +2704,14 @@ hideEditorButton.addEventListener('click', () => {
         console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
     });
 
+    if (currentlyHidden) {
+        delete editorContainer.dataset.hidden;
+    } else {
+        editorContainer.dataset.hidden = 'true';
+    }
     setEditorCss(currentlyHidden);
-    editorContainer.dataset.hidden = currentlyHidden ? 'false' : 'true';
-    resize();
     emitViewModeChanged();
-    console.log(`編輯器已${currentlyHidden === 'true' ? '顯示' : '隱藏'}`);
+    console.log(`編輯器已${currentlyHidden ? '顯示' : '隱藏'}`);
 });
 
 const difficultyInputDebounce = debounce(() => {
@@ -3843,83 +3837,98 @@ getButton("playbackSpeedMinus", "utility").addEventListener("click", () => {
     setPlaybackSpeed(sp);
 });
 
+const KEYBINDING_HANDLERS = {
+    'playback.toggle': () => playButton?.click(),
+    'playback.reset': () => resetButton?.click(),
+    'playback.stop': () => stopButton?.click(),
+    'playback.speedUp': () => {
+        const sp = Math.min(2.0, (settings.playbackSpeed || 1) + 0.25);
+        setPlaybackSpeed(sp);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    },
+    'playback.speedDown': () => {
+        const sp = Math.max(0.25, (settings.playbackSpeed || 1) - 0.25);
+        setPlaybackSpeed(sp);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    },
+    'playback.jumpToCursor': () => getCursorNoteIndex?.click(),
+    'playback.cursorToPlayhead': () => getNowNoteIndex?.click(),
+    'edit.save': () => {
+        isContextEdited = false;
+        simpleToast({ content: t('toast.saved'), type: 'success', timeout: 1200 });
+        maidata['inote_' + nowDifficulty] = editorInput.value;
+        saveMaidata();
+    },
+    'edit.find': () => openFindBar(false),
+    'edit.replace': () => openFindBar(true),
+    'edit.undo': () => {
+        if (undoStack.length > 0) {
+            undoButton.click();
+            if (document.activeElement === editorInput) {
+                simpleToast({ content: t('toast.undoSuccess'), type: 'info', timeout: 1200 });
+            }
+        }
+    },
+    'edit.redo': () => {
+        if (redoStack.length > 0) {
+            redoButton.click();
+            if (document.activeElement === editorInput) {
+                simpleToast({ content: t('toast.redoSuccess'), type: 'info', timeout: 1200 });
+            }
+        }
+    },
+    'edit.format': () => handleFormatDocument(editorInput, { simpleToast, t }),
+    'edit.toggleBk': () => handleToggleBkEx('bk', { editorInput }),
+    'edit.toggleEx': () => handleToggleBkEx('ex', { editorInput }),
+    'edit.rotateClockwise': () => rotateSelection(1),
+    'edit.rotateCounterClockwise': () => rotateSelection(-1),
+    'edit.rotate180': () => rotateSelection(4),
+    'edit.flipVertical': () => flipVertical(),
+    'edit.flipHorizontal': () => flipHorizontal(),
+    'edit.subdivision': () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce }),
+    'edit.smoothBpm': () => smoothBpmLauncher?.openModal(),
+    'visual.toolPlace': () => switchVisualTool('edit'),
+    'visual.toolSelect': () => switchVisualTool('select', false),
+    'visual.toolBoxSelect': () => switchVisualTool('boxSelect'),
+    'visual.deleteSelected': () => {
+        if (visualEditorRenderer?.selectedNotes?.size > 0) {
+            const selectedList = Array.from(visualEditorRenderer.selectedNotes);
+            visualDeleteNote(selectedList);
+            visualEditorRenderer.clearSelection();
+        }
+    },
+    'visual.clearSelection': () => {
+        if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
+            visualEditorRenderer.clearSelection();
+        }
+    },
+    'view.toggleEditor': () => hideEditorButton?.click(),
+    'view.toggleMode': () => {
+        if (!displayModeSelect) return;
+        displayModeSelect.value = isVisualMode() ? 'simai' : 'visual';
+        displayModeSelect.dispatchEvent(new Event('change'));
+    },
+    'view.togglePlayControls': () => hideButton?.click(),
+    'view.fullscreen': () => fullscreenButton?.click(),
+    'view.openSettings': () => openSettingsModal(),
+};
+
 window.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey) {
-        // 🔴 修正：拿掉外面的 e.preventDefault()，改在需要攔截的 case 內個別加上
+    if (!isInitComplete || e.isComposing || e.defaultPrevented) return;
+    if (document.querySelector('[data-recording-keybinding="true"]')) return;
+    if (document.querySelector('.popup-backdrop, .popup-window, .wmc-welcome-overlay, [role="dialog"], dialog[open]')) return;
 
-        switch (e.key.toLowerCase()) {
-            case 'f':
-                e.preventDefault();
-                openFindBar(false);
-                break;
+    const match = resolveKeybindingMatch(e, settings.customKeybindings, {
+        isVisualMode: isVisualMode(),
+        editorInput
+    });
+    if (!match) return;
 
-            case 'h':
-                e.preventDefault();
-                openFindBar(true);
-                break;
+    const handler = KEYBINDING_HANDLERS[match.action.id];
+    if (!handler) return;
 
-            case 's':
-                e.preventDefault(); // 🟢 攔截瀏覽器預設的網頁另存新檔
-                isContextEdited = false;
-
-                simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
-                maidata['inote_' + nowDifficulty] = editorInput.value;
-                saveMaidata();
-                break;
-
-            case 'o': {
-                e.preventDefault(); // 🟢 攔截瀏覽器預設的開啟檔案
-                let sp = settings.playbackSpeed - 0.25;
-                if (sp <= 0.25) sp = 0.25;
-                setPlaybackSpeed(sp);
-                simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
-                break;
-            }
-
-            case 'p': {
-                e.preventDefault();
-                let sp = settings.playbackSpeed + 0.25;
-                if (sp >= 2.0) sp = 2.0;
-                setPlaybackSpeed(sp);
-                simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
-                break;
-            }
-
-            case 'z': {
-                if (document.activeElement === editorInput) {
-                    e.preventDefault();
-                    if (undoStack.length > 0) {
-                        undoButton.click();
-                        simpleToast({ content: '復原譜面變更', type: 'info', timeout: 1200 });
-                    }
-                }
-                break;
-            }
-
-            case 'y': {
-                if (document.activeElement === editorInput) {
-                    e.preventDefault();
-                    if (redoStack.length > 0) {
-                        redoButton.click();
-                        simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
-                    }
-                }
-                break;
-            }
-        }
-        switch (e.code) {
-            case 'Space': {
-                e.preventDefault();
-                playButton.click();
-                break;
-            }
-            case 'Backspace': {
-                e.preventDefault();
-                resetButton.click();
-                break;
-            }
-        }
-    }
+    e.preventDefault();
+    handler(e);
 });
 
 function closeExternalWindow() {
@@ -4209,6 +4218,9 @@ async function loadProjectData(step, expectedGen = null) {
     } else {
         hideEditorButton.children[0].textContent = "right_panel_close";
         delete editorContainer.dataset.hidden;
+    }
+    if (isInitComplete) {
+        setEditorCss(!hideEditor);
     }
     emitViewModeChanged();
 

@@ -342,7 +342,8 @@
       "sfx": "音效",
       "operation": "操作",
       "other": "其他",
-      "maintenance": "维护"
+      "maintenance": "维护",
+      "keybindings": "快捷键"
     },
     "sections": {
       "speedAndNotes": "流速与音符",
@@ -421,7 +422,8 @@
       "invertWheelDirection": "反转滚轮滑动方向",
       "smoothScroll": "平滑滚轮 (平滑时间轴滑动)",
       "wheelSensitivity": "滚轮灵敏度",
-      "syntaxColors": "语法高亮自定颜色"
+      "syntaxColors": "语法高亮自定颜色",
+      "customKeybindings": "自定义快捷键"
     },
     "middleDisplayOpts": {
       "off": "关闭",
@@ -878,7 +880,9 @@
         "<b>减速播放</b>：<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>。",
         "<b>缩放倍率</b>：<span class=\"code-highlight\">Ctrl</span> + 鼠标滚轮 缩放编辑器/预览轴流速。",
         "<b>快速面板</b>：在设置打开后按<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> 并将鼠标移向欲运行的功能，再放开<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>。"
-      ]
+      ],
+      "customizeShortcutsBtn": "自定义快捷键...",
+      "shortcutScopeVisual": "仅轨道编辑模式"
     },
     "about": {
       "title": "关于 Web mai Chart X",
@@ -1169,5 +1173,61 @@
     "copied": "已复制代码至剪贴板！",
     "previewSelectTitle": "时间轴预览 (点击或拖拽选取时段)",
     "dragSelectTip": "在时间轴上拖拽或点击可变更时段；亦可拖拽两侧旗标微调"
+  },
+  "keybindings": {
+    "searchPlaceholder": "搜索操作名称或快捷键...",
+    "resetAll": "全部恢复默认",
+    "resetAllDone": "已将所有快捷键恢复为默认值",
+    "recording": "请按下快捷键... (Esc 取消)",
+    "unbound": "未设置",
+    "modified": "已自定义",
+    "clearBtn": "清除快捷键",
+    "resetBtn": "恢复默认",
+    "visualOnlyBadge": "轨道模式",
+    "conflictWarning": "“{action}”已使用“{shortcut}”",
+    "conflictOverwrite": "覆盖并清除原绑定",
+    "conflictCancel": "取消",
+    "noResults": "找不到符合条件的快捷键项目",
+    "hint": "点击按键即可录制新快捷键；按 Esc 可取消录制，点击 × 可清除停用。",
+    "categories": {
+      "playback": "播放控制",
+      "editing": "编辑与谱面",
+      "visual": "可视化编辑模式",
+      "view": "视图与界面"
+    },
+    "actions": {
+      "playbackToggle": "播放 / 暂停",
+      "playbackReset": "从头开始",
+      "playbackStop": "停止播放",
+      "playbackSpeedUp": "加速播放 (+0.25x)",
+      "playbackSpeedDown": "减速播放 (-0.25x)",
+      "jumpToCursor": "播放头移至光标",
+      "cursorToPlayhead": "光标移至播放头",
+      "editSave": "保存谱面",
+      "editFind": "查找",
+      "editReplace": "查找与替换",
+      "editUndo": "撤销",
+      "editRedo": "重做",
+      "editFormat": "格式化文档",
+      "editToggleBk": "切换 / 添加 Break (bk)",
+      "editToggleEx": "切换 / 添加 EX (ex)",
+      "editRotateClockwise": "顺时针旋转 45°",
+      "editRotateCounterClockwise": "逆时针旋转 45°",
+      "editRotate180": "旋转 180°",
+      "editFlipVertical": "上下翻转",
+      "editFlipHorizontal": "左右翻转",
+      "editSubdivision": "切分细分与转换",
+      "editSmoothBpm": "平滑变速生成器",
+      "visualToolPlace": "切换“放置音符”工具",
+      "visualToolSelect": "切换“选择”工具",
+      "visualToolBoxSelect": "切换“框选”工具",
+      "visualDeleteSelected": "删除选中音符",
+      "visualClearSelection": "清除选中状态",
+      "viewToggleEditor": "显示 / 隐藏编辑器面板",
+      "viewToggleMode": "切换文本 / 轨道模式",
+      "viewTogglePlayControls": "收合 / 展开播放控制栏",
+      "viewFullscreen": "切换全屏",
+      "viewOpenSettings": "打开设置"
+    }
   }
 }

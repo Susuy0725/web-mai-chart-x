@@ -342,7 +342,8 @@
       "sfx": "Audio",
       "operation": "Operation",
       "other": "Other",
-      "maintenance": "Maint."
+      "maintenance": "Maint.",
+      "keybindings": "Shortcuts"
     },
     "sections": {
       "speedAndNotes": "Speed & Notes",
@@ -421,7 +422,8 @@
       "invertWheelDirection": "Invert Wheel Scroll Direction",
       "smoothScroll": "Smooth Wheel Scrolling",
       "wheelSensitivity": "Wheel Scroll Sensitivity",
-      "syntaxColors": "Syntax Highlighting Colors"
+      "syntaxColors": "Syntax Highlighting Colors",
+      "customKeybindings": "Custom Shortcuts"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -878,7 +880,9 @@
         "<b>Slow Down Playback</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>.",
         "<b>Scale Rate</b>: <span class=\"code-highlight\">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity.",
         "<b>Quick Panel</b>: After enabling in settings, hold <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>, move cursor to target action, and release."
-      ]
+      ],
+      "customizeShortcutsBtn": "Customize Shortcuts...",
+      "shortcutScopeVisual": "Visual mode only"
     },
     "about": {
       "title": "About Web mai Chart X",
@@ -1169,5 +1173,61 @@
     "copied": "Chart code copied to clipboard!",
     "previewSelectTitle": "Timeline Preview (Click or Drag to Select)",
     "dragSelectTip": "Drag or click on the timeline to select; or drag start/end flags to adjust"
+  },
+  "keybindings": {
+    "searchPlaceholder": "Search actions or keys...",
+    "resetAll": "Reset All",
+    "resetAllDone": "All shortcuts have been reset to defaults",
+    "recording": "Press shortcut... (Esc to cancel)",
+    "unbound": "Unbound",
+    "modified": "Custom",
+    "clearBtn": "Clear shortcut",
+    "resetBtn": "Reset to default",
+    "visualOnlyBadge": "Visual",
+    "conflictWarning": "\"{shortcut}\" is already assigned to \"{action}\"",
+    "conflictOverwrite": "Overwrite",
+    "conflictCancel": "Cancel",
+    "noResults": "No matching shortcuts found",
+    "hint": "Click a key button to record a new shortcut. Press Esc to cancel, or click × to unbind.",
+    "categories": {
+      "playback": "Playback",
+      "editing": "Editing & Chart",
+      "visual": "Visual Editor Mode",
+      "view": "View & Interface"
+    },
+    "actions": {
+      "playbackToggle": "Play / Pause",
+      "playbackReset": "Reset to Start",
+      "playbackStop": "Stop Playback",
+      "playbackSpeedUp": "Speed Up (+0.25x)",
+      "playbackSpeedDown": "Speed Down (-0.25x)",
+      "jumpToCursor": "Jump Playhead to Cursor",
+      "cursorToPlayhead": "Move Cursor to Playhead",
+      "editSave": "Save Chart",
+      "editFind": "Find",
+      "editReplace": "Find & Replace",
+      "editUndo": "Undo",
+      "editRedo": "Redo",
+      "editFormat": "Format Document",
+      "editToggleBk": "Toggle / Add Break (bk)",
+      "editToggleEx": "Toggle / Add EX (ex)",
+      "editRotateClockwise": "Rotate Clockwise 45°",
+      "editRotateCounterClockwise": "Rotate Counter-Clockwise 45°",
+      "editRotate180": "Rotate 180°",
+      "editFlipVertical": "Flip Vertical",
+      "editFlipHorizontal": "Flip Horizontal",
+      "editSubdivision": "Beat Subdivision & Convert",
+      "editSmoothBpm": "Smooth BPM Generator",
+      "visualToolPlace": "Select Place Tool",
+      "visualToolSelect": "Select Pointer Tool",
+      "visualToolBoxSelect": "Select Box-Select Tool",
+      "visualDeleteSelected": "Delete Selected Notes",
+      "visualClearSelection": "Clear Selection",
+      "viewToggleEditor": "Toggle Editor Panel",
+      "viewToggleMode": "Switch Text / Visual Mode",
+      "viewTogglePlayControls": "Toggle Playback Bar",
+      "viewFullscreen": "Toggle Fullscreen",
+      "viewOpenSettings": "Open Settings"
+    }
   }
 }

@@ -342,7 +342,8 @@
       "sfx": "音效",
       "operation": "操作",
       "other": "其他",
-      "maintenance": "維護"
+      "maintenance": "維護",
+      "keybindings": "快速鍵"
     },
     "sections": {
       "speedAndNotes": "流速與音符",
@@ -421,7 +422,8 @@
       "invertWheelDirection": "反轉滾輪滑動方向",
       "smoothScroll": "平滑滾輪 (平滑時間軸滑動)",
       "wheelSensitivity": "滾輪靈敏度",
-      "syntaxColors": "語法高亮自訂顏色"
+      "syntaxColors": "語法高亮自訂顏色",
+      "customKeybindings": "自訂快速鍵"
     },
     "middleDisplayOpts": {
       "off": "關閉",
@@ -878,7 +880,9 @@
         "<b>減速播放</b>：<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>。",
         "<b>縮放倍率</b>：<span class=\"code-highlight\">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。",
         "<b>快速面板</b>：在設定開啟後按<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> 並將滑鼠移向欲執行的功能，再放開<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>。"
-      ]
+      ],
+      "customizeShortcutsBtn": "自訂快速鍵...",
+      "shortcutScopeVisual": "僅軌道編輯模式"
     },
     "about": {
       "title": "關於 Web mai Chart X",
@@ -1169,5 +1173,61 @@
     "copied": "已複製代碼至剪貼簿！",
     "previewSelectTitle": "時間軸預覽 (點擊或拖曳選取時段)",
     "dragSelectTip": "在時間軸上拖曳或點擊可變更時段；亦可拖曳兩側旗標微調"
+  },
+  "keybindings": {
+    "searchPlaceholder": "搜尋動作名稱或快速鍵...",
+    "resetAll": "全部還原預設",
+    "resetAllDone": "已將所有快速鍵還原為預設值",
+    "recording": "請按下快速鍵... (Esc 取消)",
+    "unbound": "未設定",
+    "modified": "已自訂",
+    "clearBtn": "清除快速鍵",
+    "resetBtn": "還原預設",
+    "visualOnlyBadge": "軌道模式",
+    "conflictWarning": "「{action}」已使用「{shortcut}」",
+    "conflictOverwrite": "覆蓋並清除原綁定",
+    "conflictCancel": "取消",
+    "noResults": "找不到符合條件的快速鍵項目",
+    "hint": "點擊按鍵即可錄製新快速鍵；按 Esc 可取消錄製，點擊 × 可清除停用。",
+    "categories": {
+      "playback": "播放控制",
+      "editing": "編輯與譜面",
+      "visual": "視覺化編輯模式",
+      "view": "檢視與介面"
+    },
+    "actions": {
+      "playbackToggle": "播放 / 暫停",
+      "playbackReset": "從頭開始",
+      "playbackStop": "停止播放",
+      "playbackSpeedUp": "加速播放 (+0.25x)",
+      "playbackSpeedDown": "減速播放 (-0.25x)",
+      "jumpToCursor": "播放頭移至游標",
+      "cursorToPlayhead": "游標移至播放頭",
+      "editSave": "保存譜面",
+      "editFind": "尋找",
+      "editReplace": "尋找與取代",
+      "editUndo": "復原",
+      "editRedo": "重做",
+      "editFormat": "格式化文件",
+      "editToggleBk": "切換 / 加入 Break (bk)",
+      "editToggleEx": "切換 / 加入 EX (ex)",
+      "editRotateClockwise": "順時針旋轉 45°",
+      "editRotateCounterClockwise": "逆時針旋轉 45°",
+      "editRotate180": "旋轉 180°",
+      "editFlipVertical": "上下反轉",
+      "editFlipHorizontal": "左右反轉",
+      "editSubdivision": "切分細分與轉換",
+      "editSmoothBpm": "平滑變速產生器",
+      "visualToolPlace": "切換「放置音符」工具",
+      "visualToolSelect": "切換「選取」工具",
+      "visualToolBoxSelect": "切換「框選」工具",
+      "visualDeleteSelected": "刪除選取音符",
+      "visualClearSelection": "清除選取狀態",
+      "viewToggleEditor": "顯示 / 隱藏編輯器面板",
+      "viewToggleMode": "切換文字 / 軌道模式",
+      "viewTogglePlayControls": "收合 / 展開播放控制列",
+      "viewFullscreen": "切換全螢幕",
+      "viewOpenSettings": "開啟設定"
+    }
   }
 }

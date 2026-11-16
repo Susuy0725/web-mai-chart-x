@@ -232,6 +232,13 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
         };
     }
 
+    if (ctx.defaultSettings.customKeybindings) {
+        settings.customKeybindings = {
+            ...ctx.defaultSettings.customKeybindings,
+            ...(parsedSettings?.customKeybindings || {})
+        };
+    }
+
     // 檢查是否有缺少的新設定項目
     let hasNewKeys = false;
     for (const key in ctx.defaultSettings) {

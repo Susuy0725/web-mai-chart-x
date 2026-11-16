@@ -83,7 +83,8 @@ export const defaultSettings = {
     drawHitEffect: true,
     drawHanabiEffect: true,
     richHitEffectBeta: false,
-    noBorder: false
+    noBorder: false,
+    customKeybindings: {}
 };
 
 export const settingsConfig = [
@@ -359,6 +360,18 @@ export const settingsConfig = [
                 ],
                 def: defaultSettings.invertWheelDirection || 'none'
             },
+        ]
+    },
+    {
+        id: 'keybindings',
+        label: 'settings.tabs.keybindings',
+        items: [
+            {
+                id: 'customKeybindings',
+                type: 'keybindings',
+                label: 'settings.items.customKeybindings',
+                def: defaultSettings.customKeybindings
+            }
         ]
     },
     {

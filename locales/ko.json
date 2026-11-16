@@ -342,7 +342,8 @@
       "sfx": "효과음",
       "operation": "조작",
       "other": "기타",
-      "maintenance": "관리"
+      "maintenance": "관리",
+      "keybindings": "단축키"
     },
     "sections": {
       "speedAndNotes": "속도 및 노트",
@@ -421,7 +422,8 @@
       "invertWheelDirection": "마우스 휠 스크롤 방향 반전",
       "smoothScroll": "부드러운 스크롤 (타임라인 부드럽게 이동)",
       "wheelSensitivity": "마우스 휠 감도",
-      "syntaxColors": "구문 강조 커스텀 색상"
+      "syntaxColors": "구문 강조 커스텀 색상",
+      "customKeybindings": "사용자 지정 단축키"
     },
     "middleDisplayOpts": {
       "off": "끄기",
@@ -878,7 +880,9 @@
         "<b>재생 속도 감소</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>.",
         "<b>확대/축소 배율</b>: <span class=\"code-highlight\">Ctrl</span> + 마우스 휠로 편집기/미리보기 축의 속도를 조절할 수 있습니다.",
         "<b>빠른 패널</b>: 설정에서 활성화한 후 <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>를 누른 상태에서 마우스를 원하는 기능으로 이동한 다음 <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>를 놓으세요."
-      ]
+      ],
+      "customizeShortcutsBtn": "단축키 사용자 지정...",
+      "shortcutScopeVisual": "트랙 편집 모드 전용"
     },
     "about": {
       "title": "Web mai Chart X 정보",
@@ -1169,5 +1173,61 @@
     "copied": "코드가 클립보드에 복사되었습니다!",
     "previewSelectTitle": "타임라인 미리보기 (클릭 또는 드래그하여 구간 선택)",
     "dragSelectTip": "타임라인에서 드래그하거나 클릭하여 구간을 선택하세요. 깃발 핸들을 드래그하여 미세 조정도 가능합니다"
+  },
+  "keybindings": {
+    "searchPlaceholder": "작업 이름 또는 단축키 검색...",
+    "resetAll": "모두 기본값으로 복원",
+    "resetAllDone": "모든 단축키가 기본값으로 복원되었습니다",
+    "recording": "새 단축키를 누르세요... (Esc 취소)",
+    "unbound": "미설정",
+    "modified": "사용자 지정",
+    "clearBtn": "단축키 지우기",
+    "resetBtn": "기본값으로 복원",
+    "visualOnlyBadge": "트랙 모드",
+    "conflictWarning": "\"{shortcut}\" 단축키는 이미 \"{action}\"에 지정되어 있습니다",
+    "conflictOverwrite": "덮어쓰기",
+    "conflictCancel": "취소",
+    "noResults": "일치하는 단축키 항목이 없습니다",
+    "hint": "키 버튼을 클릭하여 새 단축키를 녹화하세요. Esc로 취소하고 × 버튼으로 해제할 수 있습니다.",
+    "categories": {
+      "playback": "재생 제어",
+      "editing": "편집 및 채보",
+      "visual": "트랙 편집 모드",
+      "view": "보기 및 인터페이스"
+    },
+    "actions": {
+      "playbackToggle": "재생 / 일시정지",
+      "playbackReset": "처음으로 이동",
+      "playbackStop": "재생 정지",
+      "playbackSpeedUp": "재생 속도 빠르게 (+0.25x)",
+      "playbackSpeedDown": "재생 속도 느리게 (-0.25x)",
+      "jumpToCursor": "재생 위치를 커서로 이동",
+      "cursorToPlayhead": "커서를 재생 위치로 이동",
+      "editSave": "채보 저장",
+      "editFind": "찾기",
+      "editReplace": "찾기 및 바꾸기",
+      "editUndo": "실행 취소",
+      "editRedo": "다시 실행",
+      "editFormat": "채보 서식 지정",
+      "editToggleBk": "Break (bk) 전환 / 추가",
+      "editToggleEx": "EX (ex) 전환 / 추가",
+      "editRotateClockwise": "시계 방향 45° 회전",
+      "editRotateCounterClockwise": "반시계 방향 45° 회전",
+      "editRotate180": "180° 회전",
+      "editFlipVertical": "상하 반전",
+      "editFlipHorizontal": "좌우 반전",
+      "editSubdivision": "박자 세분화 및 변환",
+      "editSmoothBpm": "부드러운 BPM 생성기",
+      "visualToolPlace": "노트 배치 도구 선택",
+      "visualToolSelect": "선택 도구 선택",
+      "visualToolBoxSelect": "영역 선택 도구 선택",
+      "visualDeleteSelected": "선택한 노트 삭제",
+      "visualClearSelection": "선택 해제",
+      "viewToggleEditor": "에디터 패널 표시 / 숨기기",
+      "viewToggleMode": "텍스트 / 트랙 모드 전환",
+      "viewTogglePlayControls": "재생 제어바 접기 / 펼치기",
+      "viewFullscreen": "전체 화면 전환",
+      "viewOpenSettings": "설정 열기"
+    }
   }
 }

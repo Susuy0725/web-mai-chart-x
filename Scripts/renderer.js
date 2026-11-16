@@ -452,12 +452,15 @@ export class SimaiRenderer {
         const w = Math.round(width * dpr);
         const h = Math.round(height * dpr);
 
-        if (!force && this.canvas.width === w && this.canvas.height === h) {
+        const sizeChanged = this.canvas.width !== w || this.canvas.height !== h;
+        if (!force && !sizeChanged) {
             return false;
         }
 
-        this.canvas.width = w;
-        this.canvas.height = h;
+        if (sizeChanged) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+        }
 
         this.ctx.imageSmoothingEnabled = true;
         this.ctx.imageSmoothingQuality = 'high';
@@ -467,7 +470,7 @@ export class SimaiRenderer {
         this.ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
 
         this.updateCanvasMetrics();
-        this.invalidateCaches();
+        this._canvasWH = null;
         return true;
     }
 
@@ -802,117 +805,78 @@ export class SimaiRenderer {
 
         const isSlide = (noteType === 'slide');
 
+        const applyEffectFields = (target) => {
+            target.note = note;
+            target.isSlide = isSlide;
+            target.posKey = posKey;
+            target.text = text;
+            target.isBreak = isBreak;
+            target.breakScoreValue = breakScoreValue;
+            target.subGrade = judgeResult ? judgeResult.subGrade : null;
+            target.grade = grade;
+            target.startTime = startTime;
+            target.duration = duration;
+            target.x = x;
+            target.y = y;
+            target.rot = rot;
+            target.noteType = noteType;
+            target.slideType = slideType;
+            target.isWifi = isWifi;
+            target.startPos = startPos;
+            target.endPos = endPos;
+            target.rawContent = rawContent;
+            target.wPaths = wPaths;
+        };
+
         // --- 同位置去重 (Deduplication) 機制：確保 Slide 與 Tap 互不干擾，且不同 Slide 各自獨立繪製 ---
+        let existing = null;
         if (isSlide) {
             // Slide 特效去重：同一個 Slide note 實例重複觸發時覆蓋更新；
             // 不同的 Slide 音符（即使相同 endPos，例如 2-5[4:1]/8-5[4:1]）各自獨立保留並繪製，絕不覆蓋彼此，亦不與 Tap 判定文字互相覆蓋
             for (let i = 0; i < this.judgeEffects.length; i++) {
-                const existing = this.judgeEffects[i];
-                if (existing.isSlide && existing.note === note) {
-                    existing.text = text;
-                    existing.isBreak = isBreak;
-                    existing.breakScoreValue = breakScoreValue;
-                    existing.subGrade = judgeResult ? judgeResult.subGrade : null;
-                    existing.grade = grade;
-                    existing.startTime = startTime;
-                    existing.duration = duration;
-                    existing.x = x;
-                    existing.y = y;
-                    existing.rot = rot;
-                    existing.posKey = posKey;
-                    existing.noteType = noteType;
-                    existing.slideType = slideType;
-                    existing.isWifi = isWifi;
-                    existing.startPos = startPos;
-                    existing.endPos = endPos;
-                    existing.rawContent = rawContent;
-                    existing.wPaths = wPaths;
-                    return;
+                const eff = this.judgeEffects[i];
+                if (eff.isSlide && eff.note === note) {
+                    existing = eff;
+                    break;
+                }
+            }
+        } else if (posKey && posKey >= 1 && posKey <= 8) {
+            // 非 Slide 音符 (Tap / Hold 等)：防止連打時同一位置重疊繪製多個判定文字 (絕不覆蓋 Slide 特效)
+            for (let i = 0; i < this.judgeEffects.length; i++) {
+                const eff = this.judgeEffects[i];
+                if (!eff.isSlide && eff.posKey === posKey) {
+                    existing = eff;
+                    break;
                 }
             }
         } else {
-            // 非 Slide 音符 (Tap / Hold / Touch 等)：防止連打時同一位置重疊繪製多個判定文字 (絕不覆蓋 Slide 特效)
-            if (posKey && posKey >= 1 && posKey <= 8) {
-                for (let i = 0; i < this.judgeEffects.length; i++) {
-                    const existing = this.judgeEffects[i];
-                    if (!existing.isSlide && existing.posKey === posKey) {
-                        existing.text = text;
-                        existing.isBreak = isBreak;
-                        existing.breakScoreValue = breakScoreValue;
-                        existing.subGrade = judgeResult ? judgeResult.subGrade : null;
-                        existing.grade = grade;
-                        existing.startTime = startTime;
-                        existing.duration = duration;
-                        existing.x = x;
-                        existing.y = y;
-                        existing.rot = rot;
-                        existing.posKey = posKey;
-                        existing.noteType = noteType;
-                        existing.slideType = slideType;
-                        existing.isWifi = isWifi;
-                        existing.startPos = startPos;
-                        existing.endPos = endPos;
-                        existing.rawContent = rawContent;
-                        existing.wPaths = wPaths;
-                        return;
-                    }
-                }
-            } else {
-                // Touch 音符或任意坐標：採用距離平方比對 (阈值設為 noteBaseSize 半徑範圍)
-                const thresholdSq = Math.pow((this.settings.noteBaseSize || 11) * 0.75, 2);
-                for (let i = 0; i < this.judgeEffects.length; i++) {
-                    const existing = this.judgeEffects[i];
-                    if (!existing.isSlide) {
-                        const dx = existing.x - x;
-                        const dy = existing.y - y;
-                        if (dx * dx + dy * dy < thresholdSq) {
-                            existing.text = text;
-                            existing.isBreak = isBreak;
-                            existing.breakScoreValue = breakScoreValue;
-                            existing.subGrade = judgeResult ? judgeResult.subGrade : null;
-                            existing.grade = grade;
-                            existing.startTime = startTime;
-                            existing.duration = duration;
-                            existing.x = x;
-                            existing.y = y;
-                            existing.rot = rot;
-                            existing.posKey = posKey;
-                            existing.noteType = noteType;
-                            existing.slideType = slideType;
-                            existing.isWifi = isWifi;
-                            existing.startPos = startPos;
-                            existing.endPos = endPos;
-                            existing.rawContent = rawContent;
-                            existing.wPaths = wPaths;
-                            return;
-                        }
+            // Touch 音符或任意坐標：採用距離平方比對 (阈值設為 noteBaseSize 半徑範圍)
+            const thresholdSq = Math.pow((this.settings.noteBaseSize || 11) * 0.75, 2);
+            for (let i = 0; i < this.judgeEffects.length; i++) {
+                const eff = this.judgeEffects[i];
+                if (!eff.isSlide) {
+                    const dx = eff.x - x;
+                    const dy = eff.y - y;
+                    if (dx * dx + dy * dy < thresholdSq) {
+                        existing = eff;
+                        break;
                     }
                 }
             }
         }
 
-        this.judgeEffects.push({
-            note,
-            isSlide,
-            posKey,
-            text,
-            isBreak,
-            breakScoreValue,
-            subGrade: judgeResult ? judgeResult.subGrade : null,
-            grade: grade,
-            startTime,
-            duration,
-            x,
-            y,
-            rot,
-            noteType,
-            slideType,
-            isWifi,
-            startPos,
-            endPos,
-            rawContent,
-            wPaths
-        });
+        if (existing) {
+            // 渲染桶為由後往前走訪，同一幀內較舊音符不可覆蓋較新觸發的判定特效；同一音符重複觸發則維持原進度
+            if (startTime < existing.startTime || (startTime === existing.startTime && existing.note === note)) {
+                return;
+            }
+            applyEffectFields(existing);
+            return;
+        }
+
+        const newEffect = {};
+        applyEffectFields(newEffect);
+        this.judgeEffects.push(newEffect);
 
         if (this.judgeEffects.length > 25) {
             this.judgeEffects.shift();
@@ -2125,15 +2089,19 @@ export class SimaiRenderer {
         if (!wPx || !hPx) return;
 
         const params = this._staticBackgroundCacheParams;
-        if (this._staticBackgroundCache && params.w === wPx && params.h === hPx && params.scale === scale) {
+        if (this._staticBackgroundCache && params && params.w === wPx && params.h === hPx && params.scale === scale) {
             return;
         }
 
-        const cache = document.createElement('canvas');
-        cache.width = wPx;
-        cache.height = hPx;
+        const cache = this._staticBackgroundCache || document.createElement('canvas');
+        if (cache.width !== wPx || cache.height !== hPx) {
+            cache.width = wPx;
+            cache.height = hPx;
+        }
         const cctx = cache.getContext('2d');
         if (cctx) {
+            cctx.setTransform(1, 0, 0, 1, 0, 0);
+            cctx.clearRect(0, 0, wPx, hPx);
             cctx.imageSmoothingEnabled = true;
             cctx.imageSmoothingQuality = 'high';
         }
@@ -2315,30 +2283,35 @@ export class SimaiRenderer {
         }
         ctx.restore();
     }
-    // 建立或確認靜態快取（在畫布尺寸或 scale 變動時會重建）
+    // 建立或確認靜態快取（在最小邊尺寸或 scale 變動時才重建，避免水平伸縮無謂重繪）
     ensureSensorCaches() {
         const wPx = this.canvas.width;
         const hPx = this.canvas.height;
         const scale = this.scale;
         if (!wPx || !hPx) return;
-        const p = Math.min(wPx, hPx) / scaleBase * scale;
+        const dimPx = Math.min(wPx, hPx);
+        const p = dimPx / scaleBase * scale;
 
         const params = this._sensorCacheParams || {};
-        if (this._sensorShapeCache && params.w === wPx && params.h === hPx && params.scale === scale) {
+        if (this._sensorShapeCache && params.dim === dimPx && params.scale === scale) {
             return; // 快取仍有效
         }
 
-        // 建立 shapes 快取
+        // 建立或重用 shapes 快取
         try {
-            const shapes = document.createElement('canvas');
-            shapes.width = wPx;
-            shapes.height = hPx;
+            const shapes = this._sensorShapeCache || document.createElement('canvas');
+            if (shapes.width !== dimPx || shapes.height !== dimPx) {
+                shapes.width = dimPx;
+                shapes.height = dimPx;
+            }
             const sctx = shapes.getContext('2d');
             if (sctx) {
+                sctx.setTransform(1, 0, 0, 1, 0, 0);
+                sctx.clearRect(0, 0, dimPx, dimPx);
                 sctx.imageSmoothingEnabled = true;
                 sctx.imageSmoothingQuality = 'high';
             }
-            sctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+            sctx.setTransform(p, 0, 0, p, dimPx / 2, dimPx / 2);
             sctx.save();
             sctx.beginPath();
             sctx.arc(0, 0, innerCirleBase, 0, Math.PI * 2);
@@ -2362,19 +2335,23 @@ export class SimaiRenderer {
 
             sctx.restore();
 
-            // 建立文字快取
-            const texts = document.createElement('canvas');
-            texts.width = wPx;
-            texts.height = hPx;
+            // 建立或重用文字快取
+            const texts = this._sensorTextCache || document.createElement('canvas');
+            if (texts.width !== dimPx || texts.height !== dimPx) {
+                texts.width = dimPx;
+                texts.height = dimPx;
+            }
             const tctx = texts.getContext('2d');
             if (tctx) {
+                tctx.setTransform(1, 0, 0, 1, 0, 0);
+                tctx.clearRect(0, 0, dimPx, dimPx);
                 tctx.imageSmoothingEnabled = true;
                 tctx.imageSmoothingQuality = 'high';
                 if ('textRendering' in tctx) {
                     try { tctx.textRendering = 'geometricPrecision'; } catch (_) { }
                 }
             }
-            tctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+            tctx.setTransform(p, 0, 0, p, dimPx / 2, dimPx / 2);
             tctx.save();
             tctx.fillStyle = '#ffffff30';
             tctx.textAlign = "center";
@@ -2396,12 +2373,12 @@ export class SimaiRenderer {
 
             this._sensorShapeCache = shapes;
             this._sensorTextCache = texts;
-            this._sensorCacheParams = { w: wPx, h: hPx, scale };
+            this._sensorCacheParams = { dim: dimPx, scale };
         } catch (e) {
             console.error('建立傳感器靜態快取失敗:', e);
             this._sensorShapeCache = null;
             this._sensorTextCache = null;
-            this._sensorCacheParams = { w: 0, h: 0, scale };
+            this._sensorCacheParams = { dim: 0, scale };
         }
     }
 
@@ -2410,11 +2387,14 @@ export class SimaiRenderer {
         if (!this._sensorShapeCache && !this._sensorTextCache) return;
 
         const { ctx } = this;
+        const dimPx = Math.min(this.canvas.width, this.canvas.height);
+        const offsetX = (this.canvas.width - dimPx) * 0.5;
+        const offsetY = (this.canvas.height - dimPx) * 0.5;
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         try {
-            if (showSensor && this._sensorShapeCache) ctx.drawImage(this._sensorShapeCache, 0, 0);
-            if (showSensorText && this._sensorTextCache) ctx.drawImage(this._sensorTextCache, 0, 0);
+            if (showSensor && this._sensorShapeCache) ctx.drawImage(this._sensorShapeCache, offsetX, offsetY);
+            if (showSensorText && this._sensorTextCache) ctx.drawImage(this._sensorTextCache, offsetX, offsetY);
         } finally {
             ctx.restore();
         }
@@ -3354,12 +3334,15 @@ export class SimaiVisualEditor {
         const w = Math.round(width * dpr);
         const h = Math.round(height * dpr);
 
-        if (!force && this.canvas.width === w && this.canvas.height === h) {
+        const sizeChanged = this.canvas.width !== w || this.canvas.height !== h;
+        if (!force && !sizeChanged) {
             return false;
         }
 
-        this.canvas.width = w;
-        this.canvas.height = h;
+        if (sizeChanged) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+        }
 
         const p = Math.min(w, h) / this.scaleBase;
         this.ctx.setTransform(p, 0, 0, p, w / 2, h / 2);
@@ -5168,12 +5151,15 @@ export class SimaiPreviewRenderer {
         const w = Math.round(width * dpr);
         const h = Math.round(height * dpr);
 
-        if (!force && this.canvas.width === w && this.canvas.height === h) {
+        const sizeChanged = this.canvas.width !== w || this.canvas.height !== h;
+        if (!force && !sizeChanged) {
             return false;
         }
 
-        this.canvas.width = w;
-        this.canvas.height = h;
+        if (sizeChanged) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+        }
         this._canvasWH = null;
         return true;
     }

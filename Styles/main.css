@@ -121,7 +121,8 @@ body.layout-vertical.panels-swapped #canvasContainer {
 
 body.editor-hidden #canvasContainer,
 body.layout-vertical.editor-hidden #canvasContainer,
-body.panels-swapped.editor-hidden #canvasContainer {
+body.panels-swapped.editor-hidden #canvasContainer,
+body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     left: 0;
     top: var(--workspace-top, var(--utility-height, 40px));
     width: 100%;
@@ -131,9 +132,6 @@ body.panels-swapped.editor-hidden #canvasContainer {
 #canvasContainer.expanded {
     --workspace-top: 0px;
     --workspace-height: calc(100% - var(--playControls-height));
-    height: var(--workspace-height);
-    top: var(--workspace-top);
-    left: 0;
 }
 
 #canvasContainer #canvasOutline {

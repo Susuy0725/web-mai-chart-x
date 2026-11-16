@@ -4,6 +4,17 @@ import { t, setLang } from '../i18n.js';
 import { idbSet } from '../indexDB.js';
 import { appContext } from '../core/appContext.js';
 import { eventBus, EVENTS } from '../core/eventBus.js';
+import {
+    KEYBINDING_CATEGORIES,
+    KEYBINDING_DEFINITIONS,
+    eventToShortcut,
+    formatShortcutParts,
+    formatShortcutText,
+    getEffectiveShortcut,
+    isShortcutCustomized,
+    findConflictingAction,
+    normalizeShortcut,
+} from '../core/keybindings.js';
 
 /**
  * 開啟全域設定彈窗
@@ -38,19 +49,24 @@ export function openSettingsModal(options = {}) {
 
     const sections = [];
     const tabs = [];
-    let currentTabIndex = initialTab;
+    const categoryTabIds = [];
+    let currentTabIndex = 0;
+
+    let stopKeybindingRecording = () => {};
 
     const switchTab = (index) => {
-        currentTabIndex = index;
+        stopKeybindingRecording();
+        const safeIndex = (index >= 0 && index < tabs.length) ? index : 0;
+        currentTabIndex = safeIndex;
         tabs.forEach((tab, i) => {
-            tab.classList.toggle('active', i === index);
+            tab.classList.toggle('active', i === safeIndex);
         });
         sections.forEach((sec, i) => {
-            sec.classList.toggle('active', i === index);
+            sec.classList.toggle('active', i === safeIndex);
         });
     };
 
-    const addTab = (label) => {
+    const addTab = (label, categoryId = null) => {
         const index = tabs.length;
         const tab = document.createElement('div');
         tab.textContent = label;
@@ -58,6 +74,7 @@ export function openSettingsModal(options = {}) {
         tab.addEventListener('click', () => switchTab(index));
         sidebar.appendChild(tab);
         tabs.push(tab);
+        categoryTabIds.push(categoryId);
 
         const section = document.createElement('div');
         section.className = 'popup-setting-section';
@@ -170,7 +187,7 @@ export function openSettingsModal(options = {}) {
                 finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
             } else if (config.type === 'text') {
                 finalVal = config.el.value;
-            } else if (config.type === 'object' || config.type === 'color-object') {
+            } else if (config.type === 'object' || config.type === 'color-object' || config.type === 'keybindings') {
                 // 直接複製子選單同步完的物件結果
                 finalVal = { ...config.el.value };
             } else {
@@ -351,6 +368,364 @@ export function openSettingsModal(options = {}) {
         return select;
     };
 
+    const createKeybindingsEditor = (initialValue, onCleanupRegister) => {
+        const panel = document.createElement('div');
+        panel.className = 'popup-setting-kb-panel';
+
+        let workingMap = { ...(initialValue || {}) };
+        panel.value = { ...workingMap };
+
+        let recordingActionId = null;
+        let pendingConflict = null;
+        let keydownCaptureHandler = null;
+        let searchQuery = '';
+
+        const syncValue = () => {
+            panel.value = { ...workingMap };
+        };
+
+        const setBinding = (actionId, combo) => {
+            const def = KEYBINDING_DEFINITIONS.find(d => d.id === actionId);
+            if (!def) return;
+            const normDefault = normalizeShortcut(def.defaultShortcut || '');
+            const normNext = normalizeShortcut(combo || '');
+            if (normNext === normDefault) {
+                delete workingMap[actionId];
+            } else {
+                workingMap[actionId] = normNext;
+            }
+            syncValue();
+        };
+
+        const stopRecording = () => {
+            if (keydownCaptureHandler) {
+                window.removeEventListener('keydown', keydownCaptureHandler, true);
+                keydownCaptureHandler = null;
+            }
+            recordingActionId = null;
+            delete container.dataset.recordingKeybinding;
+        };
+
+        stopKeybindingRecording = stopRecording;
+        if (typeof onCleanupRegister === 'function') {
+            onCleanupRegister(stopRecording);
+        }
+
+        // 頂部提示與工具列 (搜尋 + 全部重設)
+        const hintEl = document.createElement('div');
+        hintEl.className = 'popup-setting-kb-hint';
+        hintEl.textContent = t('keybindings.hint');
+        panel.appendChild(hintEl);
+
+        const toolbarEl = document.createElement('div');
+        toolbarEl.className = 'popup-setting-kb-toolbar';
+
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'popup-setting-input popup-setting-kb-search';
+        searchInput.placeholder = t('keybindings.searchPlaceholder');
+        searchInput.addEventListener('input', () => {
+            searchQuery = searchInput.value.trim().toLowerCase();
+            renderList();
+        });
+
+        const resetAllBtn = document.createElement('button');
+        resetAllBtn.type = 'button';
+        resetAllBtn.className = 'popup-setting-sub-reset-btn popup-setting-kb-reset-all';
+        resetAllBtn.textContent = t('keybindings.resetAll');
+        resetAllBtn.addEventListener('click', () => {
+            stopRecording();
+            pendingConflict = null;
+            workingMap = {};
+            syncValue();
+            renderConflictBanner();
+            renderList();
+            simpleToast({ content: t('keybindings.resetAllDone'), type: 'info', timeout: 1500 });
+        });
+
+        toolbarEl.appendChild(searchInput);
+        toolbarEl.appendChild(resetAllBtn);
+        panel.appendChild(toolbarEl);
+
+        const conflictBanner = document.createElement('div');
+        conflictBanner.className = 'popup-setting-kb-conflict';
+        conflictBanner.style.display = 'none';
+        panel.appendChild(conflictBanner);
+
+        const listEl = document.createElement('div');
+        listEl.className = 'popup-setting-kb-list';
+        panel.appendChild(listEl);
+
+        const renderConflictBanner = () => {
+            conflictBanner.innerHTML = '';
+            if (!pendingConflict) {
+                conflictBanner.style.display = 'none';
+                return;
+            }
+
+            const { actionId, combo, conflictDef } = pendingConflict;
+            const textEl = document.createElement('span');
+            textEl.className = 'popup-setting-kb-conflict-text';
+            textEl.textContent = t('keybindings.conflictWarning', {
+                action: t(conflictDef.labelKey),
+                shortcut: formatShortcutText(combo)
+            });
+
+            const btnWrap = document.createElement('div');
+            btnWrap.className = 'popup-setting-kb-conflict-actions';
+
+            const overwriteBtn = document.createElement('button');
+            overwriteBtn.type = 'button';
+            overwriteBtn.className = 'popup-setting-kb-conflict-btn is-primary';
+            overwriteBtn.textContent = t('keybindings.conflictOverwrite');
+            overwriteBtn.addEventListener('click', () => {
+                setBinding(conflictDef.id, '');
+                setBinding(actionId, combo);
+                pendingConflict = null;
+                renderConflictBanner();
+                renderList();
+            });
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'popup-setting-kb-conflict-btn';
+            cancelBtn.textContent = t('keybindings.conflictCancel');
+            cancelBtn.addEventListener('click', () => {
+                pendingConflict = null;
+                renderConflictBanner();
+                renderList();
+            });
+
+            btnWrap.appendChild(overwriteBtn);
+            btnWrap.appendChild(cancelBtn);
+            conflictBanner.appendChild(textEl);
+            conflictBanner.appendChild(btnWrap);
+            conflictBanner.style.display = 'flex';
+        };
+
+        const startRecording = (actionId) => {
+            if (recordingActionId === actionId) {
+                stopRecording();
+                renderList();
+                return;
+            }
+            stopRecording();
+            pendingConflict = null;
+            renderConflictBanner();
+
+            recordingActionId = actionId;
+            container.dataset.recordingKeybinding = 'true';
+            renderList();
+
+            keydownCaptureHandler = (e) => {
+                if (!panel.isConnected) {
+                    stopRecording();
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+
+                // 單按 Escape 取消本次錄製
+                if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+                    stopRecording();
+                    renderList();
+                    return;
+                }
+
+                const combo = eventToShortcut(e);
+                if (!combo) return;
+
+                const conflictDef = findConflictingAction(combo, actionId, workingMap);
+                stopRecording();
+
+                if (conflictDef) {
+                    pendingConflict = { actionId, combo, conflictDef };
+                    renderConflictBanner();
+                    renderList();
+                    return;
+                }
+
+                setBinding(actionId, combo);
+                renderList();
+            };
+
+            window.addEventListener('keydown', keydownCaptureHandler, true);
+        };
+
+        const renderKeyPills = (triggerBtn, shortcutStr, isRecording) => {
+            triggerBtn.innerHTML = '';
+            if (isRecording) {
+                const recSpan = document.createElement('span');
+                recSpan.className = 'popup-setting-kb-rec-label';
+                recSpan.textContent = t('keybindings.recording');
+                triggerBtn.appendChild(recSpan);
+                return;
+            }
+
+            const parts = formatShortcutParts(shortcutStr);
+            if (parts.length === 0) {
+                const emptySpan = document.createElement('span');
+                emptySpan.className = 'popup-setting-kb-empty';
+                emptySpan.textContent = t('keybindings.unbound');
+                triggerBtn.appendChild(emptySpan);
+                return;
+            }
+
+            parts.forEach((part, idx) => {
+                if (idx > 0) {
+                    const plus = document.createElement('span');
+                    plus.className = 'popup-setting-kb-plus';
+                    plus.textContent = '+';
+                    triggerBtn.appendChild(plus);
+                }
+                const kbd = document.createElement('kbd');
+                kbd.className = 'popup-setting-kb-kbd';
+                kbd.textContent = part;
+                triggerBtn.appendChild(kbd);
+            });
+        };
+
+        const renderList = () => {
+            listEl.innerHTML = '';
+            let totalMatched = 0;
+
+            KEYBINDING_CATEGORIES.forEach((category) => {
+                const defs = KEYBINDING_DEFINITIONS.filter((def) => {
+                    if (def.category !== category) return false;
+                    if (!searchQuery) return true;
+                    const labelText = t(def.labelKey).toLowerCase();
+                    const keyText = formatShortcutText(getEffectiveShortcut(def.id, workingMap)).toLowerCase();
+                    return labelText.includes(searchQuery) || keyText.includes(searchQuery) || def.id.toLowerCase().includes(searchQuery);
+                });
+
+                if (defs.length === 0) return;
+                totalMatched += defs.length;
+
+                const catHeader = document.createElement('div');
+                catHeader.className = 'popup-setting-section-title';
+                catHeader.textContent = t(`keybindings.categories.${category}`);
+                listEl.appendChild(catHeader);
+
+                defs.forEach((def) => {
+                    const row = document.createElement('div');
+                    row.className = 'popup-setting-kb-row';
+
+                    const infoEl = document.createElement('div');
+                    infoEl.className = 'popup-setting-kb-info';
+
+                    const nameEl = document.createElement('span');
+                    nameEl.className = 'popup-setting-kb-name';
+                    nameEl.textContent = t(def.labelKey);
+                    infoEl.appendChild(nameEl);
+
+                    const customized = isShortcutCustomized(def.id, workingMap);
+                    if (def.visualOnly || customized) {
+                        const badges = document.createElement('div');
+                        badges.className = 'popup-setting-kb-badges';
+                        if (def.visualOnly) {
+                            const visualBadge = document.createElement('span');
+                            visualBadge.className = 'popup-setting-kb-badge is-scope';
+                            visualBadge.textContent = t('keybindings.visualOnlyBadge');
+                            badges.appendChild(visualBadge);
+                        }
+                        if (customized) {
+                            const modBadge = document.createElement('span');
+                            modBadge.className = 'popup-setting-kb-badge is-custom';
+                            modBadge.textContent = t('keybindings.modified');
+                            badges.appendChild(modBadge);
+                        }
+                        infoEl.appendChild(badges);
+                    }
+
+                    const controlsEl = document.createElement('div');
+                    controlsEl.className = 'popup-setting-kb-controls';
+
+                    const activeShortcut = getEffectiveShortcut(def.id, workingMap);
+                    const isRecording = recordingActionId === def.id;
+
+                    const triggerBtn = document.createElement('button');
+                    triggerBtn.type = 'button';
+                    triggerBtn.className = 'popup-setting-kb-trigger';
+                    if (isRecording) triggerBtn.classList.add('is-recording');
+                    if (!activeShortcut && !isRecording) triggerBtn.classList.add('is-unbound');
+                    renderKeyPills(triggerBtn, activeShortcut, isRecording);
+                    triggerBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        startRecording(def.id);
+                    });
+                    controlsEl.appendChild(triggerBtn);
+
+                    if (activeShortcut) {
+                        const clearBtn = document.createElement('button');
+                        clearBtn.type = 'button';
+                        clearBtn.className = 'popup-setting-kb-icon-btn';
+                        clearBtn.title = t('keybindings.clearBtn');
+                        clearBtn.setAttribute('aria-label', t('keybindings.clearBtn'));
+                        clearBtn.innerHTML = '<span class="material-symbols-outlined" translate="no">close</span>';
+                        clearBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            stopRecording();
+                            pendingConflict = null;
+                            setBinding(def.id, '');
+                            renderConflictBanner();
+                            renderList();
+                        });
+                        controlsEl.appendChild(clearBtn);
+                    }
+
+                    if (customized) {
+                        const resetBtn = document.createElement('button');
+                        resetBtn.type = 'button';
+                        resetBtn.className = 'popup-setting-kb-icon-btn';
+                        resetBtn.title = t('keybindings.resetBtn');
+                        resetBtn.setAttribute('aria-label', t('keybindings.resetBtn'));
+                        resetBtn.innerHTML = '<span class="material-symbols-outlined" translate="no">restart_alt</span>';
+                        resetBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            stopRecording();
+                            pendingConflict = null;
+                            const defaultCombo = normalizeShortcut(def.defaultShortcut || '');
+                            const conflictDef = defaultCombo ? findConflictingAction(defaultCombo, def.id, workingMap) : null;
+                            if (conflictDef) {
+                                pendingConflict = { actionId: def.id, combo: defaultCombo, conflictDef };
+                                renderConflictBanner();
+                                renderList();
+                                return;
+                            }
+                            delete workingMap[def.id];
+                            syncValue();
+                            renderConflictBanner();
+                            renderList();
+                        });
+                        controlsEl.appendChild(resetBtn);
+                    }
+
+                    row.appendChild(infoEl);
+                    row.appendChild(controlsEl);
+                    listEl.appendChild(row);
+                });
+            });
+
+            if (totalMatched === 0) {
+                const emptyEl = document.createElement('div');
+                emptyEl.className = 'popup-setting-kb-no-results';
+                emptyEl.textContent = t('keybindings.noResults');
+                listEl.appendChild(emptyEl);
+            }
+        };
+
+        panel._updateDisplay = () => {
+            workingMap = { ...(panel.value || {}) };
+            pendingConflict = null;
+            stopRecording();
+            renderConflictBanner();
+            renderList();
+        };
+
+        renderList();
+        return panel;
+    };
+
     const inputRefs = {};
     let popupCtx = null;
 
@@ -359,7 +734,7 @@ export function openSettingsModal(options = {}) {
         if (category.secret && !isEasterEggUnlocked()) {
             return;
         }
-        const section = addTab(category.label === '???' ? '???' : t(category.label));
+        const section = addTab(category.label === '???' ? '???' : t(category.label), category.id || null);
 
         if (category.html) {
             section.innerHTML += category.html;
@@ -594,6 +969,10 @@ export function openSettingsModal(options = {}) {
                     presetSelect.value = detectMatchingPreset(targetRef[targetKey]);
                 };
             }
+            // --- F2. 處理自訂快速鍵面板 (Keybindings) ---
+            else if (item.type === 'keybindings') {
+                el = createKeybindingsEditor(currentVal);
+            }
             // --- E. 處理 Button ---
             else if (item.type === 'button') {
                 el = document.createElement('button');
@@ -616,10 +995,20 @@ export function openSettingsModal(options = {}) {
                 ref: targetRef,
                 key: targetKey
             };
-            section.appendChild(createRow(t(item.label), el));
+            if (item.type === 'keybindings') {
+                section.appendChild(el);
+            } else {
+                section.appendChild(createRow(t(item.label), el));
+            }
         });
     });
 
+    if (typeof initialTab === 'string') {
+        const matchedIdx = categoryTabIds.indexOf(initialTab);
+        currentTabIndex = matchedIdx !== -1 ? matchedIdx : 0;
+    } else {
+        currentTabIndex = Number.isInteger(initialTab) ? initialTab : 0;
+    }
     switchTab(currentTabIndex);
 
     const oldAudioSettings = {
@@ -635,20 +1024,30 @@ export function openSettingsModal(options = {}) {
         title: t('settings.title'),
         customContent: container,
         width: "85%",
-        maxWidth: "500px",
+        maxWidth: "560px",
+        onClose: () => {
+            stopKeybindingRecording();
+        },
         buttons: [
             {
                 text: t('popup.save'),
-                onClick: () => { applySettings(); },
+                onClick: () => {
+                    stopKeybindingRecording();
+                    applySettings();
+                },
                 hideOnClick: true
             },
             {
                 text: t('popup.apply'),
-                onClick: () => { applySettings(); }
+                onClick: () => {
+                    stopKeybindingRecording();
+                    applySettings();
+                }
             },
             {
                 text: t('popup.cancel'),
                 onClick: () => {
+                    stopKeybindingRecording();
                     applyAudioSettings(oldAudioSettings);
                     if (oldSyntaxColors) {
                         applySyntaxColors(oldSyntaxColors);
@@ -660,6 +1059,7 @@ export function openSettingsModal(options = {}) {
             {
                 text: t('popup.reset'),
                 onClick: () => {
+                    stopKeybindingRecording();
                     Object.values(inputRefs).forEach(ref => {
                         if (ref.type === 'button') {
                             return;
@@ -671,6 +1071,9 @@ export function openSettingsModal(options = {}) {
                             Object.assign(ref.ref[ref.key], ref.def);
                             if (ref.el._updateDisplay) ref.el._updateDisplay();
                             if (ref.apply) ref.apply(ref.ref[ref.key]);
+                        } else if (ref.type === 'keybindings') {
+                            ref.el.value = { ...(ref.def || {}) };
+                            if (ref.el._updateDisplay) ref.el._updateDisplay();
                         } else {
                             ref.el.value = ref.def;
                             ref.ref[ref.key] = ref.def;

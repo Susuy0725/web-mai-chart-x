@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.16 (3)]
+
+### Added
+- **自訂快速鍵**：加入自訂快速鍵功能
+
+### Changed
+- 改善使用者介面與操作體驗。
+
 ## [2026.11.16 (2)]
 
 ### Added

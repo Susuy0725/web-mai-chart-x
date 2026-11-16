@@ -296,7 +296,8 @@
       "sfx": "音声",
       "operation": "操作",
       "other": "その他",
-      "maintenance": "メンテナンス"
+      "maintenance": "メンテナンス",
+      "keybindings": "キー設定"
     },
     "sections": {
       "speedAndNotes": "スピード・ノーツ",
@@ -375,7 +376,8 @@
       "invertWheelDirection": "マウスホイールのスクロール方向反転",
       "smoothScroll": "スムーズスクロール (滑らかなタイムライン移動)",
       "wheelSensitivity": "ホイール感度",
-      "syntaxColors": "構文強調カスタム色"
+      "syntaxColors": "構文強調カスタム色",
+      "customKeybindings": "ショートカット設定"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -832,7 +834,9 @@
         "<b>再生速度を下げる</b>: <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">O</span>。",
         "<b>スクロール速度変更</b>: <span class=\"code-highlight\">Ctrl</span> + マウスホイールでタイムラインの流速をズームします。",
         "<b>クイック パネル</b>: 設定を開いた後、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を押して、実行したい機能にマウスを移動し、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を放します。"
-      ]
+      ],
+      "customizeShortcutsBtn": "ショートカットをカスタマイズ...",
+      "shortcutScopeVisual": "トラック編集モードのみ"
     },
     "about": {
       "title": "Web mai Chart X について",
@@ -1123,5 +1127,61 @@
     "copied": "コードをクリップボードにコピーしました！",
     "previewSelectTitle": "タイムラインプレビュー (クリックまたはドラッグで区間選択)",
     "dragSelectTip": "タイムライン上をドラッグまたはクリックして選択。両端の旗をドラッグして微調整も可能"
+  },
+  "keybindings": {
+    "searchPlaceholder": "操作名やキーを検索...",
+    "resetAll": "すべて初期値に戻す",
+    "resetAllDone": "すべてのショートカットを初期設定に戻しました",
+    "recording": "キーを入力... (Esc でキャンセル)",
+    "unbound": "未設定",
+    "modified": "変更済み",
+    "clearBtn": "クリア",
+    "resetBtn": "初期値に戻す",
+    "visualOnlyBadge": "トラック",
+    "conflictWarning": "「{shortcut}」は既に「{action}」に割り当てられています",
+    "conflictOverwrite": "上書きする",
+    "conflictCancel": "キャンセル",
+    "noResults": "一致するショートカットが見つかりません",
+    "hint": "キーボタンをクリックして新しいショートカットを登録します。Esc でキャンセル、× で解除できます。",
+    "categories": {
+      "playback": "再生コントロール",
+      "editing": "編集・譜面操作",
+      "visual": "トラック編集モード",
+      "view": "表示・インターフェース"
+    },
+    "actions": {
+      "playbackToggle": "再生 / 一時停止",
+      "playbackReset": "先頭に戻る",
+      "playbackStop": "再生を停止",
+      "playbackSpeedUp": "再生速度を上げる (+0.25x)",
+      "playbackSpeedDown": "再生速度を下げる (-0.25x)",
+      "jumpToCursor": "再生位置をカーソルへ移動",
+      "cursorToPlayhead": "カーソルを再生位置へ移動",
+      "editSave": "譜面を保存",
+      "editFind": "検索",
+      "editReplace": "検索と置換",
+      "editUndo": "元に戻す",
+      "editRedo": "やり直す",
+      "editFormat": "譜面を整形",
+      "editToggleBk": "Break (bk) を切替 / 追加",
+      "editToggleEx": "EX (ex) を切替 / 追加",
+      "editRotateClockwise": "時計回りに 45° 回転",
+      "editRotateCounterClockwise": "反時計回りに 45° 回転",
+      "editRotate180": "180° 回転",
+      "editFlipVertical": "上下反転",
+      "editFlipHorizontal": "左右反転",
+      "editSubdivision": "拍分割・変換ツール",
+      "editSmoothBpm": "スムーズ BPM 生成",
+      "visualToolPlace": "ノーツ配置ツールに切替",
+      "visualToolSelect": "選択ツールに切替",
+      "visualToolBoxSelect": "範囲選択ツールに切替",
+      "visualDeleteSelected": "選択したノーツを削除",
+      "visualClearSelection": "選択を解除",
+      "viewToggleEditor": "エディターパネルを表示 / 非表示",
+      "viewToggleMode": "テキスト / トラックモード切替",
+      "viewTogglePlayControls": "再生コントロールバーを表示 / 非表示",
+      "viewFullscreen": "全画面表示を切替",
+      "viewOpenSettings": "設定を開く"
+    }
   }
 }

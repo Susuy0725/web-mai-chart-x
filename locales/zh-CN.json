@@ -219,7 +219,7 @@
     "repoEmptyHint": "点击上方“添加源”并输入支持 WERP 协议的 HTTPS 索引网址。",
     "repoNoExtensions": "当前选中的数据源中没有可用的扩展程序。",
     "repoAddTitle": "添加扩展程序数据源",
-    "repoAddDesc": "请输入第三方仓库的 WERP 索引网址，系统将验证格式并显示仓库信息供您确认。",
+    "repoAddDesc": "请输入支持的源仓库索引网址，系统将验证格式并显示仓库信息。",
     "repoFetchPreview": "检查源",
     "repoFetching": "正在获取并验证索引...",
     "repoConfirmAdd": "确认添加",
@@ -252,7 +252,9 @@
     "repoErrInvalidPath": "包路径无效或不符合同源 HTTPS 相对路径规范。",
     "repoErrDownloadFailed": "下载扩展包失败：{detail}",
     "repoErrHashMismatch": "包 SHA-256 哈希验证失败，已中止安装。",
-    "repoErrIdMismatch": "下载的包标识符与索引声明不一致。"
+    "repoErrIdMismatch": "下载的包标识符与索引声明不一致。",
+    "repoSearchPlaceholder": "搜索扩展程序名称、ID 或源...",
+    "repoNoSearchResults": "找不到符合搜索条件的扩展程序。"
   },
   "textarea": {
     "placeholder": "在此输入谱面数据..."

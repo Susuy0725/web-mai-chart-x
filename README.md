@@ -19,6 +19,7 @@
 - **專案管理器**：輕鬆管理多個譜面專案。
 - **譜面影片錄製**：方便匯出與分享你的譜面成果。
 - **進階譜面支援**：支援地雷音符 `m` 及變速指令 `<HS*N>`。
+- **擴充程式與來源管理**：支援自訂擴充套件與透過 WERP 協定從第三方儲存庫探索、驗證與安裝擴充程式。
 
 ### ✏️ 更新日誌
 
@@ -35,10 +36,12 @@ https://discord.gg/vX7XcG7bMy
 
 ### 📚 開發與架構文檔
 
-- [Agent 開發與架構指引 (AGENTS.md)](./AGENTS.md)
+- [Agent 開與架構指引 (AGENTS.md)](./AGENTS.md)
 - [詳細架構與生命週期 (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
 - [模組與 API 索引手冊 (docs/MODULES.md)](./docs/MODULES.md)
 - [渲染與音訊引擎詳解 (docs/RENDERER_AND_AUDIO.md)](./docs/RENDERER_AND_AUDIO.md)
+- [擴充程式開發手冊 (docs/EXTENSIONS.md)](./docs/EXTENSIONS.md)
+- [WERP 擴充程式儲存庫協定手冊 (docs/werp.md)](./docs/werp.md)
 
 ### 📖 授權條款
 
@@ -61,6 +64,7 @@ While perfecting the functions that a general editor should have, we also added 
 - **Project manager**: Easily manage multiple chart projects.
 - **Chart video export**: Conveniently export and share your chart previews.
 - **Advanced chart support**: Supports Mine notes `m` and High Speed command `<HS*N>`.
+- **Extension & Source Management**: Supports custom extensions and exploring, validating, and installing extensions from third-party repositories via the WERP protocol.
 
 ### ✏️ Changelog
 [Click me to visit Changelog](./CHANGELOG.md) 
@@ -79,6 +83,8 @@ Special thanks to the open-source community for providing the assets:
 - [System Architecture & Lifecycle (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
 - [Module & API Directory (docs/MODULES.md)](./docs/MODULES.md)
 - [Renderer & Audio Engine Details (docs/RENDERER_AND_AUDIO.md)](./docs/RENDERER_AND_AUDIO.md)
+- [Extension Development Guide (docs/EXTENSIONS.md)](./docs/EXTENSIONS.md)
+- [WERP Extension Repository Protocol Handbook (docs/werp.md)](./docs/werp.md)
 
 ### 📖 License
 

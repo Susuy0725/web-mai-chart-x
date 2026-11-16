@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.16 (2)]
+
+### Added
+- 新增擴充程式管理器擴充來源頁面，提供開放式靜態儲存庫協定(WERP v1.0)支援。
+- 新增資料源管理與搜尋功能，整合設定彈窗提供新增預檢、單獨與批次重新整理及來源移除，並支援初次使用自動注入預設範例來源。
+- 新增來源追蹤與完整性驗證機制，安裝或更新前進行同源 HTTPS 相對路徑檢查、SHA-256 雜湊校驗與權限審查確認。
+
+### Changed
+- 補齊 sw.js 離線快取清單，更新 5 國語系翻譯檔，並將 docs/werp.md 擴充為開發者手冊，同步更新 docs/EXTENSIONS.md 與 README.md。
+
 ## [2026.11.16 (1)]
 
 ### Added

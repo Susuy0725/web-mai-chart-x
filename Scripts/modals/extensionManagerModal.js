@@ -388,12 +388,16 @@ function formatRepoSyncTime(timestamp) {
 }
 
 /**
- * 開啟新增擴充程式資料源彈窗（WERP 5.1：取得、驗證並顯示儲存庫資訊供使用者確認）
- * @param {Function} onAdded
+ * 開啟資料源設定彈窗（整合新增資料源預檢與已加入資料源管理）
+ * @param {Function} onChanged
  */
-function openAddRepoModal(onAdded) {
+function openManageReposModal(onChanged) {
     const body = document.createElement('div');
     body.className = 'ext-perm-confirm';
+
+    // ── 新增資料源區塊（WERP 5.1：取得、驗證並顯示儲存庫資訊供使用者確認） ──
+    const addSection = document.createElement('div');
+    addSection.className = 'ext-detail-meta-card';
 
     const hint = document.createElement('p');
     hint.className = 'ext-perm-intro';
@@ -405,7 +409,7 @@ function openAddRepoModal(onAdded) {
     const urlInput = document.createElement('input');
     urlInput.type = 'url';
     urlInput.className = 'popup-input ext-repo-input';
-    urlInput.placeholder = 'https://example.com/index.json';
+    urlInput.placeholder = 'https://example.github.io/reponame/index.json';
     urlInput.autocomplete = 'off';
     urlInput.spellcheck = false;
 
@@ -419,129 +423,7 @@ function openAddRepoModal(onAdded) {
     const statusBox = document.createElement('div');
     statusBox.className = 'ext-repo-preview-area';
 
-    const confirmBtn = document.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'ext-card-btn is-primary';
-    confirmBtn.textContent = t('extensions.repoConfirmAdd');
-    confirmBtn.disabled = true;
-
     let validatedRepo = null;
-    let modalCtrl = null;
-
-    const renderPreview = (validated) => {
-        statusBox.textContent = '';
-        const card = document.createElement('div');
-        card.className = 'ext-detail-meta-card';
-
-        const head = document.createElement('div');
-        head.className = 'ext-detail-head';
-        const nameEl = document.createElement('strong');
-        nameEl.className = 'ext-detail-name';
-        nameEl.textContent = validated.index.name;
-        const countBadge = document.createElement('span');
-        countBadge.className = 'ext-status-badge is-active';
-        countBadge.textContent = t('extensions.repoExtCount', { count: validated.index.extensions.length });
-        head.append(nameEl, countBadge);
-
-        const descEl = document.createElement('p');
-        descEl.className = validated.index.description ? 'ext-detail-desc' : 'ext-detail-desc is-empty';
-        descEl.textContent = validated.index.description || t('extensions.noDescription');
-
-        const metaGrid = document.createElement('dl');
-        metaGrid.className = 'ext-detail-meta-grid';
-        metaGrid.appendChild(createMetaRow('extensions.metaId', validated.index.identifier, true));
-        metaGrid.appendChild(createMetaRow('extensions.repoUrlLabel', validated.url, true));
-
-        card.append(head, descEl, metaGrid);
-        statusBox.appendChild(card);
-    };
-
-    const runPreviewFetch = async () => {
-        validatedRepo = null;
-        confirmBtn.disabled = true;
-        checkBtn.disabled = true;
-        statusBox.textContent = '';
-
-        const loadingEl = document.createElement('p');
-        loadingEl.className = 'ext-perm-intro';
-        loadingEl.textContent = t('extensions.repoFetching');
-        statusBox.appendChild(loadingEl);
-
-        try {
-            const result = await fetchAndValidateRegistry(urlInput.value);
-            validatedRepo = result;
-            renderPreview(result);
-            confirmBtn.disabled = false;
-        } catch (error) {
-            statusBox.textContent = '';
-            const errEl = document.createElement('div');
-            errEl.className = 'ext-card-error';
-            errEl.textContent = error.message;
-            statusBox.appendChild(errEl);
-        } finally {
-            checkBtn.disabled = false;
-        }
-    };
-
-    checkBtn.addEventListener('click', runPreviewFetch);
-    urlInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            runPreviewFetch();
-        }
-    });
-    urlInput.addEventListener('input', () => {
-        if (validatedRepo && urlInput.value.trim() !== validatedRepo.url) {
-            validatedRepo = null;
-            confirmBtn.disabled = true;
-        }
-    });
-
-    const footerActions = document.createElement('div');
-    footerActions.className = 'ext-card-actions';
-    footerActions.appendChild(confirmBtn);
-
-    confirmBtn.addEventListener('click', async () => {
-        if (!validatedRepo) return;
-        confirmBtn.disabled = true;
-        try {
-            await addExtensionRepo(validatedRepo);
-            simpleToast({
-                content: t('extensions.repoAddedSuccess', { name: validatedRepo.index.name }),
-                type: 'success'
-            });
-            modalCtrl?.close();
-            if (typeof onAdded === 'function') onAdded(validatedRepo.url);
-        } catch (error) {
-            confirmBtn.disabled = false;
-            simpleToast({ content: error.message, type: 'error' });
-        }
-    });
-
-    body.append(hint, inputRow, statusBox, footerActions);
-
-    modalCtrl = popupWindow({
-        title: t('extensions.repoAddTitle'),
-        customContent: body,
-        width: 540,
-        maxWidth: 620,
-        buttons: [
-            {
-                text: t('extensions.close'),
-                hideOnClick: true
-            }
-        ]
-    });
-    setTimeout(() => urlInput.focus(), 50);
-}
-
-/**
- * 開啟管理已加入資料源子彈窗
- * @param {Function} onChanged
- */
-function openManageReposModal(onChanged) {
-    const body = document.createElement('div');
-    body.className = 'ext-perm-confirm';
 
     const listEl = document.createElement('div');
     listEl.className = 'ext-repo-manage-list';
@@ -632,13 +514,110 @@ function openManageReposModal(onChanged) {
         }
     };
 
+    const renderPreview = (validated) => {
+        statusBox.textContent = '';
+        const card = document.createElement('div');
+        card.className = 'ext-repo-manage-item';
+
+        const head = document.createElement('div');
+        head.className = 'ext-detail-head';
+        const nameEl = document.createElement('strong');
+        nameEl.className = 'ext-detail-name';
+        nameEl.textContent = validated.index.name;
+        const countBadge = document.createElement('span');
+        countBadge.className = 'ext-status-badge is-active';
+        countBadge.textContent = t('extensions.repoExtCount', { count: validated.index.extensions.length });
+        head.append(nameEl, countBadge);
+
+        const descEl = document.createElement('p');
+        descEl.className = validated.index.description ? 'ext-detail-desc' : 'ext-detail-desc is-empty';
+        descEl.textContent = validated.index.description || t('extensions.noDescription');
+
+        const metaGrid = document.createElement('dl');
+        metaGrid.className = 'ext-detail-meta-grid';
+        metaGrid.appendChild(createMetaRow('extensions.metaId', validated.index.identifier, true));
+        metaGrid.appendChild(createMetaRow('extensions.repoUrlLabel', validated.url, true));
+
+        const previewActions = document.createElement('div');
+        previewActions.className = 'ext-card-actions';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'ext-card-btn is-primary';
+        confirmBtn.textContent = t('extensions.repoConfirmAdd');
+        confirmBtn.addEventListener('click', async () => {
+            if (!validatedRepo) return;
+            confirmBtn.disabled = true;
+            try {
+                await addExtensionRepo(validatedRepo);
+                simpleToast({
+                    content: t('extensions.repoAddedSuccess', { name: validatedRepo.index.name }),
+                    type: 'success'
+                });
+                validatedRepo = null;
+                urlInput.value = '';
+                statusBox.textContent = '';
+                await renderRepoList();
+                if (typeof onChanged === 'function') onChanged();
+            } catch (error) {
+                confirmBtn.disabled = false;
+                simpleToast({ content: error.message, type: 'error' });
+            }
+        });
+
+        previewActions.appendChild(confirmBtn);
+        card.append(head, descEl, metaGrid, previewActions);
+        statusBox.appendChild(card);
+    };
+
+    const runPreviewFetch = async () => {
+        validatedRepo = null;
+        checkBtn.disabled = true;
+        statusBox.textContent = '';
+
+        const loadingEl = document.createElement('p');
+        loadingEl.className = 'ext-perm-intro';
+        loadingEl.textContent = t('extensions.repoFetching');
+        statusBox.appendChild(loadingEl);
+
+        try {
+            const result = await fetchAndValidateRegistry(urlInput.value);
+            validatedRepo = result;
+            renderPreview(result);
+        } catch (error) {
+            statusBox.textContent = '';
+            const errEl = document.createElement('div');
+            errEl.className = 'ext-card-error';
+            errEl.textContent = error.message;
+            statusBox.appendChild(errEl);
+        } finally {
+            checkBtn.disabled = false;
+        }
+    };
+
+    checkBtn.addEventListener('click', runPreviewFetch);
+    urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            runPreviewFetch();
+        }
+    });
+    urlInput.addEventListener('input', () => {
+        if (validatedRepo && urlInput.value.trim() !== validatedRepo.url) {
+            validatedRepo = null;
+            statusBox.textContent = '';
+        }
+    });
+
+    addSection.append(hint, inputRow, statusBox);
+
     renderRepoList();
-    body.appendChild(listEl);
 
     const noteEl = document.createElement('p');
     noteEl.className = 'ext-perm-intro';
     noteEl.textContent = t('extensions.repoRemoveNote');
-    body.appendChild(noteEl);
+
+    body.append(addSection, listEl, noteEl);
 
     popupWindow({
         title: t('extensions.repoManageTitle'),
@@ -675,22 +654,27 @@ function buildRepositoriesTab(onExtensionInstalled) {
     iconSpan.textContent = 'extension';
     iconWrap.appendChild(iconSpan);
 
-    const repoSelect = document.createElement('select');
-    repoSelect.className = 'drive-filter-select ext-repo-select';
-    repoSelect.setAttribute('aria-label', t('extensions.repoFilterAll'));
+    const searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.className = 'popup-input ext-repo-search';
+    searchInput.placeholder = t('extensions.repoSearchPlaceholder');
+    searchInput.setAttribute('aria-label', t('extensions.repoSearchPlaceholder'));
+    searchInput.autocomplete = 'off';
+    searchInput.spellcheck = false;
 
     const actionsWrap = document.createElement('div');
     actionsWrap.className = 'drive-account-actions';
 
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'ext-card-btn';
-    addBtn.textContent = t('extensions.repoAddBtn');
-
-    const manageBtn = document.createElement('button');
-    manageBtn.type = 'button';
-    manageBtn.className = 'ext-card-btn';
-    manageBtn.textContent = t('extensions.repoManageBtn');
+    const settingsBtn = document.createElement('button');
+    settingsBtn.type = 'button';
+    settingsBtn.className = 'drive-refresh-btn';
+    settingsBtn.title = t('extensions.repoManageTitle');
+    settingsBtn.setAttribute('aria-label', t('extensions.repoManageTitle'));
+    const settingsIcon = document.createElement('span');
+    settingsIcon.className = 'material-symbols-outlined';
+    settingsIcon.setAttribute('translate', 'no');
+    settingsIcon.textContent = 'settings';
+    settingsBtn.appendChild(settingsIcon);
 
     const refreshAllBtn = document.createElement('button');
     refreshAllBtn.type = 'button';
@@ -702,8 +686,8 @@ function buildRepositoriesTab(onExtensionInstalled) {
     refreshIcon.textContent = 'sync';
     refreshAllBtn.appendChild(refreshIcon);
 
-    actionsWrap.append(addBtn, manageBtn, refreshAllBtn);
-    topBar.append(iconWrap, repoSelect, actionsWrap);
+    actionsWrap.append(settingsBtn, refreshAllBtn);
+    topBar.append(iconWrap, searchInput, actionsWrap);
 
     // 2. 離線快取或錯誤狀態提示列
     const noticeBar = document.createElement('div');
@@ -741,7 +725,7 @@ function buildRepositoriesTab(onExtensionInstalled) {
 
     root.append(noticeBar, emptyGuide, repoGrid);
 
-    let selectedRepoUrl = 'all';
+    let searchQuery = '';
     let isRefreshing = false;
 
     const getInstalledMetaMap = async () => {
@@ -804,25 +788,7 @@ function buildRepositoriesTab(onExtensionInstalled) {
     const renderRepoTab = async () => {
         const repos = await listExtensionRepos();
 
-        // 更新來源下拉選單
-        repoSelect.textContent = '';
-        const allOpt = document.createElement('option');
-        allOpt.value = 'all';
-        allOpt.textContent = t('extensions.repoFilterAll');
-        repoSelect.appendChild(allOpt);
-
-        for (const repo of repos) {
-            const opt = document.createElement('option');
-            opt.value = repo.url;
-            opt.textContent = repo.name || repo.identifier;
-            repoSelect.appendChild(opt);
-        }
-
-        if (selectedRepoUrl !== 'all' && !repos.some((r) => r.url === selectedRepoUrl)) {
-            selectedRepoUrl = 'all';
-        }
-        repoSelect.value = selectedRepoUrl;
-        repoSelect.disabled = repos.length === 0;
+        searchInput.disabled = repos.length === 0;
         refreshAllBtn.disabled = repos.length === 0 || isRefreshing;
 
         if (repos.length === 0) {
@@ -835,12 +801,8 @@ function buildRepositoriesTab(onExtensionInstalled) {
         emptyGuide.style.display = 'none';
         repoGrid.style.display = '';
 
-        const targetRepos = selectedRepoUrl === 'all'
-            ? repos
-            : repos.filter((r) => r.url === selectedRepoUrl);
-
         // WERP 8：離線快取或失敗狀態明確標示，避免誤導為即時更新結果
-        const errorRepos = targetRepos.filter((r) => r.lastError);
+        const errorRepos = repos.filter((r) => r.lastError);
         if (errorRepos.length > 0) {
             noticeBar.style.display = 'block';
             noticeBar.textContent = t('extensions.repoCacheNotice', { count: errorRepos.length });
@@ -851,10 +813,15 @@ function buildRepositoriesTab(onExtensionInstalled) {
         const installedMap = await getInstalledMetaMap();
         repoGrid.textContent = '';
 
+        const keyword = searchQuery.trim().toLowerCase();
         const entries = [];
-        for (const repo of targetRepos) {
+        for (const repo of repos) {
             const list = repo.cachedIndex?.extensions || [];
             for (const ext of list) {
+                if (keyword) {
+                    const haystack = `${ext.name}\n${ext.id}\n${ext.description || ''}\n${repo.name || ''}`.toLowerCase();
+                    if (!haystack.includes(keyword)) continue;
+                }
                 entries.push({ repo, ext });
             }
         }
@@ -864,7 +831,9 @@ function buildRepositoriesTab(onExtensionInstalled) {
             emptyBox.className = 'ext-empty-state';
             const emptyMsg = document.createElement('p');
             emptyMsg.className = 'ext-empty-title';
-            emptyMsg.textContent = t('extensions.repoNoExtensions');
+            emptyMsg.textContent = keyword
+                ? t('extensions.repoNoSearchResults')
+                : t('extensions.repoNoExtensions');
             emptyBox.appendChild(emptyMsg);
             repoGrid.appendChild(emptyBox);
             return;
@@ -955,21 +924,15 @@ function buildRepositoriesTab(onExtensionInstalled) {
         }
     };
 
-    repoSelect.addEventListener('change', () => {
-        selectedRepoUrl = repoSelect.value;
+    searchInput.addEventListener('input', () => {
+        searchQuery = searchInput.value;
         renderRepoTab();
     });
 
-    const openAddFlow = () => {
-        openAddRepoModal((addedUrl) => {
-            selectedRepoUrl = addedUrl || 'all';
-            renderRepoTab();
-        });
-    };
+    const openManageModal = () => openManageReposModal(renderRepoTab);
 
-    addBtn.addEventListener('click', openAddFlow);
-    emptyAddBtn.addEventListener('click', openAddFlow);
-    manageBtn.addEventListener('click', () => openManageReposModal(renderRepoTab));
+    settingsBtn.addEventListener('click', openManageModal);
+    emptyAddBtn.addEventListener('click', openManageModal);
 
     refreshAllBtn.addEventListener('click', async () => {
         if (isRefreshing) return;

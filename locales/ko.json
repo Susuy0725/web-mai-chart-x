@@ -219,7 +219,7 @@
     "repoEmptyHint": "상단의 \"소스 추가\"를 클릭하고 WERP 호환 HTTPS 인덱스 URL을 입력하세요.",
     "repoNoExtensions": "선택한 소스에 사용 가능한 확장 프로그램이 없습니다.",
     "repoAddTitle": "확장 프로그램 소스 추가",
-    "repoAddDesc": "타사 저장소의 WERP 인덱스 URL을 입력하세요. 확인을 위해 인덱스를 가져와 검증합니다.",
+    "repoAddDesc": "지원되는 소스 저장소 인덱스 URL을 입력하세요. 형식을 검증한 후 저장소 정보를 표시합니다.",
     "repoFetchPreview": "소스 확인",
     "repoFetching": "인덱스를 가져와 검증하는 중...",
     "repoConfirmAdd": "추가 확인",
@@ -252,7 +252,9 @@
     "repoErrInvalidPath": "패키지 경로가 잘못되었거나 동일 출처 HTTPS 상대 경로가 아닙니다.",
     "repoErrDownloadFailed": "확장 패키지 다운로드 실패: {detail}",
     "repoErrHashMismatch": "패키지 SHA-256 무결성 검증에 실패하여 설치가 중단되었습니다.",
-    "repoErrIdMismatch": "다운로드한 패키지 ID가 인덱스 선언과 일치하지 않습니다."
+    "repoErrIdMismatch": "다운로드한 패키지 ID가 인덱스 선언과 일치하지 않습니다.",
+    "repoSearchPlaceholder": "확장 프로그램 이름, ID 또는 소스 검색...",
+    "repoNoSearchResults": "검색 조건과 일치하는 확장 프로그램이 없습니다."
   },
   "textarea": {
     "placeholder": "여기에 채보 데이터를 입력하세요..."

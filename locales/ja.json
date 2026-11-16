@@ -219,7 +219,7 @@
     "repoEmptyHint": "上の「ソースを追加」をクリックし、WERP 対応の HTTPS インデックス URL を入力してください。",
     "repoNoExtensions": "選択したソースに利用可能な拡張機能はありません。",
     "repoAddTitle": "拡張機能ソースを追加",
-    "repoAddDesc": "サードパーティリポジトリの WERP インデックス URL を入力してください。確認のため取得・検証を行います。",
+    "repoAddDesc": "対応しているソースリポジトリのインデックス URL を入力してください。形式を検証し、リポジトリ情報を表示します。",
     "repoFetchPreview": "ソースを確認",
     "repoFetching": "インデックスを取得・検証中...",
     "repoConfirmAdd": "追加を確定",
@@ -252,7 +252,9 @@
     "repoErrInvalidPath": "パッケージパスが無効か、同一オリジン HTTPS 相対パスではありません。",
     "repoErrDownloadFailed": "パッケージのダウンロードに失敗しました：{detail}",
     "repoErrHashMismatch": "パッケージの SHA-256 検証に失敗したため中止しました。",
-    "repoErrIdMismatch": "ダウンロードしたパッケージ ID がインデックスの宣言と一致しません。"
+    "repoErrIdMismatch": "ダウンロードしたパッケージ ID がインデックスの宣言と一致しません。",
+    "repoSearchPlaceholder": "拡張機能名、ID、またはソースを検索...",
+    "repoNoSearchResults": "検索条件に一致する拡張機能が見つかりません。"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."

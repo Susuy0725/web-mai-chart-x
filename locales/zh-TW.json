@@ -219,7 +219,7 @@
     "repoEmptyHint": "點擊上方「新增來源」並輸入支援 WERP 協定的 HTTPS 索引網址。",
     "repoNoExtensions": "目前選取的資料源中沒有可用的擴充程式。",
     "repoAddTitle": "新增擴充程式資料源",
-    "repoAddDesc": "請輸入第三方儲存庫的 WERP 索引網址，系統將驗證格式並顯示儲存庫資訊供您確認。",
+    "repoAddDesc": "請輸入支援的來源儲存庫索引網址，系統將驗證格式並顯示儲存庫資訊。",
     "repoFetchPreview": "檢查來源",
     "repoFetching": "正在取得並驗證索引...",
     "repoConfirmAdd": "確認新增",
@@ -252,7 +252,9 @@
     "repoErrInvalidPath": "套件路徑無效或不符合同源 HTTPS 相對路徑規範。",
     "repoErrDownloadFailed": "下載擴充套件失敗：{detail}",
     "repoErrHashMismatch": "套件 SHA-256 雜湊驗證失敗，已中止安裝。",
-    "repoErrIdMismatch": "下載的套件識別碼與索引宣告不一致。"
+    "repoErrIdMismatch": "下載的套件識別碼與索引宣告不一致。",
+    "repoSearchPlaceholder": "搜尋擴充程式名稱、ID 或來源...",
+    "repoNoSearchResults": "找不到符合搜尋條件的擴充程式。"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."

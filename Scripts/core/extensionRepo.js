@@ -8,6 +8,9 @@ import { idbGet, idbSet } from '../indexDB.js';
 import { t } from '../i18n.js';
 
 const REPOS_STORAGE_KEY = '__extension_repos__';
+const REPOS_SEEDED_KEY = '__extension_repos_seeded__';
+
+export const DEFAULT_EXTENSION_REPO_URL = 'https://seanangle666.github.io/WMCX-Demo-Extensions/index.json';
 
 const IDENTIFIER_REGEX = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const SHA256_REGEX = /^[a-f0-9]{64}$/i;
@@ -303,11 +306,58 @@ async function writeRepoRecords(records) {
     await idbSet(REPOS_STORAGE_KEY, JSON.stringify(records));
 }
 
+let seedingPromise = null;
+
+/**
+ * 初次使用時注入系統預設範例資料源（僅執行一次，使用者移除後不會自動復原）
+ */
+export async function ensureDefaultExtensionRepo() {
+    if (seedingPromise) return seedingPromise;
+
+    seedingPromise = (async () => {
+        try {
+            const seeded = await idbGet(REPOS_SEEDED_KEY);
+            if (seeded) return;
+
+            const existing = await readRepoRecords();
+            if (existing.length > 0) {
+                await idbSet(REPOS_SEEDED_KEY, true);
+                return;
+            }
+
+            await idbSet(REPOS_SEEDED_KEY, true);
+            try {
+                const validated = await fetchAndValidateRegistry(DEFAULT_EXTENSION_REPO_URL);
+                await addExtensionRepo(validated);
+            } catch (error) {
+                await writeRepoRecords([{
+                    url: DEFAULT_EXTENSION_REPO_URL,
+                    name: 'WMCX Demo Extensions',
+                    identifier: 'com.wmcx.demo',
+                    description: '',
+                    lastFetchedAt: 0,
+                    cachedIndex: null,
+                    lastError: {
+                        code: error instanceof WerpError ? error.code : WERP_ERROR_CODES.REGISTRY_FETCH_FAILED,
+                        message: error?.message || t('extensions.repoErrFetchFailed', { detail: 'Network error' }),
+                        at: Date.now()
+                    }
+                }]);
+            }
+        } finally {
+            seedingPromise = null;
+        }
+    })();
+
+    return seedingPromise;
+}
+
 /**
  * 列出所有已儲存的擴充程式資料源
  * @returns {Promise<Array<{ url: string, name: string, identifier: string, description: string, lastFetchedAt: number, cachedIndex: Object|null, lastError: { code: string, message: string, at: number } | null }>>}
  */
 export async function listExtensionRepos() {
+    await ensureDefaultExtensionRepo();
     return readRepoRecords();
 }
 

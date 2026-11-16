@@ -2605,12 +2605,20 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .ext-repo-bar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
-.ext-repo-select {
-    flex: 1;
-    min-width: 140px;
+.ext-repo-bar .ext-card-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ext-repo-search {
+    width: auto;
+    flex: 1 1 0%;
+    min-width: 100px;
+    padding: 5px 10px;
+    font-size: 12.5px;
 }
 
 .ext-repo-cache-notice {

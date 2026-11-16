@@ -219,7 +219,7 @@
     "repoEmptyHint": "Click \"Add Source\" above and enter an HTTPS WERP index URL.",
     "repoNoExtensions": "No extensions available in the selected source.",
     "repoAddTitle": "Add Extension Source",
-    "repoAddDesc": "Enter a third-party WERP repository index URL. The index will be validated and previewed before adding.",
+    "repoAddDesc": "Enter a supported repository index URL. The format will be validated and repository details will be shown.",
     "repoFetchPreview": "Check Source",
     "repoFetching": "Fetching and validating index...",
     "repoConfirmAdd": "Add Source",
@@ -252,7 +252,9 @@
     "repoErrInvalidPath": "Invalid package path or non-HTTPS/cross-origin URL.",
     "repoErrDownloadFailed": "Failed to download extension package: {detail}",
     "repoErrHashMismatch": "Package SHA-256 verification failed. Installation aborted.",
-    "repoErrIdMismatch": "Downloaded package ID does not match the index declaration."
+    "repoErrIdMismatch": "Downloaded package ID does not match the index declaration.",
+    "repoSearchPlaceholder": "Search extension name, ID, or source...",
+    "repoNoSearchResults": "No extensions match your search."
   },
   "textarea": {
     "placeholder": "Enter chart data here..."

@@ -68,7 +68,147 @@
     "changelog": "變更日誌",
     "about": "關於",
     "gotoPlay": "開啟Play",
-    "toolsSmoothBpm": "平滑變速"
+    "toolsSmoothBpm": "平滑變速",
+    "extensions": "擴充程式",
+    "manageExtensions": "管理擴充程式",
+    "fullscreen": "全螢幕",
+    "exitFullscreen": "退出全螢幕"
+  },
+  "extensions": {
+    "title": "擴充程式管理",
+    "tabInstalled": "已安裝擴充程式",
+    "empty": "尚未安裝任何擴充程式",
+    "emptyHint": "點擊下方「匯入擴充程式」選擇 .zip 壓縮包即可安裝試用",
+    "statusActive": "啟用中",
+    "statusInactive": "已停用",
+    "statusError": "錯誤",
+    "enable": "啟用",
+    "disable": "停用",
+    "view": "檢視",
+    "remove": "移除",
+    "importZip": "匯入擴充程式",
+    "close": "關閉",
+    "cancel": "取消",
+    "resetDefaults": "重設為預設值",
+    "saved": "已儲存設定",
+    "permCount": "已宣告 {count} 項權限",
+    "hasErrorHint": "啟動或執行時發生錯誤，請點擊檢視詳情",
+    "detailTitle": "擴充程式詳細資訊",
+    "metaId": "識別碼",
+    "metaAuthor": "作者",
+    "metaAuthorUnknown": "未提供",
+    "metaEntry": "進入點",
+    "metaRuntime": "執行模式",
+    "metaLinks": "相關連結",
+    "linkHomepage": "專案首頁",
+    "runtimeTrusted": "標準網頁環境",
+    "runtimeWorker": "Worker 沙箱",
+    "noDescription": "此擴充程式未提供說明。",
+    "grantedPermissions": "宣告的權限與能力",
+    "confirmInstallTitle": "確認安裝擴充程式",
+    "confirmInstallDesc": "即將安裝「{name}」，請確認來源可信並檢視以下擴充資訊與授權範圍：",
+    "requestedPermissions": "要求的權限與具體能力",
+    "noPermissions": "無特殊權限要求",
+    "unknownPermissionTitle": "未定義權限",
+    "unknownPermissionDesc": "此權限未在系統白名單中定義，載入時可能會驗證失敗。",
+    "perm": {
+      "editor_read": {
+        "title": "讀取編輯器譜面內容",
+        "desc": "讀取目前編輯器中的譜面全文、游標選取範圍，並監聽文字編輯事件。"
+      },
+      "editor_write": {
+        "title": "修改編輯器譜面內容",
+        "desc": "取代編輯器目前選取的文字或修改指定範圍內的譜面內容。"
+      },
+      "chart_read": {
+        "title": "讀取譜面解析資料",
+        "desc": "取得目前載入譜面的唯讀解析快照與曲目封面圖片。"
+      },
+      "view_read": {
+        "title": "讀取檢視模式",
+        "desc": "讀取目前編輯器所使用的檢視模式狀態。"
+      },
+      "playback_read": {
+        "title": "讀取播放狀態",
+        "desc": "取得目前音訊與譜面的播放狀態、播放時間點與總長度。"
+      },
+      "playback_seek": {
+        "title": "控制播放進度",
+        "desc": "將時間軸跳轉至指定秒數，或進行相對時間前後微調。"
+      },
+      "render_overlay": {
+        "title": "繪製畫布疊加圖層",
+        "desc": "在譜面預覽畫布上註冊自訂繪圖圖層並觸發畫布重繪。"
+      },
+      "commands_register": {
+        "title": "註冊擴充指令",
+        "desc": "向系統指令表註冊屬於此擴充程式的自訂指令。"
+      },
+      "events_subscribe": {
+        "title": "訂閱系統事件",
+        "desc": "監聽專案載入、譜面變更、播放狀態與畫布重繪等系統事件。"
+      },
+      "ui_toast": {
+        "title": "顯示通知訊息",
+        "desc": "在畫面中顯示操作結果或狀態提示的浮動通知。"
+      },
+      "ui_menu": {
+        "title": "新增工具列選單項目",
+        "desc": "在頂部工具列的擴充程式選單中新增可點擊的操作項目。"
+      },
+      "ui_popover": {
+        "title": "開啟設定面板與儲存設定",
+        "desc": "開啟擴充專屬設定面板，並讀寫該擴充程式的隔離設定值。"
+      },
+      "ui_overlay": {
+        "title": "建立畫面浮動元件",
+        "desc": "在編輯器畫面上建立並掛載可自訂位置的浮動介面容器。"
+      },
+      "i18n_register": {
+        "title": "註冊多語系翻譯",
+        "desc": "註冊擴充程式自訂的各語言翻譯字典並使用翻譯函式。"
+      },
+      "storage": {
+        "title": "讀寫擴充隔離儲存空間",
+        "desc": "於系統為此擴充程式分配的隔離儲存空間讀寫資料，移除擴充程式時會自動清除。"
+      },
+      "settings_read": {
+        "title": "讀取原生設定",
+        "desc": "讀取目前生效的編輯器、渲染與音訊等原生設定唯讀快照。"
+      },
+      "settings_override": {
+        "title": "暫時覆寫原生設定",
+        "desc": "於擴充程式啟用期間暫時覆寫原生設定，停用或移除時自動還原且不影響本機儲存。"
+      },
+      "assets_read": {
+        "title": "讀取媒體素材清單",
+        "desc": "查詢目前已載入的圖片貼圖與音效素材鍵名清單。"
+      },
+      "assets_override": {
+        "title": "暫時覆寫貼圖與音效素材",
+        "desc": "於擴充程式啟用期間暫時替換音符貼圖、特效圖片與打擊音效，停用或移除時自動還原。"
+      }
+    },
+    "betaNotice": "擴充程式系統目前為 Beta 版。擴充程式可在瀏覽器中自由運作且未受完全隔離，請僅安裝完全信任來源的檔案，並定期備份譜面專案。",
+    "securityWarning": "注意：上方權限僅代表擴充程式請求使用的編輯器介面，無法限制其存取本地資料或對外連線。請僅安裝完全信任來源的檔案，並妥善備份重要專案。",
+    "installAndEnable": "安裝並啟用",
+    "installSuccess": "已安裝並啟用「{name}」",
+    "installFailed": "匯入擴充程式失敗：{error}",
+    "removedSuccess": "已移除「{name}」",
+    "togglePassword": "顯示或隱藏密碼",
+    "errMissingManifest": "壓縮包內找不到 manifest.json",
+    "errInvalidManifestJson": "manifest.json 格式錯誤，無法解析為 JSON",
+    "errMissingRequiredFields": "manifest.json 必須包含 id、name 與 version",
+    "errMissingEntry": "找不到進入點檔案：{entry}",
+    "errMissingActivate": "擴充程式「{id}」未匯出預設啟動函式",
+    "errWorkerUnsupported": "Worker 沙箱執行模式尚未啟用",
+    "errInvalidIdFormat": "manifest.json 的 id 格式無效，須使用反向網域命名格式",
+    "errUnsupportedApiVersion": "不支援的擴充 API 版本：{version}，目前支援版本上限為 {supported}",
+    "errInvalidPermission": "manifest.json 包含未定義權限：{permission}",
+    "errUnsupportedRuntime": "不支援的執行模式：{runtime}",
+    "errInvalidUrl": "欄位 {field} 的網址格式無效，僅支援 https:// 協定",
+    "crashAutoDisabled": "擴充程式「{id}」疑似在啟動時發生嚴重錯誤，已自動停用",
+    "overlayAutoDisabled": "擴充程式「{name}」繪製耗時過高，已自動停用其疊加圖層"
   },
   "textarea": {
     "placeholder": "在此輸入譜面資料..."

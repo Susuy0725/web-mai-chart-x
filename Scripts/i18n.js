@@ -10,7 +10,86 @@ let manifest = {
 };
 
 const translations = {};
+const extensionTranslations = {};
+const loadedLocales = new Set();
 const listeners = [];
+
+/**
+ * 將已註冊的擴充詞庫合併至指定語系物件中
+ * @param {string} lang
+ */
+function mergeExtensionTranslations(lang) {
+    const extMap = extensionTranslations[lang];
+    if (!extMap || !translations[lang]) return;
+
+    for (const [namespace, dict] of Object.entries(extMap)) {
+        const parts = namespace.split('.');
+        let target = translations[lang];
+        for (let i = 0; i < parts.length - 1; i++) {
+            const part = parts[i];
+            if (!target[part] || typeof target[part] !== 'object') {
+                target[part] = {};
+            }
+            target = target[part];
+        }
+        const leafKey = parts[parts.length - 1];
+        target[leafKey] = {
+            ...(target[leafKey] && typeof target[leafKey] === 'object' ? target[leafKey] : {}),
+            ...dict
+        };
+    }
+}
+
+/**
+ * 動態註冊擴充程式專屬翻譯詞庫
+ * @param {string} namespace 命名空間，例如 "ext.myPlugin"
+ * @param {Record<string, Object>} localeMap 以語系代碼為鍵的翻譯字典
+ * @returns {Function} 取消註冊函式
+ */
+export function registerTranslations(namespace, localeMap) {
+    if (!namespace || typeof namespace !== 'string') {
+        throw new TypeError('[i18n] 翻譯命名空間必須為非空字串');
+    }
+    if (!localeMap || typeof localeMap !== 'object') {
+        return () => {};
+    }
+
+    const registeredLangs = [];
+    for (const [lang, dict] of Object.entries(localeMap)) {
+        if (!dict || typeof dict !== 'object') continue;
+        if (!extensionTranslations[lang]) {
+            extensionTranslations[lang] = {};
+        }
+        extensionTranslations[lang][namespace] = dict;
+        registeredLangs.push(lang);
+        if (!translations[lang]) {
+            translations[lang] = {};
+        }
+        mergeExtensionTranslations(lang);
+    }
+
+    if (typeof document !== 'undefined') {
+        applyI18nToDOM();
+    }
+
+    return () => {
+        for (const lang of registeredLangs) {
+            if (extensionTranslations[lang]) {
+                delete extensionTranslations[lang][namespace];
+            }
+            if (translations[lang]) {
+                const parts = namespace.split('.');
+                let target = translations[lang];
+                for (let i = 0; i < parts.length - 1; i++) {
+                    target = target?.[parts[i]];
+                }
+                if (target && typeof target === 'object') {
+                    delete target[parts[parts.length - 1]];
+                }
+            }
+        }
+    };
+}
 
 // 'auto' 表示由 BCP 47 自動偵測系統語言
 const AUTO_LANG = 'auto';
@@ -90,7 +169,7 @@ function resolveEffectiveLang(lang) {
 }
 
 export async function loadLocale(lang) {
-    if (translations[lang]) {
+    if (loadedLocales.has(lang) && translations[lang]) {
         return translations[lang];
     }
     try {
@@ -102,7 +181,9 @@ export async function loadLocale(lang) {
         }
         const data = await res.json();
         translations[lang] = data;
-        return data;
+        loadedLocales.add(lang);
+        mergeExtensionTranslations(lang);
+        return translations[lang];
     } catch (e) {
         console.error(`Failed to fetch ${lang}.json:`, e);
         return null;

@@ -198,6 +198,148 @@ class AppContext {
             eventBus.emit(EVENTS.SETTINGS_SAVED, { allSettings: this.state.settings });
         }
     }
+
+    /**
+     * 取得目前編輯器完整譜面文字
+     * @returns {string}
+     */
+    getEditorText() {
+        const fn = this.services.get('getEditorText');
+        return typeof fn === 'function' ? fn() : '';
+    }
+
+    /**
+     * 取得目前編輯器選取區資訊
+     * @returns {{ start: number, end: number, text: string }}
+     */
+    getEditorSelection() {
+        const fn = this.services.get('getEditorSelection');
+        return typeof fn === 'function' ? fn() : { start: 0, end: 0, text: '' };
+    }
+
+    /**
+     * 置換編輯器指定區間或目前選取區文字
+     * @param {string} replacement
+     * @param {number} [start]
+     * @param {number} [end]
+     * @returns {boolean}
+     */
+    replaceEditorSelection(replacement, start, end) {
+        const fn = this.services.get('replaceEditorSelection');
+        if (typeof fn !== 'function') return false;
+        return fn(replacement, start, end);
+    }
+
+    /**
+     * 訂閱編輯器事件並回傳取消訂閱函式
+     * @param {string} eventName
+     * @param {Function} handler
+     * @returns {Function}
+     */
+    onEditorEvent(eventName, handler) {
+        const fn = this.services.get('onEditorEvent');
+        if (typeof fn !== 'function') return () => { };
+        return fn(eventName, handler);
+    }
+
+    /**
+     * 取得目前播放狀態唯讀快照
+     * @returns {{ isPlaying: boolean, realTime: number, globalTime: number }}
+     */
+    getPlaybackState() {
+        const engine = this.playbackEngine;
+        if (!engine) {
+            return { isPlaying: false, realTime: 0, globalTime: 0 };
+        }
+        return {
+            isPlaying: !!engine.isPlaying,
+            realTime: Number(engine.realTime) || 0,
+            globalTime: Number(engine.globalTime) || 0
+        };
+    }
+
+    /**
+     * 安全跳轉播放時間軸
+     * @param {number} targetTime
+     * @returns {boolean}
+     */
+    seekToTime(targetTime) {
+        const fn = this.services.get('seekToTime');
+        if (typeof fn === 'function') {
+            fn(targetTime);
+            return true;
+        }
+        const engine = this.playbackEngine;
+        if (engine && typeof engine.seekToTime === 'function') {
+            engine.seekToTime(targetTime);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 取得目前音訊或時間軸總長度（秒）
+     * @returns {number}
+     */
+    getDuration() {
+        const fn = this.services.get('getDuration');
+        return typeof fn === 'function' ? (Number(fn()) || 0) : 0;
+    }
+
+    /**
+     * 取得目前譜面解析結果的唯讀快照
+     * @returns {{ difficulty: number, maidata: Object, duration: number, notes: Array<Object>, tags: Array<Object> }}
+     */
+    getChartSnapshot() {
+        const fn = this.services.get('getChartSnapshot');
+        if (typeof fn === 'function') {
+            return fn();
+        }
+        return {
+            difficulty: 5,
+            maidata: { ...(this.maidata || {}) },
+            duration: this.getDuration(),
+            notes: [],
+            tags: []
+        };
+    }
+
+    /**
+     * 取得目前專案封面圖片網址（唯讀）
+     * @returns {string|null}
+     */
+    getCoverImageUrl() {
+        const imgEl = this.services.get('editorBackgroundImage');
+        if (imgEl && typeof imgEl.getAttribute === 'function') {
+            const rawSrc = imgEl.getAttribute('src');
+            if (rawSrc && rawSrc.trim() && !rawSrc.endsWith('no_image.png')) {
+                return imgEl.src || rawSrc;
+            }
+        }
+        const getBg = this.services.get('getBackgroundImage');
+        const bg = typeof getBg === 'function' ? getBg() : null;
+        if (typeof bg === 'string' && bg.trim() && !bg.endsWith('no_image.png')) {
+            return bg;
+        }
+        return null;
+    }
+
+    /**
+     * 取得目前編輯器檢視模式快照（唯讀）
+     * @returns {{ isEditorHidden: boolean, isFullscreen: boolean, isVerticalMode: boolean, showAuxiliaryText: boolean }}
+     */
+    getViewMode() {
+        const fn = this.services.get('getViewMode');
+        if (typeof fn === 'function') {
+            return fn();
+        }
+        return {
+            isEditorHidden: false,
+            isFullscreen: false,
+            isVerticalMode: false,
+            showAuxiliaryText: Boolean(this.settings?.renderSurroundingAuxiliaryText)
+        };
+    }
 }
 
 export const appContext = new AppContext();

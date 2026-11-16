@@ -68,7 +68,147 @@
     "changelog": "Changelog",
     "about": "About",
     "gotoPlay": "Open Play",
-    "toolsSmoothBpm": "Smooth BPM"
+    "toolsSmoothBpm": "Smooth BPM",
+    "extensions": "Extensions",
+    "manageExtensions": "Manage Extensions",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen"
+  },
+  "extensions": {
+    "title": "Extension Manager",
+    "tabInstalled": "Installed",
+    "empty": "No extensions installed",
+    "emptyHint": "Click \"Import Extension\" below and select a .zip package to install",
+    "statusActive": "Active",
+    "statusInactive": "Disabled",
+    "statusError": "Error",
+    "enable": "Enable",
+    "disable": "Disable",
+    "view": "Details",
+    "remove": "Remove",
+    "importZip": "Import Extension",
+    "close": "Close",
+    "cancel": "Cancel",
+    "resetDefaults": "Reset to Defaults",
+    "saved": "Settings saved",
+    "permCount": "{count} permissions requested",
+    "hasErrorHint": "An error occurred. Click Details to inspect.",
+    "detailTitle": "Extension Details",
+    "metaId": "ID",
+    "metaAuthor": "Author",
+    "metaAuthorUnknown": "Not provided",
+    "metaEntry": "Entry",
+    "metaRuntime": "Runtime",
+    "metaLinks": "Links",
+    "linkHomepage": "Project Homepage",
+    "runtimeTrusted": "Standard browser context",
+    "runtimeWorker": "Worker sandbox",
+    "noDescription": "No description provided.",
+    "grantedPermissions": "Declared Permissions & Capabilities",
+    "confirmInstallTitle": "Confirm Extension Installation",
+    "confirmInstallDesc": "About to install \"{name}\". Please verify the source and review the manifest details and requested permissions:",
+    "requestedPermissions": "Requested Permissions & Capabilities",
+    "noPermissions": "No special permissions requested",
+    "unknownPermissionTitle": "Unknown permission",
+    "unknownPermissionDesc": "This permission is not defined in the system allowlist and may fail validation.",
+    "perm": {
+      "editor_read": {
+        "title": "Read editor chart text",
+        "desc": "Read the full chart text, current selection range, and listen to editor input events."
+      },
+      "editor_write": {
+        "title": "Modify editor chart text",
+        "desc": "Replace selected text or edit chart content within a specified range in the editor."
+      },
+      "chart_read": {
+        "title": "Read decoded chart data",
+        "desc": "Access a read-only snapshot of the decoded chart and the track cover image."
+      },
+      "view_read": {
+        "title": "Read view mode",
+        "desc": "Read the current view mode state of the editor."
+      },
+      "playback_read": {
+        "title": "Read playback state",
+        "desc": "Read current audio and chart playback state, playhead position, and total duration."
+      },
+      "playback_seek": {
+        "title": "Control playback position",
+        "desc": "Seek the timeline to a specific timestamp or nudge playback forward and backward."
+      },
+      "render_overlay": {
+        "title": "Draw canvas overlays",
+        "desc": "Register custom overlay layers on the chart preview canvas and request redraws."
+      },
+      "commands_register": {
+        "title": "Register extension commands",
+        "desc": "Register custom namespaced commands in the application command registry."
+      },
+      "events_subscribe": {
+        "title": "Subscribe to system events",
+        "desc": "Listen to allowlisted events such as project load, chart change, playback, and redraw."
+      },
+      "ui_toast": {
+        "title": "Show toast notifications",
+        "desc": "Display floating toast notifications for status updates or action feedback."
+      },
+      "ui_menu": {
+        "title": "Add toolbar menu items",
+        "desc": "Add clickable items under the Extensions menu in the top toolbar."
+      },
+      "ui_popover": {
+        "title": "Open settings panel & store settings",
+        "desc": "Open an extension settings popover and read/write isolated extension settings."
+      },
+      "ui_overlay": {
+        "title": "Create floating UI widgets",
+        "desc": "Create and mount floating UI containers positioned over the workspace."
+      },
+      "i18n_register": {
+        "title": "Register translations",
+        "desc": "Register localized translation dictionaries for the extension and resolve translated keys."
+      },
+      "storage": {
+        "title": "Read and write isolated extension storage",
+        "desc": "Store and read extension-specific data in an isolated namespace that is automatically cleared on removal."
+      },
+      "settings_read": {
+        "title": "Read native settings",
+        "desc": "Read a read-only snapshot of active editor, rendering, and audio settings."
+      },
+      "settings_override": {
+        "title": "Temporarily override native settings",
+        "desc": "Temporarily override native settings while active without modifying persisted user settings; automatically restored on deactivation."
+      },
+      "assets_read": {
+        "title": "List native media assets",
+        "desc": "Query the list of available image texture and sound effect keys."
+      },
+      "assets_override": {
+        "title": "Temporarily override textures and sound assets",
+        "desc": "Temporarily replace note textures, effects, and hit sounds while active; automatically restored on deactivation."
+      }
+    },
+    "betaNotice": "The extension system is currently in Beta. Extensions run freely in your browser without full isolation. Only install packages from fully trusted sources and back up your chart projects regularly.",
+    "securityWarning": "Warning: These permissions only cover the editor interfaces requested by the extension and do not restrict it from accessing local data or making network requests. Only install extensions from fully trusted sources and back up important projects.",
+    "installAndEnable": "Install & Enable",
+    "installSuccess": "Installed and enabled \"{name}\"",
+    "installFailed": "Failed to import extension: {error}",
+    "removedSuccess": "Removed \"{name}\"",
+    "togglePassword": "Show or hide password",
+    "errMissingManifest": "manifest.json not found in archive",
+    "errInvalidManifestJson": "Invalid manifest.json format",
+    "errMissingRequiredFields": "manifest.json must contain id, name, and version",
+    "errMissingEntry": "Entry file not found: {entry}",
+    "errMissingActivate": "Extension \"{id}\" does not export an activate function",
+    "errWorkerUnsupported": "Worker sandbox runtime is not yet enabled",
+    "errInvalidIdFormat": "Invalid id format in manifest.json; reverse-domain notation is required",
+    "errUnsupportedApiVersion": "Unsupported extension API version: {version} (max supported: {supported})",
+    "errInvalidPermission": "manifest.json contains an undefined permission: {permission}",
+    "errUnsupportedRuntime": "Unsupported runtime mode: {runtime}",
+    "errInvalidUrl": "Invalid URL in field \"{field}\". Only https:// URLs are allowed.",
+    "crashAutoDisabled": "Extension \"{id}\" appears to have caused a startup crash and has been automatically disabled",
+    "overlayAutoDisabled": "Extension \"{name}\" took too long to render and its overlay layer has been automatically disabled"
   },
   "textarea": {
     "placeholder": "Enter chart data here..."

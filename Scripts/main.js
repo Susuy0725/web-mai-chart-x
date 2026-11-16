@@ -17,6 +17,11 @@ import {
 } from './core/panelLayout.js';
 import { eventBus, EVENTS } from './core/eventBus.js';
 import { appContext } from './core/appContext.js';
+import { commandRegistry } from './core/commandRegistry.js';
+import { extensionManager } from './core/extensionManager.js';
+import { extensionOverrideRegistry } from './core/extensionOverrideRegistry.js';
+import { loadStoredExtensions } from './core/extensionLoader.js';
+import { initExtensionMenu } from './features/extensionMenu.js';
 import { PlaybackEngine } from './core/playbackEngine.js';
 import { initServiceWorker } from './core/swManager.js';
 import { runInitModal } from './core/init.js';
@@ -71,7 +76,7 @@ let
     isInitComplete = false,
     isImagesLoaded = false,
     isDatabaseEmpty = false,
-    images,
+    images = {},
     readyBeat = false,
     maidata = {},
     nowDifficulty = 5,
@@ -113,6 +118,9 @@ window.simpleToast = simpleToast;
 try { applySyntaxColors(defaultSyntaxColors); } catch (_) { }
 
 const simaiLogicControler = new SimaiLogicControler(audioManager);
+audioManager.onSoundLoaded = (key, audioBuffer) => {
+    extensionOverrideRegistry.applyDefaultSoundBuffer(key, audioBuffer);
+};
 
 const isVisualMode = () => settings.displayMode === 'visual';
 
@@ -123,10 +131,11 @@ const saveSettingsDebounce = debounce(() => {
     if (!isInitComplete || !settings || Object.keys(settings).length < 5) {
         return;
     }
+    const cleanSettings = extensionOverrideRegistry.getCleanSettings(settings);
     if (majdataWs.isConnected()) {
-        majdataWs.sendSetting(settings);
+        majdataWs.sendSetting(cleanSettings);
     }
-    const settingsStr = JSON.stringify(settings);
+    const settingsStr = JSON.stringify(cleanSettings);
     idbSet('simai_settings', settingsStr).catch((error) => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
     });
@@ -311,6 +320,7 @@ let lastCursorIndex = -1;
 let visualCtx = null;
 let warnings = [], warningPositions = [], warningPositionsConst = [];
 let decodedTags = [];
+let cachedChartSnapshot = null;
 let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
 
 let lastCanvasSize = { w: 0, h: 0 };
@@ -489,7 +499,13 @@ if (fullscreenButton) {
         if (iconSpan) {
             iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
         }
-        fullscreenButton.title = isFullscreen ? '退出全螢幕' : '全螢幕';
+        const i18nKey = isFullscreen ? 'menu.exitFullscreen' : 'menu.fullscreen';
+        const labelText = t(i18nKey);
+        fullscreenButton.setAttribute('data-i18n-title', i18nKey);
+        fullscreenButton.setAttribute('data-i18n-aria-label', i18nKey);
+        fullscreenButton.title = labelText;
+        fullscreenButton.setAttribute('aria-label', labelText);
+        emitViewModeChanged();
     };
 
     document.addEventListener('fullscreenchange', updateFullscreenIcon);
@@ -1428,6 +1444,7 @@ function setDataEmpty(skipPersist = false) {
         playStartTimestamp = null;
     }
     maidata = {};
+    cachedChartSnapshot = null;
     nowDifficulty = 5;
     backgroundImage = null;
     backgroundVideo = null;
@@ -1582,6 +1599,7 @@ function applyDecodeResult(result, simaiDataValue) {
 
     notes = result.notes;
     decodedTags = result.tags || [];
+    cachedChartSnapshot = null;
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
 
@@ -1616,6 +1634,10 @@ function applyDecodeResult(result, simaiDataValue) {
     draw();
     // 立即以 Worker/同步解析出的最新 warningPositions 重新繪製編輯器紅底線
     applyHighlight(editorInput.value, true);
+    eventBus.emit(EVENTS.CHART_DECODED, {
+        difficulty: nowDifficulty,
+        noteCount: Array.isArray(notes) ? notes.length : 0
+    });
 }
 
 /**
@@ -1715,6 +1737,8 @@ function saveMaidataImmediate() {
 
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
+    cachedChartSnapshot = null;
+    eventBus.emit(EVENTS.MAIDATA_CHANGED, { ...maidata });
 
     return projSet('maidata', maidata).catch((error) => {
         console.error("儲存maidata到IndexedDB失敗:", error);
@@ -2692,6 +2716,7 @@ hideEditorButton.addEventListener('click', () => {
     setEditorCss(currentlyHidden);
     editorContainer.dataset.hidden = currentlyHidden ? 'false' : 'true';
     resize();
+    emitViewModeChanged();
     console.log(`編輯器已${currentlyHidden === 'true' ? '顯示' : '隱藏'}`);
 });
 
@@ -3750,6 +3775,7 @@ function resize(force = false) {
     }
 
     draw();
+    emitViewModeChanged();
 }
 
 const secondaryWindow = new SecondaryWindowManager();
@@ -4184,13 +4210,16 @@ async function loadProjectData(step, expectedGen = null) {
         hideEditorButton.children[0].textContent = "right_panel_close";
         delete editorContainer.dataset.hidden;
     }
+    emitViewModeChanged();
 
     if (myGen !== loadGeneration) return;
 
     playbackEngine.setTime(targetRealTime);
     playbackEngine.resetNotesPlaybackState(playbackEngine.globalTime);
+    cachedChartSnapshot = null;
     draw();
     updateSlider(playbackEngine.realTime, true);
+    eventBus.emit(EVENTS.PROJECT_LOADED);
 }
 
 /**
@@ -4343,7 +4372,11 @@ async function _init() {
         updateDiscordRPC,
         getMaidata: () => maidata,
         getNowDifficulty: () => nowDifficulty,
-        setImages: (val) => { images = val; },
+        setImages: (val) => {
+            extensionOverrideRegistry.refreshImagesBase(val);
+            images = val;
+            appContext.state.images = val;
+        },
         setRenderer: (val) => { renderer = val; },
         setVisualEditorRenderer: (val) => {
             visualEditorRenderer = val;
@@ -4365,6 +4398,13 @@ async function _init() {
                     return globalTime;
                 },
                 configurable: true
+            });
+
+            initExtensionMenu();
+            eventBus.emit(EVENTS.APP_READY);
+            extensionManager.activateAll();
+            loadStoredExtensions().catch((err) => {
+                console.error('[Extensions] 載入已安裝外掛失敗:', err);
             });
         }
     });
@@ -4406,6 +4446,7 @@ export async function switchSkin(newSkin) {
     isSwitchingSkin = true;
     try {
         const newImages = await loadAllImages(null, newSkin);
+        extensionOverrideRegistry.refreshImagesBase(newImages);
         images = newImages;
         currentSkin = newSkin;
         appContext.state.images = newImages;
@@ -4460,7 +4501,10 @@ appContext.register('updatePauseBackgroundDisplay', updatePauseBackgroundDisplay
 appContext.register('applySplitRatio', applySplitRatio);
 appContext.register('snapRestoreCanvas', snapRestoreCanvas);
 appContext.register('getMaidata', () => maidata);
-appContext.register('setMaidata', (val) => { maidata = val; });
+appContext.register('setMaidata', (val) => {
+    maidata = val;
+    cachedChartSnapshot = null;
+});
 appContext.register('getCurrentProjectId', () => currentProjectId);
 appContext.register('setCurrentProjectId', (val) => { currentProjectId = val; });
 appContext.register('projSet', projSet);
@@ -4473,6 +4517,124 @@ appContext.register('images', () => images);
 appContext.register('editorBackgroundImage', editorBackgroundImage);
 appContext.register('changeDifficulty', changeDifficulty);
 appContext.register('saveMaidata', saveMaidata);
+appContext.register('simpleToast', simpleToast);
+appContext.register('commandRegistry', commandRegistry);
+appContext.register('extensionManager', extensionManager);
+appContext.register('seekToTime', (targetTime) => seekToTime(targetTime));
+appContext.register('getDuration', () => Number(timeline?.max) || 0);
+function getCurrentViewMode() {
+    const isEditorHidden = editorContainer?.dataset?.hidden === 'true';
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+    const w = document.documentElement.clientWidth || window.innerWidth || 1;
+    const h = document.documentElement.clientHeight || window.innerHeight || 1;
+    return {
+        isEditorHidden,
+        isFullscreen,
+        isVerticalMode: (w / h) <= 0.587,
+        showAuxiliaryText: Boolean(settings?.renderSurroundingAuxiliaryText)
+    };
+}
+
+let lastViewModeKey = '';
+function emitViewModeChanged(force = false) {
+    const mode = getCurrentViewMode();
+    const key = `${mode.isEditorHidden}|${mode.isFullscreen}|${mode.isVerticalMode}|${mode.showAuxiliaryText}`;
+    if (!force && key === lastViewModeKey) return;
+    lastViewModeKey = key;
+    eventBus.emit(EVENTS.VIEW_MODE_CHANGED, mode);
+}
+
+appContext.register('getViewMode', () => getCurrentViewMode());
+appContext.register('getChartSnapshot', () => {
+    const currentDuration = Number(timeline?.max) || 0;
+    if (cachedChartSnapshot &&
+        cachedChartSnapshot.difficulty === nowDifficulty &&
+        cachedChartSnapshot.duration === currentDuration) {
+        return cachedChartSnapshot;
+    }
+
+    const frozenMaidata = Object.freeze(maidata ? { ...maidata } : {});
+    const frozenNotes = Object.freeze(
+        Array.isArray(notes) ? notes.map((n) => Object.freeze({ ...n })) : []
+    );
+    const frozenTags = Object.freeze(
+        Array.isArray(decodedTags) ? decodedTags.map((tag) => Object.freeze({ ...tag })) : []
+    );
+
+    cachedChartSnapshot = Object.freeze({
+        difficulty: nowDifficulty,
+        maidata: frozenMaidata,
+        duration: currentDuration,
+        notes: frozenNotes,
+        tags: frozenTags
+    });
+    return cachedChartSnapshot;
+});
+appContext.register('getEditorText', () => (editorInput ? editorInput.value : ''));
+appContext.register('getEditorSelection', () => {
+    if (!editorInput) return { start: 0, end: 0, text: '' };
+    const start = editorInput.selectionStart ?? 0;
+    const end = editorInput.selectionEnd ?? 0;
+    return {
+        start,
+        end,
+        text: editorInput.value.slice(start, end)
+    };
+});
+appContext.register('replaceEditorSelection', (replacement, start, end) => {
+    if (!editorInput) return false;
+    const text = String(replacement ?? '');
+    const value = editorInput.value;
+    const selStart = typeof start === 'number' ? Math.max(0, Math.min(start, value.length)) : (editorInput.selectionStart ?? 0);
+    const selEnd = typeof end === 'number' ? Math.max(selStart, Math.min(end, value.length)) : (editorInput.selectionEnd ?? selStart);
+
+    editorInput.value = value.slice(0, selStart) + text + value.slice(selEnd);
+    const nextCursor = selStart + text.length;
+    editorInput.selectionStart = selStart;
+    editorInput.selectionEnd = nextCursor;
+    applyHighlight(editorInput.value);
+    recordEditorHistory();
+    inputDebounce();
+    return true;
+});
+appContext.register('onEditorEvent', (eventName, handler) => {
+    if (!editorInput || typeof handler !== 'function') return () => { };
+    const allowed = new Set(['input', 'keydown', 'blur', 'selectionchange']);
+    if (!allowed.has(eventName)) return () => { };
+
+    const buildSnapshot = () => ({
+        text: editorInput.value,
+        selectionStart: editorInput.selectionStart ?? 0,
+        selectionEnd: editorInput.selectionEnd ?? 0
+    });
+
+    if (eventName === 'selectionchange') {
+        const onSelectionChange = () => {
+            if (document.activeElement !== editorInput) return;
+            handler(buildSnapshot());
+        };
+        document.addEventListener('selectionchange', onSelectionChange);
+        return () => document.removeEventListener('selectionchange', onSelectionChange);
+    }
+
+    const listener = (e) => {
+        const payload = buildSnapshot();
+        if (eventName === 'keydown') {
+            payload.key = e.key;
+            payload.code = e.code;
+            payload.ctrlKey = e.ctrlKey;
+            payload.metaKey = e.metaKey;
+            payload.altKey = e.altKey;
+            payload.shiftKey = e.shiftKey;
+            payload.isComposing = e.isComposing;
+            payload.preventDefault = () => e.preventDefault();
+            payload.stopPropagation = () => e.stopPropagation();
+        }
+        handler(payload);
+    };
+    editorInput.addEventListener(eventName, listener);
+    return () => editorInput.removeEventListener(eventName, listener);
+});
 
 // === 全域 EventBus 事件訂閱 (解耦副作用與跨模組直接調用) ===
 eventBus.on(EVENTS.CANVAS_REDRAW, () => {
@@ -4505,6 +4667,9 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     if (key === 'moviebrightness') applyMovieBrightness(value);
     if (['disableVideo', 'hideBackgroundWhenPaused', 'showCoverWhenPaused'].includes(key)) {
         updateVideoBackgroundDisplay();
+    }
+    if (key === 'renderSurroundingAuxiliaryText') {
+        emitViewModeChanged();
     }
 
     // 4. 判定圈顯示開關

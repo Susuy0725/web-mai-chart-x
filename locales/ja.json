@@ -68,7 +68,147 @@
     "changelog": "更新履歴",
     "about": "このアプリについて",
     "gotoPlay": "Playを起動する",
-    "toolsSmoothBpm": "スムーズBPM"
+    "toolsSmoothBpm": "スムーズBPM",
+    "extensions": "拡張機能",
+    "manageExtensions": "拡張機能を管理",
+    "fullscreen": "全画面表示",
+    "exitFullscreen": "全画面表示を終了"
+  },
+  "extensions": {
+    "title": "拡張機能管理",
+    "tabInstalled": "インストール済み",
+    "empty": "拡張機能がインストールされていません",
+    "emptyHint": "下の「拡張機能をインポート」から .zip パッケージを選択してインストールできます",
+    "statusActive": "有効",
+    "statusInactive": "無効",
+    "statusError": "エラー",
+    "enable": "有効化",
+    "disable": "無効化",
+    "view": "詳細",
+    "remove": "削除",
+    "importZip": "拡張機能をインポート",
+    "close": "閉じる",
+    "cancel": "キャンセル",
+    "resetDefaults": "初期値にリセット",
+    "saved": "設定を保存しました",
+    "permCount": "{count} 件の権限を要求",
+    "hasErrorHint": "エラーが発生しました。「詳細」から確認してください",
+    "detailTitle": "拡張機能の詳細",
+    "metaId": "識別子",
+    "metaAuthor": "作成者",
+    "metaAuthorUnknown": "未設定",
+    "metaEntry": "エントリ",
+    "metaRuntime": "実行モード",
+    "metaLinks": "関連リンク",
+    "linkHomepage": "プロジェクトページ",
+    "runtimeTrusted": "標準ブラウザ環境",
+    "runtimeWorker": "Worker サンドボックス",
+    "noDescription": "説明は提供されていません。",
+    "grantedPermissions": "宣言された権限と機能",
+    "confirmInstallTitle": "拡張機能のインストール確認",
+    "confirmInstallDesc": "「{name}」をインストールします。提供元を確認し、拡張機能情報と要求される権限を確認してください：",
+    "requestedPermissions": "要求される権限と具体的な機能",
+    "noPermissions": "特別な権限は不要です",
+    "unknownPermissionTitle": "未定義の権限",
+    "unknownPermissionDesc": "この権限はシステム許可リストに定義されていないため、読み込み時に検証エラーとなる可能性があります。",
+    "perm": {
+      "editor_read": {
+        "title": "エディタ譜面テキストの読み取り",
+        "desc": "現在のエディタ内の譜面テキスト全文や選択範囲を取得し、入力イベントを監視します。"
+      },
+      "editor_write": {
+        "title": "エディタ譜面テキストの変更",
+        "desc": "エディタで選択中のテキストを置換、または指定範囲の譜面内容を変更します。"
+      },
+      "chart_read": {
+        "title": "解析済み譜面データの読み取り",
+        "desc": "現在読み込まれている譜面の読み取り専用スナップショットとジャケット画像を取得します。"
+      },
+      "view_read": {
+        "title": "表示モードの読み取り",
+        "desc": "現在のエディタの表示モード状態を取得します。"
+      },
+      "playback_read": {
+        "title": "再生状態の読み取り",
+        "desc": "現在の音声および譜面の再生状態、再生位置、総再生時間を取得します。"
+      },
+      "playback_seek": {
+        "title": "再生位置の制御",
+        "desc": "タイムラインを指定秒数へ移動、または前後に微調整します。"
+      },
+      "render_overlay": {
+        "title": "キャンバスオーバーレイ描画",
+        "desc": "譜面プレビューキャンバスにカスタム描画レイヤーを登録し、再描画を要求します。"
+      },
+      "commands_register": {
+        "title": "拡張コマンドの登録",
+        "desc": "システムのコマンドレジストリに拡張機能固有のカスタムコマンドを登録します。"
+      },
+      "events_subscribe": {
+        "title": "システムイベントの購読",
+        "desc": "プロジェクト読み込み、譜面変更、再生状態、再描画などの許可イベントを監視します。"
+      },
+      "ui_toast": {
+        "title": "トースト通知の表示",
+        "desc": "操作結果や状態を知らせるフローティング通知を画面に表示します。"
+      },
+      "ui_menu": {
+        "title": "ツールバーメニュー項目の追加",
+        "desc": "上部ツールバーの拡張機能メニューにクリック可能な項目を追加します。"
+      },
+      "ui_popover": {
+        "title": "設定パネルの表示と設定保存",
+        "desc": "拡張機能専用の設定パネルを開き、分離された設定値を読み書きします。"
+      },
+      "ui_overlay": {
+        "title": "フローティング UI 要素の作成",
+        "desc": "ワークスペース上の任意の位置に配置できるフローティング UI コンテナを作成します。"
+      },
+      "i18n_register": {
+        "title": "多言語翻訳の登録",
+        "desc": "拡張機能独自の多言語辞書を登録し、翻訳関数を使用します。"
+      },
+      "storage": {
+        "title": "分離ストレージへの読み書き",
+        "desc": "拡張機能ごとに割り当てられた分離ストレージへデータを保存・取得し、削除時に自動消去されます。"
+      },
+      "settings_read": {
+        "title": "ネイティブ設定の読み取り",
+        "desc": "現在有効なエディター・描画・音声などのネイティブ設定を読み取り専用で取得します。"
+      },
+      "settings_override": {
+        "title": "ネイティブ設定の一時的な上書き",
+        "desc": "有効化中にネイティブ設定を一時的に上書きし、無効化または削除時に自動復元します。"
+      },
+      "assets_read": {
+        "title": "メディア素材一覧の取得",
+        "desc": "現在読み込まれているテクスチャ画像や効果音のキー一覧を取得します。"
+      },
+      "assets_override": {
+        "title": "テクスチャ・効果音素材の一時的な上書き",
+        "desc": "有効化中にノーツ画像や効果音を一時的に差し替え、無効化または削除時に自動復元します。"
+      }
+    },
+    "betaNotice": "拡張機能システムは現在 Beta 版です。拡張機能はブラウザ内で完全に隔離されず自由に動作するため、完全に信頼できる提供元のファイルのみをインストールし、譜面プロジェクトを定期的にバックアップしてください。",
+    "securityWarning": "注意：上記の権限は拡張機能が要求するエディター機能の呼び出し範囲を示すものであり、ローカルデータへのアクセスや外部通信を制限するものではありません。完全に信頼できる提供元のファイルのみをインストールし、重要なプロジェクトをバックアップしてください。",
+    "installAndEnable": "インストールして有効化",
+    "installSuccess": "「{name}」をインストールし有効化しました",
+    "installFailed": "インポートに失敗しました：{error}",
+    "removedSuccess": "「{name}」を削除しました",
+    "togglePassword": "パスワードの表示切替",
+    "errMissingManifest": "アーカイブ内に manifest.json が見つかりません",
+    "errInvalidManifestJson": "manifest.json の形式が正しくありません",
+    "errMissingRequiredFields": "manifest.json には id、name、version が必要です",
+    "errMissingEntry": "エントリファイルが見つかりません：{entry}",
+    "errMissingActivate": "拡張機能「{id}」に起動関数がエクスポートされていません",
+    "errWorkerUnsupported": "Worker サンドボックス実行モードはまだ有効ではありません",
+    "errInvalidIdFormat": "manifest.json の id 形式が無効です。逆ドメイン形式を使用してください",
+    "errUnsupportedApiVersion": "未対応の拡張 API バージョンです：{version}（対応上限：{supported}）",
+    "errInvalidPermission": "manifest.json に未定義の権限が含まれています：{permission}",
+    "errUnsupportedRuntime": "未対応の実行モードです：{runtime}",
+    "errInvalidUrl": "フィールド「{field}」の URL が無効です。https:// のみ対応しています。",
+    "crashAutoDisabled": "拡張機能「{id}」の起動時に重大なエラーが発生した可能性があるため、自動的に無効化されました",
+    "overlayAutoDisabled": "拡張機能「{name}」の描画処理時間が長すぎるため、オーバーレイレイヤーが自動的に無効化されました"
   },
   "textarea": {
     "placeholder": "ここに譜面データを入力してください..."

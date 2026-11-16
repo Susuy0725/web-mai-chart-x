@@ -558,7 +558,11 @@ class AudioManager {
                     throw decodeErr;
                 }
 
-                this.bufferMap.set(key, audioBuffer);
+                if (typeof this.onSoundLoaded === 'function') {
+                    this.onSoundLoaded(key, audioBuffer);
+                } else {
+                    this.bufferMap.set(key, audioBuffer);
+                }
             } catch (e) {
                 console.error(`[Audio] ${key} 載入失敗:`, e);
             } finally {
@@ -568,6 +572,42 @@ class AudioManager {
         });
 
         await Promise.all(loadTasks);
+    }
+
+    /**
+     * 將外部音訊來源解碼為 AudioBuffer，供擴充介面覆寫音效使用
+     * @param {AudioBuffer|ArrayBuffer|ArrayBufferView|Blob|string} source
+     * @returns {Promise<AudioBuffer>}
+     */
+    async decodeAudioSource(source) {
+        this.ensureContextSync();
+        if (!this.ctx) {
+            throw new Error('[Audio] AudioContext 尚未就緒');
+        }
+
+        if (typeof AudioBuffer !== 'undefined' && source instanceof AudioBuffer) {
+            return source;
+        }
+
+        let arrayBuffer;
+        if (source instanceof ArrayBuffer) {
+            arrayBuffer = source.slice(0);
+        } else if (ArrayBuffer.isView(source)) {
+            arrayBuffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+        } else if (typeof Blob !== 'undefined' && source instanceof Blob) {
+            arrayBuffer = await source.arrayBuffer();
+        } else if (typeof source === 'string' && source.trim()) {
+            const response = await fetch(source);
+            if (!response.ok) {
+                throw new Error(`[Audio] 音訊下載失敗: HTTP ${response.status}`);
+            }
+            arrayBuffer = await response.arrayBuffer();
+        } else {
+            throw new TypeError('[Audio] 不支援的音訊素材來源格式');
+        }
+
+        const cleanedBuffer = stripId3Tags(arrayBuffer);
+        return await this.ctx.decodeAudioData(cleanedBuffer.slice(0));
     }
 
     queueSoundSingle(sample, targetTime, isMono = false, detune = 0) {

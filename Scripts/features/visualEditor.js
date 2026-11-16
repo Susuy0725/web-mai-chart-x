@@ -11,6 +11,22 @@ export function stripLeadingTags(str) {
 }
 
 /**
+ * 分離音符字串開頭的時序/屬性前綴標籤與手動手順標籤 (<L>/<R>/<HAND*L>/<HAND*R>)
+ * @param {string} partStr
+ * @returns {{ otherPrefix: string, manualHand: 'L'|'R'|null, clean: string }}
+ */
+function splitPartPrefixAndHand(partStr) {
+    const clean = stripLeadingTags(partStr);
+    const prefixRaw = partStr.substring(0, partStr.length - clean.length);
+    let manualHand = null;
+    const otherPrefix = prefixRaw.replace(/<\s*(?:HAND\s*\*\s*)?([LR])\s*>/gi, (_, h) => {
+        manualHand = h.toUpperCase();
+        return '';
+    });
+    return { otherPrefix, manualHand, clean };
+}
+
+/**
  * 組合段落的前綴標籤，嚴格保證 () 永遠在 {} 前面，即 (BPM){SPLIT}REMAINDER
  * @param {string} segment 原始段落文字
  * @param {Object} updates { bpm?: number|string, split?: number|string }
@@ -62,7 +78,16 @@ export function getNextNoteClean(clean, L) {
  * 剝皮解析音符字串結構 (參考 decode.js 解析流水線)
  * @param {string} clean 
  */
-export function peelNoteStructure(clean) {
+export function peelNoteStructure(cleanInput, manualHandOverride = undefined) {
+    const clean = stripLeadingTags(cleanInput);
+    const prefixRaw = cleanInput.substring(0, cleanInput.length - clean.length);
+    let parsedManualHand = null;
+    prefixRaw.replace(/<\s*(?:HAND\s*\*\s*)?([LR])\s*>/gi, (_, h) => {
+        parsedManualHand = h.toUpperCase();
+        return '';
+    });
+    const manualHand = manualHandOverride !== undefined ? manualHandOverride : parsedManualHand;
+
     // 1. 剝離時長
     const bracketMatch = clean.match(/\[([^\]]*)\]/);
     const duration = bracketMatch ? bracketMatch[0] : '';
@@ -92,7 +117,8 @@ export function peelNoteStructure(clean) {
             trackPart: cleanTrack,
             trackFlags,
             duration,
-            isTouch: false
+            isTouch: false,
+            manualHand
         };
     }
 
@@ -111,7 +137,8 @@ export function peelNoteStructure(clean) {
             isHold,
             flags,
             duration,
-            isTouch: true
+            isTouch: true,
+            manualHand
         };
     }
 
@@ -129,7 +156,8 @@ export function peelNoteStructure(clean) {
         isHold,
         flags,
         duration,
-        isTouch: false
+        isTouch: false,
+        manualHand
     };
 }
 
@@ -138,6 +166,7 @@ export function peelNoteStructure(clean) {
  * @param {Object} peeled 
  */
 export function rebuildPeeledNote(peeled) {
+    const handPrefix = (peeled.manualHand === 'L' || peeled.manualHand === 'R') ? `<${peeled.manualHand}>` : '';
     if (peeled.type === 'slide') {
         const headFlagsArr = Array.from(peeled.headFlags);
         headFlagsArr.sort((a, b) => {
@@ -146,14 +175,14 @@ export function rebuildPeeledNote(peeled) {
         });
         const headFlagsStr = headFlagsArr.join('');
         const trackFlagsStr = Array.from(peeled.trackFlags).join('');
-        return `${peeled.headLane}${headFlagsStr}${peeled.trackPart}${trackFlagsStr}${peeled.duration}`;
+        return `${handPrefix}${peeled.headLane}${headFlagsStr}${peeled.trackPart}${trackFlagsStr}${peeled.duration}`;
     }
 
     if (peeled.isTouch) {
         const flagsStr = Array.from(peeled.flags).join('');
         const holdStr = peeled.isHold ? 'h' : '';
         const durStr = peeled.isHold ? (peeled.duration ? (peeled.duration.startsWith('[') ? peeled.duration : `[${peeled.duration}]`) : '[4:1]') : '';
-        return `${peeled.pos}${holdStr}${durStr}${flagsStr}`;
+        return `${handPrefix}${peeled.pos}${holdStr}${durStr}${flagsStr}`;
     }
 
     const flagsArr = Array.from(peeled.flags);
@@ -163,7 +192,7 @@ export function rebuildPeeledNote(peeled) {
     });
     const flagsStr = flagsArr.join('');
     const holdStr = peeled.isHold ? 'h' : '';
-    return `${peeled.pos}${flagsStr}${holdStr}${peeled.duration}`;
+    return `${handPrefix}${peeled.pos}${flagsStr}${holdStr}${peeled.duration}`;
 }
 
 /**
@@ -467,6 +496,7 @@ export function createVisualNoteCallbacks(ctx) {
 
         const selectedModifier = settings?.visualSelectedModifier || 'none';
         const effectiveType = selectedType === 'break' ? 'tap' : selectedType;
+        const handTagPrefix = (selectedModifier === 'handL') ? '<L>' : ((selectedModifier === 'handR') ? '<R>' : '');
 
         const modChar = (selectedModifier === 'ex') ? 'x' :
                         (selectedModifier === 'break') ? 'b' :
@@ -567,10 +597,11 @@ export function createVisualNoteCallbacks(ctx) {
         }
 
         let newSegment = "";
+        const prefixedNoteString = handTagPrefix + noteString;
         if (cleanNotePart === "") {
-            newSegment = segment + noteString;
+            newSegment = segment + prefixedNoteString;
         } else {
-            newSegment = segment + "/" + noteString;
+            newSegment = segment + "/" + prefixedNoteString;
         }
 
         rawData[closestIndex] = newSegment;
@@ -580,7 +611,9 @@ export function createVisualNoteCallbacks(ctx) {
         const modName = (selectedModifier === 'ex') ? 'EX ' :
                         (selectedModifier === 'break') ? 'Break ' :
                         (selectedModifier === 'mine') ? `${t('visualToolbar.modMine')} ` :
-                        (selectedModifier === 'firework') ? `${t('visualToolbar.modFirework')} ` : '';
+                        (selectedModifier === 'firework') ? `${t('visualToolbar.modFirework')} ` :
+                        (selectedModifier === 'handL') ? 'L ' :
+                        (selectedModifier === 'handR') ? 'R ' : '';
         const targetLabel = isTouchLane ? t('visualEditor.touchLane') : t('visualEditor.laneLabel', { lane });
         simpleToast({ content: t('visualEditor.notePlaced', { lane: targetLabel, note: `${modName}${noteLabel}` }), type: 'success', timeout: 1000 });
     };
@@ -609,8 +642,9 @@ export function createVisualNoteCallbacks(ctx) {
         if (selectedModifier === 'break') holdTag = 'bh';
         else if (selectedModifier === 'ex') holdTag = 'hx';
         else if (selectedModifier === 'mine') holdTag = 'hm';
+        const handTagPrefix = (selectedModifier === 'handL') ? '<L>' : ((selectedModifier === 'handR') ? '<R>' : '');
 
-        let noteStr = numTicks === 0 ? `${lane}${holdTag}` : `${lane}${holdTag}[${gridDiv}:${numTicks}]`;
+        let noteStr = handTagPrefix + (numTicks === 0 ? `${lane}${holdTag}` : `${lane}${holdTag}[${gridDiv}:${numTicks}]`);
 
         if (originalNote) {
             if (originalNote.isBreak) {
@@ -759,8 +793,8 @@ export function createVisualNoteCallbacks(ctx) {
         if (partIndex === -1) return;
 
         const originalPart = parts[partIndex];
-        const clean = stripLeadingTags(originalPart);
-        const prefix = originalPart.substring(0, originalPart.length - clean.length);
+        const { otherPrefix, manualHand, clean } = splitPartPrefixAndHand(originalPart);
+        let prefix = otherPrefix;
 
         const settings = getSettings();
         const toolMode = settings?.visualToolMode;
@@ -768,10 +802,11 @@ export function createVisualNoteCallbacks(ctx) {
 
         if (toolMode === 'modifier') {
             const selectedModifier = settings?.visualSelectedModifier || 'none';
-            const peeled = peelNoteStructure(clean);
+            const peeled = peelNoteStructure(clean, manualHand);
 
-            // 1. 若選擇「無效果 (none)」：徹底剝除所有 flags
+            // 1. 若選擇「無效果 (none)」：徹底剝除所有 flags 與手動手順
             if (selectedModifier === 'none') {
+                peeled.manualHand = null;
                 if (peeled.type === 'slide') {
                     const isTrackClick = (note.hitPart === 'track') || (note.type === 'slide' && note.hitPart !== 'head');
                     if (isTrackClick) {
@@ -786,8 +821,20 @@ export function createVisualNoteCallbacks(ctx) {
                     simpleToast({ content: t('visualEditor.clearAllModifiers'), type: 'info', timeout: 1000 });
                 }
                 nextClean = rebuildPeeledNote(peeled);
+            } else if (selectedModifier === 'handL' || selectedModifier === 'handR') {
+                // 2. 手順標記切換 (<L> / <R>)
+                const targetHand = selectedModifier === 'handL' ? 'L' : 'R';
+                const handLabel = targetHand === 'L' ? t('visualToolbar.modHandL') : t('visualToolbar.modHandR');
+                if (peeled.manualHand === targetHand) {
+                    peeled.manualHand = null;
+                    simpleToast({ content: t('visualEditor.modRemoved', { target: t('visualEditor.targetNote'), mod: handLabel }), type: 'info', timeout: 1000 });
+                } else {
+                    peeled.manualHand = targetHand;
+                    simpleToast({ content: t('visualEditor.modApplied', { target: t('visualEditor.targetNote'), mod: handLabel }), type: 'success', timeout: 1000 });
+                }
+                nextClean = rebuildPeeledNote(peeled);
             } else {
-                // 2. 具體旗標操作
+                // 3. 具體旗標操作
                 const targetFlag = selectedModifier === 'ex' ? 'x' :
                                    selectedModifier === 'break' ? 'b' :
                                    selectedModifier === 'mine' ? 'm' :
@@ -876,7 +923,7 @@ export function createVisualNoteCallbacks(ctx) {
                 nextClean = rebuildPeeledNote(peeled);
             }
         } else {
-            nextClean = getNextNoteClean(clean, lane);
+            nextClean = (manualHand ? `<${manualHand}>` : '') + getNextNoteClean(clean, lane);
             simpleToast({ content: t('visualEditor.noteTypeChanged', { note: nextClean }), type: 'success', timeout: 1000 });
         }
 

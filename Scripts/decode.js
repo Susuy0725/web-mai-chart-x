@@ -1,4 +1,5 @@
 import { PathRecorder, noteRefPos, innerCirleBase, isObject } from './core/chartGeometry.js';
+import { computeHandAssignments } from './core/handHintEngine.js';
 
 export let warns = [];
 export let warnpos = [];
@@ -100,6 +101,18 @@ function parsePropertyTag(tagContent) {
             return { valid: false, raw: trimmed, error: `Invalid COLOR format (must be 6 or 8 hex digits): "${valStr}"` };
         }
         return { valid: true, type: 'COLOR', value: '#' + valStr, raw: trimmed };
+    }
+
+    // 4. HAND Property: <L>, <R>, <HAND*L>, <HAND*R>
+    if (/^(?:L|R)$/i.test(trimmed)) {
+        return { valid: true, type: 'HAND', value: trimmed.toUpperCase(), raw: trimmed };
+    }
+    if (/^HAND\*/i.test(trimmed)) {
+        const valStr = trimmed.slice(5).trim().toUpperCase();
+        if (valStr !== 'L' && valStr !== 'R') {
+            return { valid: false, raw: trimmed, error: `Invalid HAND value (must be L or R): "${valStr}"` };
+        }
+        return { valid: true, type: 'HAND', value: valStr, raw: trimmed };
     }
 
     return { valid: false, raw: trimmed, error: `Unknown property tag: "${trimmed}"` };
@@ -516,10 +529,10 @@ function splitChartByComma(str) {
     let inBrace = 0;   // {...}
 
     for (let i = 0; i < str.length; i++) {
-        // If we encounter a property tag e.g. <SIZE*(1.5,2)> or <HS*1.25>, consume it atomically
+        // If we encounter a property tag e.g. <SIZE*(1.5,2)>, <HS*1.25>, or <L>, consume it atomically
         if (str[i] === '<') {
             const rest = str.slice(i);
-            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            const propMatch = rest.match(/^<[A-Za-z]+(?:\*[^>]*)?>/);
             if (propMatch) {
                 current += propMatch[0];
                 i += propMatch[0].length - 1;
@@ -584,6 +597,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
     let eventHispeed = null;
     let eventSize = null;
     let eventColor = null;
+    let eventHand = null;
     let tapCounts = 0, holdCounts = 0, slideCounts = 0, touchCounts = 0, breakCounts = 0;
     let maxEndTime = nowTime;
     let hasTimingChange = false;
@@ -654,7 +668,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             }
             e = e.slice(closeIdx + 1);
         } else if (e.startsWith('<')) {
-            const match = e.match(/^<([A-Za-z]+\*[^>]*)>/);
+            const match = e.match(/^<([A-Za-z]+(?:\*[^>]*)?)>/);
             if (!match) break;
             const tagContent = match[1];
             const parsed = parsePropertyTag(tagContent);
@@ -669,6 +683,8 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     eventSize = parsed.value;
                 } else if (parsed.type === 'COLOR') {
                     eventColor = parsed.value;
+                } else if (parsed.type === 'HAND') {
+                    eventHand = parsed.value;
                 }
             }
             e = e.slice(match[0].length);
@@ -682,15 +698,6 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
     }
 
     if (overrideSplitTime) nowBpm = 240 / overrideSplitTime;
-
-    // 2. Detect misplaced property tags inside e
-    const misplacedTags = e.match(/<[A-Za-z]+\*[^>]*>/g);
-    if (misplacedTags) {
-        for (const tag of misplacedTags) {
-            pushWarn(`Misplaced property tag "${tag}": property tags must only appear at the beginning of the note group, `, { errpos: noteCommaIndex });
-        }
-        e = e.replace(/<[A-Za-z]+\*[^>]*>/g, '');
-    }
 
     const commaDuration = overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
     if (nowTime + commaDuration > maxEndTime) {
@@ -753,9 +760,56 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             pushWarn("Empty note detected in split, ", { errpos: noteCommaIndex });
         }
 
+        // 解析每個 / 子項目的前綴屬性標籤（例如 <L>1/<R>2），並檢測音符內部的錯置屬性標籤
+        const parsedSplitr = splitr.map((rawPart) => {
+            let cleanPart = rawPart;
+            let partHispeed = eventHispeed;
+            let partSize = eventSize;
+            let partColor = eventColor;
+            let partHand = eventHand;
+            let partProps = eventProps.length > 0 ? [...eventProps] : null;
+
+            let tagMatch;
+            while ((tagMatch = cleanPart.match(/^<([A-Za-z]+(?:\*[^>]*)?)>/))) {
+                const tagContent = tagMatch[1];
+                const parsed = parsePropertyTag(tagContent);
+                if (!parsed.valid) {
+                    pushWarn(`Invalid property tag <${tagContent}>: ${parsed.error || 'invalid syntax'}, `, { errpos: noteCommaIndex });
+                } else {
+                    if (!partProps) partProps = [];
+                    partProps.push(parsed.raw);
+                    if (parsed.type === 'HS') partHispeed = parsed.value;
+                    else if (parsed.type === 'SIZE') partSize = parsed.value;
+                    else if (parsed.type === 'COLOR') partColor = parsed.value;
+                    else if (parsed.type === 'HAND') partHand = parsed.value;
+                }
+                cleanPart = cleanPart.slice(tagMatch[0].length).trim();
+            }
+
+            const misplacedTags = cleanPart.match(/<[A-Za-z]+\*[^>]*>/g);
+            if (misplacedTags) {
+                for (const tag of misplacedTags) {
+                    pushWarn(`Misplaced property tag "${tag}": property tags must only appear at the beginning of the note group, `, { errpos: noteCommaIndex });
+                }
+                cleanPart = cleanPart.replace(/<[A-Za-z]+\*[^>]*>/g, '');
+            }
+
+            return {
+                noteStr: cleanPart,
+                props: partProps,
+                hispeed: partHispeed,
+                size: partSize,
+                color: partColor,
+                hand: partHand
+            };
+        }).filter(item => item.noteStr !== '');
+
+        if (parsedSplitr.length === 0) continue;
+
         // Handle shorthand double tap e.g. "11" or "22"
-        if (splitr.length === 1 && !isNaN(splitr[0]) && splitr[0].length === 2) {
-            const s = splitr[0];
+        if (parsedSplitr.length === 1 && !isNaN(parsedSplitr[0].noteStr) && parsedSplitr[0].noteStr.length === 2) {
+            const partMeta = parsedSplitr[0];
+            const s = partMeta.noteStr;
             if (s.charAt(0) === s.charAt(1)) {
                 pushWarn("Overlapping note position:", { errpos: noteCommaIndex });
                 continue;
@@ -767,18 +821,22 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             }
             commaNotes.push({
                 pos: p1,
-                props: eventProps.length > 0 ? eventProps : null,
-                hispeed: eventHispeed !== null ? eventHispeed : hispeed,
-                size: eventSize !== null ? eventSize : null,
-                color: eventColor !== null ? eventColor : null,
+                props: partMeta.props,
+                hispeed: partMeta.hispeed !== null ? partMeta.hispeed : hispeed,
+                size: partMeta.size !== null ? partMeta.size : null,
+                color: partMeta.color !== null ? partMeta.color : null,
+                manualHand: partMeta.hand || null,
+                hand: partMeta.hand || null,
                 isDouble: true, time, type: 'tap', index: noteCommaIndex,
                 isBreak: false, isHold: false, isMine: false, isEx: false
             }, {
                 pos: p2,
-                props: eventProps.length > 0 ? eventProps : null,
-                hispeed: eventHispeed !== null ? eventHispeed : hispeed,
-                size: eventSize !== null ? eventSize : null,
-                color: eventColor !== null ? eventColor : null,
+                props: partMeta.props,
+                hispeed: partMeta.hispeed !== null ? partMeta.hispeed : hispeed,
+                size: partMeta.size !== null ? partMeta.size : null,
+                color: partMeta.color !== null ? partMeta.color : null,
+                manualHand: partMeta.hand || null,
+                hand: partMeta.hand || null,
                 isDouble: true, time, type: 'tap', index: noteCommaIndex,
                 isBreak: false, isHold: false, isMine: false, isEx: false
             });
@@ -788,9 +846,9 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
         }
 
         let doubleSlideCount = 0;
-        if (splitr.length > 1) {
-            for (const p of splitr) {
-                if (p.match(REGEX_SLIDE_SYMBOL)) {
+        if (parsedSplitr.length > 1) {
+            for (const item of parsedSplitr) {
+                if (item.noteStr.match(REGEX_SLIDE_SYMBOL)) {
                     doubleSlideCount++;
                     if (doubleSlideCount > 1) break;
                 }
@@ -798,7 +856,8 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
         }
         const doubleSlide = doubleSlideCount > 1;
 
-        for (let noteStr of splitr) {
+        for (const item of parsedSplitr) {
+            let noteStr = item.noteStr;
             const posMatch = noteStr.match(REGEX_POS_MATCH);
             const touchMatch = noteStr.match(REGEX_TOUCH_MATCH);
 
@@ -847,12 +906,14 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
             const noteObj = {
                 pos,
-                props: eventProps.length > 0 ? eventProps : null,
-                hispeed: eventHispeed !== null ? eventHispeed : hispeed,
-                size: eventSize !== null ? eventSize : null,
-                color: eventColor !== null ? eventColor : null,
+                props: item.props,
+                hispeed: item.hispeed !== null ? item.hispeed : hispeed,
+                size: item.size !== null ? item.size : null,
+                color: item.color !== null ? item.color : null,
+                manualHand: item.hand || null,
+                hand: item.hand || null,
                 touchPos,
-                isDouble: splitr.length > 1,
+                isDouble: parsedSplitr.length > 1,
                 time,
                 type,
                 index: noteCommaIndex,
@@ -1145,6 +1206,8 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                             hispeed: noteObj.hispeed,
                             size: noteObj.size,
                             color: noteObj.color,
+                            manualHand: noteObj.manualHand || null,
+                            hand: noteObj.manualHand || null,
                             pos: seg.head,
                             firstSlide: index === 0,
                             lastSlide: index === segments.length - 1,
@@ -1271,6 +1334,10 @@ function executeFullDecode(raw, splitParts, baseOffset, options) {
 
     indexToTime[splitParts.length] = currentState.nowTime;
     if (currentState.nowTime > endTime) endTime = currentState.nowTime;
+
+    // 依時間軸排序並執行自動手順推算
+    notes.sort((a, b) => a.time - b.time);
+    computeHandAssignments(notes);
 
     if (options && options.debug) {
         if (warns.length > 0) {

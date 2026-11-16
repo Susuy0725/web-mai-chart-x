@@ -1033,6 +1033,7 @@ export async function videoRender(audioManager, canvas, renderer, {
             exportRenderer.drawFrame({
                 globalTime: globalT,
                 buckets,
+                notes,
                 dt: step,
                 showSensor: settings.showSensor,
                 showSensorText: false,

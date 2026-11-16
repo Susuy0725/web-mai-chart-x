@@ -1319,9 +1319,15 @@ export function generatePath(startPos, endPos) {
     return recorder;
 }
 /**
- * 對圖像套用色調 (Flat Tint)
+ * 對圖像套用色調 (Flat Tint / Color Recolor)
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} img
+ * @param {number} r
+ * @param {number} g
+ * @param {number} b
+ * @param {number} [amount=0.5]
+ * @param {'multiply'|'color'} [mode='multiply']
  */
-function tintImage(img, r, g, b, amount = 0.5) {
+function tintImage(img, r, g, b, amount = 0.5, mode = 'multiply') {
     const w = img.width || img.naturalWidth || 0;
     const h = img.height || img.naturalHeight || 0;
     if (w === 0 || h === 0) return null;
@@ -1342,6 +1348,29 @@ function tintImage(img, r, g, b, amount = 0.5) {
     ctx.drawImage(img, 0, 0, w, h);
 
     if (amount <= 0) return canvas;
+
+    if (mode === 'color') {
+        const clampedAmount = Math.max(0, Math.min(1, amount));
+        const fillStyle = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+        ctx.save();
+        // 使用 'color' 混合模式替換既有色彩（避免藍/黃貼圖因 multiply 造成 R 或 B 通道歸零）
+        ctx.globalCompositeOperation = 'color';
+        ctx.globalAlpha = Math.min(1, clampedAmount * 1.35);
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(0, 0, w, h);
+
+        // 疊加適度 multiply 強化亮黃色 (each) 等高明度素材的飽和度
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = clampedAmount * 0.42;
+        ctx.fillRect(0, 0, w, h);
+
+        // 完整還原原始透明通道
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.globalAlpha = 1;
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.restore();
+        return canvas;
+    }
 
     // 3. 使用 GPU 混合模式套用色彩乘法混合 (若有 CORS 限制則會拋錯降級)
     try {
@@ -1403,7 +1432,7 @@ let _tintCache = new WeakMap();
 /**
  * 取得染色後的圖片 (具備快取機制)
  */
-export function getTintedImage(img, amount = 0.5, { r = 255, g = 255, b = 255, colorCode = null } = {}) {
+export function getTintedImage(img, amount = 0.5, { r = 255, g = 255, b = 255, colorCode = null, mode = 'multiply' } = {}) {
     if (!img) return null;
 
     // 快速通道：若不需染色，直接回傳原圖，避開快取與 Canvas 染色負載
@@ -1438,13 +1467,14 @@ export function getTintedImage(img, amount = 0.5, { r = 255, g = 255, b = 255, c
 
     // Amount 正規化為 0.05 粒度，提高閃爍時的快取命中率
     const normalizedAmount = Math.round(amount * 20) / 20;
+    const tintMode = mode === 'color' ? 'color' : 'multiply';
 
     // 4. 快取檢索
-    const key = `${r}|${g}|${b}|${normalizedAmount}`;
+    const key = `${r}|${g}|${b}|${normalizedAmount}|${tintMode}`;
     if (map.has(key)) return map.get(key);
 
     // 5. 執行真正的染色邏輯
-    const canvas = tintImage(img, r, g, b, normalizedAmount);
+    const canvas = tintImage(img, r, g, b, normalizedAmount, tintMode);
     map.set(key, canvas);
 
     return canvas;

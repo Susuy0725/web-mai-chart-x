@@ -602,7 +602,9 @@ const modifierSubMenu = new VisualSubMenu({
         ex: { render: () => '<span class="modifier-text-btn" translate="no">EX</span>' },
         break: { render: () => '<img src="./Skin/Default/TapSkins/tap_break.png" alt="Break" style="width: 20px; height: 20px; object-fit: contain;">' },
         mine: { render: () => `<img src="./Skin/Default/TapSkins/tap_mine.png" alt="${t('visualToolbar.modMine')}" style="width: 20px; height: 20px; object-fit: contain;">` },
-        firework: { render: () => '<span class="modifier-text-btn" translate="no">FW</span>' }
+        firework: { render: () => '<span class="modifier-text-btn" translate="no">FW</span>' },
+        handL: { render: () => '<span class="modifier-text-btn" translate="no" style="color: #38bdf8;">L</span>' },
+        handR: { render: () => '<span class="modifier-text-btn" translate="no" style="color: #fb7185;">R</span>' }
     },
     onSelect: (modType) => {
         settings.visualSelectedModifier = modType;
@@ -1373,6 +1375,7 @@ function applyDecodeResult(result, simaiDataValue) {
 
     notes = result.notes;
     decodedTags = result.tags || [];
+    renderer?.setNotes?.(notes);
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
 
@@ -3740,6 +3743,7 @@ function draw(dt = 0) {
         renderer.drawFrame({
             globalTime,
             buckets,
+            notes,
             dt,
             showSensor: settings.showSensor,
             showSensorText: (settings.showSensorTextWhenPaused && !playing),
@@ -3757,6 +3761,7 @@ function draw(dt = 0) {
             renderer.drawFrame({
                 globalTime,
                 buckets,
+                notes,
                 dt,
                 showSensor: settings.showSensor,
                 showSensorText: (settings.showSensorTextWhenPaused && !playing),

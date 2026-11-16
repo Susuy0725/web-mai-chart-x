@@ -5,6 +5,7 @@ import {
     visualNoteRefPos,
     touchRefPos,
 } from './core/chartGeometry.js';
+import { HAND_COLORS, getHandCursorStates } from './core/handHintEngine.js';
 import {
     imgNotExists,
     getTintedImage,
@@ -251,6 +252,8 @@ export class SimaiRenderer {
 
         // 打擊判定文字特效佇列 (Judge Text / Break Effect Queue)
         this.judgeEffects = [];
+
+        this.HAND_OPACITY = 1;
     }
 
 
@@ -302,10 +305,148 @@ export class SimaiRenderer {
         this._touchBorderCache = null;
     }
 
+    setNotes(notes) {
+        this.notes = notes;
+    }
+
+    /**
+     * 依左右手順繪製主圓盤音符角標 ('L' | 'R' | 'BOTH')
+     */
+    drawHandNoteBadge(x, y, hand, radius = 2.0, isManual = false, alpha = 1) {
+        const theme = HAND_COLORS[hand];
+        if (!theme) return;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        if (hand === 'BOTH') {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.closePath();
+            ctx.fillStyle = HAND_COLORS.L.badgeFill;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, -Math.PI * 0.5, Math.PI * 0.5);
+            ctx.closePath();
+            ctx.fillStyle = HAND_COLORS.R.badgeFill;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+        } else {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = theme.badgeFill;
+            ctx.fill();
+        }
+        ctx.lineWidth = isManual ? 0.55 : 0.35;
+        ctx.strokeStyle = isManual ? '#fde047' : 'rgba(255, 255, 255, 0.9)';
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        const label = hand === 'BOTH' ? 'LR' : hand;
+        ctx.font = `900 ${radius * (hand === 'BOTH' ? 1.05 : 1.35)}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, x, y + radius * 0.06);
+        ctx.restore();
+    }
+
+    /**
+     * 繪製虛擬雙手游標與移動軌跡 (在畫布中心座標系 scaleBase = 100 下繪製)
+     */
+    drawHandCursors(globalTime) {
+        if (!this.notes || this.notes.length === 0) return;
+        const handStates = getHandCursorStates(this.notes, globalTime, scaleBase);
+        const ctx = this.ctx;
+
+        for (const hand of ['L', 'R']) {
+            const st = handStates[hand];
+            const theme = HAND_COLORS[hand];
+            if (!st || !theme) continue;
+
+            ctx.save();
+
+            // 1. 下一個目標預備導引虛線
+            if (st.nextTarget && st.nextTarget.timeDiff > 0.01) {
+                const guideAlpha = Math.max(0.12, Math.min(0.42, (0.75 - st.nextTarget.timeDiff) * 0.7)) * st.alpha;
+                ctx.save();
+                ctx.globalAlpha = guideAlpha;
+                ctx.strokeStyle = theme.main;
+                ctx.lineWidth = 0.55;
+                ctx.setLineDash([1.6, 1.4]);
+                ctx.beginPath();
+                ctx.moveTo(st.x, st.y);
+                ctx.lineTo(st.nextTarget.x, st.nextTarget.y);
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(st.nextTarget.x, st.nextTarget.y, 1.8, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 2. 漸層移動拖尾軌跡 (Motion Trail)
+            if (st.trailPoints && st.trailPoints.length > 1) {
+                for (let i = 0; i < st.trailPoints.length - 1; i++) {
+                    const p0 = st.trailPoints[i];
+                    const p1 = st.trailPoints[i + 1];
+                    const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                    if (dist < 0.05) continue;
+                    const fade = (1 - i / st.trailPoints.length);
+                    ctx.save();
+                    ctx.globalAlpha = st.alpha * fade * 0.55;
+                    ctx.strokeStyle = theme.main;
+                    ctx.lineCap = 'round';
+                    ctx.lineWidth = Math.max(0.5, 2.2 * fade);
+                    ctx.beginPath();
+                    ctx.moveTo(p0.x, p0.y);
+                    ctx.lineTo(p1.x, p1.y);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            // 3. 虛擬手部游標本體與按壓狀態動畫
+            const isPressed = st.state === 'tapping' || st.state === 'holding' || st.state === 'sliding';
+            const radius = st.state === 'tapping' ? 3.2 : (isPressed ? 3.55 : 3.4);
+
+            if (isPressed) {
+                ctx.save();
+                ctx.globalAlpha = st.alpha * 0.45;
+                ctx.strokeStyle = theme.main;
+                ctx.lineWidth = 0.9;
+                ctx.beginPath();
+                ctx.arc(st.x, st.y, radius + 1.4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            ctx.globalAlpha = st.alpha;
+            ctx.beginPath();
+            ctx.arc(st.x, st.y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = isPressed ? theme.badgeFill : 'rgba(15, 23, 42, 0.72)';
+            ctx.fill();
+
+            ctx.lineWidth = 0.75;
+            ctx.strokeStyle = theme.main;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `900 ${radius * 1.15}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(hand, st.x, st.y + radius * 0.05);
+
+            ctx.restore();
+        }
+    }
+
     /**
      * 優化染色圖片取得方式，採用整數化透明度快取 Key
      */
-    getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
+    getMemoizedTintedImage(imgKeyOrImg, opacity, config, mode = 'multiply') {
         let imgKey = null;
         let img = null;
         if (typeof imgKeyOrImg === 'string') {
@@ -318,14 +459,18 @@ export class SimaiRenderer {
         if (!img) return null;
 
         const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
+        const tintMode = mode === 'color' ? 'color' : 'multiply';
         const snappedOpacity = Math.round((opacity || 0) * 20) / 20;
-        const cacheKey = `${imgKey}_${snappedOpacity}_${conf.colorCode}`;
+        const cacheKey = `${imgKey}_${snappedOpacity}_${conf.colorCode}_${tintMode}`;
 
         if (this._tintCache.has(cacheKey)) {
             return this._tintCache.get(cacheKey);
         }
 
-        const tinted = getTintedImage(img, opacity, conf);
+        const tinted = getTintedImage(img, opacity, { ...conf, mode: tintMode });
+        if (tinted && typeof tinted === 'object') {
+            tinted._tintKey = cacheKey;
+        }
         if (this._tintCache.size >= 250) {
             const iter = this._tintCache.keys();
             for (let i = 0; i < 50; i++) {
@@ -1218,7 +1363,7 @@ export class SimaiRenderer {
         const p = -noteT / decayTime;
         if (p <= 0 || p >= 1) return;
 
-        const alpha = p < 0.125 ? p / 0.125 : (p > 0.67 ? (1 - p) / 0.33 : 1);
+        const alpha = p < 0.125 ? p / 0.125 : (p > 0.34 ? (1 - p) / 0.66 : 1);
         if (alpha <= 0) return;
 
         const isBreak = typeof judge === 'boolean'
@@ -1566,6 +1711,9 @@ export class SimaiRenderer {
         } = state;
 
         this.globalTime = globalTime;
+        if (state.notes) {
+            this.notes = state.notes;
+        }
         this._currentFrameBreakTint = Math.pow(Math.sin(globalTime * -6), 2) * 0.7;
         this.playCombo = playCombo;
         this.playScore = playScore;
@@ -1636,6 +1784,11 @@ export class SimaiRenderer {
         // 獨立分離的打擊特效層 (Hit Effects Pass)
         this.drawHitEffects();
         this.drawJudgeEffects();
+
+        // 虛擬雙手游標與移動軌跡提示層 (Hand Cursors & Trails)
+        if (this.settings.showHandCursor && this.notes && this.notes.length > 0) {
+            this.drawHandCursors(globalTime);
+        }
 
         if (!this.settings.noBorder) this.drawStaticBackground();
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
@@ -2414,9 +2567,15 @@ export class SimaiRenderer {
                 const sizeOffset = (t < md) ? 0 :
                     Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize); // 20.35
                 const isOn = noteT <= -0.15 && !s.isMine; // 150ms
-                const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
+                let img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
-                const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
+                let endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
+                const showHandColor = Boolean(this.settings.showHandNoteColor && !s.isMine && (s.hand === 'L' || s.hand === 'R'));
+                const handTheme = showHandColor ? HAND_COLORS[s.hand] : null;
+                if (handTheme) {
+                    if (img) img = this.getMemoizedTintedImage(img, this.HAND_OPACITY, handTheme.main, 'color');
+                    if (endimg) endimg = this.getMemoizedTintedImage(endimg, this.HAND_OPACITY, handTheme.main, 'color');
+                }
 
                 // 1. 導引弧 (Arc)
                 ctx.rotate(posInfo.rot);
@@ -2450,10 +2609,10 @@ export class SimaiRenderer {
                             ctx.drawImage(ex, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
                         }
                     }
-                    //ctx.globalAlpha = 1;
-                    //ctx.fillStyle = "white";
-                    //ctx.font = "3px mono";
-                    //ctx.fillText(`t1:${(t1).toFixed(2)}, 1-t1:${(1 - t1).toFixed(2)}, t-md:${(t - md).toFixed(2)}`, 0, 10);
+                    if (handTheme && displayT > md) {
+                        ctx.setTransform(a, b, c, d, e, f);
+                        this.drawHandNoteBadge(posInfo.x * displayT, posInfo.y * displayT, s.hand, size * 0.2, Boolean(s.manualHand), currentScale);
+                    }
                 }
 
                 if (drawHitEffect) {
@@ -2478,11 +2637,15 @@ export class SimaiRenderer {
 
                 const { displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, s.hispeed, s.size);
                 const isStar = !!s.isStar;
-                const img = isStar
+                let img = isStar
                     ? this.getStarImage(s.isMine, s.isBreak, s.isDouble, s.isMultiple)
                     : this.getTapImage(s.isMine, s.isBreak, s.isDouble);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
                 const size = baseSize * currentScale;
+                const handTheme = (this.settings.showHandNoteColor && !s.isMine && (s.hand === 'L' || s.hand === 'R')) ? HAND_COLORS[s.hand] : null;
+                if (handTheme && img) {
+                    img = this.getMemoizedTintedImage(img, this.HAND_OPACITY, handTheme.main, 'color');
+                }
 
                 // 1. 導引弧 (Arc)
                 ctx.rotate(posInfo.rot);
@@ -2518,6 +2681,9 @@ export class SimaiRenderer {
                 }
 
                 ctx.setTransform(a, b, c, d, e, f);
+                if (handTheme && displayT > md) {
+                    this.drawHandNoteBadge(posInfo.x * displayT, posInfo.y * displayT, s.hand, size * 0.2, Boolean(s.manualHand), currentScale);
+                }
             }
         }
     }
@@ -2573,10 +2739,15 @@ export class SimaiRenderer {
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
         const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble);
+        const handTheme = (this.settings.showHandNoteColor && !isMine && (s.hand === 'L' || s.hand === 'R')) ? HAND_COLORS[s.hand] : null;
+        const tintedTouchImg = (handTheme && touchImg) ? this.getMemoizedTintedImage(touchImg, this.HAND_OPACITY, handTheme.main, 'color') : touchImg;
 
         if (holdDuration) {
             const isOn = (noteTime - this.globalTime) <= -0.15; // 150ms
-            const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
+            let touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
+            if (handTheme && touchBorder) {
+                touchBorder = this.getMemoizedTintedImage(touchBorder, this.HAND_OPACITY, handTheme.main, 'color');
+            }
 
             if (-noteT > holdDuration) {
                 if (this.settings.drawHitEffect) {
@@ -2606,13 +2777,19 @@ export class SimaiRenderer {
             this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
             this.ctx.rotate(Math.PI * -0.75);
             for (let i = 0; i < 4; i++) {
-                const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                let thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                if (handTheme && thImg) {
+                    thImg = this.getMemoizedTintedImage(thImg, this.HAND_OPACITY, handTheme.main, 'color');
+                }
                 this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
             }
             this.ctx.globalAlpha = 1;
             this.drawImgAtcenter(touchPoint, size * 0.4);
             this.ctx.restore();
+            if (handTheme) {
+                this.drawHandNoteBadge(posInfo.x, posInfo.y, s.hand, size * 0.25, Boolean(s.manualHand), 1);
+            }
 
             if (this.settings.drawHitEffect) {
                 if (noteT <= 0 && noteT >= -0.2) {
@@ -2648,12 +2825,15 @@ export class SimaiRenderer {
         }
         this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
         for (let i = 0; i < 4; i++) {
-            this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.drawImage(tintedTouchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
             this.ctx.rotate(Math.PI * 0.5);
         }
         this.ctx.globalAlpha = 1;
         this.drawImgAtcenter(touchPoint, size * 0.4);
         this.ctx.restore();
+        if (handTheme) {
+            this.drawHandNoteBadge(posInfo.x, posInfo.y, s.hand, size * 0.25, Boolean(s.manualHand), 1);
+        }
     }
 
     drawSlideTrack(s) {
@@ -2689,7 +2869,8 @@ export class SimaiRenderer {
         const br = (!isIllegalRed && s.isBreak && !s.isMine) ? this.getBreakTint(s.isBreak, s.isMine) : 0;
         const isWiFi = s.slideType === "w";
         const prefixOrKey = isWiFi ? prefix : standardKey;
-        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, br, isIllegalRed, 0.3963 * size);
+        const handColor = (!isIllegalRed && !s.isMine && this.settings.showHandNoteColor && HAND_COLORS[s.hand]) ? HAND_COLORS[s.hand].main : null;
+        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, br, isIllegalRed, 0.3963 * size, handColor);
         this.ctx.restore();
     }
 
@@ -2721,26 +2902,48 @@ export class SimaiRenderer {
         const sz = Math.min(1, 1 - (noteT + slideDelay) / slideDelay);
         if (noteT <= 0 && (!s.hideHead || sz >= 1) && (displaySlideProgress < 1 || (s.lastSlide && !s.slideFinish))) {
             const { x, y, rot } = p.getPointAt(Math.min(1, displaySlideProgress));
+            const starAlpha = slideDelay < 1e-4 ? 1 : sz;
             this.ctx.save();
-            this.ctx.globalAlpha = slideDelay < 1e-4 ? 1 : sz;
-            const starImg = this.getStarImage(s.isMine, s.isBreak, s.isDouble, false, true);
+            this.ctx.globalAlpha = starAlpha;
+            const baseStarImg = this.getStarImage(s.isMine, s.isBreak, s.isDouble, false, true);
+            const showHandColor = Boolean(this.settings.showHandNoteColor && !s.isMine);
+            const isBothWifi = showHandColor && s.slideType === 'w' && s.hand === 'BOTH';
+            const handTheme = (showHandColor && !isBothWifi && HAND_COLORS[s.hand]) ? HAND_COLORS[s.hand] : null;
+            let starImg = baseStarImg;
+            if (isBothWifi && baseStarImg) {
+                starImg = this.getMemoizedTintedImage(baseStarImg, this.HAND_OPACITY, HAND_COLORS.BOTH.main, 'color');
+            } else if (handTheme && starImg) {
+                starImg = this.getMemoizedTintedImage(starImg, this.HAND_OPACITY, handTheme.main, 'color');
+            }
             const starSize = this.settings.noteBaseSize * sz * 1.45;
             const isWiFi = s.slideType === "w";
+            let w1Hand = null, w2Hand = null, w1Point = null, w2Point = null;
 
             if (isWiFi && wPaths) {
                 const { a, b, c, d, e, f } = this.ctx.getTransform();
 
-                const w1Point = wPaths.w1.getPointAt(Math.min(1, displaySlideProgress));
+                w1Point = wPaths.w1.getPointAt(Math.min(1, displaySlideProgress));
+                w2Point = wPaths.w2.getPointAt(Math.min(1, displaySlideProgress));
+
+                let w1Img = starImg;
+                let w2Img = starImg;
+                if (isBothWifi && baseStarImg) {
+                    const isW1Left = (s.wLeftPath && s.wLeftPath === wPaths.w1) || (!s.wLeftPath && w1Point.x <= w2Point.x);
+                    w1Hand = isW1Left ? 'L' : 'R';
+                    w2Hand = isW1Left ? 'R' : 'L';
+                    w1Img = this.getMemoizedTintedImage(baseStarImg, this.HAND_OPACITY, HAND_COLORS[w1Hand].main, 'color');
+                    w2Img = this.getMemoizedTintedImage(baseStarImg, this.HAND_OPACITY, HAND_COLORS[w2Hand].main, 'color');
+                }
+
                 this.ctx.translate(w1Point.x, w1Point.y);
                 this.ctx.rotate(w1Point.rot + Math.PI * 0.5);
-                this.drawImgAtcenter(starImg, starSize);
+                this.drawImgAtcenter(w1Img, starSize);
 
                 this.ctx.setTransform(a, b, c, d, e, f);
 
-                const w2Point = wPaths.w2.getPointAt(Math.min(1, displaySlideProgress));
                 this.ctx.translate(w2Point.x, w2Point.y);
                 this.ctx.rotate(w2Point.rot + Math.PI * 0.5);
-                this.drawImgAtcenter(starImg, starSize);
+                this.drawImgAtcenter(w2Img, starSize);
 
                 this.ctx.setTransform(a, b, c, d, e, f);
             }
@@ -2749,6 +2952,17 @@ export class SimaiRenderer {
             this.drawImgAtcenter(starImg, starSize);
 
             this.ctx.restore();
+            if (isBothWifi) {
+                if (w1Point && w1Hand) {
+                    this.drawHandNoteBadge(w1Point.x, w1Point.y, w1Hand, starSize * 0.16, false, starAlpha);
+                }
+                if (w2Point && w2Hand) {
+                    this.drawHandNoteBadge(w2Point.x, w2Point.y, w2Hand, starSize * 0.16, false, starAlpha);
+                }
+                this.drawHandNoteBadge(x, y, 'BOTH', starSize * 0.17, Boolean(s.manualHand), starAlpha);
+            } else if (handTheme) {
+                this.drawHandNoteBadge(x, y, s.hand, starSize * 0.16, Boolean(s.manualHand), starAlpha);
+            }
         }
     }
 
@@ -2891,7 +3105,7 @@ export class SimaiRenderer {
         return arrows;
     }
 
-    drawPathWithArrows(recorder, starProgress, prefixOrKey, typew, br, isIllegal, spacing = 4.36) {
+    drawPathWithArrows(recorder, starProgress, prefixOrKey, typew, br, isIllegal, spacing = 4.36, handColor = null) {
         if (starProgress >= 1) return;
 
         const arrows = this.ensureArrowCache(recorder, typew, spacing);
@@ -2907,15 +3121,17 @@ export class SimaiRenderer {
             currentStarSensorId = this.getSensorIdAtPoint(pt.x, pt.y, true);
         }
 
-        const opacity = isIllegal ? 1 : br;
-        const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
-        const isTinted = isIllegal || br > 0;
+        const useHandTint = !isIllegal && Boolean(handColor);
+        const opacity = isIllegal ? 1 : (useHandTint ? this.HAND_OPACITY : (br > 0 ? br : 0));
+        const colorCode = isIllegal ? "#ff3838" : (useHandTint ? handColor : (br > 0 ? "#fff8a6" : "#fff8a6"));
+        const tintMode = useHandTint ? 'color' : 'multiply';
+        const isTinted = isIllegal || br > 0 || useHandTint;
 
         let singleImg = null;
         if (!typew) {
             if (isTinted) {
                 this._tempColorConfig.colorCode = colorCode;
-                singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
+                singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig, tintMode);
             } else {
                 singleImg = this.images[prefixOrKey];
             }
@@ -2939,7 +3155,7 @@ export class SimaiRenderer {
                 const imgKey = prefixOrKey + arr.imgIndex;
                 if (isTinted) {
                     this._tempColorConfig.colorCode = colorCode;
-                    img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
+                    img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig, tintMode);
                 } else {
                     img = this.images[imgKey];
                 }
@@ -3051,6 +3267,7 @@ export class SimaiVisualEditor {
         this.zoom = 200;
 
         this.passOpacity = 0.7;
+        this.HAND_OPACITY = 0.7;
 
         this.exColor = exColor;
         // marker state: 方塊表示現在游標位置（綠色），按下時變紅
@@ -3230,7 +3447,7 @@ export class SimaiVisualEditor {
         }
     }
 
-    getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
+    getMemoizedTintedImage(imgKeyOrImg, opacity, config, mode = 'multiply') {
         let imgKey = null;
         let img = null;
         if (typeof imgKeyOrImg === 'string') {
@@ -3243,13 +3460,17 @@ export class SimaiVisualEditor {
         if (!img) return null;
 
         const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
-        const cacheKey = `${imgKey}_${(opacity || 0).toFixed(2)}_${conf.colorCode}`;
+        const tintMode = mode === 'color' ? 'color' : 'multiply';
+        const cacheKey = `${imgKey}_${(opacity || 0).toFixed(2)}_${conf.colorCode}_${tintMode}`;
 
         if (this._tintCache.has(cacheKey)) {
             return this._tintCache.get(cacheKey);
         }
 
-        const tinted = getTintedImage(img, opacity, conf);
+        const tinted = getTintedImage(img, opacity, { ...conf, mode: tintMode });
+        if (tinted && typeof tinted === 'object') {
+            tinted._tintKey = cacheKey;
+        }
         if (this._tintCache.size >= 250) {
             const iter = this._tintCache.keys();
             for (let i = 0; i < 50; i++) {
@@ -3260,6 +3481,17 @@ export class SimaiVisualEditor {
         }
         this._tintCache.set(cacheKey, tinted);
         return tinted;
+    }
+
+    /**
+     * 依視覺編輯器音符手順取得 'color' 模式染色貼圖
+     */
+    getHandTintedImage(img, note) {
+        if (!img || !note || note.isMine || !this.settings?.showHandNoteColor) return img;
+        const hand = note.manualHand || note.hand;
+        const theme = HAND_COLORS[hand];
+        if (!theme) return img;
+        return this.getMemoizedTintedImage(img, this.HAND_OPACITY, theme.main, 'color') || img;
     }
 
     getCanvasWH() {
@@ -3316,12 +3548,64 @@ export class SimaiVisualEditor {
         return drawImgAtcenter(this.ctx, img, size, offsetX, offsetY, imgWidthMul, imgHeightMul);
     }
 
+    /**
+     * 在視覺化編輯器的音符旁繪製 L / R 手順徽章（手動指定者顯示高亮黃框）
+     */
+    drawVisualHandBadge(x, y, size, note) {
+        if (!note) return;
+        const isManual = Boolean(note.manualHand);
+        if (!this.settings?.showVisualHandHint && !isManual) return;
+        const hand = note.manualHand || note.hand;
+        const theme = HAND_COLORS[hand];
+        if (!theme) return;
+
+        const r = Math.max(1.8, size * 0.2);
+        const bx = x + size * 0.34;
+        const by = y - size * 0.34;
+        const ctx = this.ctx;
+
+        ctx.save();
+        if (hand === 'BOTH') {
+            ctx.beginPath();
+            ctx.arc(bx, by, r, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.closePath();
+            ctx.fillStyle = HAND_COLORS.L.badgeFill;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bx, by, r, -Math.PI * 0.5, Math.PI * 0.5);
+            ctx.closePath();
+            ctx.fillStyle = HAND_COLORS.R.badgeFill;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bx, by, r, 0, Math.PI * 2);
+        } else {
+            ctx.beginPath();
+            ctx.arc(bx, by, r, 0, Math.PI * 2);
+            ctx.fillStyle = theme.badgeFill;
+            ctx.fill();
+        }
+        ctx.lineWidth = isManual ? 0.55 : 0.3;
+        ctx.strokeStyle = isManual ? '#fde047' : 'rgba(255, 255, 255, 0.85)';
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        const label = hand === 'BOTH' ? 'LR' : hand;
+        ctx.font = `900 ${r * (hand === 'BOTH' ? 1.05 : 1.35)}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, bx, by + r * 0.06);
+        ctx.restore();
+    }
+
     drawTap(s) {
         const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
         const t = (noteTime - this.globalTime);
 
-        const img = this.images[isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
-        if (imgNotExists(img)) return;
+        const baseImg = this.images[isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
+        if (imgNotExists(baseImg)) return;
+        const img = this.getHandTintedImage(baseImg, s);
         const size = this.settings.noteBaseSize;
         const x = visualNoteRefPos[pos - 1].x;
         const y = t * -this.zoom;
@@ -3336,6 +3620,7 @@ export class SimaiVisualEditor {
             const ex = this.getMemoizedTintedImage("tap_ex", 0.6, this._tempColorConfig);
             this.drawImgAtcenter(ex, size, x, y);
         }
+        this.drawVisualHandBadge(x, y, size, s);
         if (isPassed) {
             this.ctx.globalAlpha = 1;
         }
@@ -3346,12 +3631,13 @@ export class SimaiVisualEditor {
         const t = (noteTime - this.globalTime);
 
         const isPink = Boolean(this.settings.pinkStars);
-        const img = this.images[isMine ?
+        const baseImg = this.images[isMine ?
             (isMultiple ? "star_mine_double" : "star_mine")
             : (isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))
                 : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))))
         ];
-        if (imgNotExists(img)) return;
+        if (imgNotExists(baseImg)) return;
+        const img = this.getHandTintedImage(baseImg, s);
         const size = this.settings.noteBaseSize;
         const x = visualNoteRefPos[pos - 1].x;
         const y = t * -this.zoom;
@@ -3366,6 +3652,7 @@ export class SimaiVisualEditor {
             const ex = this.getMemoizedTintedImage(isMultiple ? "star_ex_double" : "star_ex", 0.4, this._tempColorConfig);
             this.drawImgAtcenter(ex, size * 0.95, x, y);
         }
+        this.drawVisualHandBadge(x, y, size, s);
         if (isPassed) {
             this.ctx.globalAlpha = 1;
         }
@@ -3379,9 +3666,9 @@ export class SimaiVisualEditor {
         if (holdDuration) {
             const imgs = [];
             for (let i = 0; i < 4; i++) {
-                const img = this.images[isMine ? ("touchhold_" + i + "_mine") : ("touchhold_" + i)];
-                if (imgNotExists(img)) return;
-                imgs.push(img);
+                const rawImg = this.images[isMine ? ("touchhold_" + i + "_mine") : ("touchhold_" + i)];
+                if (imgNotExists(rawImg)) return;
+                imgs.push(this.getHandTintedImage(rawImg, s));
             }
             const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
 
@@ -3439,12 +3726,14 @@ export class SimaiVisualEditor {
             }
             this.drawImgAtcenter(touchPoint, size * 0.4);
             this.ctx.restore();
+            this.drawVisualHandBadge(touchX, t * -this.zoom, this.settings.noteBaseSize, s);
             return;
         }
 
-        const img = this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")];
+        const baseImg = this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")];
         const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
-        if (imgNotExists(img)) return;
+        if (imgNotExists(baseImg)) return;
+        const img = this.getHandTintedImage(baseImg, s);
 
         this.ctx.save();
 
@@ -3462,6 +3751,7 @@ export class SimaiVisualEditor {
         this.drawImgAtcenter(touchPoint, size * 0.4);
 
         this.ctx.restore();
+        this.drawVisualHandBadge(touchX, t * -this.zoom, this.settings.noteBaseSize, s);
     }
 
     drawHold(s) {
@@ -3472,8 +3762,9 @@ export class SimaiVisualEditor {
         const t = (noteTime - this.globalTime);
         const posInfo = visualNoteRefPos[pos - 1];
 
-        const img = this.images[isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
-        if (imgNotExists(img)) return;
+        const baseImg = this.images[isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
+        if (imgNotExists(baseImg)) return;
+        const img = this.getHandTintedImage(baseImg, s);
 
         function drawHoldImage(ctx, img, size, sizeOffset) {
             ctx.drawImage(img, 0, 0, 122, 55, -size / 2, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
@@ -3499,16 +3790,20 @@ export class SimaiVisualEditor {
             drawHoldImage(this.ctx, ex, size, sizeOffset);
         }
         this.ctx.restore();
+        this.drawVisualHandBadge(posInfo.x, t * -this.zoom, size, s);
     }
 
     drawSlide(s) {
-        const target = this.images[s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
-        if (imgNotExists(target)) return;
+        const baseTarget = this.images[s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
+        if (imgNotExists(baseTarget)) return;
+        const target = this.getHandTintedImage(baseTarget, s);
 
         const { time: noteTime, pos, slideDelay, slideDuration } = s;
         const t = noteTime - this.globalTime;
+        const x = visualNoteRefPos[pos - 1].x;
 
-        this.drawPathWithArrows(target, visualNoteRefPos[pos - 1].x, t + slideDelay, slideDuration, -(t + slideDelay) / slideDuration);
+        this.drawPathWithArrows(target, x, t + slideDelay, slideDuration, -(t + slideDelay) / slideDuration);
+        this.drawVisualHandBadge(x, (t + slideDelay) * -this.zoom, this.settings.noteBaseSize, s);
     }
 
     drawPathWithArrows(img, x, t, len, passT, config = { spacing: 4.36 }) {

@@ -30,6 +30,12 @@ export function hydrateDecodedResult(result) {
                     Object.setPrototypeOf(n.wPaths.w2, PathRecorder.prototype);
                 }
             }
+            if (n.wLeftPath && !(n.wLeftPath instanceof PathRecorder)) {
+                Object.setPrototypeOf(n.wLeftPath, PathRecorder.prototype);
+            }
+            if (n.wRightPath && !(n.wRightPath instanceof PathRecorder)) {
+                Object.setPrototypeOf(n.wRightPath, PathRecorder.prototype);
+            }
         }
     }
     return result;

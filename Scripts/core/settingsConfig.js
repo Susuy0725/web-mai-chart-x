@@ -18,6 +18,9 @@ export const defaultSettings = {
     showJudge: true, // 顯示判定
     showCriticalPerfect: true, // 顯示 critical perfect
     showBreakCriticalPerfect: true, // 顯示 break critical perfect
+    showHandCursor: false, // 顯示手順虛擬雙手游標與移動軌跡
+    showHandNoteColor: false, // 啟用左右手音符分色提示
+    showVisualHandHint: true, // 在視覺化編輯器顯示 L/R 手順標記
     // Misc
     displayMode: 'simai', // simai 或 visual
     middleDistance: 0.25,
@@ -143,7 +146,7 @@ export const settingsConfig = [
                 type: 'dropdown',
                 label: 'settings.items.skin',
                 options: [
-                    { value: 'Default', label: 'Default' },
+                    { value: 'Default', label: 'Standard' },
                     { value: 'Deluxe', label: 'Deluxe' },
                 ],
                 def: defaultSettings.skin || 'Default',
@@ -159,6 +162,24 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.showSensorTextWhenPaused',
                 def: defaultSettings.showSensorTextWhenPaused
+            },
+            {
+                id: 'showHandCursor',
+                type: 'checkbox',
+                label: 'settings.items.showHandCursor',
+                def: defaultSettings.showHandCursor || false
+            },
+            {
+                id: 'showHandNoteColor',
+                type: 'checkbox',
+                label: 'settings.items.showHandNoteColor',
+                def: defaultSettings.showHandNoteColor || false
+            },
+            {
+                id: 'showVisualHandHint',
+                type: 'checkbox',
+                label: 'settings.items.showVisualHandHint',
+                def: defaultSettings.showVisualHandHint ?? true
             },
             {
                 id: 'hideBackgroundWhenPaused',
@@ -249,7 +270,48 @@ export const settingsConfig = [
                     eventBus.emit(EVENTS.LAYOUT_RESET);
                     simpleToast({ content: t('toast.panelRatioReset'), type: 'info', timeout: 1500 });
                 }
-            }
+            },
+            {
+                id: 'syntaxColors',
+                type: 'color-object',
+                label: 'settings.items.syntaxColors',
+                def: defaultSettings.syntaxColors,
+                subLabels: {
+                    note: 'settings.syntaxColorOpts.note',
+                    comment: 'settings.syntaxColorOpts.comment',
+                    bpm: 'settings.syntaxColorOpts.bpm',
+                    split: 'settings.syntaxColorOpts.split',
+                    time: 'settings.syntaxColorOpts.time',
+                    slide: 'settings.syntaxColorOpts.slide',
+                    customSlide: 'settings.syntaxColorOpts.customSlide',
+                    hold: 'settings.syntaxColorOpts.hold',
+                    break: 'settings.syntaxColorOpts.break',
+                    ex: 'settings.syntaxColorOpts.ex',
+                    mine: 'settings.syntaxColorOpts.mine',
+                    hanabi: 'settings.syntaxColorOpts.hanabi',
+                    touch: 'settings.syntaxColorOpts.touch',
+                    comma: 'settings.syntaxColorOpts.comma',
+                },
+                subPreviews: {
+                    note: '1',
+                    comment: '/* 註釋 */',
+                    bpm: '(120)',
+                    split: '{4}',
+                    time: '[1:4]',
+                    slide: '-^v',
+                    customSlide: '<A1>',
+                    hold: 'h',
+                    break: 'b',
+                    ex: 'x',
+                    mine: 'm',
+                    hanabi: 'f',
+                    touch: 'A1',
+                    comma: ',',
+                },
+                apply: (val) => {
+                    applySyntaxColors(val);
+                }
+            },
         ]
     },
     {
@@ -319,47 +381,6 @@ export const settingsConfig = [
                     { value: 'both', label: 'settings.invertWheelOpts.both' },
                 ],
                 def: defaultSettings.invertWheelDirection || 'none'
-            },
-            {
-                id: 'syntaxColors',
-                type: 'color-object',
-                label: 'settings.items.syntaxColors',
-                def: defaultSettings.syntaxColors,
-                subLabels: {
-                    note: 'settings.syntaxColorOpts.note',
-                    comment: 'settings.syntaxColorOpts.comment',
-                    bpm: 'settings.syntaxColorOpts.bpm',
-                    split: 'settings.syntaxColorOpts.split',
-                    time: 'settings.syntaxColorOpts.time',
-                    slide: 'settings.syntaxColorOpts.slide',
-                    customSlide: 'settings.syntaxColorOpts.customSlide',
-                    hold: 'settings.syntaxColorOpts.hold',
-                    break: 'settings.syntaxColorOpts.break',
-                    ex: 'settings.syntaxColorOpts.ex',
-                    mine: 'settings.syntaxColorOpts.mine',
-                    hanabi: 'settings.syntaxColorOpts.hanabi',
-                    touch: 'settings.syntaxColorOpts.touch',
-                    comma: 'settings.syntaxColorOpts.comma',
-                },
-                subPreviews: {
-                    note: '1',
-                    comment: '/* 註釋 */',
-                    bpm: '(120)',
-                    split: '{4}',
-                    time: '[1:4]',
-                    slide: '-^v',
-                    customSlide: '<A1>',
-                    hold: 'h',
-                    break: 'b',
-                    ex: 'x',
-                    mine: 'm',
-                    hanabi: 'f',
-                    touch: 'A1',
-                    comma: ',',
-                },
-                apply: (val) => {
-                    applySyntaxColors(val);
-                }
             },
         ]
     },

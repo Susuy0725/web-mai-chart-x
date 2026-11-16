@@ -190,7 +190,7 @@ export function initServiceWorker() {
             }
         });
 
-        navigator.serviceWorker.register('./sw.js')
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
             .then((reg) => {
                 console.log('Service worker registered:', reg);
 

@@ -53,6 +53,9 @@ jobs:
           find . -maxdepth 2 -name "*.html" ! -path "*/.*" \
             -exec npx html-minifier-terser --collapse-whitespace --remove-comments --minify-css true --minify-js true -o {} {} \;
 
+      - name: Generate Service Worker Asset Hashes
+        run: node .github/scripts/inject-sw-hashes.mjs
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -78,6 +78,7 @@ const ASSETS = [
     './Scripts/core/extensionStorage.js',
     './Scripts/core/frameProfiler.js',
     './Scripts/core/init.js',
+    './Scripts/core/keybindings.js',
     './Scripts/core/legalVersionManager.js',
     './Scripts/core/panelLayout.js',
     './Scripts/core/playbackEngine.js',
@@ -117,6 +118,17 @@ const ASSETS = [
     './_play/slidetables.js',
 ];
 
+const ASSET_HASHES_KEY = './__sw_asset_hashes__.json';
+// 正式建置部署時會透過 .github/scripts/inject-sw-hashes.mjs 注入各檔案內容雜湊
+const ASSET_HASHES = null; // __ASSET_HASHES__
+const SCOPE_PATH = new URL('./', self.location.href).pathname;
+
+function toRelativeAssetUrl(requestUrl) {
+    if (!requestUrl.pathname.startsWith(SCOPE_PATH)) return null;
+    const sub = requestUrl.pathname.slice(SCOPE_PATH.length);
+    return sub ? `./${sub}` : './';
+}
+
 async function broadcast(message) {
     try {
         const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
@@ -128,16 +140,68 @@ async function broadcast(message) {
     }
 }
 
+async function loadPreviousCacheHashes() {
+    const prevEntries = new Map(); // url -> { hash, cache }
+    if (!ASSET_HASHES) return prevEntries;
+
+    try {
+        const keys = await caches.keys();
+        const oldKeys = keys.filter((k) => k !== CACHE_NAME && k.startsWith('web-mai-chart-cache-'));
+        for (const key of oldKeys) {
+            try {
+                const oldCache = await caches.open(key);
+                const metaResp = await oldCache.match(ASSET_HASHES_KEY);
+                if (!metaResp || !metaResp.ok) continue;
+                const hashMap = await metaResp.json();
+                if (!hashMap || typeof hashMap !== 'object') continue;
+                for (const [url, hash] of Object.entries(hashMap)) {
+                    if (typeof hash === 'string' && !prevEntries.has(url)) {
+                        prevEntries.set(url, { hash, cache: oldCache });
+                    }
+                }
+            } catch (err) {
+                console.warn(`Failed to read hash manifest from ${key}:`, err);
+            }
+        }
+    } catch (err) {
+        console.warn('Failed to enumerate previous caches:', err);
+    }
+    return prevEntries;
+}
+
 self.addEventListener('install', (event) => {
     console.log('Service worker installing', CACHE_NAME);
     const isUpdate = Boolean(self.registration.active);
     event.waitUntil(
         (async () => {
             const cache = await caches.open(CACHE_NAME);
-            let loaded = 0;
-            const total = ASSETS.length;
+            const prevEntries = await loadPreviousCacheHashes();
+            const nextHashes = {};
+            const urlsToFetch = [];
 
-            if (isUpdate) {
+            // 先從舊快取零流量複製未變更的檔案
+            await Promise.all(
+                ASSETS.map(async (url) => {
+                    const expectedHash = ASSET_HASHES ? ASSET_HASHES[url] : null;
+                    const prev = expectedHash ? prevEntries.get(url) : null;
+                    if (expectedHash && prev && prev.hash === expectedHash) {
+                        try {
+                            const cachedResp = await prev.cache.match(url);
+                            if (cachedResp && cachedResp.ok && cachedResp.status === 200) {
+                                await cache.put(url, cachedResp);
+                                nextHashes[url] = expectedHash;
+                                return;
+                            }
+                        } catch (_) { }
+                    }
+                    urlsToFetch.push(url);
+                })
+            );
+
+            const total = urlsToFetch.length;
+            let loaded = 0;
+
+            if (isUpdate && total > 0) {
                 await broadcast({
                     type: 'SW_UPDATE_START',
                     total,
@@ -147,31 +211,49 @@ self.addEventListener('install', (event) => {
                 });
             }
 
-            await Promise.all(
-                ASSETS.map(async (url) => {
-                    try {
-                        const response = await fetch(url, { cache: 'no-cache' });
-                        if (response && response.ok && response.status === 200) {
-                            await cache.put(url, response);
+            if (total > 0) {
+                await Promise.all(
+                    urlsToFetch.map(async (url) => {
+                        try {
+                            const response = await fetch(url, { cache: 'no-cache' });
+                            if (response && response.ok && response.status === 200) {
+                                await cache.put(url, response);
+                                if (ASSET_HASHES && ASSET_HASHES[url]) {
+                                    nextHashes[url] = ASSET_HASHES[url];
+                                }
+                            }
+                        } catch (err) {
+                            console.warn(`Failed to cache asset ${url}:`, err);
+                        } finally {
+                            loaded++;
+                            const progress = Math.round((loaded / total) * 100);
+                            if (isUpdate) {
+                                await broadcast({
+                                    type: 'SW_UPDATE_PROGRESS',
+                                    total,
+                                    loaded,
+                                    progress,
+                                    file: url,
+                                    isUpdate: true
+                                });
+                            }
                         }
-                    } catch (err) {
-                        console.warn(`Failed to cache asset ${url}:`, err);
-                    } finally {
-                        loaded++;
-                        const progress = Math.round((loaded / total) * 100);
-                        if (isUpdate) {
-                            await broadcast({
-                                type: 'SW_UPDATE_PROGRESS',
-                                total,
-                                loaded,
-                                progress,
-                                file: url,
-                                isUpdate: true
-                            });
-                        }
-                    }
-                })
-            );
+                    })
+                );
+            }
+
+            if (ASSET_HASHES) {
+                try {
+                    await cache.put(
+                        ASSET_HASHES_KEY,
+                        new Response(JSON.stringify(nextHashes), {
+                            headers: { 'Content-Type': 'application/json' }
+                        })
+                    );
+                } catch (err) {
+                    console.warn('Failed to persist asset hashes:', err);
+                }
+            }
 
             if (isUpdate) {
                 await broadcast({
@@ -206,32 +288,43 @@ self.addEventListener('fetch', (event) => {
     const requestUrl = new URL(event.request.url);
     if (requestUrl.origin !== self.location.origin) return;
 
+    const relUrl = toRelativeAssetUrl(requestUrl);
+    const isManagedPrecache = Boolean(
+        ASSET_HASHES &&
+        relUrl &&
+        Object.prototype.hasOwnProperty.call(ASSET_HASHES, relUrl)
+    );
+
     event.respondWith(
-        // 加上 ignoreSearch: true，防止 main.css?v=1.2 這種版本號導致快取失效
-        caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
+        caches.open(CACHE_NAME).then((cache) =>
+            // 加上 ignoreSearch: true，防止 main.css?v=1.2 這種版本號導致快取失效
+            cache.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
+                // 已列管於版本雜湊預快取中的檔案，直接使用當前版本快取 (Cache-First)，
+                // 避免每次載入時在背景重複下載大型靜態庫 (如 mediabunny.cjs / jszip.min.js)
+                if (cachedResponse && isManagedPrecache) {
+                    return cachedResponse;
+                }
 
-            // 定義發送網路請求的邏輯
-            const fetchPromise = fetch(event.request)
-                .then((networkResponse) => {
-                    // 🔴 關鍵修正：必須同時滿足 ok 且 status 為 200 才能放進快取，防止 404 HTML 污染快取
-                    if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
-                        const cloned = networkResponse.clone();
-                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-                    }
-                    return networkResponse;
-                })
-                .catch(() => {
-                    // 網路斷線且無快取時的 Fallback
-                    if (event.request.destination === 'document' || event.request.mode === 'navigate') {
-                        return caches.match('./index.html');
-                    }
-                });
+                // 未列入預快取的動態資源 (如 Skin / 音效) 維持 Stale-While-Revalidate
+                const fetchPromise = fetch(event.request)
+                    .then((networkResponse) => {
+                        // 🔴 關鍵修正：必須同時滿足 ok 且 status 為 200 才能放進快取，防止 404 HTML 污染快取
+                        if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
+                            const cloned = networkResponse.clone();
+                            cache.put(event.request, cloned);
+                        }
+                        return networkResponse;
+                    })
+                    .catch(() => {
+                        // 網路斷線且無快取時的 Fallback
+                        if (event.request.destination === 'document' || event.request.mode === 'navigate') {
+                            return cache.match('./index.html');
+                        }
+                    });
 
-            // ✨ 優化策略：Stale-While-Revalidate
-            // 如果有快取就「先拿去用」（讓畫面秒開），但同時在背景偷偷發送 fetchPromise 去下載最新版更新快取
-            // 如果沒快取，就直接走網路請求 fetchPromise
-            return cachedResponse || fetchPromise;
-        })
+                return cachedResponse || fetchPromise;
+            })
+        )
     );
 });
 

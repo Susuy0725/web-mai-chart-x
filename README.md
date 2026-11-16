@@ -39,6 +39,7 @@ https://discord.gg/vX7XcG7bMy
 - [詳細架構與生命週期 (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
 - [模組與 API 索引手冊 (docs/MODULES.md)](./docs/MODULES.md)
 - [渲染與音訊引擎詳解 (docs/RENDERER_AND_AUDIO.md)](./docs/RENDERER_AND_AUDIO.md)
+- [擴充程式開發手冊 (docs/EXTENSIONS.md)](./docs/EXTENSIONS.md)
 
 ### 📖 授權條款
 
@@ -79,6 +80,7 @@ Special thanks to the open-source community for providing the assets:
 - [System Architecture & Lifecycle (docs/ARCHITECTURE.md)](./docs/ARCHITECTURE.md)
 - [Module & API Directory (docs/MODULES.md)](./docs/MODULES.md)
 - [Renderer & Audio Engine Details (docs/RENDERER_AND_AUDIO.md)](./docs/RENDERER_AND_AUDIO.md)
+- [Extension Development Guide (docs/EXTENSIONS.md)](./docs/EXTENSIONS.md)
 
 ### 📖 License
 

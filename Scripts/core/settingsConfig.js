@@ -131,7 +131,7 @@ export const settingsConfig = [
                 type: 'dropdown',
                 label: 'settings.items.skin',
                 options: [
-                    { value: 'Default', label: 'Default' },
+                    { value: 'Default', label: 'Standard' },
                     { value: 'Deluxe', label: 'Deluxe' },
                 ],
                 def: defaultSettings.skin || 'Default',

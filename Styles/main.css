@@ -972,7 +972,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 #panelSplitter.orientation-horizontal .splitter-toolbar {
     flex-direction: column;
-    width: 48px;
+    width: 42px;
     box-sizing: border-box;
     top: 50%;
     left: calc(50% + var(--toolbar-dock-offset, 0px));
@@ -981,7 +981,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 #panelSplitter.orientation-vertical .splitter-toolbar {
     flex-direction: row;
-    height: 48px;
+    height: 42px;
     box-sizing: border-box;
     left: 50%;
     top: calc(50% + var(--toolbar-dock-offset, 0px));
@@ -1021,8 +1021,8 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: none;
     border-radius: 5px;
@@ -1045,6 +1045,11 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .splitter-toolbar-btn .splitter-icon {
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 300,
+        'GRAD' 0,
+        'opsz' 24;
     width: 24px;
     height: 24px;
     display: block;
@@ -1052,24 +1057,30 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .splitter-toolbar-btn .splitter-direction-icon {
-    transform: rotate(90deg);
-}
-
-#panelSplitter.orientation-vertical .splitter-toolbar-btn .splitter-direction-icon {
     transform: rotate(0deg);
 }
 
+#panelSplitter.orientation-vertical .splitter-toolbar-btn .splitter-direction-icon {
+    transform: rotate(90deg);
+}
+
 .splitter-toolbar-btn .splitter-swap-icon {
-    font-size: 24px;
-    line-height: 1;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 300,
+        'GRAD' 0,
+        'opsz' 24;
+    width: 24px;
+    height: 24px;
+    display: block;
 }
 
 .splitter-toolbar-handle {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 24px;
+    width: 32px;
+    height: 42px;
     flex-shrink: 0;
     cursor: col-resize;
     color: rgba(255, 255, 255, 0.45);
@@ -1081,14 +1092,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     cursor: row-resize;
 }
 
-#panelSplitter.dragging .splitter-toolbar-handle {
+#panelSplitter.dragging .splitter-handle-bars {
     color: var(--accent-color);
 }
 
 .splitter-handle-bars {
     display: block;
-    width: 7px;
-    height: 17px;
+    color: #333;
+    width: 4px;
+    height: 20px;
     border-left: 2px solid currentColor;
     border-right: 2px solid currentColor;
     border-radius: 1px;
@@ -1097,7 +1109,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 #panelSplitter.orientation-vertical .splitter-handle-bars {
     width: 17px;
-    height: 7px;
+    height: 4px;
     border-left: none;
     border-right: none;
     border-top: 2px solid currentColor;

@@ -394,7 +394,7 @@ export function initFileHandlers(ctx) {
         addMusicButton.addEventListener('click', () => {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'audio/*';
+            input.accept = '.mp3,.wav,.ogg';
             input.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -694,7 +694,7 @@ export async function saveProjectZipToIDB(zipBlob, defaultName = '未命名專�
     if (!finalProjectId) {
         finalProjectId = await projectCreate(projectName);
     } else {
-        await projectTouch(finalProjectId).catch(() => {});
+        await projectTouch(finalProjectId).catch(() => { });
     }
 
     let parsedMaidata = null;
@@ -720,7 +720,7 @@ export async function saveProjectZipToIDB(zipBlob, defaultName = '未命名專�
                 parsedMaidata = parseMaidata(text);
                 if (parsedMaidata?.title && parsedMaidata.title.trim()) {
                     projectName = parsedMaidata.title.trim();
-                    await projectUpdateName(finalProjectId, projectName).catch(() => {});
+                    await projectUpdateName(finalProjectId, projectName).catch(() => { });
                 }
             } catch (e) {
                 console.warn('[saveProjectZipToIDB] 解析 maidata.txt 失敗:', e);
@@ -735,17 +735,17 @@ export async function saveProjectZipToIDB(zipBlob, defaultName = '未命名專�
             if (isImage) {
                 try {
                     bgImageBlob = await entry.async('blob');
-                } catch (_) {}
+                } catch (_) { }
             } else if (isVideo) {
                 try {
                     bgVideoBlob = await entry.async('blob');
-                } catch (_) {}
+                } catch (_) { }
             }
         } else if (lowerName.startsWith('pv.')) {
             if (isVideo) {
                 try {
                     bgVideoBlob = await entry.async('blob');
-                } catch (_) {}
+                } catch (_) { }
             }
         }
     }

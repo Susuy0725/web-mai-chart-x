@@ -2190,6 +2190,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-card-grid,
 .ext-detail-scroll-body,
 .ext-repo-manage-list,
+.popup-setting-sidebar,
 .popup-setting-content,
 .project-manager-grid {
     scrollbar-width: thin;
@@ -2206,6 +2207,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-card-grid::-webkit-scrollbar,
 .ext-detail-scroll-body::-webkit-scrollbar,
 .ext-repo-manage-list::-webkit-scrollbar,
+.popup-setting-sidebar::-webkit-scrollbar,
 .popup-setting-content::-webkit-scrollbar,
 .project-manager-grid::-webkit-scrollbar {
     width: var(--scrollbar-size);
@@ -2222,6 +2224,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-card-grid::-webkit-scrollbar-track,
 .ext-detail-scroll-body::-webkit-scrollbar-track,
 .ext-repo-manage-list::-webkit-scrollbar-track,
+.popup-setting-sidebar::-webkit-scrollbar-track,
 .popup-setting-content::-webkit-scrollbar-track,
 .project-manager-grid::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
@@ -2238,6 +2241,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-card-grid::-webkit-scrollbar-thumb,
 .ext-detail-scroll-body::-webkit-scrollbar-thumb,
 .ext-repo-manage-list::-webkit-scrollbar-thumb,
+.popup-setting-sidebar::-webkit-scrollbar-thumb,
 .popup-setting-content::-webkit-scrollbar-thumb,
 .project-manager-grid::-webkit-scrollbar-thumb {
     background-color: var(--scrollbar-thumb);
@@ -2256,6 +2260,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-card-grid::-webkit-scrollbar-thumb:hover,
 .ext-detail-scroll-body::-webkit-scrollbar-thumb:hover,
 .ext-repo-manage-list::-webkit-scrollbar-thumb:hover,
+.popup-setting-sidebar::-webkit-scrollbar-thumb:hover,
 .popup-setting-content::-webkit-scrollbar-thumb:hover,
 .project-manager-grid::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-thumb-hover);

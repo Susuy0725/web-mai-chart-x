@@ -27,7 +27,8 @@
 | **`extensionManager.js`** | 擴充程式生命週期、權限門面與資源回收管理器。 | `EXTENSION_API_VERSION`, `EXTENSION_PERMISSIONS`, `extensionManager` |
 | **`extensionOverrideRegistry.js`** | 擴充程式層疊覆寫註冊表，管理設定、圖片與音效的非破壞性覆寫與自動還原。 | `extensionOverrideRegistry` |
 | **`extensionStorage.js`** | 使用 IndexedDB 儲存與管理已安裝的擴充套件。 | `listStoredExtensions()`, `saveStoredExtension()`, `setStoredExtensionEnabled()`, `removeStoredExtension()` |
-| **`renderOverlayRegistry.js`** | Canvas 渲染疊加圖層註冊表與狀態隔離呼叫器。 | `renderOverlayRegistry` |
+| **`renderOverlayRegistry.js`** | Canvas 渲染疊加圖層分桶註冊表、狀態隔離呼叫與離線影片匯出前置準備管理。 | `renderOverlayRegistry` |
+| **`videoFrameDecoder.js`** | 受控的逐幀影片解碼器封裝，提供循序影格讀取與資源釋放介面。 | `createVideoFrameDecoder()` |
 
 ---
 

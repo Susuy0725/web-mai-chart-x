@@ -45,15 +45,16 @@ maimai 框體由圍繞圓心的 8 個主按鍵（1~8 號鍵）組成：
 - 音符自圓心判定點向外圈判定環等速或依變速指令 `<HS*N>` 飛馳。
 
 ### 1.2 渲染管線 (Render Pipeline)
-每幀在 `playbackEngine` 驅動下執行：
-1. **背景清理與影片繪製**：若啟用背景影片/底圖，先畫底層並疊加使用者設定的暗度濾鏡（`bgBrightness`）。
-2. **判定線與軌道環**：繪製 maimai 特徵的 8 條軌道線與主判定圓環。
+每幀在 `playbackEngine` 驅動下執行，擴充疊加圖層可透過 `renderOverlayRegistry` 於各階段邊界掛載：
+1. **清除畫布與外框輪廓**：清除目標區域後可掛載 `afterClear`，接著繪製判定外框輪廓並提供 `beforeNotes` 掛載點。
+2. **感應區與中央顯示**：依序繪製觸控感應區、`afterSensors` 掛載點、中央分數與連擊顯示，以及 `afterMiddleDisplay` 掛載點。
 3. **音符批次繪製（深度排序）**：
-   - 先繪製 Slide 軌跡導引線（箭頭發光動畫與星星等待狀態）。
-   - 繪製 Hold 與 TouchHold 延伸長條。
-   - 繪製 Tap 音符、Break 音符（帶閃爍高光）、地雷音符 `m`。
-   - 繪製 Touch 與 Touch 中心感應點。
-4. **即時打擊反饋與特效**：Critical/Perfect/Great 特效環與分數評級指示。
+   - 繪製 Touch 花火特效。
+   - 繪製 Slide 軌跡導引線與星星等待狀態。
+   - 繪製 Tap、Break、地雷 `m` 與 Hold 延伸長條。
+   - 繪製 Touch 與 TouchHold，隨後提供 `afterNoteObjects` 掛載點。
+4. **即時打擊反饋與特效**：Critical/Perfect/Great 打擊光暈與判定文字特效，隨後提供 `afterEffects` 掛載點。
+5. **圓外黑色遮罩、輔助文字與介面**：繪製判定圓外圍靜態黑色遮罩，隨後提供 `afterBorder` 掛載點，最後繪製周邊輔助文字、原生介面與最頂層 `afterNotes` 掛載點。
 
 ### 1.3 ⚠️ 效能優化與快取關鍵（必讀陷阱）
 - **Slide 軌跡與 spacing 快取**：

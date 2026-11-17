@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.11.17 (1)]
+
+### Added
+- **擴充疊加圖層階段 API**：`ctx.render.registerOverlay` 的 `phase` 參數擴充支援細粒度渲染階段。主畫布 `main` 支援 `afterClear`、`beforeNotes`、`afterSensors`、`afterMiddleDisplay`、`afterNoteObjects`、`afterEffects`、`afterBorder`、`afterNotes`；視覺化編輯器 `visual` 支援 `beforeNotes`、`afterNoteObjects`、`afterNotes`。
+- **離線影片匯出前置準備 API**：`ctx.render.registerOverlay` 新增 `prepareVideoFrame` 非同步回呼與 `prepareTimeoutMs` 設定項，預設 3000 毫秒、允許範圍 100 至 30000 毫秒，於主畫布匯出每幀繪製前傳入 `{ globalTime, frameIndex, frameCount, dt, width, height, signal }`，支援 `AbortSignal` 中斷控制與連續逾時保護。
+- **受控逐幀影片解碼器 API**：於 `render:overlay` 權限下新增 `ctx.render.createVideoFrameDecoder(source, options)`，接受 `Blob`、`File` 與網址字串來源，回傳 `{ duration, getFrameAt, dispose }` 介面供離線匯出循序取幀，並於擴充停用時自動回收資源。
+- **開發者文件網站**：新增 `doc/` 互動式開發者文件網站，提供指南閱讀與全文搜尋功能。
+
+### Changed
+- **渲染管線與影片匯出整合**：調整 `SimaiRenderer`、`SimaiVisualEditor` 與 `videoRender`，依多階段順序執行疊加圖層並於逐幀匯出期間串接 `renderOverlayRegistry.prepareVideoFrames` 與中斷訊號。
+- **開發文件同步**：更新 `docs/EXTENSIONS.md`、`docs/MODULES.md`、`docs/RENDERER_AND_AUDIO.md` 與 `doc/docData.js`，補齊擴充疊加階段、離線前置鉤子與影片解碼器 API 規格。
+
 ## [2026.11.16 (3)]
 
 ### Added

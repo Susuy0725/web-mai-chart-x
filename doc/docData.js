@@ -320,7 +320,7 @@ my-extension.zip
                     ['`view:read`', '`EXTENSION_PERMISSIONS.VIEW_READ`', '讀取目前編輯器檢視模式快照'],
                     ['`playback:read`', '`EXTENSION_PERMISSIONS.PLAYBACK_READ`', '讀取播放狀態快照與時間軸總長度'],
                     ['`playback:seek`', '`EXTENSION_PERMISSIONS.PLAYBACK_SEEK`', '跳轉至指定秒數或相對微調播放進度'],
-                    ['`render:overlay`', '`EXTENSION_PERMISSIONS.RENDER_OVERLAY`', '註冊畫布自訂疊加圖層與請求畫布重繪'],
+                    ['`render:overlay`', '`EXTENSION_PERMISSIONS.RENDER_OVERLAY`', '註冊畫布自訂疊加圖層、請求畫布重繪與建立受控逐幀影片解碼器'],
                     ['`commands:register`', '`EXTENSION_PERMISSIONS.COMMANDS_REGISTER`', '註冊具備擴充名稱空間的自訂指令'],
                     ['`events:subscribe`', '`EXTENSION_PERMISSIONS.EVENTS_SUBSCRIBE`', '訂閱系統開放白名單事件'],
                     ['`settings:read`', '`EXTENSION_PERMISSIONS.SETTINGS_READ`', '讀取應用程式原生設定的深層凍結唯讀快照'],
@@ -367,7 +367,7 @@ my-extension.zip
             '啟動時系統會驗證 `manifest.json`、組裝受限上下文 `ctx`、捕捉啟動例外，並收集啟動函式回傳的清理函式或具備 `dispose` 方法的物件。'
         ],
         notes: [
-            '自動回收範圍僅涵蓋透過 `ctx` 官方介面註冊的指令、事件監聽器、疊加圖層、選單項目、浮動元件、多語系詞典、原生設定覆寫與素材覆寫。',
+            '自動回收範圍僅涵蓋透過 `ctx` 官方介面註冊的指令、事件監聽器、疊加圖層、逐幀影片解碼器、選單項目、浮動元件、多語系詞典、原生設定覆寫與素材覆寫。',
             '若擴充程式自行於 `window` 或 `document` 綁定事件、建立計時器或發起背景 Worker，必須於回傳的清理函式中主動釋放。',
             '啟動崩潰防護：啟動時透過 `sessionStorage` 鍵 `wmcx_ext_activating` 追蹤狀態，若發生嚴重崩潰導致異常重載，下次啟動會自動停用該擴充程式。',
             '安全模式啟動參數：於編輯器網址列加上 `?safeMode=1` 或 `?safeMode=true` 時，系統僅登錄已安裝擴充而不自動啟動，便於排除問題外掛。'
@@ -1490,7 +1490,8 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                 columns: ['方法', '所需權限', '說明'],
                 rows: [
                     ['`registerOverlay(options)`', '`render:overlay`', '註冊畫布疊加圖層並回傳取消註冊函式'],
-                    ['`requestRedraw()`', '`render:overlay`', '發布重繪事件請求畫布立即重新繪製']
+                    ['`requestRedraw()`', '`render:overlay`', '發布重繪事件請求畫布立即重新繪製'],
+                    ['`createVideoFrameDecoder(source, options)`', '`render:overlay`', '建立受控的逐幀影片解碼器供離線匯出循序取幀']
                 ]
             }
         ],
@@ -1502,7 +1503,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
             runtime: 'Trusted 模式',
             since: 'API v1'
         },
-        seeAlso: ['ctx.render.registerOverlay', 'ctx.render.requestRedraw', 'arch-renderer-audio']
+        seeAlso: ['ctx.render.registerOverlay', 'ctx.render.requestRedraw', 'ctx.render.createVideoFrameDecoder', 'arch-renderer-audio']
     },
     {
         id: 'ctx.render.registerOverlay',
@@ -1713,6 +1714,115 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
             since: 'API v1'
         },
         seeAlso: ['ctx.render.registerOverlay', 'events-list']
+    },
+    {
+        id: 'ctx.render.createVideoFrameDecoder',
+        category: 'api',
+        groupId: 'group-ctx-render',
+        title: '建立逐幀影片解碼器',
+        codeTitle: 'ctx.render.createVideoFrameDecoder()',
+        sidebarLabel: 'createVideoFrameDecoder()',
+        sidebarMono: true,
+        badge: '渲染',
+        subtitle: '建立受控的離線逐幀影片解碼器，封裝循序影格推進、循環對齊與自動資源釋放。',
+        status: {
+            variant: 'perm',
+            label: '需要權限',
+            permissions: ['render:overlay'],
+            envs: ['Trusted 模式', '離線影片渲染支援'],
+            apiVersion: 'API v1'
+        },
+        overview: [
+            '供需要將外部影片整合進離線錄影匯出的外掛使用，內部會自動維護循序影格迭代器推進、循環回繞與跳轉重建，避免直接以 `video.currentTime` 逐幀跳轉導致匯出緩慢。',
+            '若圖層僅使用 Canvas 畫筆繪製圖形或繪製靜態圖片，只需於 `registerOverlay` 設定 `includeInVideo: true` 並於 `draw` 依 `globalTime` 繪圖即可，無需呼叫此方法。'
+        ],
+        syntax: `const decoder = await ctx.render.createVideoFrameDecoder(source, options)`,
+        parameters: [
+            {
+                name: 'source',
+                type: 'Blob | File | string',
+                required: true,
+                description: '欲解碼的影片來源，支援本機檔案物件或網址字串。'
+            },
+            {
+                name: 'options',
+                type: 'Object',
+                required: false,
+                description: '解碼器組態設定物件。',
+                children: [
+                    {
+                        name: 'endBehavior',
+                        type: 'string',
+                        required: false,
+                        defaultValue: "'stop'",
+                        description: '超出影片長度時的預設行為，可選 `stop` 或 `loop`。'
+                    },
+                    {
+                        name: 'width',
+                        type: 'number',
+                        required: false,
+                        description: '解碼輸出畫布的目標寬度像素值。'
+                    },
+                    {
+                        name: 'height',
+                        type: 'number',
+                        required: false,
+                        description: '解碼輸出畫布的目標高度像素值。'
+                    }
+                ]
+            }
+        ],
+        returns: {
+            type: 'Promise<Object>',
+            description: '解析為受控解碼器物件 `{ duration, getFrameAt, dispose }`，擴充停用時系統會自動呼叫 `dispose()` 釋放資源。'
+        },
+        tables: [
+            {
+                title: '解碼器回傳介面與方法',
+                columns: ['屬性或方法', '型別', '說明'],
+                rows: [
+                    ['`duration`', '`number`', '影片總長度秒數'],
+                    ['`getFrameAt(time, callOptions)`', '`Function`', '非同步函式，依目標秒數 `time` 與選填 `{ endBehavior }` 回傳影格物件 `{ canvas, timestamp, duration, width, height }` 或 `null`'],
+                    ['`dispose()`', '`Function`', '非同步函式，立即關閉迭代器並釋放底層解碼器資源']
+                ]
+            }
+        ],
+        examples: [
+            {
+                label: '搭配 prepareVideoFrame 進行離線逐幀繪製',
+                code: `const decoder = await ctx.render.createVideoFrameDecoder(videoFile, {
+    endBehavior: 'loop',
+    width: 320
+});
+let latestFrame = null;
+
+ctx.render.registerOverlay({
+    target: 'main',
+    phase: 'afterBorder',
+    includeInVideo: true,
+    async prepareVideoFrame({ globalTime, signal }) {
+        if (signal?.aborted) return;
+        const frame = await decoder.getFrameAt(globalTime);
+        if (!signal?.aborted && frame) {
+            latestFrame = frame;
+        }
+    },
+    draw(rc) {
+        if (!latestFrame) return;
+        rc.ctx.drawImage(latestFrame.canvas, 0, 0, rc.width, rc.height);
+    }
+});`
+            }
+        ],
+        summary: {
+            namespace: 'ctx.render',
+            permission: 'render:overlay',
+            constant: 'EXTENSION_PERMISSIONS.RENDER_OVERLAY',
+            async: '非同步建立與取幀',
+            runtime: 'Trusted 模式',
+            since: 'API v1'
+        },
+        seeAlso: ['ctx.render.registerOverlay', 'guide-lifecycle']
     },
 
     /* ======================================================================
@@ -3822,7 +3932,8 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
                     ['`Scripts/core/extensionLoader.js`', '解析、驗證與動態載入第三方 `.zip` 擴充套件', '`parseExtensionZip()`、`installExtensionPackage()`、`loadStoredExtensions()`'],
                     ['`Scripts/core/extensionRepo.js`', 'WERP 擴充來源管理、索引驗證與下載校驗', '儲存庫索引讀取與安全檢查 API'],
                     ['`Scripts/core/extensionOverrideRegistry.js`', '管理設定、圖片與音效的非破壞性層疊覆寫與還原', '`extensionOverrideRegistry`'],
-                    ['`Scripts/core/renderOverlayRegistry.js`', 'Canvas 疊加圖層註冊表與狀態隔離呼叫器', '`renderOverlayRegistry`'],
+                    ['`Scripts/core/renderOverlayRegistry.js`', 'Canvas 疊加圖層分桶註冊表、狀態隔離呼叫與離線影片匯出前置準備管理', '`renderOverlayRegistry`'],
+                    ['`Scripts/core/videoFrameDecoder.js`', '受控的逐幀影片解碼器封裝與循序影格讀取管理', '`createVideoFrameDecoder()`'],
                     ['`Scripts/core/commandRegistry.js`', '統一指令註冊與派發中心', '`commandRegistry`'],
                     ['`Scripts/core/playbackEngine.js`', '播放器狀態機、播放與倒數計時驅動', '`PlaybackEngine`'],
                     ['`Scripts/core/decodeWorkerManager.js`', '背景非同步譜面解析與同步降級', '`decodeWorkerManager`']

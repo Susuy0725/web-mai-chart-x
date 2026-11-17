@@ -8,6 +8,7 @@ import { appContext } from './appContext.js';
 import { commandRegistry } from './commandRegistry.js';
 import { eventBus, EVENTS } from './eventBus.js';
 import { renderOverlayRegistry } from './renderOverlayRegistry.js';
+import { createVideoFrameDecoder } from './videoFrameDecoder.js';
 import { extensionOverrideRegistry } from './extensionOverrideRegistry.js';
 import {
     getExtensionData,
@@ -243,7 +244,21 @@ class ExtensionManager {
                     eventBus.emit(EVENTS.CANVAS_REDRAW);
                     return dispose;
                 },
-                requestRedraw: () => eventBus.emit(EVENTS.CANVAS_REDRAW)
+                requestRedraw: () => eventBus.emit(EVENTS.CANVAS_REDRAW),
+                createVideoFrameDecoder: async (source, options = {}) => {
+                    if (!isContextActive()) {
+                        throw new Error(`[ExtensionManager] 擴充 "${extId}" 未處於啟用狀態`);
+                    }
+                    const decoder = await createVideoFrameDecoder(source, options);
+                    if (!isContextActive()) {
+                        await decoder.dispose();
+                        throw new Error(`[ExtensionManager] 擴充 "${extId}" 已停用`);
+                    }
+                    disposables.push(() => {
+                        decoder.dispose();
+                    });
+                    return decoder;
+                }
             });
         }
 

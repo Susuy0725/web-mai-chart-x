@@ -114,7 +114,7 @@ example-extension.zip
 | `view:read` | `EXTENSION_PERMISSIONS.VIEW_READ` | 讀取目前編輯器檢視模式快照 |
 | `playback:read` | `EXTENSION_PERMISSIONS.PLAYBACK_READ` | 讀取播放狀態快照與時間軸總長度 |
 | `playback:seek` | `EXTENSION_PERMISSIONS.PLAYBACK_SEEK` | 跳轉至指定秒數或相對微調播放進度 |
-| `render:overlay` | `EXTENSION_PERMISSIONS.RENDER_OVERLAY` | 註冊畫布自訂疊加圖層與請求畫布重繪 |
+| `render:overlay` | `EXTENSION_PERMISSIONS.RENDER_OVERLAY` | 註冊畫布自訂疊加圖層、請求畫布重繪與建立受控逐幀影片解碼器 |
 | `commands:register` | `EXTENSION_PERMISSIONS.COMMANDS_REGISTER` | 註冊具備擴充名稱空間的自訂指令 |
 | `events:subscribe` | `EXTENSION_PERMISSIONS.EVENTS_SUBSCRIBE` | 訂閱系統開放白名單事件 |
 | `settings:read` | `EXTENSION_PERMISSIONS.SETTINGS_READ` | 讀取應用程式原生設定的深層凍結唯讀快照 |
@@ -298,6 +298,48 @@ ctx.hasPermission(permissionString);
 - 參數：無
 - 行為：發布 `canvas:redraw` 事件，請求主程式立即排程重新繪製畫布。
 - 回傳：無回傳值。
+
+#### `ctx.render.createVideoFrameDecoder(source, options = {})`
+- 權限需求：`render:overlay`
+- 參數：
+  - `source`：`Blob`、`File` 或網址字串，欲解碼的影片來源。
+  - `options`：物件，選填：
+    - `endBehavior`：字串，選填，超出影片長度時的預設行為，可選值為 `'stop'` 或 `'loop'`，預設為 `'stop'`。
+    - `width`：數值，選填，解碼輸出畫布目標寬度。
+    - `height`：數值，選填，解碼輸出畫布目標高度。
+- 回傳：Promise，解析為受控解碼器物件 `{ duration, getFrameAt, dispose }`：
+  - `duration`：數值，影片總長度秒數。
+  - `getFrameAt(time, callOptions = {})`：非同步函式，傳入目標秒數 `time` 與選填 `{ endBehavior }`，內部自動維護循序解碼迭代器推進、循環回繞與跳轉重建，回傳唯讀影格物件 `{ canvas, timestamp, duration, width, height }` 或 `null`。
+  - `dispose()`：非同步函式，提前關閉迭代器並釋放底層解碼器資源。
+- 生命週期：擴充停用時系統會自動呼叫 `dispose()` 釋放解碼器資源。
+- 備註：若圖層僅使用 Canvas 畫筆繪製或繪製靜態圖片，只需於 `registerOverlay` 開啟 `includeInVideo: true` 並於 `draw` 依 `globalTime` 繪圖即可，無需使用此解碼器。
+
+使用範例：
+
+```javascript
+const decoder = await ctx.render.createVideoFrameDecoder(videoFile, {
+    endBehavior: 'loop',
+    width: 320
+});
+let latestFrame = null;
+
+ctx.render.registerOverlay({
+    target: 'main',
+    phase: 'afterBorder',
+    includeInVideo: true,
+    async prepareVideoFrame({ globalTime, signal }) {
+        if (signal?.aborted) return;
+        const frame = await decoder.getFrameAt(globalTime);
+        if (!signal?.aborted && frame) {
+            latestFrame = frame;
+        }
+    },
+    draw(rc) {
+        if (!latestFrame) return;
+        rc.ctx.drawImage(latestFrame.canvas, 0, 0, rc.width, rc.height);
+    }
+});
+```
 
 ### 3.8 指令註冊介面：`ctx.commands`
 
@@ -731,6 +773,7 @@ export default function activate(ctx) {
 - 註銷透過 `ctx.commands.register` 註冊的所有指令。
 - 取消透過 `ctx.events.on` 訂閱的所有事件監聽器。
 - 註銷透過 `ctx.render.registerOverlay` 註冊的疊加圖層並觸發畫布重繪。
+- 釋放透過 `ctx.render.createVideoFrameDecoder` 建立的逐幀影片解碼器資源。
 - 移除透過 `ctx.ui.registerMenuItem` 註冊的選單項目。
 - 卸載透過 `ctx.i18n.registerTranslations` 註冊的多語系詞典。
 - 還原透過 `ctx.settings` 套用的所有原生設定覆寫並觸發畫面重繪。

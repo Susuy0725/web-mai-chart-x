@@ -87,6 +87,7 @@ const ASSETS = [
     './Scripts/core/simaiLogicControler.js',
     './Scripts/core/skinConfig.js',
     './Scripts/core/swManager.js',
+    './Scripts/core/videoFrameDecoder.js',
     './Scripts/core/wmcxExtract.js',
     './Scripts/workers/decodeWorker.js',
     './Scripts/renderer.js',

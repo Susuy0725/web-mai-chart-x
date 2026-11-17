@@ -30,10 +30,11 @@ import { videoRender } from "./features/videoRender.js";
 export { videoRender };
 
 export function imgNotExists(image) {
-    if (!image || !image.complete || image.naturalWidth === 0) {
-        return true;
+    if (!image) return true;
+    if ('complete' in image) {
+        return !image.complete || image.naturalWidth === 0;
     }
-    return false;
+    return (image.width || 0) <= 0 || (image.height || 0) <= 0;
 }
 
 const baseURL = (typeof window !== 'undefined' && window.location.pathname.includes('/_play/')) ? '../Skin/' : './Skin/';
@@ -1461,6 +1462,136 @@ export function clearTintCache(img) {
         _tintCache.delete(img);
     } else {
         _tintCache = new WeakMap();
+    }
+}
+
+function createWorkCanvas(w, h) {
+    if (typeof OffscreenCanvas !== 'undefined') {
+        return new OffscreenCanvas(w, h);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+}
+
+/**
+ * 對圖像調整亮度 (1.0 為原始亮度，< 1 變暗，> 1 變亮，完整保留透明通道)
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} img
+ * @param {number} [brightness=1]
+ */
+function brightenImage(img, brightness = 1) {
+    const w = img.naturalWidth || img.width || 0;
+    const h = img.naturalHeight || img.height || 0;
+    if (w === 0 || h === 0) return null;
+
+    const canvas = createWorkCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(img, 0, 0, w, h);
+    if (Math.abs(brightness - 1) < 1e-4) return canvas;
+
+    // 調暗 (< 1)：使用 source-atop + 黑色遮罩，全程 GPU 加速且不受 CORS 或 Safari ctx.filter 限制
+    if (brightness < 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = '#000000';
+        ctx.globalAlpha = Math.max(0, Math.min(1, 1 - brightness));
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+        return canvas;
+    }
+
+    // 調亮 (> 1)：優先直接以像素運算等比放大 RGB (數學精準並相容 Safari/iOS)
+    try {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] === 0) continue;
+            data[i] = Math.min(255, Math.round(data[i] * brightness));
+            data[i + 1] = Math.min(255, Math.round(data[i + 1] * brightness));
+            data[i + 2] = Math.min(255, Math.round(data[i + 2] * brightness));
+        }
+        ctx.putImageData(imgData, 0, 0);
+        return canvas;
+    } catch (e) {
+        // 若遇跨域圖片無法讀取像素，降級嘗試 ctx.filter 或 lighter 疊加
+        try {
+            if ('filter' in ctx) {
+                ctx.clearRect(0, 0, w, h);
+                ctx.save();
+                ctx.filter = `brightness(${brightness})`;
+                ctx.drawImage(img, 0, 0, w, h);
+                ctx.restore();
+                return canvas;
+            }
+        } catch (_) { }
+
+        const extraPasses = Math.min(4, brightness - 1);
+        let remain = extraPasses;
+        while (remain > 0.01) {
+            const alpha = Math.min(1, remain);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(img, 0, 0, w, h);
+            ctx.restore();
+            remain -= alpha;
+        }
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.restore();
+    }
+
+    return canvas;
+}
+
+let _brightnessCache = new WeakMap();
+
+/**
+ * 取得調整亮度後的圖片 (具備 WeakMap 快取與 0.05 粒度量化機制)
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} img
+ * @param {number} [brightness=1] 亮度倍率 (0 = 全黑, 1 = 原圖, > 1 = 提亮)
+ * @returns {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas|null}
+ */
+export function getBrightenedImage(img, brightness = 1) {
+    if (!img) return null;
+
+    const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
+    // 量化為 0.05 粒度，提高動畫期間快取命中率
+    const normalized = Math.round(safeBrightness * 20) / 20;
+
+    // 快速通道：若亮度為 1.0，直接回傳原圖
+    if (normalized === 1) return img;
+
+    let map = _brightnessCache.get(img);
+    if (!map) {
+        map = new Map();
+        _brightnessCache.set(img, map);
+    }
+
+    const key = `${normalized.toFixed(2)}`;
+    if (map.has(key)) return map.get(key);
+
+    const result = brightenImage(img, normalized);
+    if (!result) return img;
+
+    map.set(key, result);
+    return result;
+}
+
+/**
+ * 清除 brightness 快取
+ * 如果傳入 img 只清該圖的快取；不傳則清除全部快取
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} [img]
+ */
+export function clearBrightnessCache(img) {
+    if (img) {
+        _brightnessCache.delete(img);
+    } else {
+        _brightnessCache = new WeakMap();
     }
 }
 

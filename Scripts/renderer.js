@@ -9,6 +9,7 @@ import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
 import {
     imgNotExists,
     getTintedImage,
+    getBrightenedImage,
     generatePath,
     touchPaths,
     wSlideRatio,
@@ -39,23 +40,78 @@ const IS_IOS_OR_SAFARI = typeof navigator !== 'undefined' && (
 );
 
 const charWidthCache = {};
-const RICH_HANABI_COLOR_MAP = ['#b30077', '#b33b00', '#b3a600', '#9bb300', '#0083b3'];
+// 順時針色序對齊實機（vid_frame）：藍 → 萊姆綠 → 金黃 → 橘 → 洋紅
+const RICH_HANABI_COLOR_MAP = ['#0086d6', '#9cb800', '#eab900', '#e64b00', '#d81b78'];
 const TWO_PI = Math.PI * 2;
 const INV_TWO_PI = 1 / TWO_PI;
+
+const _customImgIds = new WeakMap();
+let _nextCustomImgId = 1;
+
+function resolveImageInput(images, imgKeyOrImg) {
+    if (typeof imgKeyOrImg === 'string') {
+        return { imgKey: imgKeyOrImg, img: images?.[imgKeyOrImg] || null };
+    }
+    if (imgKeyOrImg && typeof imgKeyOrImg === 'object') {
+        let imgKey = imgKeyOrImg._tintKey || imgKeyOrImg.src;
+        if (!imgKey) {
+            imgKey = _customImgIds.get(imgKeyOrImg);
+            if (!imgKey) {
+                imgKey = `custom_img_${_nextCustomImgId++}`;
+                _customImgIds.set(imgKeyOrImg, imgKey);
+            }
+        }
+        return { imgKey, img: imgKeyOrImg };
+    }
+    return { imgKey: null, img: null };
+}
+
+function getOrSetMemoizedImage(cache, cacheKey, createFn, maxSize = 250, evictCount = 50) {
+    if (cache.has(cacheKey)) {
+        return cache.get(cacheKey);
+    }
+    const result = createFn();
+    if (!result) return null;
+
+    if (cache.size >= maxSize) {
+        const iter = cache.keys();
+        for (let i = 0; i < evictCount; i++) {
+            const next = iter.next();
+            if (next.done) break;
+            cache.delete(next.value);
+        }
+    }
+    cache.set(cacheKey, result);
+    return result;
+}
 
 const RICH_HANABI_COLOR_DATA = RICH_HANABI_COLOR_MAP.map(color => {
     const r = parseInt(color.slice(1, 3), 16);
     const g = parseInt(color.slice(3, 5), 16);
     const b = parseInt(color.slice(5, 7), 16);
+    const ir = Math.round(r * 0.68);
+    const ig = Math.round(g * 0.68);
+    const ib = Math.round(b * 0.68);
+    const mr = Math.round(r * 0.84);
+    const mg = Math.round(g * 0.84);
+    const mb = Math.round(b * 0.84);
+    const lr = Math.min(255, Math.round(r + (255 - r) * 0.36));
+    const lg = Math.min(255, Math.round(g + (255 - g) * 0.36));
+    const lb = Math.min(255, Math.round(b + (255 - b) * 0.36));
     return {
         hex: color,
         r, g, b,
+        baseInner: `rgba(${ir}, ${ig}, ${ib}, 0.78)`,
+        baseMid: `rgba(${mr}, ${mg}, ${mb}, 0.90)`,
+        dotBright: `rgba(${lr}, ${lg}, ${lb}, 0.92)`,
         transparent: `rgba(${r}, ${g}, ${b}, 0)`
     };
 });
 
-// 預先計算半徑 50 內部的靜態點陣幾何資料（座標、半徑、夾角）
-const HANABI_GRID_STEP = 2.0;
+// 預計算半徑 50 內部的靜態點陣幾何資料（座標、半徑、夾角）
+const HANABI_SLICES = 30;
+const HANABI_HALF_SECTOR = Math.PI / HANABI_SLICES;
+const HANABI_GRID_STEP = 1.85;
 const HANABI_GRID_DOTS = [];
 for (let y = -50; y <= 50; y += HANABI_GRID_STEP) {
     for (let x = -50; x <= 50; x += HANABI_GRID_STEP) {
@@ -69,6 +125,148 @@ for (let y = -50; y <= 50; y += HANABI_GRID_STEP) {
             });
         }
     }
+}
+const HANABI_GRID_BUCKETS = [[], [], [], [], []];
+
+// 確定性 PRNG 預生成煙霧、四角星與星塵表（確保時間軸拖曳/影片匯出幀一致）
+function createHanabiPrng(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a |= 0;
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+let _hanabiMistCanvas = null;
+function getHanabiMistCanvas() {
+    if (_hanabiMistCanvas) return _hanabiMistCanvas;
+    if (typeof document === 'undefined') return null;
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const mctx = c.getContext('2d');
+    if (!mctx) return null;
+
+    const half = size * 0.5;
+    const rand = createHanabiPrng(0x534D4F4B);
+
+    // 柔和底盤煙霧團塊
+    for (let i = 0; i < 42; i++) {
+        const angle = rand() * TWO_PI;
+        const dist = (0.12 + rand() * 0.72) * half;
+        const px = half + Math.cos(angle) * dist;
+        const py = half + Math.sin(angle) * dist;
+        const pr = (0.14 + rand() * 0.22) * half;
+        const bright = 145 + Math.floor(rand() * 85);
+        const a = 0.05 + rand() * 0.07;
+        const g = mctx.createRadialGradient(px, py, 0, px, py, pr);
+        g.addColorStop(0, `rgba(${bright}, ${bright + 4}, ${bright + 10}, ${a})`);
+        g.addColorStop(1, `rgba(${bright}, ${bright + 4}, ${bright + 10}, 0)`);
+        mctx.fillStyle = g;
+        mctx.beginPath();
+        mctx.arc(px, py, pr, 0, TWO_PI);
+        mctx.fill();
+    }
+
+    // 外緣平滑遮罩，確保圓邊柔順消散不生硬
+    mctx.globalCompositeOperation = 'destination-in';
+    const mask = mctx.createRadialGradient(half, half, half * 0.15, half, half, half);
+    mask.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+    mask.addColorStop(0.76, 'rgba(255, 255, 255, 0.92)');
+    mask.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    mctx.fillStyle = mask;
+    mctx.fillRect(0, 0, size, size);
+
+    _hanabiMistCanvas = c;
+    return c;
+}
+
+const HANABI_STAR_TINTS = [null, null, '#ffd6f0', '#b8f4ff', '#fff7a8', '#d6ff9e'];
+const HANABI_SPARKLES = (() => {
+    const rand = createHanabiPrng(0x4D414921);
+    const list = [];
+    // 前中段爆發主星群（invt ~0.04..0.58，含成對與小簇四角星）
+    for (let i = 0; i < 24; i++) {
+        const baseAngle = rand() * TWO_PI;
+        const isClustered = i % 3 === 1;
+        const angle = isClustered && list.length > 0
+            ? list[list.length - 1].angle + (rand() - 0.5) * 0.18
+            : baseAngle;
+        const maxDist = isClustered && list.length > 0
+            ? clamp(list[list.length - 1].maxDist + (rand() - 0.5) * 5.0, 12, 42)
+            : 14 + rand() * 24;
+        list.push({
+            cosA: Math.cos(angle),
+            sinA: Math.sin(angle),
+            minDist: 2 + rand() * 5,
+            maxDist,
+            size: 2.8 + rand() * 3.8,
+            rot0: (rand() - 0.5) * 0.35,
+            rotSpeed: (rand() - 0.5) * 0.45,
+            lifeStart: 0.03 + rand() * 0.08,
+            lifeEnd: 0.42 + rand() * 0.18,
+            twinklePhase: rand() * TWO_PI,
+            tint: HANABI_STAR_TINTS[Math.floor(rand() * HANABI_STAR_TINTS.length)],
+            hollow: rand() < 0.22
+        });
+    }
+    // 中後段外圍點綴微閃爍星（invt ~0.18..0.86，保持後半段畫面乾淨）
+    for (let i = 0; i < 10; i++) {
+        const angle = (i / 10) * TWO_PI + (rand() - 0.5) * 0.4;
+        list.push({
+            cosA: Math.cos(angle),
+            sinA: Math.sin(angle),
+            minDist: 16 + rand() * 8,
+            maxDist: 34 + rand() * 14,
+            size: 1.5 + rand() * 1.1,
+            rot0: (rand() - 0.5) * 0.25,
+            rotSpeed: (rand() - 0.5) * 0.3,
+            lifeStart: 0.16 + rand() * 0.16,
+            lifeEnd: 0.72 + rand() * 0.16,
+            twinklePhase: rand() * TWO_PI,
+            tint: HANABI_STAR_TINTS[2 + Math.floor(rand() * (HANABI_STAR_TINTS.length - 2))],
+            hollow: false
+        });
+    }
+    return list;
+})();
+
+const HANABI_DUST = (() => {
+    const rand = createHanabiPrng(0x9E3779B9);
+    const dots = [];
+    for (let i = 0; i < 24; i++) {
+        const angle = rand() * TWO_PI;
+        dots.push({
+            cosA: Math.cos(angle),
+            sinA: Math.sin(angle),
+            minDist: 4 + rand() * 6,
+            maxDist: 18 + rand() * 28,
+            radius: 0.2 + rand() * 0.24,
+            phase: rand() * TWO_PI,
+            color: rand() < 0.5 ? '#fff8c9' : '#ffffff'
+        });
+    }
+    return dots;
+})();
+
+function drawFallbackFourPointStar(ctx, x, y, halfSize, rot = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (rot) ctx.rotate(rot);
+    const inner = halfSize * 0.26;
+    ctx.beginPath();
+    ctx.moveTo(0, -halfSize);
+    ctx.quadraticCurveTo(inner * 0.5, -inner * 0.5, halfSize, 0);
+    ctx.quadraticCurveTo(inner * 0.5, inner * 0.5, 0, halfSize);
+    ctx.quadraticCurveTo(-inner * 0.5, inner * 0.5, -halfSize, 0);
+    ctx.quadraticCurveTo(-inner * 0.5, -inner * 0.5, 0, -halfSize);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
 }
 const TOUCH_GROUP_TO_INDEX = { A: 0, B: 8, C: 16, D: 17, E: 25 };
 
@@ -201,6 +399,7 @@ export class SimaiRenderer {
         this.scale = 0.98;
 
         this._tintCache = new Map();
+        this._brightnessCache = new Map();
 
         // EX 顏色定義 (shared)
         this.exColor = exColor;
@@ -302,42 +501,37 @@ export class SimaiRenderer {
         this.images = images;
         this._touchBorderCache = null;
         this._tintCache?.clear();
+        this._brightnessCache?.clear();
     }
 
     /**
      * 優化染色圖片取得方式，採用整數化透明度快取 Key
      */
     getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
-        let imgKey = null;
-        let img = null;
-        if (typeof imgKeyOrImg === 'string') {
-            imgKey = imgKeyOrImg;
-            img = this.images?.[imgKey];
-        } else if (imgKeyOrImg && typeof imgKeyOrImg === 'object') {
-            img = imgKeyOrImg;
-            imgKey = img._tintKey || img.src || 'custom_img';
-        }
+        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
         if (!img) return null;
 
         const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
         const snappedOpacity = Math.round((opacity || 0) * 20) / 20;
         const cacheKey = `${imgKey}_${snappedOpacity}_${conf.colorCode}`;
+        return getOrSetMemoizedImage(this._tintCache, cacheKey, () => getTintedImage(img, opacity, conf));
+    }
 
-        if (this._tintCache.has(cacheKey)) {
-            return this._tintCache.get(cacheKey);
-        }
+    /**
+     * 取得調整亮度後的快取圖片，採用 0.05 粒度量化 Key 避免動畫期間重複重繪
+     * @param {string|HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} imgKeyOrImg
+     * @param {number} [brightness=1] 亮度倍率 (0 = 全黑, 1 = 原圖, > 1 = 提亮)
+     */
+    getMemoizedBrightnessImage(imgKeyOrImg, brightness = 1) {
+        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
+        if (!img) return null;
 
-        const tinted = getTintedImage(img, opacity, conf);
-        if (this._tintCache.size >= 250) {
-            const iter = this._tintCache.keys();
-            for (let i = 0; i < 50; i++) {
-                const next = iter.next();
-                if (next.done) break;
-                this._tintCache.delete(next.value);
-            }
-        }
-        this._tintCache.set(cacheKey, tinted);
-        return tinted;
+        const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
+        const snappedBrightness = Math.round(safeBrightness * 20) / 20;
+        if (snappedBrightness === 1) return img;
+
+        const cacheKey = `${imgKey}_${snappedBrightness.toFixed(2)}`;
+        return getOrSetMemoizedImage(this._brightnessCache, cacheKey, () => getBrightenedImage(img, snappedBrightness));
     }
 
     // --- 圖片與皮膚樣式分離選擇器 (Image Selection Helpers) ---
@@ -1287,148 +1481,263 @@ export class SimaiRenderer {
     }
 
     richHanabi(noteT) {
-        const t = noteT / this.settings.hanabiEffectDecayTime; // 1.1
+        const decayTime = this.settings.hanabiEffectDecayTime || 1.1;
+        const t = noteT / decayTime;
         if (t < -1) return;
         const invt = clamp(-t, 0, 1);
 
-        function easeOutExpo(x) {
-            return x === 1 ? 1 : 1 - Math.pow(2, -40 * x);
-        }
+        // 整體主生命週期透明度：爆發即顯現，0.72 後隨內洞開啟平滑淡出至 1.0
+        const decayAlpha = invt < 0.04
+            ? clamp(invt / 0.04, 0, 1)
+            : (invt < 0.72 ? 1 : clamp(1 - Math.pow((invt - 0.72) / 0.28, 1.35), 0, 1));
+        if (decayAlpha <= 0.005) return;
 
-        function getCustomCurveClamped(x) {
-            let val;
-            if (x <= 0.3) {
-                val = 1 - Math.pow(2, -10 * x) + Math.pow(2, -3);
-            } else {
-                const diff = 0.3 - x;
-                val = 1 - (diff * diff) / 0.49;
-            }
-            return Math.max(0, Math.min(1, val));
-        }
-
+        const fullRadius = 53;
         const ctx = this.ctx;
-        const decayAlpha = getCustomCurveClamped(-t);
-
-        // --- 1. 底層光暈 / 圖片 ---
-        if (this.images?.ColorBall) {
-            ctx.globalAlpha = 1 - clamp(invt * 3 - 0.5, 0, 1);
-            this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * (3.8 + invt * 0.5), 0, 0);
-            ctx.globalAlpha = 1 - clamp(invt * 4.4 - 0.5, 0, 1);
-            this.drawImgAtcenter(this.images.ColorBall, this.settings.noteBaseSize * easeOutExpo(invt * 4.4) * 2.5, 0, 0);
-        }
-
-        // --- 2. 扇形本體 + 點陣紋理 + 內外雙向羽化 (直接於主畫布渲染，保證高解析度清晰且不抹除其他圖元) ---
-        const maxRadius = 50 * clamp((invt * 11 - 1), 0, 1);
-        if (maxRadius <= 0.001) return;
-
         ctx.save();
-        ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
 
-        // 底層白色擴散光環
-        ctx.globalAlpha = decayAlpha * 0.65;
-        const white = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
-        white.addColorStop(0, "#ffffff00");
-        white.addColorStop(0.4, "#ffffff00");
-        white.addColorStop(0.8, "#ffffff8b");
-        white.addColorStop(1, "#ffffff00");
+        const easeOutCubic = (x) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
 
-        ctx.fillStyle = white;
-        ctx.beginPath();
-        ctx.arc(0, 0, maxRadius, 0, Math.PI * 2);
-        ctx.fill();
+        // 15 道條紋自 invt ~0.06 急促向外迸發（0.19 達滿圓），末段 0.80~1.00 內洞快速清場
+        const rayProgress = clamp((invt - 0.06) / 0.13, 0, 1);
+        const rayRadius = fullRadius * easeOutCubic(rayProgress);
+        const rayVisibleAlpha = clamp((invt - 0.055) / 0.04, 0, 1) * decayAlpha;
+        const holeProgress = clamp((invt - 0.80) / 0.20, 0, 1);
+        const innerHole = 46 * Math.pow(holeProgress, 1.1);
 
-        // 羽化半徑設定：
-        // 0 ~ innerHole: 核心完全透明
-        // innerHole ~ innerFeatherEnd: 內圈平滑羽化淡入至純色
-        // innerFeatherEnd ~ outerFeatherStart: 鮮豔飽和主體環帶
-        // outerFeatherStart ~ maxRadius: 外圈平滑羽化淡出至透明
-        const innerHole = 35 * clamp(1 - (1 + t) * 2.75, 0, 1);
-        const innerFeatherEnd = 50 * clamp(1 - (1 + t) * 2.75, 0, 1);
-        const outerFeatherStart = 35 * clamp((invt * 11 - 1), 0, 1);
-        const innerRange = innerFeatherEnd - innerHole;
-        const outerRange = maxRadius - outerFeatherStart;
+        // --- 1. 底層煙霧盤與柔和外暈（對齊 vid_frame 暗縫中的霧氣紋理） ---
+        if (rayRadius > 1 && rayVisibleAlpha > 0.01) {
+            const pHole = clamp(innerHole / rayRadius, 0, 1);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = rayVisibleAlpha * 0.56 * (1 - holeProgress * 0.85);
+            const mistCanvas = getHanabiMistCanvas();
+            if (mistCanvas) {
+                const mistSize = rayRadius * 2;
+                ctx.drawImage(mistCanvas, -rayRadius, -rayRadius, mistSize, mistSize);
+            }
 
-        // 計算徑向漸變各關鍵比例位置 (0 ~ 1.0)
-        const p1 = Math.min(1, Math.max(0, innerHole / maxRadius));
-        const p2 = Math.min(1, Math.max(p1, innerFeatherEnd / maxRadius));
-        const p3 = Math.min(1, Math.max(p2, outerFeatherStart / maxRadius));
-
-        // 預先為 5 種扇形顏色建立雙向羽化徑向漸變 (使用已預解析的 RGBA，避開每幀 parseInt)
-        const colorGradients = RICH_HANABI_COLOR_DATA.map(c => {
-            const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
-            grad.addColorStop(0, c.transparent);
-            grad.addColorStop(p1, c.transparent);
-            grad.addColorStop(p2, c.hex);
-            grad.addColorStop(p3, c.hex);
-            grad.addColorStop(1, c.transparent);
-            return grad;
-        });
-
-        const slices = 30;
-        const tOffset = t * -0.1;
-        const tFive = t * 5 + 5;
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = decayAlpha * 0.8;
-
-        // 繪製扇形各色塊 (不再需要每幀 new Path2D，點陣將直接以幾何角度過濾)
-        for (let slice = 1; slice < slices; slice += 2) {
-            const angle = ((slice - 0.5) / slices + tOffset) * TWO_PI;
-            const angle1 = ((slice + 0.5) / slices + tOffset) * TWO_PI;
-
-            const cosA = Math.cos(angle);
-            const sinA = Math.sin(angle);
-            const cosA1 = Math.cos(angle1);
-            const sinA1 = Math.sin(angle1);
-
+            ctx.globalAlpha = rayVisibleAlpha * 0.45;
+            const pMistOuter = Math.max(pHole, 0.86);
+            const pMistMid = Math.min(pMistOuter, pHole + 0.18);
+            const mistGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, rayRadius);
+            mistGrad.addColorStop(0, 'rgba(200, 210, 225, 0)');
+            if (pHole > 0.02) {
+                mistGrad.addColorStop(pHole, 'rgba(180, 190, 205, 0)');
+            }
+            mistGrad.addColorStop(pMistMid, 'rgba(165, 175, 190, 0.16)');
+            mistGrad.addColorStop(pMistOuter, 'rgba(220, 228, 240, 0.20)');
+            mistGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = mistGrad;
             ctx.beginPath();
-            ctx.fillStyle = colorGradients[Math.floor((slice + tFive) % 5)];
-            ctx.moveTo(0, 0);
-            ctx.lineTo(cosA * maxRadius, sinA * maxRadius);
-            ctx.lineTo(cosA1 * maxRadius, sinA1 * maxRadius);
-            ctx.closePath();
+            ctx.arc(0, 0, rayRadius, 0, TWO_PI);
             ctx.fill();
+
+            // --- 2. 15 道高飽和彩虹放射扇條（藍→綠→黃→橘→洋紅 順時針旋轉） ---
+            const innerStart = Math.min(rayRadius, innerHole);
+            const p1 = clamp(innerStart / rayRadius, 0, 0.96);
+            const p2 = Math.min(0.98, Math.max(p1, (innerStart + 10) / rayRadius));
+            const p3 = Math.min(0.99, Math.max(p2, 0.76));
+
+            const colorGradients = RICH_HANABI_COLOR_DATA.map((c) => {
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rayRadius);
+                grad.addColorStop(0, p1 > 0.01 ? c.transparent : c.baseInner);
+                if (p1 > 0.01) {
+                    grad.addColorStop(p1, c.transparent);
+                }
+                grad.addColorStop(p2, c.baseMid);
+                grad.addColorStop(p3, c.baseMid);
+                grad.addColorStop(1, c.transparent);
+                return grad;
+            });
+
+            const slices = HANABI_SLICES;
+            const tOffset = invt * 0.1;
+            const halfSector = HANABI_HALF_SECTOR;
+
+            ctx.globalAlpha = rayVisibleAlpha * 0.92;
+
+            const colorStep = Math.floor(noteT * 6.66);
+            const sectorColorIdx = new Int32Array(15);
+
+            for (let sIdx = 0; sIdx < 15; sIdx++) {
+                const slice = sIdx * 2 + 1;
+                const centerAngle = (slice / slices + tOffset) * TWO_PI;
+                const a0 = centerAngle - halfSector;
+                const a1 = centerAngle + halfSector;
+                const cIdx = (((sIdx - colorStep) % 5) + 5) % 5;
+
+                sectorColorIdx[sIdx] = cIdx;
+
+                ctx.beginPath();
+                ctx.fillStyle = colorGradients[cIdx];
+                ctx.moveTo(0, 0);
+                ctx.lineTo(Math.cos(a0) * rayRadius, Math.sin(a0) * rayRadius);
+                ctx.lineTo(Math.cos(a1) * rayRadius, Math.sin(a1) * rayRadius);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // --- 3. 扇瓣內部點陣波紋（保留原本直角網格 + 正弦波紋大小控制，並按 5 色分批繪製） ---
+            const dotPhaseAlpha = clamp((invt - 0.08) / 0.06, 0, 1) * rayVisibleAlpha;
+            if (dotPhaseAlpha > 0.01) {
+                const innerFeatherEnd = Math.min(rayRadius, innerHole + 14);
+                const outerFeatherStart = rayRadius * 0.68;
+                const innerRange = innerFeatherEnd - innerHole;
+                const outerRange = rayRadius - outerFeatherStart;
+
+                const tPhase = t * Math.PI * 2.2;
+                const distFactor = Math.PI * 0.08;
+                const shiftOffset = (0.5 / slices) - tOffset;
+
+                for (let c = 0; c < 5; c++) {
+                    HANABI_GRID_BUCKETS[c].length = 0;
+                }
+
+                for (let i = 0; i < HANABI_GRID_DOTS.length; i++) {
+                    const dot = HANABI_GRID_DOTS[i];
+                    const dist = dot.dist;
+                    if (dist < innerHole || dist > rayRadius) continue;
+
+                    // 扇瓣切片奇偶過濾：奇數切片（有扇瓣）依對應條紋色分組，偶數切片（空白）跳過
+                    let u = dot.angle * INV_TWO_PI + shiftOffset;
+                    u = (u % 1 + 1) % 1;
+                    const sliceIdx = Math.min(slices - 1, Math.floor(u * slices));
+                    if ((sliceIdx & 1) === 0) continue;
+
+                    let size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2;
+                    if (size <= 0) continue;
+
+                    if (dist < innerFeatherEnd && innerRange > 0) {
+                        size *= (dist - innerHole) / innerRange; // 內部羽化微縮
+                    } else if (dist > outerFeatherStart && outerRange > 0) {
+                        size *= (rayRadius - dist) / outerRange; // 外部羽化微縮
+                    }
+
+                    if (size > 0.05) {
+                        const cIdx = sectorColorIdx[sliceIdx >> 1];
+                        HANABI_GRID_BUCKETS[cIdx].push(dot.x, dot.y, size);
+                    }
+                }
+
+                ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
+                ctx.globalAlpha = dotPhaseAlpha * 0.35;
+
+                for (let cIdx = 0; cIdx < 5; cIdx++) {
+                    const bucket = HANABI_GRID_BUCKETS[cIdx];
+                    if (bucket.length === 0) continue;
+
+                    ctx.fillStyle = RICH_HANABI_COLOR_DATA[cIdx].dotBright;
+                    ctx.beginPath();
+                    for (let k = 0; k < bucket.length; k += 3) {
+                        const dx = bucket[k];
+                        const dy = bucket[k + 1];
+                        const ds = bucket[k + 2];
+                        ctx.moveTo(dx + ds, dy);
+                        ctx.arc(dx, dy, ds, 0, TWO_PI);
+                    }
+                    ctx.fill();
+                }
+            }
         }
+
+        // --- 4. 雙層同心 ColorBall 彩球與中心耀眼白金核（0.00~0.58 淡出後留小中心光點至 0.85） ---
+        const ballPop = easeOutCubic(clamp(invt / 0.05, 0, 1));
+        if (invt < 0.58 && !imgNotExists(this.images?.ColorBall)) {
+            const outerBallFade = invt < 0.12
+                ? clamp(invt / 0.04, 0, 1)
+                : clamp(1 - Math.pow((invt - 0.12) / 0.46, 1.35), 0, 1);
+            const ballBrightness = invt < 0.25 ? (1.35 - invt * 1.0) : 1.05;
+            const ballImg = this.getMemoizedBrightnessImage('ColorBall', ballBrightness) || this.images.ColorBall;
+
+            if (outerBallFade > 0.01) {
+                const outerBallSize = fullRadius * (1.02 + invt * 0.10) * (0.68 + 0.32 * ballPop);
+                ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
+                ctx.globalAlpha = outerBallFade * 0.92 * decayAlpha;
+                this.drawImgAtcenter(ballImg, outerBallSize, 0, 0);
+            }
+
+            if (invt < 0.28) {
+                const innerPop = easeOutCubic(clamp(invt / 0.04, 0, 1));
+                const innerFade = clamp(1 - Math.pow(invt / 0.28, 1.45), 0, 1);
+                if (innerFade > 0.01) {
+                    const innerBallSize = fullRadius * 0.56 * (0.6 + 0.4 * innerPop);
+                    ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
+                    ctx.globalAlpha = innerFade * 0.88 * decayAlpha;
+                    this.drawImgAtcenter(ballImg, innerBallSize, 0, 0);
+                }
+            }
+        }
+
+        if (invt < 0.86) {
+            const coreFade = invt < 0.05
+                ? clamp(invt / 0.05, 0, 1)
+                : clamp(1 - Math.pow((invt - 0.05) / 0.81, 1.25), 0, 1);
+            const coreRadius = invt < 0.42
+                ? (16.5 - invt * 24)
+                : Math.max(2.0, 6.4 - (invt - 0.42) * 10);
+            if (coreFade > 0.01 && coreRadius > 0.5) {
+                ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
+                ctx.globalAlpha = coreFade * decayAlpha;
+                const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius);
+                coreGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                coreGrad.addColorStop(0.28, 'rgba(255, 246, 175, 0.92)');
+                coreGrad.addColorStop(0.62, 'rgba(255, 195, 220, 0.40)');
+                coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = coreGrad;
+                ctx.beginPath();
+                ctx.arc(0, 0, coreRadius, 0, TWO_PI);
+                ctx.fill();
+            }
+        }
+
+        // --- 6. 飛散的閃耀四角星群（前中段爆發主星 + 後段外緣極細點綴） ---
+        const solidStarKey = !imgNotExists(this.images?.TouchEffparts_02) ? 'TouchEffparts_02' : null;
+        const hollowStarKey = !imgNotExists(this.images?.TouchEffparts_01) ? 'TouchEffparts_01' : solidStarKey;
         ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
-        ctx.globalAlpha = decayAlpha;
 
-        // 繪製內部的點陣波紋（以扇區角度幾何精準過濾，完全免除昂貴的 ctx.clip，並採用預計算網格與高效 rect 批次繪製）
-        const dotGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, maxRadius);
-        dotGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
-        dotGrad.addColorStop(p1, 'rgba(255, 255, 255, 0)');
-        dotGrad.addColorStop(p2, 'rgba(255, 255, 255, 0.3)');
-        dotGrad.addColorStop(p3, 'rgba(255, 255, 255, 0.3)');
-        dotGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = dotGrad;
+        for (let i = 0; i < HANABI_SPARKLES.length; i++) {
+            const sp = HANABI_SPARKLES[i];
+            if (invt < sp.lifeStart || invt > sp.lifeEnd) continue;
+            const localT = clamp((invt - sp.lifeStart) / (sp.lifeEnd - sp.lifeStart), 0, 1);
 
-        const tPhase = t * Math.PI * 2.2;
-        const distFactor = Math.PI * 0.08;
-        const shiftOffset = (0.5 / slices) - tOffset;
+            const moveEase = 1 - Math.pow(1 - localT, 2.2);
+            const dist = sp.minDist + (sp.maxDist - sp.minDist) * moveEase;
+            if (dist > fullRadius * 0.95) continue;
 
-        ctx.beginPath();
-        for (let i = 0; i < HANABI_GRID_DOTS.length; i++) {
-            const dot = HANABI_GRID_DOTS[i];
-            const dist = dot.dist;
-            if (dist < innerHole || dist > maxRadius) continue;
+            const scaleCurve = localT < 0.16
+                ? (localT / 0.16)
+                : clamp(1 - Math.pow((localT - 0.16) / 0.84, 1.8) * 0.55, 0.25, 1);
+            const twinkle = 0.65 + 0.35 * Math.sin(localT * TWO_PI * 2.2 + sp.twinklePhase);
+            const fadeOut = localT > 0.55 ? clamp(1 - (localT - 0.55) / 0.45, 0, 1) : 1;
+            const starAlpha = decayAlpha * twinkle * fadeOut;
+            if (starAlpha <= 0.02) continue;
 
-            // 扇瓣切片奇偶過濾：奇數切片（有扇瓣）繪製，偶數切片（空白）跳過
-            let u = dot.angle * INV_TWO_PI + shiftOffset;
-            u = (u % 1 + 1) % 1;
-            if ((Math.floor(u * slices) & 1) === 0) continue;
+            const sx = sp.cosA * dist;
+            const sy = sp.sinA * dist;
+            const starSize = sp.size * scaleCurve;
 
-            let size = (Math.sin(dist * distFactor + tPhase) + 1.2) / 2.5;
-            if (size <= 0) continue;
-
-            if (dist < innerFeatherEnd && innerRange > 0) {
-                size *= (dist - innerHole) / innerRange; // 內部羽化微縮
-            } else if (dist > outerFeatherStart && outerRange > 0) {
-                size *= (maxRadius - dist) / outerRange; // 外部羽化微縮
+            const baseKey = sp.hollow ? hollowStarKey : solidStarKey;
+            let starImg = null;
+            if (baseKey) {
+                starImg = sp.tint
+                    ? this.getMemoizedTintedImage(baseKey, 0.72, sp.tint)
+                    : this.images[baseKey];
+                if (starImg && twinkle > 0.9) {
+                    starImg = this.getMemoizedBrightnessImage(starImg, 1.2) || starImg;
+                }
             }
 
-            if (size > 0.05) {
-                ctx.rect(dot.x - size, dot.y - size, size * 2, size * 2);
+            ctx.globalAlpha = starAlpha;
+            if (starImg && !imgNotExists(starImg)) {
+                ctx.save();
+                ctx.translate(sx, sy);
+                this.drawImgAtcenter(starImg, starSize, 0, 0);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = sp.tint || '#ffffff';
+                drawFallbackFourPointStar(ctx, sx, sy, starSize * 0.5);
             }
         }
-        ctx.fill();
 
         ctx.restore();
     }
@@ -2449,6 +2758,8 @@ export class SimaiRenderer {
                     Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize); // 20.35
                 const isOn = noteT <= -0.15 && !s.isMine; // 150ms
                 const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
+                if (!img) continue;
+                const brImg = getBrightenedImage(img, 1 + (s.isBreak && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI))) : 0));
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
                 const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
 
@@ -2466,29 +2777,27 @@ export class SimaiRenderer {
                 }
 
                 // 3. Hold 本體
-                if (img) {
-                    ctx.setTransform(a, b, c, d, e, f);
-                    ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
-                    ctx.rotate(posInfo.rot);
+                ctx.setTransform(a, b, c, d, e, f);
+                ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
+                ctx.rotate(posInfo.rot);
 
-                    ctx.drawImage(img, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-                    ctx.drawImage(img, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.18 + sizeOffset));
-                    ctx.drawImage(img, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
+                ctx.drawImage(brImg, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+                ctx.drawImage(brImg, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.18 + sizeOffset));
+                ctx.drawImage(brImg, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
 
-                    if (s.isEx) {
-                        this._tempColorConfig.colorCode = this.getEXColor(s.isBreak, s.isDouble, "tap");
-                        const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
-                        if (ex) {
-                            ctx.drawImage(ex, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
-                            ctx.drawImage(ex, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
-                            ctx.drawImage(ex, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
-                        }
+                if (s.isEx) {
+                    this._tempColorConfig.colorCode = this.getEXColor(s.isBreak, s.isDouble, "tap");
+                    const ex = this.getMemoizedTintedImage("hold_ex", 0.6, this._tempColorConfig);
+                    if (ex) {
+                        ctx.drawImage(ex, 0, 0, 122, 55, -size * 0.5, -size * 1.64 * 0.35, size, size * 1.64 * 0.275);
+                        ctx.drawImage(ex, 0, 55, 122, 90, -size * 0.5, -size * 1.64 * 0.0785, size, size * 1.64 * (0.17 + sizeOffset));
+                        ctx.drawImage(ex, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
                     }
-                    //ctx.globalAlpha = 1;
-                    //ctx.fillStyle = "white";
-                    //ctx.font = "3px mono";
-                    //ctx.fillText(`t1:${(t1).toFixed(2)}, 1-t1:${(1 - t1).toFixed(2)}, t-md:${(t - md).toFixed(2)}`, 0, 10);
                 }
+                //ctx.globalAlpha = 1;
+                //ctx.fillStyle = "white";
+                //ctx.font = "3px mono";
+                //ctx.fillText(`t1:${(t1).toFixed(2)}, 1-t1:${(1 - t1).toFixed(2)}, t-md:${(t - md).toFixed(2)}`, 0, 10);
 
                 if (drawHitEffect) {
                     if (isOn) {
@@ -2515,6 +2824,7 @@ export class SimaiRenderer {
                 const img = isStar
                     ? this.getStarImage(s.isMine, s.isBreak, s.isDouble, s.isMultiple)
                     : this.getTapImage(s.isMine, s.isBreak, s.isDouble);
+                const brimg = getBrightenedImage(img, 1 + (s.isBreak ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0))
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
                 const size = baseSize * currentScale;
 
@@ -2537,7 +2847,7 @@ export class SimaiRenderer {
                     rot += globalTime * 2 * Math.PI * speed;
                 }
                 ctx.rotate(rot);
-                this.drawImgAtcenter(img, size, 0, 0, scaleX, scaleY);
+                this.drawImgAtcenter(brimg, size, 0, 0, scaleX, scaleY);
 
                 if (s.isEx) {
                     const exType = isStar ? "star" : "tap";
@@ -2720,10 +3030,9 @@ export class SimaiRenderer {
 
         displaySlideProgress = Math.min(1, displaySlideProgress);
 
-        const br = (!isIllegalRed && s.isBreak && !s.isMine) ? this.getBreakTint(s.isBreak, s.isMine) : 0;
         const isWiFi = s.slideType === "w";
         const prefixOrKey = isWiFi ? prefix : standardKey;
-        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, br, isIllegalRed, 0.3963 * size);
+        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, (isTaped && s.isBreak ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0), isIllegalRed, 0.3963 * size);
         this.ctx.restore();
     }
 
@@ -2941,9 +3250,8 @@ export class SimaiRenderer {
             currentStarSensorId = this.getSensorIdAtPoint(pt.x, pt.y, true);
         }
 
-        const opacity = isIllegal ? 1 : br;
         const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
-        const isTinted = isIllegal || br > 0;
+        const isTinted = isIllegal;
 
         let singleImg = null;
         if (!typew) {
@@ -2952,6 +3260,7 @@ export class SimaiRenderer {
                 singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
             } else {
                 singleImg = this.images[prefixOrKey];
+                singleImg = getBrightenedImage(singleImg, 1 + br);
             }
             if (!singleImg) return;
         }
@@ -2976,6 +3285,7 @@ export class SimaiRenderer {
                     img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
                 } else {
                     img = this.images[imgKey];
+                    img = getBrightenedImage(img, 1 + br);
                 }
             } else {
                 img = singleImg;
@@ -3103,6 +3413,7 @@ export class SimaiVisualEditor {
         this.selectionEnd = { x: 0, y: 0 };
 
         this._tintCache = new Map();
+        this._brightnessCache = new Map();
         this._tempColorConfig = { colorCode: '' };
 
         // Callbacks & Snapping for editing
@@ -3265,35 +3576,29 @@ export class SimaiVisualEditor {
     }
 
     getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
-        let imgKey = null;
-        let img = null;
-        if (typeof imgKeyOrImg === 'string') {
-            imgKey = imgKeyOrImg;
-            img = this.images?.[imgKey];
-        } else if (imgKeyOrImg && typeof imgKeyOrImg === 'object') {
-            img = imgKeyOrImg;
-            imgKey = img._tintKey || img.src || 'custom_img';
-        }
+        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
         if (!img) return null;
 
         const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
         const cacheKey = `${imgKey}_${(opacity || 0).toFixed(2)}_${conf.colorCode}`;
+        return getOrSetMemoizedImage(this._tintCache, cacheKey, () => getTintedImage(img, opacity, conf));
+    }
 
-        if (this._tintCache.has(cacheKey)) {
-            return this._tintCache.get(cacheKey);
-        }
+    /**
+     * 取得調整亮度後的快取圖片 (採用 0.05 粒度量化 Key)
+     * @param {string|HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} imgKeyOrImg
+     * @param {number} [brightness=1] 亮度倍率 (0 = 全黑, 1 = 原圖, > 1 = 提亮)
+     */
+    getMemoizedBrightnessImage(imgKeyOrImg, brightness = 1) {
+        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
+        if (!img) return null;
 
-        const tinted = getTintedImage(img, opacity, conf);
-        if (this._tintCache.size >= 250) {
-            const iter = this._tintCache.keys();
-            for (let i = 0; i < 50; i++) {
-                const next = iter.next();
-                if (next.done) break;
-                this._tintCache.delete(next.value);
-            }
-        }
-        this._tintCache.set(cacheKey, tinted);
-        return tinted;
+        const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
+        const snappedBrightness = Math.round(safeBrightness * 20) / 20;
+        if (snappedBrightness === 1) return img;
+
+        const cacheKey = `${imgKey}_${snappedBrightness.toFixed(2)}`;
+        return getOrSetMemoizedImage(this._brightnessCache, cacheKey, () => getBrightenedImage(img, snappedBrightness));
     }
 
     getCanvasWH() {
@@ -3321,6 +3626,7 @@ export class SimaiVisualEditor {
     setImages(images) {
         this.images = images;
         this._tintCache?.clear();
+        this._brightnessCache?.clear();
     }
 
     setContext(ctx) {

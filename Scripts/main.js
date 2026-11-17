@@ -173,7 +173,8 @@ const stopButton = getButton("stop", "control");
 const resetButton = getButton("reset", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
-const hideUtilityButton = document.querySelector("#utilityContainer .closeBtn");
+const hideUtilityButton = getButton("hideUtility", "utility");
+const showUtilityButton = document.getElementById("showUtilityBtn");
 const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
 const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
@@ -2870,7 +2871,7 @@ function updateUtilityHeight() {
 if (window.ResizeObserver && topUtilityBtnsEl) {
     let lastObservedRows = getExpectedUtilityRows();
     const utilityObserver = new ResizeObserver(() => {
-        const isHidden = hideUtilityButton?.dataset.hidden === 'true';
+        const isHidden = utilityContainerEl?.classList.contains('expanded');
 
         if (!isHidden && topUtilityBtnsEl.style.display !== 'none') {
             const currentRows = calculateUtilityRows();
@@ -3073,12 +3074,16 @@ function setupUtilityHorizontalScroll() {
 
 setupUtilityHorizontalScroll();
 
-hideUtilityButton.addEventListener('click', () => {
+function toggleTopUtilityBar(forceExpand = null) {
     const utilityBtns = topUtilityBtnsEl;
     const utilityContainer = utilityContainerEl;
-    const isHidden = hideUtilityButton.dataset.hidden === 'true';
+    if (!utilityBtns || !utilityContainer) return;
 
-    if (isHidden) {
+    const isHidden = utilityContainer.classList.contains('expanded');
+    const shouldExpand = forceExpand !== null ? Boolean(forceExpand) : isHidden;
+
+    if (shouldExpand) {
+        if (showUtilityButton) showUtilityButton.style.display = 'none';
         utilityBtns.style.display = 'flex';
         utilityBtns.style.height = 'auto';
 
@@ -3098,7 +3103,6 @@ hideUtilityButton.addEventListener('click', () => {
         editorContainer.classList.remove('expanded');
         panelSplitter?.classList.remove('expanded');
         utilityContainer.classList.remove('expanded');
-
     } else {
         const currentHeight = updateUtilityHeight();
 
@@ -3111,6 +3115,9 @@ hideUtilityButton.addEventListener('click', () => {
         }).onfinish = () => {
             utilityBtns.style.display = 'none';
             utilityBtns.style.height = '';
+            if (showUtilityButton && utilityContainer.classList.contains('expanded')) {
+                showUtilityButton.style.display = 'flex';
+            }
         };
 
         canvasContainer.classList.add('expanded');
@@ -3119,11 +3126,11 @@ hideUtilityButton.addEventListener('click', () => {
         utilityContainer.classList.add('expanded');
     }
 
-    hideUtilityButton.innerText = isHidden ? '▲' : '▼';
-    hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
-
     resize();
-});
+}
+
+hideUtilityButton?.addEventListener('click', () => toggleTopUtilityBar(false));
+showUtilityButton?.addEventListener('click', () => toggleTopUtilityBar(true));
 
 const utilityDropdowns = document.querySelectorAll('.utilityDropdown');
 const DROPDOWN_VIEWPORT_MARGIN = 8;

@@ -339,6 +339,17 @@
     padding: 8px 12px 12px 12px;
 }
 
+.toast-item[data-toast-id="sw-update-toast"] {
+    width: min(340px, calc(100vw - 24px));
+    max-width: min(340px, calc(100vw - 24px));
+}
+
+.toast-item[data-toast-id="sw-update-toast"] .toast-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .toast-item.toast-removing {
     opacity: 0 !important;
     transform: translateY(-10px) scale(0.94) !important;

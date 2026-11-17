@@ -980,6 +980,41 @@ export function openExtensionManagerModal() {
 
     tabBar.append(installedTabBtn, reposTabBtn);
 
+    const installedToolBar = document.createElement('div');
+    installedToolBar.className = 'drive-account-bar ext-installed-toolbar';
+
+    const installedIconWrap = document.createElement('div');
+    installedIconWrap.className = 'drive-account-avatar-placeholder';
+    const installedIcon = document.createElement('span');
+    installedIcon.className = 'material-symbols-outlined';
+    installedIcon.setAttribute('translate', 'no');
+    installedIcon.style.fontSize = '20px';
+    installedIcon.textContent = 'extension';
+    installedIconWrap.appendChild(installedIcon);
+
+    const installedBarLabel = document.createElement('div');
+    installedBarLabel.className = 'drive-account-name';
+    installedBarLabel.setAttribute('data-i18n', 'extensions.tabInstalled');
+    installedBarLabel.textContent = t('extensions.tabInstalled');
+
+    const installedActions = document.createElement('div');
+    installedActions.className = 'drive-account-actions';
+
+    const importBtn = document.createElement('button');
+    importBtn.type = 'button';
+    importBtn.className = 'drive-signout-btn';
+    importBtn.setAttribute('data-i18n', 'extensions.importZip');
+    importBtn.textContent = t('extensions.importZip');
+
+    const disableAllBtn = document.createElement('button');
+    disableAllBtn.type = 'button';
+    disableAllBtn.className = 'drive-signout-btn';
+    disableAllBtn.setAttribute('data-i18n', 'extensions.disableAll');
+    disableAllBtn.textContent = t('extensions.disableAll');
+
+    installedActions.append(importBtn, disableAllBtn);
+    installedToolBar.append(installedIconWrap, installedBarLabel, installedActions);
+
     const listContainer = document.createElement('div');
     listContainer.className = 'pm-tab-content popup-list';
 
@@ -990,6 +1025,7 @@ export function openExtensionManagerModal() {
     const renderGrid = () => {
         grid.textContent = '';
         const list = extensionManager.list();
+        disableAllBtn.disabled = !list.some((item) => item.status === 'active');
 
         if (list.length === 0) {
             const emptyBox = document.createElement('div');
@@ -1102,6 +1138,37 @@ export function openExtensionManagerModal() {
 
     renderGrid();
 
+    importBtn.addEventListener('click', () => {
+        triggerZipPicker(renderGrid);
+    });
+
+    disableAllBtn.addEventListener('click', async () => {
+        const activeItems = extensionManager.list().filter((item) => item.status === 'active');
+        if (activeItems.length === 0) {
+            renderGrid();
+            return;
+        }
+
+        disableAllBtn.disabled = true;
+        try {
+            for (const item of activeItems) {
+                await toggleInstalledExtension(item.manifest.id, false);
+            }
+            simpleToast({
+                content: t('extensions.disableAllSuccess'),
+                type: 'info'
+            });
+        } catch (error) {
+            console.error('[ExtensionManagerModal] 停用所有擴充程式失敗:', error);
+            simpleToast({
+                content: t('extensions.disableAllFailed', { error: error.message }),
+                type: 'error'
+            });
+        } finally {
+            renderGrid();
+        }
+    });
+
     const reposContainer = document.createElement('div');
     reposContainer.className = 'pm-tab-content popup-list';
     reposContainer.style.display = 'none';
@@ -1115,6 +1182,7 @@ export function openExtensionManagerModal() {
     installedTabBtn.addEventListener('click', () => {
         installedTabBtn.classList.add('pm-tab-btn--active');
         reposTabBtn.classList.remove('pm-tab-btn--active');
+        installedToolBar.style.display = '';
         reposTab.topBar.style.display = 'none';
         listContainer.style.display = '';
         reposContainer.style.display = 'none';
@@ -1124,6 +1192,7 @@ export function openExtensionManagerModal() {
     reposTabBtn.addEventListener('click', () => {
         reposTabBtn.classList.add('pm-tab-btn--active');
         installedTabBtn.classList.remove('pm-tab-btn--active');
+        installedToolBar.style.display = 'none';
         reposTab.topBar.style.display = '';
         listContainer.style.display = 'none';
         reposContainer.style.display = 'flex';
@@ -1135,23 +1204,14 @@ export function openExtensionManagerModal() {
     betaBanner.setAttribute('data-i18n', 'extensions.betaNotice');
     betaBanner.textContent = t('extensions.betaNotice');
 
-    mainWrapper.append(tabBar, reposTab.topBar, listContainer, reposContainer, betaBanner);
+    mainWrapper.append(tabBar, installedToolBar, reposTab.topBar, listContainer, reposContainer, betaBanner);
 
     return popupWindow({
         title: t('extensions.title'),
         customContent: mainWrapper,
         width: 760,
         maxWidth: 840,
-        buttons: [
-            {
-                text: t('extensions.importZip'),
-                onClick: () => triggerZipPicker(renderGrid)
-            },
-            {
-                text: t('extensions.close'),
-                hideOnClick: true
-            }
-        ]
+        buttons: []
     });
 }
 

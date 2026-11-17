@@ -816,7 +816,8 @@ export function simpleToast(options = {}) {
         showProgress = true,
         progress = null,
         closable = null,
-        buttons = null
+        buttons = null,
+        onClose = null
     } = opts;
 
     const MAX_TOASTS = 4;
@@ -844,7 +845,8 @@ export function simpleToast(options = {}) {
                 progress,
                 closable,
                 buttons,
-                timeout
+                timeout,
+                onClose
             });
             return existing._toastController;
         }
@@ -937,14 +939,23 @@ export function simpleToast(options = {}) {
     let remainingTime = typeof timeout === 'number' ? timeout : 0;
     let startTime = Date.now();
     let isCountdownActive = false;
+    let currentOnClose = typeof onClose === 'function' ? onClose : null;
 
-    const removePopup = () => {
+    const removePopup = (isManualClose = false) => {
         if (popup._isRemoving) return;
         popup._isRemoving = true;
 
         if (timer) {
             clearTimeout(timer);
             timer = null;
+        }
+
+        if (isManualClose && typeof currentOnClose === 'function') {
+            try {
+                currentOnClose(controller);
+            } catch (err) {
+                console.error('[simpleToast] onClose error:', err);
+            }
         }
 
         popup.classList.remove('toast-show');
@@ -958,17 +969,17 @@ export function simpleToast(options = {}) {
         }, 320);
     };
 
-    popup._triggerRemove = removePopup;
+    popup._triggerRemove = () => removePopup(false);
 
     closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        removePopup();
+        removePopup(true);
     });
 
     // 點擊關閉：除點擊操作按鈕外，點擊 Toast 任意區域皆可直接手動關閉
     popup.addEventListener('click', (e) => {
         if (e.target.closest('.toast-btn')) return;
-        removePopup();
+        removePopup(true);
     });
 
     function setupCountdown(ms) {
@@ -1069,8 +1080,12 @@ export function simpleToast(options = {}) {
         progress: newProgress,
         closable: newClosable,
         buttons: newButtons,
-        timeout: newTimeout
+        timeout: newTimeout,
+        onClose: newOnClose
     }) {
+        if (newOnClose !== undefined) {
+            currentOnClose = typeof newOnClose === 'function' ? newOnClose : null;
+        }
         if (newType) {
             popup.className = `toast-item toast-${newType} toast-show`;
         }

@@ -575,10 +575,67 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
     tabBar.append(localTabBtn, driveTabBtn);
 
-    // 本地專案容器（完全保留原有邏輯）
+    // 本地專案容器（含頂部操作工具列）
+    const localTabContainer = document.createElement('div');
+    localTabContainer.className = 'pm-tab-content pm-tab-content--drive popup-list';
+
+    const localTabRoot = document.createElement('div');
+    localTabRoot.className = 'drive-tab-root';
+
+    const localToolBar = document.createElement('div');
+    localToolBar.className = 'drive-account-bar pm-local-toolbar';
+
+    const importFolderBtn = document.createElement('button');
+    importFolderBtn.type = 'button';
+    importFolderBtn.className = 'drive-signout-btn';
+    importFolderBtn.textContent = t('popup.projectManager.importFolder') || '匯入資料夾';
+    importFolderBtn.onclick = () => {
+        if (typeof getFileHandlerCtx !== 'function') {
+            simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
+            return;
+        }
+        triggerImportFolder(getFileHandlerCtx(), {
+            onComplete: () => triggerAllListRefresh()
+        });
+    };
+
+    const importZipBtn = document.createElement('button');
+    importZipBtn.type = 'button';
+    importZipBtn.className = 'drive-signout-btn';
+    importZipBtn.textContent = t('popup.projectManager.importZip') || '匯入壓縮檔';
+    importZipBtn.onclick = () => {
+        if (typeof getFileHandlerCtx !== 'function') {
+            simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
+            return;
+        }
+        triggerImportZip(getFileHandlerCtx(), {
+            onComplete: () => triggerAllListRefresh()
+        });
+    };
+
+    const newBlankBtn = document.createElement('button');
+    newBlankBtn.type = 'button';
+    newBlankBtn.className = 'drive-signout-btn';
+    newBlankBtn.textContent = t('popup.projectManager.newBlankProject') || '新建空白專案';
+    newBlankBtn.onclick = async () => {
+        const name = prompt(t('popup.projectManager.newProjectPrompt'), t('popup.projectManager.untitled'));
+        if (name === null) return;
+        const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
+        if (typeof loadProject === 'function') {
+            const proj = await loadProject(newId);
+            simpleToast({ content: t('popup.projectManager.toastSwitched', { name: proj?.name || t('popup.projectManager.untitled') }), type: 'success', timeout: 1500 });
+        }
+        triggerAllListRefresh();
+    };
+
+    localToolBar.append(importFolderBtn, importZipBtn, newBlankBtn);
+
     const localContainer = document.createElement('div');
     localContainer.className = 'project-manager-grid popup-list';
     buildList(localContainer);
+
+    localTabRoot.append(localToolBar, localContainer);
+    localTabContainer.appendChild(localTabRoot);
 
     let refreshPending = false;
     const scheduleRefresh = () => {
@@ -625,18 +682,18 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
     localTabBtn.onclick = () => {
         localTabBtn.classList.add('pm-tab-btn--active');
         driveTabBtn.classList.remove('pm-tab-btn--active');
-        localContainer.style.display = '';
+        localTabContainer.style.display = 'flex';
         driveContainer.style.display = 'none';
     };
 
     driveTabBtn.onclick = () => {
         driveTabBtn.classList.add('pm-tab-btn--active');
         localTabBtn.classList.remove('pm-tab-btn--active');
-        localContainer.style.display = 'none';
+        localTabContainer.style.display = 'none';
         driveContainer.style.display = 'flex';
     };
 
-    mainWrapper.append(tabBar, localContainer, driveContainer);
+    mainWrapper.append(tabBar, localTabContainer, driveContainer);
 
     projectManagerPopup = popupWindow({
         title: "專案總管",
@@ -646,45 +703,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         onClose: () => {
             window.removeEventListener('wmc:project-changed', onProjectChanged);
         },
-        buttons: [
-            {
-                text: t('popup.projectManager.importFolder') || '匯入資料夾',
-                onClick: () => {
-                    if (typeof getFileHandlerCtx !== 'function') {
-                        simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
-                        return;
-                    }
-                    triggerImportFolder(getFileHandlerCtx(), {
-                        onComplete: () => triggerAllListRefresh()
-                    });
-                }
-            },
-            {
-                text: t('popup.projectManager.importZip') || '匯入壓縮檔',
-                onClick: () => {
-                    if (typeof getFileHandlerCtx !== 'function') {
-                        simpleToast({ content: t('popup.projectManager.fileHandlerNotReady'), type: 'error' });
-                        return;
-                    }
-                    triggerImportZip(getFileHandlerCtx(), {
-                        onComplete: () => triggerAllListRefresh()
-                    });
-                }
-            },
-            {
-                text: t('popup.projectManager.newBlankProject') || "新建空白專案",
-                onClick: async () => {
-                    const name = prompt(t('popup.projectManager.newProjectPrompt'), t('popup.projectManager.untitled'));
-                    if (name === null) return;
-                    const newId = await projectCreate(name.trim() || t('popup.projectManager.untitled'));
-                    if (typeof loadProject === 'function') {
-                        const proj = await loadProject(newId);
-                        simpleToast({ content: t('popup.projectManager.toastSwitched', { name: proj?.name || t('popup.projectManager.untitled') }), type: 'success', timeout: 1500 });
-                    }
-                    triggerAllListRefresh();
-                }
-            }
-        ]
+        buttons: []
     });
     return projectManagerPopup;
 }

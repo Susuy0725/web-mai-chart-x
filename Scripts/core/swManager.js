@@ -3,6 +3,12 @@ import { simpleToast } from '../helper.js';
 
 let isUpdating = false;
 let latestProgressData = null;
+let hasCompletedPrompt = false;
+
+function deferSwUpdate() {
+    sessionStorage.setItem('sw_update_deferred', 'true');
+    isUpdating = false;
+}
 
 export function promptSwUpdate({ onConfirm, onDelay } = {}) {
     if (sessionStorage.getItem('sw_update_deferred') === 'true') {
@@ -13,23 +19,26 @@ export function promptSwUpdate({ onConfirm, onDelay } = {}) {
         id: 'sw-update-toast',
         type: 'info',
         title: t('toast.swUpdateAvailableTitle') || '發現新版本',
-        content: t('toast.swUpdateAvailableDesc') || '偵測到應用程式有新版本，是否立即更新？',
+        content: t('toast.swUpdateAvailableDesc') || '正在背景準備新版本資源，是否查看更新進度？',
         timeout: 0,
         closable: true,
+        onClose: () => {
+            deferSwUpdate();
+            if (typeof onDelay === 'function') onDelay();
+        },
         buttons: [
             {
                 text: t('toast.swDelay') || '延遲',
                 primary: false,
-                onClick: (toast) => {
-                    sessionStorage.setItem('sw_update_deferred', 'true');
-                    isUpdating = false;
+                onClick: () => {
+                    deferSwUpdate();
                     if (typeof onDelay === 'function') onDelay();
                 }
             },
             {
                 text: t('toast.swUpdate') || '更新',
                 primary: true,
-                onClick: (toast) => {
+                onClick: () => {
                     isUpdating = true;
                     if (typeof onConfirm === 'function') {
                         onConfirm();
@@ -69,14 +78,19 @@ export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file
         progress,
         timeout: 0,
         closable: true,
+        onClose: () => {
+            deferSwUpdate();
+        },
         buttons: []
     });
 }
 
-export function showSwUpdateComplete() {
+export function showSwUpdateComplete({ fromEvent = false } = {}) {
     if (sessionStorage.getItem('sw_update_deferred') === 'true') return;
+    if (fromEvent && hasCompletedPrompt) return;
 
     latestProgressData = { ...(latestProgressData || {}), progress: 100, completed: true };
+    hasCompletedPrompt = true;
 
     if (!isUpdating) {
         promptSwUpdate();
@@ -92,12 +106,15 @@ export function showSwUpdateComplete() {
         progress: 100,
         timeout: 0,
         closable: true,
+        onClose: () => {
+            deferSwUpdate();
+        },
         buttons: [
             {
                 text: t('toast.swDismiss') || '稍後',
                 primary: false,
                 onClick: () => {
-                    isUpdating = false;
+                    deferSwUpdate();
                 }
             },
             {
@@ -119,6 +136,7 @@ export function mockSwUpdateFlow() {
     sessionStorage.removeItem('sw_update_deferred');
     isUpdating = false;
     latestProgressData = null;
+    hasCompletedPrompt = false;
 
     let progress = 0;
     const total = 50;
@@ -186,7 +204,7 @@ export function initServiceWorker() {
             if (data.type === 'SW_UPDATE_START' || data.type === 'SW_UPDATE_PROGRESS') {
                 showSwUpdateProgress(data);
             } else if (data.type === 'SW_UPDATE_COMPLETE') {
-                showSwUpdateComplete();
+                showSwUpdateComplete({ fromEvent: true });
             }
         });
 
@@ -199,7 +217,7 @@ export function initServiceWorker() {
                     if (!newWorker) return;
                     newWorker.addEventListener('statechange', () => {
                         if (newWorker.state === 'installed' && hasExistingController) {
-                            showSwUpdateComplete();
+                            showSwUpdateComplete({ fromEvent: true });
                         }
                     });
                 });

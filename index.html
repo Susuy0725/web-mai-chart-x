@@ -65,7 +65,7 @@
     </noscript>
 
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="Styles/main.css?v=visual_11">
+    <link rel="stylesheet" href="Styles/main.css?v=visual_12">
     <link rel="stylesheet" href="Styles/settings.css?v=visual_11">
     <link rel="stylesheet" href="Styles/popup.css?v=3">
     <link rel="stylesheet" href="Styles/drive.css">
@@ -132,8 +132,8 @@
             </div>
             <div id="showPlayControlsBtn" style="display: none;" role="button" tabindex="0" aria-label="展開播放控制列"
                 title="展開播放控制列">
-                <span class="material-symbols-outlined" translate="no">
-                    keyboard_arrow_up
+                <span class="splitter-toolbar-btn" aria-hidden="true">
+                    <span class="material-symbols-outlined" translate="no">keyboard_arrow_up</span>
                 </span>
             </div>
         </div>
@@ -364,6 +364,13 @@
         <div id="utilityContainer">
             <div id="topUtilityBtns">
                 <div class="utility-row utility-row-1">
+                    <div class="utilityButton" data-buttonAction="hideUtility" role="button" tabindex="0"
+                        data-i18n-aria-label="visualToolbar.collapseToolbar"
+                        data-i18n-title="visualToolbar.collapseToolbar" aria-label="收納工具列" title="收納工具列">
+                        <span class="material-symbols-outlined" translate="no">
+                            keyboard_arrow_up
+                        </span>
+                    </div>
                     <div class="utilityButton " data-buttonAction="hideEditor" role="button" tabindex="0"
                         aria-label="收合編輯器面板" title="收合編輯器">
                         <span class="material-symbols-outlined" translate="no">
@@ -612,7 +619,12 @@
                     </div>
                 </div>
             </div>
-            <div class="closeBtn" data-hidden="false" role="button" tabindex="0" aria-label="收合工具列" title="收合工具列">▲
+            <div id="showUtilityBtn" class="utility-expand-btn" role="button" tabindex="0" style="display: none;"
+                data-i18n-aria-label="visualToolbar.expandToolbar" data-i18n-title="visualToolbar.expandToolbar"
+                aria-label="展開工具列" title="展開工具列">
+                <span class="splitter-toolbar-btn" aria-hidden="true">
+                    <span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span>
+                </span>
             </div>
             <div class="warnbtn" role="button" tabindex="0" aria-label="譜面警告資訊" title="語法警告"><span
                     class="material-symbols-outlined" translate="no">warning</span><span class="warnCount">0</span>

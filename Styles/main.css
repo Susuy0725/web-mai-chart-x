@@ -264,55 +264,41 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 }
 
 #playControls #showPlayControlsBtn {
-    background-color: #222;
-    overflow: hidden;
-    width: 50px;
-    height: 50px;
+    background: var(--main-color);
+    width: 42px;
+    height: 42px;
+    padding: 5px;
+    margin: 0;
     position: absolute;
-    margin: 16px;
     bottom: 0;
-    left: calc(max(var(--split-ratio) * 100% - 90px, 0px));
+    left: 8px;
     right: auto;
-    border: 1px solid var(--button-ouline);
-    color: white;
+    border: none;
     display: flex;
-    align-content: center;
-    text-align: center;
     justify-content: center;
-    flex-wrap: wrap;
+    align-items: center;
     cursor: pointer;
-    box-shadow: 0 0 3px 1px rgba(0, 0, 0, 0.6);
-    border-radius: 25px;
-    transition: background-color 100ms ease, left 300ms cubic-bezier(0.4, 0, 0.2, 1), right 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease, transform 200ms ease;
+    box-sizing: border-box;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5), 0 -1px 4px rgba(0, 0, 0, 0.25);
+    border-radius: 7px 7px 0 0;
+    transition: background-color 0.15s ease, opacity 200ms ease, transform 200ms ease;
     z-index: 100;
 }
 
-#playControls #showPlayControlsBtn:hover {
-    background-color: color-mix(in srgb, var(--main-color) 50%, black);
+#playControls #showPlayControlsBtn:hover .splitter-toolbar-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.95);
 }
 
-#playControls #showPlayControlsBtn:active {
-    transform: scale(0.95);
+#playControls #showPlayControlsBtn:active .splitter-toolbar-btn {
+    background: #484852;
+    color: #ffffff;
+    transform: scale(0.94);
 }
 
-/* 當隱藏編輯器 (hideEditor) 時，將按鈕優雅收至右下角，避免在畫面底部中央遮擋 maimai 圓盤判定區 */
-#playControls #showPlayControlsBtn.editor-hidden,
-body.editor-hidden #playControls #showPlayControlsBtn,
-#app:has(#editorContainer[data-hidden="true"]) #playControls #showPlayControlsBtn,
-#app:has(#editorContainer[style*="display: none"]) #playControls #showPlayControlsBtn {
-    left: auto;
-    right: 0;
-    opacity: 0.85;
-}
-
-body.panels-swapped #playControls #showPlayControlsBtn {
-    left: auto;
-    right: 0;
-}
-
-body.layout-vertical #playControls #showPlayControlsBtn {
-    left: auto;
-    right: 0;
+#playControls #showPlayControlsBtn .material-symbols-outlined {
+    font-size: 20px;
+    line-height: 1;
 }
 
 #miniPreviewContainer #miniPreview {
@@ -447,7 +433,7 @@ body.layout-vertical #playControls #showPlayControlsBtn {
 #utilityContainer {
     position: absolute;
     width: 100%;
-    height: calc(var(--utility-height, 40px) + var(--utility-hidden-height));
+    height: var(--utility-height, 40px);
     top: 0;
     right: 0;
     z-index: 110;
@@ -494,38 +480,50 @@ body.layout-vertical #playControls #showPlayControlsBtn {
 
 #utilityContainer.expanded {
     position: absolute;
-    height: var(--utility-hidden-height);
+    height: 0;
     top: 0;
     right: 0;
     z-index: 110;
+    pointer-events: none;
     user-select: none;
     -webkit-user-select: none;
 }
 
-#utilityContainer .closeBtn {
-    background-color: var(--main-color);
-    overflow: hidden;
-    width: 30%;
-    max-width: 200px;
+#utilityContainer #showUtilityBtn {
+    background: var(--main-color);
+    width: 42px;
+    height: 42px;
+    padding: 5px;
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    height: var(--utility-hidden-height);
-    color: white;
-    font-size: 10px;
-    text-align: center;
+    top: 0;
+    left: 8px;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
     box-sizing: border-box;
-    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
-    border-radius: 0 0 10px 10px;
-    transition: background-color 100ms ease;
+    border: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    border-radius: 0 0 7px 7px;
+    pointer-events: auto;
+    transition: background-color 0.15s ease;
+    z-index: 20;
 }
 
-#utilityContainer .closeBtn:hover {
-    background-color: var(--button-ouline);
+#utilityContainer #showUtilityBtn:hover .splitter-toolbar-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+#utilityContainer #showUtilityBtn:active .splitter-toolbar-btn {
+    background: #484852;
+    color: #ffffff;
+    transform: scale(0.94);
+}
+
+#utilityContainer #showUtilityBtn .material-symbols-outlined {
+    font-size: 20px;
+    line-height: 1;
 }
 
 #utilityContainer .warnbtn {
@@ -1141,7 +1139,6 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     height: 100%;
     margin: 0;
     padding: 5px;
-    padding-top: calc(var(--utility-hidden-height) + 5px);
     padding-bottom: calc((100vh - var(--playControls-height) - var(--utility-height, 40px)) * 0.5);
     box-sizing: border-box;
     font-family: 'Consolas', monospace;
@@ -2423,10 +2420,26 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-modal-wrapper {
     --ext-card-height: 148px;
     --ext-grid-gap: 12px;
+    --ext-list-height: 316px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     min-height: 0;
+}
+
+.ext-installed-toolbar {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ext-installed-toolbar .drive-signout-btn {
+    white-space: nowrap;
+}
+
+.ext-installed-toolbar .drive-signout-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .ext-card-grid {
@@ -2435,9 +2448,9 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     grid-auto-rows: var(--ext-card-height);
     align-content: start;
     gap: var(--ext-grid-gap);
-    height: calc(var(--ext-card-height) * 1.25 + var(--ext-grid-gap));
-    min-height: calc(var(--ext-card-height) * 1.25 + var(--ext-grid-gap));
-    max-height: calc(var(--ext-card-height) * 1.25 + var(--ext-grid-gap));
+    height: var(--ext-list-height);
+    min-height: var(--ext-list-height);
+    max-height: var(--ext-list-height);
     overflow-y: auto;
     overscroll-behavior: contain;
     box-sizing: border-box;
@@ -2803,7 +2816,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .ext-repo-empty {
-    min-height: calc(var(--ext-card-height, 148px) * 1.25 + var(--ext-grid-gap, 12px));
+    min-height: var(--ext-list-height);
     justify-content: center;
 }
 

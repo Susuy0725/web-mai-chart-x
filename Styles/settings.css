@@ -56,25 +56,6 @@
     flex-direction: column;
     margin-top: 0;
     width: 100%;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-.popup-setting-content::-webkit-scrollbar {
-    width: 4px;
-}
-
-.popup-setting-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.popup-setting-content::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 2px;
-}
-
-.popup-setting-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.35);
 }
 
 .popup-setting-section {

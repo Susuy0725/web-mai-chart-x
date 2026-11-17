@@ -2019,26 +2019,6 @@
     overflow-y: auto;
     overscroll-behavior: none;
     box-sizing: border-box;
-    scrollbar-width: thin;
-    scrollbar-color: #555555 transparent;
     user-select: none;
     -webkit-user-select: none;
-}
-
-.project-manager-grid::-webkit-scrollbar {
-    width: 6px;
-}
-
-.project-manager-grid::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-}
-
-.project-manager-grid::-webkit-scrollbar-thumb {
-    background: #555555;
-    border-radius: 3px;
-}
-
-.project-manager-grid::-webkit-scrollbar-thumb:hover {
-    background: #777777;
 }

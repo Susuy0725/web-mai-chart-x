@@ -24,6 +24,11 @@
     --submenu-hover-visibility: visible;
     --submenu-hover-transform: translate(0, 0) scale(1);
     --submenu-hover-pointer-events: auto;
+    --scrollbar-size: 8px;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.24);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
+    --scrollbar-radius: 9999px;
 }
 
 @font-face {
@@ -695,7 +700,8 @@ body.layout-vertical #playControls #showPlayControlsBtn {
 }
 
 .utilityButton.disabled,
-.utilityDropdown-content .utilityButton.disabled {
+.utilityDropdown-content .utilityButton.disabled,
+.utilitySubmenu .utilityButton.disabled {
     color: #666666 !important;
     opacity: 0.45;
     cursor: not-allowed !important;
@@ -703,7 +709,8 @@ body.layout-vertical #playControls #showPlayControlsBtn {
 }
 
 .utilityButton.disabled:hover,
-.utilityDropdown-content .utilityButton.disabled:hover {
+.utilityDropdown-content .utilityButton.disabled:hover,
+.utilitySubmenu .utilityButton.disabled:hover {
     background-color: transparent !important;
 }
 
@@ -1151,10 +1158,6 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     border: none;
     outline: none;
     overflow: auto;
-    scrollbar-width: thin;
-    /* auto or thin */
-    scrollbar-color: #838383 transparent;
-    /* 滾動條顏色 */
 }
 
 #editor-input {
@@ -1252,10 +1255,10 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     margin-bottom: -5px;
 }
 
-.utilityDropdown.open .utilityDropdown-content {
+.utilityDropdown.open .utilityDropdown-content,
+.utilityDropdown-content.open {
     opacity: 1;
     visibility: visible;
-    transform: scaleY(1);
     pointer-events: auto;
 }
 
@@ -1264,6 +1267,17 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     position: fixed;
     background-color: var(--main-color);
     min-width: 135px;
+    max-height: calc(100dvh - var(--utility-height, 40px) - 8px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    contain: layout paint;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
     z-index: 1100;
     border: 1px solid var(--button-ouline);
@@ -1273,17 +1287,23 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     gap: 2px;
     opacity: 0;
     visibility: hidden;
-    transform: scaleY(0.95);
-    transform-origin: top left;
     pointer-events: none;
-    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
+    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
+}
+
+#extensionsMenuList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
 }
 
 .utilityButton:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-.utilityDropdown-content .utilityButton {
+.utilityDropdown-content .utilityButton,
+.utilitySubmenu .utilityButton {
     padding: 0 8px 0 10px;
     border: none;
     width: 100%;
@@ -1293,15 +1313,18 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     align-items: center;
     justify-content: space-between;
     height: 30px;
+    flex-shrink: 0;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.92);
     cursor: pointer;
+    touch-action: pan-y;
     transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.utilityDropdown-content .utilityButton:hover {
+.utilityDropdown-content .utilityButton:hover,
+.utilitySubmenu .utilityButton:hover {
     background-color: rgba(255, 255, 255, 0.14);
     color: #ffffff;
 }
@@ -1341,11 +1364,22 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilitySubmenu {
-    display: flex;
-    position: absolute;
+    display: none;
+    position: fixed;
     top: var(--submenu-top, 0);
     left: var(--submenu-left, 100%);
     min-width: 155px;
+    max-height: calc(100dvh - var(--utility-height, 40px) - 8px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    contain: layout paint;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     background-color: var(--main-color);
     border: 1px solid var(--button-ouline);
     border-radius: 10px;
@@ -1356,23 +1390,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     z-index: 1110;
     opacity: 0;
     visibility: hidden;
-    transform: var(--submenu-transform-closed, translateX(-4px) scale(0.97));
-    transform-origin: top left;
     pointer-events: none;
-    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
+    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
 }
 
-.utilityDropdown-content .utilityMenuTitle:hover .utilitySubmenu {
-    opacity: var(--submenu-hover-opacity, 1);
-    visibility: var(--submenu-hover-visibility, visible);
-    transform: var(--submenu-hover-transform, translate(0, 0) scale(1));
-    pointer-events: var(--submenu-hover-pointer-events, auto);
-}
-
-.utilityDropdown-content .utilityMenuTitle.open .utilitySubmenu {
+.utilityDropdown-content .utilityMenuTitle.open .utilitySubmenu,
+.utilitySubmenu.open {
+    display: flex;
     opacity: 1;
     visibility: visible;
-    transform: translate(0, 0) scale(1);
     pointer-events: auto;
 }
 
@@ -1384,8 +1410,72 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .utilitySubmenu hr {
     width: 100%;
     margin: 3px 0;
+    flex-shrink: 0;
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.utilityDropdown-content *,
+.utilitySubmenu * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.utility-scroll-indicator {
+    display: none;
+    position: sticky;
+    left: 0;
+    width: 100%;
+    height: 20px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--main-color);
+    color: rgba(255, 255, 255, 0.72);
+    z-index: 5;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: opacity 0.16s ease, visibility 0.16s, color 0.12s ease;
+}
+
+.utilityDropdown-content.is-scrollable .utility-scroll-indicator,
+.utilitySubmenu.is-scrollable .utility-scroll-indicator {
+    display: flex;
+}
+
+.utility-scroll-indicator-top {
+    top: -4px;
+    margin-bottom: -22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.utility-scroll-indicator-bottom {
+    bottom: -4px;
+    margin-top: -22px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.utilityDropdown-content.is-scrollable.can-scroll-up .utility-scroll-indicator-top,
+.utilitySubmenu.is-scrollable.can-scroll-up .utility-scroll-indicator-top,
+.utilityDropdown-content.is-scrollable.can-scroll-down .utility-scroll-indicator-bottom,
+.utilitySubmenu.is-scrollable.can-scroll-down .utility-scroll-indicator-bottom {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.utility-scroll-indicator:hover {
+    color: #ffffff;
+}
+
+.utility-scroll-indicator .material-symbols-outlined {
+    font-size: 16px;
+    line-height: 1;
+    pointer-events: none;
 }
 
 .quick-panel {
@@ -2089,19 +2179,86 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     animation: paletteSlideIn 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 全域統一滾動條樣式 */
+.utilityDropdown-content,
+.utilitySubmenu,
+.editor-layer,
+.visual-sub-palette,
+.visual-note-palette,
+.visual-modifier-palette,
+.visual-division-palette,
+.ext-card-grid,
+.ext-detail-scroll-body,
+.ext-repo-manage-list,
+.popup-setting-content,
+.project-manager-grid {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.utilityDropdown-content::-webkit-scrollbar,
+.utilitySubmenu::-webkit-scrollbar,
+.editor-layer::-webkit-scrollbar,
 .visual-sub-palette::-webkit-scrollbar,
 .visual-note-palette::-webkit-scrollbar,
 .visual-modifier-palette::-webkit-scrollbar,
-.visual-division-palette::-webkit-scrollbar {
-    width: 3px;
+.visual-division-palette::-webkit-scrollbar,
+.ext-card-grid::-webkit-scrollbar,
+.ext-detail-scroll-body::-webkit-scrollbar,
+.ext-repo-manage-list::-webkit-scrollbar,
+.popup-setting-content::-webkit-scrollbar,
+.project-manager-grid::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
 }
 
+.utilityDropdown-content::-webkit-scrollbar-track,
+.utilitySubmenu::-webkit-scrollbar-track,
+.editor-layer::-webkit-scrollbar-track,
+.visual-sub-palette::-webkit-scrollbar-track,
+.visual-note-palette::-webkit-scrollbar-track,
+.visual-modifier-palette::-webkit-scrollbar-track,
+.visual-division-palette::-webkit-scrollbar-track,
+.ext-card-grid::-webkit-scrollbar-track,
+.ext-detail-scroll-body::-webkit-scrollbar-track,
+.ext-repo-manage-list::-webkit-scrollbar-track,
+.popup-setting-content::-webkit-scrollbar-track,
+.project-manager-grid::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: var(--scrollbar-radius);
+}
+
+.utilityDropdown-content::-webkit-scrollbar-thumb,
+.utilitySubmenu::-webkit-scrollbar-thumb,
+.editor-layer::-webkit-scrollbar-thumb,
 .visual-sub-palette::-webkit-scrollbar-thumb,
 .visual-note-palette::-webkit-scrollbar-thumb,
 .visual-modifier-palette::-webkit-scrollbar-thumb,
-.visual-division-palette::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.25);
-    border-radius: 3px;
+.visual-division-palette::-webkit-scrollbar-thumb,
+.ext-card-grid::-webkit-scrollbar-thumb,
+.ext-detail-scroll-body::-webkit-scrollbar-thumb,
+.ext-repo-manage-list::-webkit-scrollbar-thumb,
+.popup-setting-content::-webkit-scrollbar-thumb,
+.project-manager-grid::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: var(--scrollbar-radius);
+}
+
+.utilityDropdown-content::-webkit-scrollbar-thumb:hover,
+.utilitySubmenu::-webkit-scrollbar-thumb:hover,
+.editor-layer::-webkit-scrollbar-thumb:hover,
+.visual-sub-palette::-webkit-scrollbar-thumb:hover,
+.visual-note-palette::-webkit-scrollbar-thumb:hover,
+.visual-modifier-palette::-webkit-scrollbar-thumb:hover,
+.visual-division-palette::-webkit-scrollbar-thumb:hover,
+.ext-card-grid::-webkit-scrollbar-thumb:hover,
+.ext-detail-scroll-body::-webkit-scrollbar-thumb:hover,
+.ext-repo-manage-list::-webkit-scrollbar-thumb:hover,
+.popup-setting-content::-webkit-scrollbar-thumb:hover,
+.project-manager-grid::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
 }
 
 @keyframes paletteSlideIn {

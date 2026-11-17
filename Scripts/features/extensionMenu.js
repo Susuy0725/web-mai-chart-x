@@ -28,9 +28,31 @@ function resolveItemLabel(item) {
 
 function closeExtensionDropdown() {
     const dropdown = document.getElementById('extensionsDropdown');
+    const content = document.getElementById('extensionsDropdownContent');
     if (dropdown) {
         dropdown.classList.remove('open');
         dropdown.querySelectorAll('.utilityMenuTitle.open').forEach((el) => el.classList.remove('open'));
+    }
+    if (content) {
+        content.classList.remove('open');
+        content.querySelectorAll('.utilityMenuTitle').forEach((el) => {
+            if (el._hoverCloseTimer) {
+                clearTimeout(el._hoverCloseTimer);
+                el._hoverCloseTimer = null;
+            }
+            el.classList.remove('open');
+            delete el.dataset.hoverOpen;
+            const sub = el._submenu || el.querySelector('.utilitySubmenu');
+            if (sub) {
+                sub.classList.remove('open');
+                if (sub.parentElement !== el) {
+                    el.appendChild(sub);
+                }
+            }
+        });
+        if (dropdown && content.parentElement !== dropdown) {
+            dropdown.appendChild(content);
+        }
     }
 }
 
@@ -103,6 +125,16 @@ export function renderExtensionMenu() {
     const dividerEl = document.getElementById('extensionsMenuDivider');
     if (!listContainer || !dividerEl) return;
 
+    listContainer.querySelectorAll('.utilityMenuTitle').forEach((el) => {
+        if (el._hoverCloseTimer) {
+            clearTimeout(el._hoverCloseTimer);
+            el._hoverCloseTimer = null;
+        }
+        const sub = el._submenu;
+        if (sub && sub.parentElement && sub.parentElement !== el) {
+            sub.remove();
+        }
+    });
     listContainer.textContent = '';
 
     const extensions = extensionManager.list();
@@ -176,6 +208,7 @@ export function renderExtensionMenu() {
         titleRow.appendChild(nameSpan);
         titleRow.appendChild(arrowSpan);
         titleRow.appendChild(submenu);
+        titleRow._submenu = submenu;
         listContainer.appendChild(titleRow);
         renderedCount++;
     }
@@ -242,36 +275,7 @@ export function initExtensionMenu() {
         createFloatingWidget
     });
 
-    const listContainer = document.getElementById('extensionsMenuList');
-    if (listContainer) {
-        const handleToggleSubmenu = (event) => {
-            if (event.target.closest('.utilitySubmenu .utilityButton')) {
-                return;
-            }
-            const titleRow = event.target.closest('.utilityMenuTitle');
-            if (!titleRow) return;
-            event.stopPropagation();
-            const isOpen = titleRow.classList.contains('open');
-            listContainer.querySelectorAll('.utilityMenuTitle').forEach((m) => m.classList.remove('open'));
-            if (!isOpen) {
-                titleRow.classList.add('open');
-            }
-        };
-        listContainer.addEventListener('click', handleToggleSubmenu);
-        listContainer.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                if (event.target.closest('.utilitySubmenu .utilityButton')) {
-                    return;
-                }
-                if (event.target.closest('.utilityMenuTitle')) {
-                    event.preventDefault();
-                    handleToggleSubmenu(event);
-                }
-            }
-        });
-    }
-
-    const manageBtn = document.querySelector('#extensionsDropdown [data-buttonAction="manageExtensions"]');
+    const manageBtn = document.querySelector('#extensionsDropdownContent [data-buttonAction="manageExtensions"]');
     if (manageBtn) {
         const handleManageClick = (event) => {
             event.stopPropagation();

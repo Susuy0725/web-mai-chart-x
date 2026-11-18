@@ -376,10 +376,12 @@
     box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.28));
 }
 
-.popup-setting-dropdown option {
-    background: #1a1a20;
-    color: #ffffff;
-    padding: 4px;
+@supports not (appearance: base-select) {
+    .popup-setting-dropdown option {
+        background: #1a1a20;
+        color: #ffffff;
+        padding: 4px;
+    }
 }
 
 .popup-setting-element {

@@ -2050,3 +2050,134 @@
     user-select: none;
     -webkit-user-select: none;
 }
+
+
+/* --- 原生 select 圓角矩形選項容器 (Pure CSS base-select) --- */
+@supports (appearance: base-select) {
+    select,
+    .popup-setting-dropdown,
+    select::picker(select) {
+        appearance: base-select;
+    }
+
+    .utilityButton select {
+        padding: 2px 6px;
+        min-height: 0;
+        align-items: center;
+        gap: 6px;
+        border-radius: 6px 6px 0 0;
+    }
+
+    select::picker-icon {
+        transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    select:open::picker-icon {
+        transform: rotate(180deg);
+    }
+
+    .popup-setting-dropdown::picker-icon {
+        display: none;
+    }
+
+    select::picker(select) {
+        background-color: var(--main-color);
+        min-width: max(anchor-size(width), 135px);
+        box-sizing: border-box;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
+        border: 1px solid var(--button-ouline);
+        border-radius: 18px;
+        padding: 5px;
+        margin-block: 4px;
+        color: rgba(255, 255, 255, 0.92);
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+        opacity: 0;
+        transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), overlay 0.16s allow-discrete, display 0.16s allow-discrete;
+    }
+
+    select::picker(select)::-webkit-scrollbar {
+        width: var(--scrollbar-size);
+        height: var(--scrollbar-size);
+    }
+
+    select::picker(select)::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: var(--scrollbar-radius);
+    }
+
+    select::picker(select)::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb);
+        border: 2px solid transparent;
+        background-clip: content-box;
+        border-radius: var(--scrollbar-radius);
+    }
+
+    select::picker(select)::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar-thumb-hover);
+    }
+
+    select:open::picker(select) {
+        opacity: 1;
+    }
+
+    @starting-style {
+        select:open::picker(select) {
+            opacity: 0;
+        }
+    }
+
+    select option {
+        padding: 0 8px 0 10px;
+        border: none;
+        outline: none;
+        width: 100%;
+        box-sizing: border-box;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 30px;
+        border-radius: 13px;
+        font-size: 13px;
+        font-weight: 400;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.92);
+        cursor: pointer;
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+        transition: background-color 0.12s ease, color 0.12s ease;
+    }
+
+    select option + option {
+        margin-top: 2px;
+    }
+
+    select option::checkmark {
+        display: none;
+    }
+
+    select option:hover {
+        background-color: rgba(255, 255, 255, 0.14);
+        color: #ffffff;
+    }
+
+    select option:checked {
+        background-color: rgba(56, 139, 253, 0.42);
+        color: #ffffff;
+    }
+
+    select option:checked:hover {
+        background-color: rgba(56, 139, 253, 0.55);
+        color: #ffffff;
+    }
+}

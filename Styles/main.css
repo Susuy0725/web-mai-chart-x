@@ -760,10 +760,12 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
-.utilityButton select option {
-    background: #202020;
-    color: white;
-    border: none;
+@supports not (appearance: base-select) {
+    .utilityButton select option {
+        background: #202020;
+        color: white;
+        border: none;
+    }
 }
 
 #editorContainer {

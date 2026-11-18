@@ -222,7 +222,10 @@
     "repoEmptyHint": "点击上方“添加源”并输入支持 WERP 协议的 HTTPS 索引网址。",
     "repoNoExtensions": "当前选中的数据源中没有可用的扩展程序。",
     "repoAddTitle": "添加扩展程序数据源",
-    "repoAddDesc": "请输入支持的源仓库索引网址，系统将验证格式并显示仓库信息。",
+    "repoAddDesc": "可输入 example/reponame、example.github.io/reponame 或完整 HTTPS 网址，系统将自动补全并搜索索引。",
+    "repoAddInputPlaceholder": "example/reponame、example.github.io/reponame 或 https://...",
+    "repoResolvedLabel": "自动补全：",
+    "repoTabToFill": "Tab 应用",
     "repoFetchPreview": "检查源",
     "repoFetching": "正在获取并验证索引...",
     "repoConfirmAdd": "确认添加",
@@ -897,6 +900,11 @@
       "legalTitle": "条款与政策",
       "privacyPolicy": "隐私权政策",
       "termsOfService": "服务条款"
+    },
+    "changelog": {
+      "title": "更新日志",
+      "viewOnGithub": "在 GitHub 浏览",
+      "loadFailed": "无法加载更新日志文件"
     },
     "welcome": {
       "step1Desc": "一个开源、易用的 maimai 谱面在线编辑器",

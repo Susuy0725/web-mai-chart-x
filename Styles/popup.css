@@ -182,7 +182,8 @@
     max-height: 90dvh;
 }
 
-.popup-custom-content.has-content:has(.popup-setting-container) {
+.popup-custom-content.has-content:has(.popup-setting-container),
+.popup-custom-content.has-content:has(.changelog-modal) {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
@@ -1747,6 +1748,184 @@
     transform: scale(0.98);
 }
 
+/* --- 變更日誌彈窗 (Changelog Modal Markdown + GitHub Link) --- */
+.changelog-modal {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.changelog-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+    flex-shrink: 0;
+}
+
+.changelog-github-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--popup-surface, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.16));
+    color: var(--popup-text-main, #ffffff);
+    font-size: 12.5px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.1s ease;
+}
+
+.changelog-github-btn:hover {
+    background: var(--popup-surface-hover, rgba(255, 255, 255, 0.14));
+    border-color: var(--accent-color, #4499ee);
+    color: #ffffff;
+}
+
+.changelog-github-btn:active {
+    transform: scale(0.97);
+}
+
+.changelog-github-icon {
+    width: 15px;
+    height: 15px;
+    display: block;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.changelog-ext-icon {
+    font-size: 14px;
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.changelog-markdown {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 6px;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--popup-text-sub, #d0d0d8);
+}
+
+.changelog-markdown h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--popup-text-main, #ffffff);
+    margin: 2px 0 8px;
+}
+
+.changelog-markdown h2 {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--popup-text-main, #ffffff);
+    margin: 18px 0 8px;
+    padding: 6px 10px;
+    border-left: 3px solid var(--accent-color, #4499ee);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 0 6px 6px 0;
+}
+
+.changelog-markdown h3 {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: color-mix(in srgb, var(--accent-color, #4499ee) 65%, #ffffff);
+    margin: 10px 0 4px;
+}
+
+.changelog-markdown h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--popup-text-main, #f0f0f0);
+    margin: 8px 0 4px;
+}
+
+.changelog-markdown p {
+    margin: 6px 0;
+    color: var(--popup-text-sub, #c8c8d2);
+}
+
+.changelog-markdown ul,
+.changelog-markdown ol {
+    margin: 4px 0 8px;
+    padding-left: 20px;
+}
+
+.changelog-markdown li {
+    margin: 3px 0;
+}
+
+.changelog-markdown li > ul,
+.changelog-markdown li > ol {
+    margin: 2px 0 4px;
+}
+
+.changelog-markdown strong {
+    color: var(--popup-text-main, #ffffff);
+    font-weight: 600;
+}
+
+.changelog-markdown a {
+    color: var(--accent-color, #4499ee);
+    text-decoration: none;
+}
+
+.changelog-markdown a:hover {
+    text-decoration: underline;
+}
+
+.changelog-code {
+    font-family: 'mono', monospace, sans-serif;
+    font-size: 11.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #90caf9;
+    word-break: break-word;
+}
+
+.changelog-pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow-x: auto;
+    font-family: 'mono', monospace, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #e6e6ee;
+}
+
+.changelog-quote {
+    margin: 8px 0;
+    padding: 6px 12px;
+    border-left: 3px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0 4px 4px 0;
+    color: var(--popup-text-sub, #b8b8c4);
+}
+
+.changelog-hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 14px 0;
+}
+
 /* --------------------------------------------------------------------------
    全螢幕行動端頁面模式 (Flutter-style Fullscreen Page Route)
    當螢幕寬度縮小至行動端 (<= 440px) 時，Page 類型 Popup 轉變為全螢幕新頁面，
@@ -2005,7 +2184,7 @@
     }
 
     /* 自訂內容在全螢幕下完全滿版展開 */
-    .popup-custom-content.has-content {
+    .popup-custom-content {
         background: transparent !important;
         border: none !important;
         padding: 0 !important;

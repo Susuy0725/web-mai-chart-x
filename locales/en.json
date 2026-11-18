@@ -222,7 +222,10 @@
     "repoEmptyHint": "Click \"Add Source\" above and enter an HTTPS WERP index URL.",
     "repoNoExtensions": "No extensions available in the selected source.",
     "repoAddTitle": "Add Extension Source",
-    "repoAddDesc": "Enter a supported repository index URL. The format will be validated and repository details will be shown.",
+    "repoAddDesc": "Enter example/reponame, example.github.io/reponame, or a full HTTPS URL to auto-complete and fetch its index.",
+    "repoAddInputPlaceholder": "example/reponame, example.github.io/reponame, or https://...",
+    "repoResolvedLabel": "Resolved:",
+    "repoTabToFill": "Tab to fill",
     "repoFetchPreview": "Check Source",
     "repoFetching": "Fetching and validating index...",
     "repoConfirmAdd": "Add Source",
@@ -897,6 +900,11 @@
       "legalTitle": "Policies & Terms",
       "privacyPolicy": "Privacy Policy",
       "termsOfService": "Terms of Service"
+    },
+    "changelog": {
+      "title": "Changelog",
+      "viewOnGithub": "View on GitHub",
+      "loadFailed": "Failed to load CHANGELOG.md"
     },
     "welcome": {
       "step1Desc": "An open-source, easy-to-use maimai online chart editor",

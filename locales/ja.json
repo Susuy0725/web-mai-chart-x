@@ -222,7 +222,10 @@
     "repoEmptyHint": "上の「ソースを追加」をクリックし、WERP 対応の HTTPS インデックス URL を入力してください。",
     "repoNoExtensions": "選択したソースに利用可能な拡張機能はありません。",
     "repoAddTitle": "拡張機能ソースを追加",
-    "repoAddDesc": "対応しているソースリポジトリのインデックス URL を入力してください。形式を検証し、リポジトリ情報を表示します。",
+    "repoAddDesc": "example/reponame、example.github.io/reponame、または完全な HTTPS URL を入力すると自動で補完して検索します。",
+    "repoAddInputPlaceholder": "example/reponame、example.github.io/reponame、または https://...",
+    "repoResolvedLabel": "自動補完：",
+    "repoTabToFill": "Tab で入力",
     "repoFetchPreview": "ソースを確認",
     "repoFetching": "インデックスを取得・検証中...",
     "repoConfirmAdd": "追加を確定",
@@ -897,6 +900,11 @@
       "legalTitle": "規約とポリシー",
       "privacyPolicy": "プライバシーポリシー",
       "termsOfService": "利用規約"
+    },
+    "changelog": {
+      "title": "更新履歴",
+      "viewOnGithub": "GitHub で見る",
+      "loadFailed": "CHANGELOG.md を読み込めませんでした"
     },
     "welcome": {
       "step1Desc": "オープンソースで使いやすい maimai 譜面オンラインエディタ",

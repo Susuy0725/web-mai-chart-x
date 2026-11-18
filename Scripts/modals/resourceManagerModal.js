@@ -73,19 +73,25 @@ export async function openResourceManager() {
         container.innerHTML = '';
         const { totalSize, items } = await getStorageData();
 
-        // 頂部統計摘要卡片
+        // 頂部統計摘要卡片（對齊設定頁視覺風格）
         const summaryCard = document.createElement('div');
-        summaryCard.className = 'popup-card';
-        summaryCard.style.cssText = 'flex-direction: row; justify-content: space-between; align-items: center; background: rgba(68, 153, 238, 0.08); border-color: var(--popup-accent); padding: 12px 16px;';
+        summaryCard.className = 'resource-summary-card';
 
         const summaryLeft = document.createElement('div');
-        summaryLeft.innerHTML = `
-            <span style="font-size: 11px; color: var(--popup-text-muted); display: block; font-weight: 500;">${t('popup.resource.totalUsageLabel')}</span>
-            <span style="font-size: 18px; font-weight: 700; color: var(--popup-text-main); font-family: 'ShareTechMono', monospace;">${formatSize(totalSize)}</span>
-        `;
+        summaryLeft.className = 'resource-summary-meta';
+
+        const summaryLabel = document.createElement('span');
+        summaryLabel.className = 'resource-summary-label';
+        summaryLabel.textContent = t('popup.resource.totalUsageLabel');
+
+        const summaryValue = document.createElement('span');
+        summaryValue.className = 'resource-summary-value';
+        summaryValue.textContent = formatSize(totalSize);
+
+        summaryLeft.append(summaryLabel, summaryValue);
 
         const summaryBadge = document.createElement('span');
-        summaryBadge.className = 'popup-badge popup-badge-accent';
+        summaryBadge.className = 'popup-setting-kb-badge is-scope resource-summary-badge';
         summaryBadge.textContent = t('popup.resource.cachedItemsCount', { count: items.length });
 
         summaryCard.append(summaryLeft, summaryBadge);
@@ -93,24 +99,25 @@ export async function openResourceManager() {
 
         // 詳細鍵值列表
         const listWrapper = document.createElement('div');
-        listWrapper.className = 'popup-list';
+        listWrapper.className = 'popup-setting-kb-list resource-item-list';
 
         if (items.length === 0) {
-            listWrapper.innerHTML = `<div style="color: var(--popup-text-muted); text-align: center; padding: 24px 0; font-size: 13px;">${t('popup.resource.emptyCache')}</div>`;
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'popup-setting-kb-no-results';
+            emptyEl.textContent = t('popup.resource.emptyCache');
+            listWrapper.appendChild(emptyEl);
         } else {
             items.forEach(item => {
                 const row = document.createElement('div');
-                row.className = 'popup-list-item';
-                row.style.padding = '8px 12px';
+                row.className = 'popup-setting-kb-row resource-item-row';
 
                 const nameEl = document.createElement('span');
-                nameEl.className = 'popup-list-item-title';
-                nameEl.style.fontSize = '12px';
+                nameEl.className = 'resource-item-key';
+                nameEl.title = item.key;
                 nameEl.textContent = item.key;
 
                 const sizeEl = document.createElement('span');
-                sizeEl.className = 'popup-badge popup-badge-muted';
-                sizeEl.style.fontFamily = 'monospace';
+                sizeEl.className = 'popup-setting-kb-kbd resource-item-size';
                 sizeEl.textContent = formatSize(item.size);
 
                 row.append(nameEl, sizeEl);
@@ -122,8 +129,7 @@ export async function openResourceManager() {
     };
 
     const container = document.createElement('div');
-    container.className = 'popup-list';
-    container.style.cssText = 'max-height: 400px; overflow-y: auto; padding-right: 4px;';
+    container.className = 'resource-manager-modal';
 
     await renderContent(container);
 

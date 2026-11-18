@@ -13,6 +13,7 @@ import {
 import { listStoredExtensionMeta } from '../core/extensionStorage.js';
 import {
     fetchAndValidateRegistry,
+    resolveRepoInputUrl,
     listExtensionRepos,
     addExtensionRepo,
     removeExtensionRepo,
@@ -407,9 +408,11 @@ function openManageReposModal(onChanged) {
     inputRow.className = 'ext-repo-input-row';
 
     const urlInput = document.createElement('input');
-    urlInput.type = 'url';
+    urlInput.type = 'text';
+    urlInput.inputMode = 'url';
+    urlInput.autocapitalize = 'off';
     urlInput.className = 'popup-input ext-repo-input';
-    urlInput.placeholder = 'https://example.github.io/reponame/index.json';
+    urlInput.placeholder = t('extensions.repoAddInputPlaceholder');
     urlInput.autocomplete = 'off';
     urlInput.spellcheck = false;
 
@@ -420,10 +423,32 @@ function openManageReposModal(onChanged) {
 
     inputRow.append(urlInput, checkBtn);
 
+    const resolvedBar = document.createElement('div');
+    resolvedBar.className = 'ext-repo-resolved-hint';
+    resolvedBar.hidden = true;
+
+    const resolvedLabel = document.createElement('span');
+    resolvedLabel.className = 'ext-repo-resolved-label';
+    resolvedLabel.textContent = t('extensions.repoResolvedLabel');
+
+    const resolvedChip = document.createElement('button');
+    resolvedChip.type = 'button';
+    resolvedChip.className = 'ext-repo-resolved-chip';
+
+    const resolvedTabHint = document.createElement('kbd');
+    resolvedTabHint.className = 'ext-repo-resolved-kbd';
+    resolvedTabHint.textContent = t('extensions.repoTabToFill');
+
+    resolvedBar.append(resolvedLabel, resolvedChip, resolvedTabHint);
+
     const statusBox = document.createElement('div');
     statusBox.className = 'ext-repo-preview-area';
 
     let validatedRepo = null;
+    let autoSearchTimer = null;
+    let activeController = null;
+    let fetchSeq = 0;
+    let lastSearchedUrl = '';
 
     const listEl = document.createElement('div');
     listEl.className = 'ext-repo-manage-list';
@@ -555,7 +580,9 @@ function openManageReposModal(onChanged) {
                     type: 'success'
                 });
                 validatedRepo = null;
+                lastSearchedUrl = '';
                 urlInput.value = '';
+                resolvedBar.hidden = true;
                 statusBox.textContent = '';
                 await renderRepoList();
                 if (typeof onChanged === 'function') onChanged();
@@ -570,9 +597,57 @@ function openManageReposModal(onChanged) {
         statusBox.appendChild(card);
     };
 
-    const runPreviewFetch = async () => {
+    const updateResolvedHint = (resolved) => {
+        const rawTrimmed = urlInput.value.trim();
+        if (resolved && resolved.url && resolved.url !== rawTrimmed) {
+            resolvedChip.textContent = resolved.url;
+            resolvedBar.hidden = false;
+        } else {
+            resolvedChip.textContent = '';
+            resolvedBar.hidden = true;
+        }
+    };
+
+    const cancelPendingFetch = () => {
+        if (autoSearchTimer !== null) {
+            clearTimeout(autoSearchTimer);
+            autoSearchTimer = null;
+        }
+        if (activeController) {
+            activeController.abort();
+            activeController = null;
+        }
+    };
+
+    const runPreviewFetch = async (overrideUrl = null, { isAuto = false, applyCompletion = false } = {}) => {
+        if (autoSearchTimer !== null) {
+            clearTimeout(autoSearchTimer);
+            autoSearchTimer = null;
+        }
+        if (activeController) {
+            activeController.abort();
+        }
+
+        const resolved = overrideUrl ? null : resolveRepoInputUrl(urlInput.value);
+        const targetUrl = overrideUrl || (resolved ? resolved.url : urlInput.value);
+        if (!String(targetUrl || '').trim()) {
+            return;
+        }
+
+        if (applyCompletion && resolved && resolved.url && resolved.url !== urlInput.value.trim()) {
+            urlInput.value = resolved.url;
+            updateResolvedHint(null);
+        }
+
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        activeController = controller;
+        const seq = ++fetchSeq;
+
         validatedRepo = null;
-        checkBtn.disabled = true;
+        lastSearchedUrl = targetUrl;
+        if (!isAuto) {
+            checkBtn.disabled = true;
+        }
         statusBox.textContent = '';
 
         const loadingEl = document.createElement('p');
@@ -581,35 +656,101 @@ function openManageReposModal(onChanged) {
         statusBox.appendChild(loadingEl);
 
         try {
-            const result = await fetchAndValidateRegistry(urlInput.value);
+            const result = await fetchAndValidateRegistry(targetUrl, { signal: controller?.signal });
+            if (seq !== fetchSeq) return;
             validatedRepo = result;
+            lastSearchedUrl = result.url;
             renderPreview(result);
         } catch (error) {
+            if (error?.name === 'AbortError' || seq !== fetchSeq) return;
             statusBox.textContent = '';
             const errEl = document.createElement('div');
             errEl.className = 'ext-card-error';
             errEl.textContent = error.message;
             statusBox.appendChild(errEl);
         } finally {
-            checkBtn.disabled = false;
+            if (activeController === controller) {
+                activeController = null;
+            }
+            if (seq === fetchSeq) {
+                checkBtn.disabled = false;
+            }
         }
     };
 
-    checkBtn.addEventListener('click', runPreviewFetch);
-    urlInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            runPreviewFetch();
+    const applyChipCompletionAndSearch = () => {
+        const resolved = resolveRepoInputUrl(urlInput.value);
+        if (!resolved || !resolved.url) return false;
+        if (urlInput.value.trim() !== resolved.url) {
+            urlInput.value = resolved.url;
+            updateResolvedHint(null);
         }
-    });
-    urlInput.addEventListener('input', () => {
-        if (validatedRepo && urlInput.value.trim() !== validatedRepo.url) {
+        if (validatedRepo && validatedRepo.url === resolved.url) {
+            return true;
+        }
+        runPreviewFetch(resolved.url, { isAuto: false });
+        return true;
+    };
+
+    const scheduleAutoSearch = (delayMs = 420) => {
+        const resolved = resolveRepoInputUrl(urlInput.value);
+        updateResolvedHint(resolved);
+
+        if (validatedRepo && (!resolved || resolved.url !== validatedRepo.url)) {
             validatedRepo = null;
             statusBox.textContent = '';
         }
+
+        if (!resolved || !resolved.autoSearchable) {
+            cancelPendingFetch();
+            lastSearchedUrl = '';
+            if (!validatedRepo) {
+                statusBox.textContent = '';
+            }
+            return;
+        }
+
+        if (resolved.url === lastSearchedUrl && (validatedRepo?.url === resolved.url || activeController)) {
+            return;
+        }
+
+        if (autoSearchTimer !== null) {
+            clearTimeout(autoSearchTimer);
+        }
+        autoSearchTimer = setTimeout(() => {
+            autoSearchTimer = null;
+            if (!urlInput.isConnected) return;
+            const latest = resolveRepoInputUrl(urlInput.value);
+            if (!latest || !latest.autoSearchable) return;
+            if (latest.url === lastSearchedUrl && validatedRepo?.url === latest.url) return;
+            runPreviewFetch(latest.url, { isAuto: true });
+        }, delayMs);
+    };
+
+    resolvedChip.addEventListener('click', applyChipCompletionAndSearch);
+    checkBtn.addEventListener('click', () => runPreviewFetch(null, { isAuto: false, applyCompletion: true }));
+    urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            runPreviewFetch(null, { isAuto: false, applyCompletion: true });
+        } else if (e.key === 'Tab' && !e.shiftKey) {
+            const resolved = resolveRepoInputUrl(urlInput.value);
+            if (resolved && resolved.url && resolved.url !== urlInput.value.trim()) {
+                e.preventDefault();
+                applyChipCompletionAndSearch();
+            }
+        }
+    });
+    urlInput.addEventListener('input', () => scheduleAutoSearch(420));
+    urlInput.addEventListener('paste', () => {
+        setTimeout(() => {
+            if (urlInput.isConnected) {
+                scheduleAutoSearch(60);
+            }
+        }, 0);
     });
 
-    addSection.append(hint, inputRow, statusBox);
+    addSection.append(hint, inputRow, resolvedBar, statusBox);
 
     renderRepoList();
 
@@ -627,7 +768,8 @@ function openManageReposModal(onChanged) {
         buttons: [
             {
                 text: t('extensions.close'),
-                hideOnClick: true
+                hideOnClick: true,
+                onclick: cancelPendingFetch
             }
         ]
     });
@@ -1108,7 +1250,7 @@ export function openExtensionManagerModal() {
             const isActive = item.status === 'active';
             const toggleBtn = document.createElement('button');
             toggleBtn.type = 'button';
-            toggleBtn.className = 'ext-card-btn';
+            toggleBtn.className = 'ext-card-btn' + (isActive ? ' is-primary' : '');
             toggleBtn.setAttribute('data-i18n', isActive ? 'extensions.disable' : 'extensions.enable');
             toggleBtn.textContent = isActive ? t('extensions.disable') : t('extensions.enable');
             toggleBtn.addEventListener('click', async () => {

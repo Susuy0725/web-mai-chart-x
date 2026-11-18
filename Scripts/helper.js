@@ -102,7 +102,7 @@ export function drawImgAtcenter(ctx, img, size, offsetX = 0, offsetY = 0, imgWid
     }
 }
 export function getButton(action, type = "control") {
-    return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#topUtilityBtns .utilityButton"}[data-buttonAction="${action}"]`);
+    return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#utilityContainer .utilityButton"}[data-buttonAction="${action}"]`);
 }
 /**
 * @param {Function} func - 要執行的函式

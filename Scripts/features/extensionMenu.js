@@ -45,14 +45,8 @@ function closeExtensionDropdown() {
             const sub = el._submenu || el.querySelector('.utilitySubmenu');
             if (sub) {
                 sub.classList.remove('open');
-                if (sub.parentElement !== el) {
-                    el.appendChild(sub);
-                }
             }
         });
-        if (dropdown && content.parentElement !== dropdown) {
-            dropdown.appendChild(content);
-        }
     }
 }
 

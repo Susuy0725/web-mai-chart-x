@@ -222,7 +222,10 @@
     "repoEmptyHint": "點擊上方「新增來源」並輸入支援 WERP 協定的 HTTPS 索引網址。",
     "repoNoExtensions": "目前選取的資料源中沒有可用的擴充程式。",
     "repoAddTitle": "新增擴充程式資料源",
-    "repoAddDesc": "請輸入支援的來源儲存庫索引網址，系統將驗證格式並顯示儲存庫資訊。",
+    "repoAddDesc": "可輸入 example/reponame、example.github.io/reponame 或完整 HTTPS 網址，系統將自動補全並搜尋索引。",
+    "repoAddInputPlaceholder": "example/reponame、example.github.io/reponame 或 https://...",
+    "repoResolvedLabel": "自動補全：",
+    "repoTabToFill": "Tab 套用",
     "repoFetchPreview": "檢查來源",
     "repoFetching": "正在取得並驗證索引...",
     "repoConfirmAdd": "確認新增",
@@ -897,6 +900,11 @@
       "legalTitle": "條款與政策",
       "privacyPolicy": "隱私權政策",
       "termsOfService": "服務條款"
+    },
+    "changelog": {
+      "title": "變更日誌",
+      "viewOnGithub": "在 GitHub 瀏覽",
+      "loadFailed": "無法載入變更日誌檔案"
     },
     "welcome": {
       "step1Desc": "一個開源、易用的 maimai 譜面線上編輯器",

@@ -105,17 +105,43 @@ function parsePropertyTag(tagContent) {
     return { valid: false, raw: trimmed, error: `Unknown property tag: "${trimmed}"` };
 }
 
+const REGEX_STRICT_NUMBER = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+
 /**
- * 解析滑星移動時間部分 (純移動秒數或拍數，可選覆蓋 BPM)
- * @param {string} str 可以是 "bpm#t:b"、"bpm#s"、"t:b"、"s"
+ * 嚴格解析非負數（僅允許純整數或浮點數，拒絕如 "234dcbk;" 等尾隨雜訊）
+ * @param {string} str
+ * @returns {number} 合法時回傳有限非負數值，否則回傳 NaN
+ */
+function parseStrictNonNegNumber(str) {
+    if (typeof str !== 'string') return NaN;
+    const trimmed = str.trim();
+    if (!REGEX_STRICT_NUMBER.test(trimmed)) return NaN;
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : NaN;
+}
+
+/**
+ * 解析滑星移動時間部分
+ * @param {string} str 可為 "bpm#t:b"、"bpm#s"、"#s"、"t:b"，僅在 allowBareSeconds 為 true（即 "##" 右側）時才允許純秒數 "s"
  * @param {number} fallbackBpm
+ * @param {boolean} [allowBareSeconds=false]
  * @returns {{ time: number, bpm?: number, error?: string }}
  */
-function parseSlideMovement(str, fallbackBpm) {
+function parseSlideMovement(str, fallbackBpm, allowBareSeconds = false) {
     if (!str) return { time: -1, error: 'Empty movement duration' };
     const s = str.trim();
 
-    // 含有指定 BPM "#" (例如 160#8:3 或 160#2)
+    // 0. 直接指定秒數 "#seconds"（例如 [#1.234] 或 3###1.5）
+    if (s.startsWith('#')) {
+        const secStr = s.slice(1).trim();
+        const sec = parseStrictNonNegNumber(secStr);
+        if (isNaN(sec) || sec < 0) {
+            return { time: -1, error: `Invalid slide seconds value: "${s}"` };
+        }
+        return { time: sec };
+    }
+
+    // 1. 含有指定 BPM "#" (例如 160#8:3 或 160#2)
     if (s.includes('#')) {
         const parts = s.split('#');
         if (parts.length !== 2) {
@@ -124,8 +150,8 @@ function parseSlideMovement(str, fallbackBpm) {
         const bpmStr = parts[0].trim();
         const tbStr = parts[1].trim();
 
-        const overrideBpm = parseFloat(bpmStr);
-        if (isNaN(overrideBpm) || overrideBpm <= 0 || !isFinite(overrideBpm)) {
+        const overrideBpm = parseStrictNonNegNumber(bpmStr);
+        if (isNaN(overrideBpm) || overrideBpm <= 0) {
             return { time: -1, error: `Invalid slide BPM value: "${bpmStr}"` };
         }
         if (!tbStr) {
@@ -139,31 +165,28 @@ function parseSlideMovement(str, fallbackBpm) {
             return { time: beatRes.time, bpm: overrideBpm };
         }
 
-        // 移動時間為純秒數 "s"
-        if (!/^[0-9]+(?:\.[0-9]+)?$/.test(tbStr)) {
-            return { time: -1, error: `Invalid slide seconds value: "${tbStr}"` };
-        }
-        const sec = parseFloat(tbStr);
-        if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
+        // 移動時間為秒數 "s" (bpm#s)
+        const sec = parseStrictNonNegNumber(tbStr);
+        if (isNaN(sec) || sec < 0) {
             return { time: -1, error: `Invalid slide seconds value: "${tbStr}"` };
         }
         return { time: sec, bpm: overrideBpm };
     }
 
-    // 拍數 "t:b" (使用 fallbackBpm)
+    // 2. 拍數 "t:b" (使用 fallbackBpm)
     if (s.includes(':')) {
         return parseBeatRatio(s, fallbackBpm);
     }
 
-    // 純秒數 "s" (例如 [1.5] 或 [1])
-    if (!/^[0-9]+(?:\.[0-9]+)?$/.test(s)) {
-        return { time: -1, error: `Invalid slide duration format: "${s}"` };
+    // 3. 純秒數 "s" 僅在 "##" 右側合法（例如 [3##1.5]）；無 "##" 時直接寫 [98] 不合法（須為 [#98]）
+    if (allowBareSeconds) {
+        const sec = parseStrictNonNegNumber(s);
+        if (!isNaN(sec) && sec >= 0) {
+            return { time: sec };
+        }
     }
-    const sec = parseFloat(s);
-    if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
-        return { time: -1, error: `Invalid slide duration format: "${s}"` };
-    }
-    return { time: sec };
+
+    return { time: -1, error: `Invalid slide duration format: "${s}"` };
 }
 
 /**
@@ -177,9 +200,9 @@ function parseBeatRatio(str, bpm) {
     if (parts.length !== 2) {
         return { time: -1, error: `Invalid beat ratio format: "${str}"` };
     }
-    const t = parseFloat(parts[0].trim());
-    const b = parseFloat(parts[1].trim());
-    if (isNaN(t) || isNaN(b) || t <= 0 || b < 0 || !isFinite(t) || !isFinite(b)) {
+    const t = parseStrictNonNegNumber(parts[0]);
+    const b = parseStrictNonNegNumber(parts[1]);
+    if (isNaN(t) || isNaN(b) || t <= 0 || b < 0) {
         return { time: -1, error: `Invalid beat ratio values: "${str}"` };
     }
     const time = (240 / bpm) * (b / t);
@@ -187,8 +210,8 @@ function parseBeatRatio(str, bpm) {
 }
 
 /**
- * 解析滑星時長字串 (完整支援 Simai 官方 8 種書式格式: [待ち時間 ## 移動時間])
- * @param {string} str 括號內字串，如 "1.5##160#4:1", "4:1", "1.5", "160#8:3", "3##1.5" 等
+ * 解析滑星時長字串 (支援 Simai 官方書式: [a:b], [bpm#a:b], [bpm#s], [#s], [delay##...])
+ * @param {string} str 括號內字串，如 "1.5##160#4:1", "4:1", "#1.5", "160#8:3", "3##1.5" 等
  * @param {number} currentBpm 當前曲目/小節基準 BPM
  * @returns {{ time: number, delay: number, error?: string }}
  */
@@ -210,24 +233,23 @@ export function parseSlideTime(str, currentBpm) {
         const delayStr = parts[0].trim();
         const moveStr = parts[1].trim();
 
-        const delay = parseFloat(delayStr);
-        if (isNaN(delay) || delay < 0 || !isFinite(delay)) {
+        const delay = parseStrictNonNegNumber(delayStr);
+        if (isNaN(delay) || delay < 0) {
             return { time: -1, delay: -1, error: `Invalid slide delay value: "${delayStr}"` };
         }
         if (!moveStr) {
             return { time: -1, delay: -1, error: 'Missing move duration after "##"' };
         }
 
-        const moveRes = parseSlideMovement(moveStr, currentBpm);
+        const moveRes = parseSlideMovement(moveStr, currentBpm, true);
         if (moveRes.time < 0) {
             return { time: -1, delay: -1, error: moveRes.error };
         }
         return { time: moveRes.time, delay, error: null };
     }
 
-    // 2. 未指定等待時間 (無 "##")
-    // 預設等待時間為 1 拍: 若有指定 bpm#，則為指定 bpm 的 1 拍 (60 / overrideBpm)；否則為 currentBpm 的 1 拍 (60 / currentBpm)
-    const moveRes = parseSlideMovement(clean, currentBpm);
+    // 2. 未指定等待時間 (無 "##")，不允許裸寫純數字（如 [98] 須寫為 [#98]）
+    const moveRes = parseSlideMovement(clean, currentBpm, false);
     if (moveRes.time < 0) {
         return { time: -1, delay: -1, error: moveRes.error };
     }
@@ -236,8 +258,8 @@ export function parseSlideTime(str, currentBpm) {
 }
 
 /**
- * 解析 Hold 音符時長字串
- * @param {string} str 如 "4:1", "160#4:1", "#1.5", "1.5"
+ * 解析 Hold 音符時長字串（僅支援 "t:b"、"bpm#t:b"、"bpm#s"、"#s"，不允許無 # 的純數字如 [98]）
+ * @param {string} str 如 "4:1", "160#4:1", "#1.234"
  * @param {number} currentBpm
  * @returns {{ time: number, delay: number, error?: string }}
  */
@@ -253,11 +275,8 @@ export function parseHoldTime(str, currentBpm) {
     // 1. 直給秒數格式: "#seconds"
     if (clean.startsWith('#')) {
         const secStr = clean.slice(1).trim();
-        if (!/^[0-9]+(?:\.[0-9]+)?$/.test(secStr)) {
-            return { time: -1, delay: 0, error: `Invalid hold duration value: "${clean}"` };
-        }
-        const sec = parseFloat(secStr);
-        if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
+        const sec = parseStrictNonNegNumber(secStr);
+        if (isNaN(sec) || sec < 0) {
             return { time: -1, delay: 0, error: `Invalid hold duration value: "${clean}"` };
         }
         return { time: sec, delay: 0, error: null };
@@ -269,8 +288,8 @@ export function parseHoldTime(str, currentBpm) {
         if (parts.length !== 2) {
             return { time: -1, delay: 0, error: `Invalid hold format with multiple "#": "${clean}"` };
         }
-        const overrideBpm = parseFloat(parts[0].trim());
-        if (isNaN(overrideBpm) || overrideBpm <= 0 || !isFinite(overrideBpm)) {
+        const overrideBpm = parseStrictNonNegNumber(parts[0]);
+        if (isNaN(overrideBpm) || overrideBpm <= 0) {
             return { time: -1, delay: 0, error: `Invalid hold BPM value: "${parts[0]}"` };
         }
         const tbStr = parts[1].trim();
@@ -279,11 +298,8 @@ export function parseHoldTime(str, currentBpm) {
             if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error };
             return { time: beatRes.time, delay: 0, error: null };
         }
-        if (!/^[0-9]+(?:\.[0-9]+)?$/.test(tbStr)) {
-            return { time: -1, delay: 0, error: `Invalid hold seconds value: "${tbStr}"` };
-        }
-        const sec = parseFloat(tbStr);
-        if (isNaN(sec) || sec < 0 || !isFinite(sec)) {
+        const sec = parseStrictNonNegNumber(tbStr);
+        if (isNaN(sec) || sec < 0) {
             return { time: -1, delay: 0, error: `Invalid hold seconds value: "${tbStr}"` };
         }
         return { time: sec, delay: 0, error: null };
@@ -294,14 +310,6 @@ export function parseHoldTime(str, currentBpm) {
         const beatRes = parseBeatRatio(clean, currentBpm);
         if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error };
         return { time: beatRes.time, delay: 0, error: null };
-    }
-
-    // 4. 純秒數: "s"
-    if (/^[0-9]+(?:\.[0-9]+)?$/.test(clean)) {
-        const sec = parseFloat(clean);
-        if (!isNaN(sec) && sec >= 0 && isFinite(sec)) {
-            return { time: sec, delay: 0, error: null };
-        }
     }
 
     return { time: -1, delay: 0, error: `Invalid hold duration format: "${clean}"` };
@@ -595,7 +603,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             const closeIdx = e.indexOf(')');
             if (closeIdx === -1) { pushWarn("Unclosed BPM tag '(', ", { errpos: noteCommaIndex }); break; }
             const bpmContent = e.slice(1, closeIdx).trim();
-            const bpmVal = parseFloat(bpmContent);
+            const bpmVal = parseStrictNonNegNumber(bpmContent);
             if (isNaN(bpmVal) || bpmVal <= 0) {
                 pushWarn(`Invalid BPM value in (${bpmContent}), `, { errpos: noteCommaIndex });
             } else {
@@ -625,7 +633,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             if (closeIdx === -1) { pushWarn("Unclosed split tag '{', ", { errpos: noteCommaIndex }); break; }
             const splitContent = e.slice(1, closeIdx).trim();
             if (splitContent.startsWith('#')) {
-                const dur = parseFloat(splitContent.slice(1));
+                const dur = parseStrictNonNegNumber(splitContent.slice(1));
                 if (isNaN(dur) || dur < 0) {
                     pushWarn(`Invalid split duration in {${splitContent}}, `, { errpos: noteCommaIndex });
                 } else {
@@ -638,7 +646,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     lastSplitTagCommIndex = noteCommaIndex;
                 }
             } else {
-                const splitVal = parseFloat(splitContent);
+                const splitVal = parseStrictNonNegNumber(splitContent);
                 if (isNaN(splitVal) || splitVal <= 0) {
                     pushWarn(`Invalid split value in {${splitContent}}, `, { errpos: noteCommaIndex });
                 } else {
@@ -928,6 +936,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                 const residue = noteStr.replace(REGEX_SINGLE_BRACKET, '').replace(/h/, '');
                 if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
                     pushWarn("Invalid format in hold note, ", { errpos: noteCommaIndex });
+                    if (noteObj.isBreak) {
+                        breakCounts--;
+                    } else if (touchMatch) {
+                        touchCounts--;
+                    } else {
+                        tapCounts--;
+                    }
                     continue;
                 }
 
@@ -937,6 +952,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     const holdRes = parseHoldTime(durationStr, nowBpm);
                     if (holdRes.time < 0 || isNaN(holdRes.time) || !isFinite(holdRes.time)) {
                         pushWarn(holdRes.error || "Invalid hold syntax in note, ", { errpos: noteCommaIndex });
+                        if (noteObj.isBreak) {
+                            breakCounts--;
+                        } else if (touchMatch) {
+                            touchCounts--;
+                        } else {
+                            tapCounts--;
+                        }
                         continue;
                     }
                     const duration = holdRes.time;

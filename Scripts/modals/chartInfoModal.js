@@ -1,6 +1,10 @@
-import { simpleToast, popupWindow, createLabeledInput1, ensureJsMediaTags } from '../helper.js';
+import { simpleToast, popupWindow, ensureJsMediaTags } from '../helper.js';
 import { t } from '../i18n.js';
 import { appContext } from '../core/appContext.js';
+import {
+    createSettingRow,
+    createSettingDropdown,
+} from './settingsModal.js';
 
 /**
  * 開啟譜面資訊編輯彈窗
@@ -89,12 +93,26 @@ export function openChartInfoModal(options = {}) {
         container.className = 'chart-info-container';
         const createButton = (text, eventHandler) => {
             const btn = document.createElement('button');
-            btn.className = 'chart-info-btn';
+            btn.type = 'button';
+            btn.className = 'popup-setting-element chart-info-btn';
             btn.textContent = text;
             if (eventHandler) {
                 btn.addEventListener('click', eventHandler);
             }
             return btn;
+        };
+
+        const createSettingTextField = ({ value = '', labelText, assign, data, ref }) => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'popup-setting-input popup-setting-input-text chart-info-input';
+            input.value = value ?? '';
+            input.addEventListener('input', () => {
+                if (data && assign) data[assign] = input.value;
+            });
+            if (ref && assign) ref[assign] = input;
+            const row = createSettingRow(labelText, input);
+            return { wrapper: row, input };
         };
 
         // 左側：圖片更換
@@ -196,48 +214,42 @@ export function openChartInfoModal(options = {}) {
         const diffContainer = document.createElement('div');
         diffContainer.className = 'chart-info-diff-container';
 
-        // 建立主要欄位並存入 inputRefs (使用 createLabeledInput1)
-        const titleField = createLabeledInput1({ value: tempData.title, labelText: t('popup.chartInfo.titleLabel'), type: 'text', assign: "title", data: tempData, ref: inputRefs });
-        const artistField = createLabeledInput1({ value: tempData.artist, labelText: t('popup.chartInfo.artistLabel'), type: 'text', assign: "artist", data: tempData, ref: inputRefs });
-        const descField = createLabeledInput1({ value: tempData.des, labelText: t('popup.chartInfo.designerLabel'), type: 'text', assign: "des", data: tempData, ref: inputRefs });
+        // 建立主要欄位並存入 inputRefs (對齊設定頁元件)
+        const titleField = createSettingTextField({ value: tempData.title, labelText: t('popup.chartInfo.titleLabel'), assign: 'title', data: tempData, ref: inputRefs });
+        const artistField = createSettingTextField({ value: tempData.artist, labelText: t('popup.chartInfo.artistLabel'), assign: 'artist', data: tempData, ref: inputRefs });
+        const descField = createSettingTextField({ value: tempData.des, labelText: t('popup.chartInfo.designerLabel'), assign: 'des', data: tempData, ref: inputRefs });
 
         diffContainer.append(titleField.wrapper, artistField.wrapper, descField.wrapper);
 
-        // 難度選擇與等級 (使用 createLabeledInput1 的 select)
+        // 難度選擇與等級
         const nowDifficulty = getNowDifficulty();
-        const dropdownField = createLabeledInput1({
-            value: nowDifficulty || "5",
-            labelText: t('popup.chartInfo.diffLabel'),
-            type: 'select',
-            assign: 'difficulty',
-            data: tempData,
-            ref: inputRefs,
-            options: [
-                { value: "7", label: "ORIGINAL" }, { value: "6", label: "RE:MASTER" },
-                { value: "5", label: "MASTER" }, { value: "4", label: "EXPERT" },
-                { value: "3", label: "ADVANCED" }, { value: "2", label: "BASIC" }, { value: "1", label: "EASY" }
-            ]
-        });
+        const diffSelect = createSettingDropdown(nowDifficulty || '5', [
+            { value: '7', label: 'ORIGINAL' }, { value: '6', label: 'RE:MASTER' },
+            { value: '5', label: 'MASTER' }, { value: '4', label: 'EXPERT' },
+            { value: '3', label: 'ADVANCED' }, { value: '2', label: 'BASIC' }, { value: '1', label: 'EASY' }
+        ], 'chart-info-dropdown');
+        inputRefs.difficulty = diffSelect;
+        const dropdownRow = createSettingRow(t('popup.chartInfo.diffLabel'), diffSelect);
 
-        dropdownField.input.addEventListener('change', (e) => {
+        diffSelect.addEventListener('change', (e) => {
             tempData.difficulty = e.target.value;
             updateDiffFields(e.target.value);
         });
 
         const infoText = document.createElement('div');
+        infoText.className = 'popup-setting-subbody open chart-info-subbody';
         const updateDiffFields = (diff) => {
-            infoText.innerHTML = "";
-            const lv = createLabeledInput1({ value: tempData[`lv_${diff}`], labelText: t('popup.chartInfo.levelLabel'), type: 'text', assign: `lv_${diff}`, data: tempData, ref: inputRefs });
-            const des = createLabeledInput1({ value: tempData[`des_${diff}`], labelText: t('popup.chartInfo.designerDiffLabel'), type: 'text', assign: `des_${diff}`, data: tempData, ref: inputRefs });
+            infoText.innerHTML = '';
+            const lv = createSettingTextField({ value: tempData[`lv_${diff}`], labelText: t('popup.chartInfo.levelLabel'), assign: `lv_${diff}`, data: tempData, ref: inputRefs });
+            const des = createSettingTextField({ value: tempData[`des_${diff}`], labelText: t('popup.chartInfo.designerDiffLabel'), assign: `des_${diff}`, data: tempData, ref: inputRefs });
             infoText.append(lv.wrapper, des.wrapper);
         };
 
-        // 🌟 關鍵修正：這裡改塞整個 wrapper，灰色小字才會出來
-        diffContainer.appendChild(dropdownField.wrapper);
+        diffContainer.appendChild(dropdownRow);
         diffContainer.appendChild(infoText);
 
         // 初始觸發一次，帶入目前的 select 值
-        updateDiffFields(dropdownField.input.value);
+        updateDiffFields(diffSelect.value);
 
         // 自訂指令
         const excludedKeys = new Set(["title", "artist", "des", "first", "difficulty"]);
@@ -245,8 +257,21 @@ export function openChartInfoModal(options = {}) {
             .filter(key => !excludedKeys.has(key) && !key.startsWith('lv_') && !key.startsWith('des_') && !key.startsWith('inote_'))
             .map(key => `&${key} = ${tempData[key]}`)
             .join("\n");
-        const customIns = createLabeledInput1({ value: insVal, labelText: t('popup.chartInfo.customLabel'), type: 'textarea', assign: "custom", data: tempData, ref: inputRefs });
-        diffContainer.appendChild(customIns.wrapper);
+        const customRow = document.createElement('div');
+        customRow.className = 'popup-setting-row chart-info-textarea-row';
+        const customLabel = document.createElement('label');
+        customLabel.className = 'popup-setting-text';
+        customLabel.textContent = t('popup.chartInfo.customLabel');
+        const customTextarea = document.createElement('textarea');
+        customTextarea.className = 'popup-setting-input chart-info-textarea';
+        customTextarea.rows = 3;
+        customTextarea.value = insVal;
+        customTextarea.addEventListener('input', () => {
+            tempData.custom = customTextarea.value;
+        });
+        inputRefs.custom = customTextarea;
+        customRow.append(customLabel, customTextarea);
+        diffContainer.appendChild(customRow);
 
         container.appendChild(imgContainer);
         container.appendChild(diffContainer);

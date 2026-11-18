@@ -85,6 +85,28 @@ function getOrSetMemoizedImage(cache, cacheKey, createFn, maxSize = 250, evictCo
     return result;
 }
 
+function memoizeTintedImage(images, cache, imgKeyOrImg, opacity, config, snapOpacity = false) {
+    const { imgKey, img } = resolveImageInput(images, imgKeyOrImg);
+    if (!img) return null;
+
+    const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
+    const quantizedOpacity = snapOpacity ? Math.round((opacity || 0) * 20) / 20 : (opacity || 0).toFixed(2);
+    const cacheKey = `${imgKey}_${quantizedOpacity}_${conf.colorCode}`;
+    return getOrSetMemoizedImage(cache, cacheKey, () => getTintedImage(img, opacity, conf));
+}
+
+function memoizeBrightenedImage(images, cache, imgKeyOrImg, brightness = 1) {
+    const { imgKey, img } = resolveImageInput(images, imgKeyOrImg);
+    if (!img) return null;
+
+    const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
+    const snappedBrightness = Math.round(safeBrightness * 20) / 20;
+    if (snappedBrightness === 1) return img;
+
+    const cacheKey = `${imgKey}_${snappedBrightness.toFixed(2)}`;
+    return getOrSetMemoizedImage(cache, cacheKey, () => getBrightenedImage(img, snappedBrightness));
+}
+
 const RICH_HANABI_COLOR_DATA = RICH_HANABI_COLOR_MAP.map(color => {
     const r = parseInt(color.slice(1, 3), 16);
     const g = parseInt(color.slice(3, 5), 16);
@@ -233,24 +255,6 @@ const HANABI_SPARKLES = (() => {
         });
     }
     return list;
-})();
-
-const HANABI_DUST = (() => {
-    const rand = createHanabiPrng(0x9E3779B9);
-    const dots = [];
-    for (let i = 0; i < 24; i++) {
-        const angle = rand() * TWO_PI;
-        dots.push({
-            cosA: Math.cos(angle),
-            sinA: Math.sin(angle),
-            minDist: 4 + rand() * 6,
-            maxDist: 18 + rand() * 28,
-            radius: 0.2 + rand() * 0.24,
-            phase: rand() * TWO_PI,
-            color: rand() < 0.5 ? '#fff8c9' : '#ffffff'
-        });
-    }
-    return dots;
 })();
 
 function drawFallbackFourPointStar(ctx, x, y, halfSize, rot = 0) {
@@ -412,7 +416,6 @@ export class SimaiRenderer {
         // 靜態背景與中間顯示快取
         this._staticBackgroundCache = null;
         this._staticBackgroundCacheParams = { w: 0, h: 0, scale: this.scale };
-        this._middleDisplayCache = null;
         this._middleDisplayCacheParams = {
             w: 0,
             h: 0,
@@ -432,6 +435,11 @@ export class SimaiRenderer {
         this._tempColorConfig = { colorCode: '' };
         this._tempSize = [1, 1];
         this._auxTextList = new Array(12);
+        this._tempJudgeInfo = { isBreak: false, grade: 'CRITICAL_PERFECT', breakScoreValue: null, text: '' };
+        this._tempJudgeImageInfo = { imgKey: null, isBreakFlashing: false };
+        this._tempHoldState = { img: null, isOn: false, holdJudge: null };
+        this._tempTouchHoldState = { borderKey: 'touchhold_border', isOn: false, holdJudge: null };
+        this._tempTouchHanabi = { effT: 0, clearIfNotHanabi: true };
 
         // outlineText / middleDisplay 快取配置
         this._middleDisplayConfig1 = { fillStyle: "#A1435D", strokeStyle: "#A6ABAE" };
@@ -440,8 +448,6 @@ export class SimaiRenderer {
         this._middleDisplayConfigDot = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
         this._middleDisplayConfigFrac = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
         this._middleDisplayConfigPercent = { fillStyle: "#4061A8", strokeStyle: "#A6ABAE", letterSpacing: -0.12, textAlign: "left" };
-
-        this._hitEffectCache = null;
 
         // 打擊與持續判定特效池 (Hit / Hold Effect Pool)
         this._hitEffectQueue = [];
@@ -508,13 +514,7 @@ export class SimaiRenderer {
      * 優化染色圖片取得方式，採用整數化透明度快取 Key
      */
     getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
-        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
-        if (!img) return null;
-
-        const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
-        const snappedOpacity = Math.round((opacity || 0) * 20) / 20;
-        const cacheKey = `${imgKey}_${snappedOpacity}_${conf.colorCode}`;
-        return getOrSetMemoizedImage(this._tintCache, cacheKey, () => getTintedImage(img, opacity, conf));
+        return memoizeTintedImage(this.images, this._tintCache, imgKeyOrImg, opacity, config, true);
     }
 
     /**
@@ -523,15 +523,7 @@ export class SimaiRenderer {
      * @param {number} [brightness=1] 亮度倍率 (0 = 全黑, 1 = 原圖, > 1 = 提亮)
      */
     getMemoizedBrightnessImage(imgKeyOrImg, brightness = 1) {
-        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
-        if (!img) return null;
-
-        const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
-        const snappedBrightness = Math.round(safeBrightness * 20) / 20;
-        if (snappedBrightness === 1) return img;
-
-        const cacheKey = `${imgKey}_${snappedBrightness.toFixed(2)}`;
-        return getOrSetMemoizedImage(this._brightnessCache, cacheKey, () => getBrightenedImage(img, snappedBrightness));
+        return memoizeBrightenedImage(this.images, this._brightnessCache, imgKeyOrImg, brightness);
     }
 
     // --- 圖片與皮膚樣式分離選擇器 (Image Selection Helpers) ---
@@ -674,9 +666,7 @@ export class SimaiRenderer {
         this._sensorShapeCache = null;
         this._sensorTextCache = null;
         this._sensorCacheParams = null;
-        this._hitEffectCache = null;
         this._middleDisplayCanvas = null;
-        this._lastMiddleCacheKey = null;
         this._canvasWH = null;
         this._cachedDomOutline = null;
     }
@@ -710,17 +700,31 @@ export class SimaiRenderer {
         }
     }
 
-    ensureHitEffectCache() {
-        if (this._hitEffectCache) return;
-        this._hitEffectCache = new Path2D();
-        this._hitEffectCache.arc(0, 0, 1, 0, Math.PI * 2);
+    shouldDrawHitEffects() {
+        return Boolean(this.settings.drawHitEffect);
+    }
+
+    shouldDrawHanabiEffects() {
+        return Boolean(this.settings.drawHanabiEffect);
+    }
+
+    shouldDrawJudgeEffects() {
+        return !!(this.settings && this.settings.showJudge !== false && this.judgeEffects && this.judgeEffects.length > 0);
+    }
+
+    hasActiveSensorOverlay() {
+        return false;
+    }
+
+    drawActiveSensorOverlay() {
+        // 供子類（如遊玩模式）覆寫繪製即時輸入感應區高亮
     }
 
     /**
-     * 佇列單次打擊光圈特效 (Hit Effect) - 具備同位置去重 (Deduplication)
+     * 佇列單次打擊波紋特效 (Hit Effect) - 具備同位置去重 (Deduplication)
      */
     queueHitEffect(pos, noteT, judge = null, x = null, y = null, rot = null) {
-        if (!this.settings.drawHitEffect) return;
+        if (!this.shouldDrawHitEffects()) return;
         if (!Number.isFinite(noteT)) return;
         if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
         const decayTime = this.settings.effectDecayTime || 0.4;
@@ -810,7 +814,7 @@ export class SimaiRenderer {
      * 佇列持續按壓波紋特效 (Hold Effect) - 具備同位置去重 (Deduplication)
      */
     queueHoldEffect(pos, noteT, judge = null, x = null, y = null, rot = null) {
-        if (!this.settings.drawHitEffect) return;
+        if (!this.shouldDrawHitEffects()) return;
         if (!Number.isFinite(noteT)) return;
         if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
 
@@ -903,7 +907,7 @@ export class SimaiRenderer {
      * 在所有音符繪製完成後統一執行，整幀只切換一次混合模式
      */
     drawHitEffects() {
-        if (!this.settings.drawHitEffect || this._hitEffectCount === 0) {
+        if (!this.shouldDrawHitEffects() || this._hitEffectCount === 0) {
             this.clearHitEffects();
             return;
         }
@@ -937,6 +941,36 @@ export class SimaiRenderer {
         this.clearHitEffects();
     }
 
+    canSpawnJudgeEffect(note, judgeResult) {
+        return !!(this.settings && this.settings.showJudge !== false && note);
+    }
+
+    resolveJudgeEffectInfo(note, judgeResult) {
+        const isBreak = !!note.isBreak;
+        // Script 沒有玩家判定機制，判定等級只保留 CRITICAL_PERFECT 與 PERFECT
+        const showCP = (this.settings.showCriticalPerfect !== false);
+        const grade = (judgeResult && judgeResult.grade)
+            ? (judgeResult.grade === 'PERFECT' ? 'PERFECT' : 'CRITICAL_PERFECT')
+            : (showCP ? 'CRITICAL_PERFECT' : 'PERFECT');
+
+        let breakScoreValue = judgeResult ? judgeResult.breakScoreValue : null;
+        if (isBreak && (breakScoreValue === undefined || breakScoreValue === null)) {
+            if (grade === 'CRITICAL_PERFECT') {
+                breakScoreValue = 2600;
+            } else {
+                breakScoreValue = (judgeResult && judgeResult.breakMultiplier === 0.5) ? 2500 : 2550;
+            }
+        }
+
+        const text = isBreak ? `${breakScoreValue}` : (grade === 'CRITICAL_PERFECT' ? 'PERFECT' : grade);
+        const info = this._tempJudgeInfo;
+        info.isBreak = isBreak;
+        info.grade = grade;
+        info.breakScoreValue = breakScoreValue;
+        info.text = text;
+        return info;
+    }
+
     /**
      * 觸發單次打擊判定文字與圖片特效 (globalTime driven)
      * @param {Object} note 擊中的音符
@@ -944,8 +978,7 @@ export class SimaiRenderer {
      * @param {number|null} triggerTime 觸發時的譜面時間 (秒)，若為空則使用 this.globalTime
      */
     spawnJudgeEffect(note, judgeResult = null, triggerTime = null) {
-        if (!this.settings || this.settings.showJudge === false) return;
-        if (!note) return;
+        if (!this.canSpawnJudgeEffect(note, judgeResult)) return;
         let x = 0, y = 0, rot = 0;
         let posKey = null;
 
@@ -977,23 +1010,7 @@ export class SimaiRenderer {
             posKey = note.pos;
         }
 
-        const isBreak = !!note.isBreak;
-        // Script 沒有玩家判定機制，判定等級只保留 CRITICAL_PERFECT 與 PERFECT
-        const showCP = (this.settings.showCriticalPerfect !== false);
-        const grade = (judgeResult && judgeResult.grade)
-            ? (judgeResult.grade === 'PERFECT' ? 'PERFECT' : 'CRITICAL_PERFECT')
-            : (showCP ? 'CRITICAL_PERFECT' : 'PERFECT');
-
-        let breakScoreValue = judgeResult ? judgeResult.breakScoreValue : null;
-        if (isBreak && (breakScoreValue === undefined || breakScoreValue === null)) {
-            if (grade === 'CRITICAL_PERFECT') {
-                breakScoreValue = 2600;
-            } else {
-                breakScoreValue = (judgeResult && judgeResult.breakMultiplier === 0.5) ? 2500 : 2550;
-            }
-        }
-
-        const text = isBreak ? `${breakScoreValue}` : (grade === 'CRITICAL_PERFECT' ? 'PERFECT' : grade);
+        const { isBreak, grade, breakScoreValue, text } = this.resolveJudgeEffectInfo(note, judgeResult);
         const startTime = (triggerTime !== null && triggerTime !== undefined) ? triggerTime : this.globalTime;
         const duration = noteType === 'slide' ? 0.3 : 0.2; // 300, 200 ms
 
@@ -1100,6 +1117,11 @@ export class SimaiRenderer {
      * @param {Object} images 圖片資源表
      * @returns {string|null}
      */
+    resolveSlideJustImageKeyByGrade(eff, state, showCP, images) {
+        const isCritical = (eff.grade === 'CRITICAL_PERFECT');
+        return (isCritical && showCP) ? `just_${state}` : `just_${state}_p`;
+    }
+
     getSlideJustImageKey(eff, images) {
         if (!eff || eff.noteType !== 'slide') return null;
 
@@ -1152,12 +1174,13 @@ export class SimaiRenderer {
         const dir = (shape === 'wifi') ? (isJustR ? 'u' : 'd') : (isJustR ? 'r' : 'l');
         const state = `${shape}_${dir}`;
 
-        // 3. 根據 Grade 選擇對應的圖片 Key (只保留 Critical Perfect 與 Perfect)
-        const isCritical = (eff.grade === 'CRITICAL_PERFECT');
-        const candidateKey = (isCritical && showCP) ? `just_${state}` : `just_${state}_p`;
-
+        // 3. 根據 Grade 選擇對應的圖片 Key (由子類可擴充 FAST / LATE / MISS)
+        const candidateKey = this.resolveSlideJustImageKeyByGrade(eff, state, showCP, images);
         if (candidateKey && images && images[candidateKey] && !imgNotExists(images[candidateKey])) {
             return candidateKey;
+        }
+        if (eff.grade === 'MISS') {
+            return null;
         }
 
         const fallbackKey = `just_${state}`;
@@ -1168,13 +1191,32 @@ export class SimaiRenderer {
         return null;
     }
 
+    resolveJudgeTextImageKey(eff) {
+        const res = this._tempJudgeImageInfo;
+        const isCritical = (eff.grade === 'CRITICAL_PERFECT');
+        if (eff.isBreak) {
+            const showCP = isCritical && (this.settings.showBreakCriticalPerfect !== false) && (this.settings.showCriticalPerfect !== false);
+            if (showCP) {
+                res.imgKey = 'judge_text_cPerfect_break';
+                res.isBreakFlashing = true;
+            } else {
+                res.imgKey = 'judge_text_perfect_break';
+                res.isBreakFlashing = false;
+            }
+        } else {
+            const showCP = isCritical && (this.settings.showCriticalPerfect !== false);
+            res.imgKey = showCP ? 'judge_text_normal' : 'judge_text_perfect';
+            res.isBreakFlashing = false;
+        }
+        return res;
+    }
+
     /**
      * 獨立的打擊判定文字/圖片與閃爍特效渲染通道 (Judge Effects Pass - globalTime driven)
      * @param {number|null} currentTime 當前譜面時間 (秒)，若為空則使用 this.globalTime
      */
     drawJudgeEffects(currentTime = null) {
-        if (!this.settings || this.settings.showJudge === false) return;
-        if (!this.judgeEffects || this.judgeEffects.length === 0) return;
+        if (!this.shouldDrawJudgeEffects()) return;
         const now = (currentTime !== null && currentTime !== undefined) ? currentTime : this.globalTime;
         const ctx = this.ctx;
         const images = this.images;
@@ -1231,20 +1273,9 @@ export class SimaiRenderer {
                     isBreakFlashing = false;
                 }
             } else {
-                const isCritical = (eff.grade === 'CRITICAL_PERFECT');
-                if (eff.isBreak) {
-                    const showCP = isCritical && (this.settings.showBreakCriticalPerfect !== false) && (this.settings.showCriticalPerfect !== false);
-                    if (showCP) {
-                        imgKey = 'judge_text_cPerfect_break';
-                        isBreakFlashing = true;
-                    } else {
-                        imgKey = 'judge_text_perfect_break';
-                        isBreakFlashing = false;
-                    }
-                } else {
-                    const showCP = isCritical && (this.settings.showCriticalPerfect !== false);
-                    imgKey = showCP ? 'judge_text_normal' : 'judge_text_perfect';
-                }
+                const resolved = this.resolveJudgeTextImageKey(eff);
+                imgKey = resolved.imgKey;
+                isBreakFlashing = resolved.isBreakFlashing;
             }
 
             const img = (images && imgKey) ? images[imgKey] : null;
@@ -1301,19 +1332,6 @@ export class SimaiRenderer {
                     ctx.drawImage(subImg, -subWidth / 2, subY - subHeight / 2, subWidth, subHeight);
                 }
             }
-
-            // Break 額外數值 (2600, 2550 等)
-            // no ai slop
-            /*if (eff.isBreak && eff.breakScoreValue !== undefined && eff.breakScoreValue !== null) {
-                ctx.save();
-                const scoreY = showFastLate ? ((judgeHeight / 2) + 2.1) : ((judgeHeight / 2) + 1.2);
-                ctx.font = 'bold 1.6px combo';
-                ctx.fillStyle = '#fff4a3';
-                ctx.shadowColor = '#ffbb00';
-                ctx.shadowBlur = 3;
-                ctx.fillText(`${eff.breakScoreValue}`, 0, scoreY);
-                ctx.restore();
-            }*/
 
             ctx.restore();
         }
@@ -1418,19 +1436,17 @@ export class SimaiRenderer {
 
     standardHoldEffect(noteT, judge = null, x = 0, y = 0, rot = 0, isBatch = false) {
         if (!Number.isFinite(noteT)) return;
-        const p = -noteT;
 
         const img = this.images.HoldEffect;
         if (!img || -noteT < 0.15) return; // 150 ms
 
-        const nb = this.settings.noteBaseSize
+        const nb = this.settings.noteBaseSize;
 
         const titimg = this.getMemoizedTintedImage(img, 0.5, "#fffb00");
 
         const ctx = this.ctx;
         ctx.save();
         ctx.globalCompositeOperation = 'source-over';
-        //ctx.globalAlpha = alpha;
         ctx.translate(x, y);
 
         // 在旋轉後的局部坐標系中直接繪製，完全無需內部重複 save / restore / translate
@@ -1690,7 +1706,7 @@ export class SimaiRenderer {
             }
         }
 
-        // --- 6. 飛散的閃耀四角星群（前中段爆發主星 + 後段外緣極細點綴） ---
+        // --- 5. 飛散的閃耀四角星群（前中段爆發主星 + 後段外緣極細點綴） ---
         const solidStarKey = !imgNotExists(this.images?.TouchEffparts_02) ? 'TouchEffparts_02' : null;
         const hollowStarKey = !imgNotExists(this.images?.TouchEffparts_01) ? 'TouchEffparts_01' : solidStarKey;
         ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
@@ -1817,8 +1833,10 @@ export class SimaiRenderer {
             dt,
             showSensor,
             showSensorText,
+            activeSensors = null,
             playCombo,
             playScore,
+            playScoreMinus,
             noteQuantity = {
                 tap: 0,
                 hold: 0,
@@ -1844,6 +1862,7 @@ export class SimaiRenderer {
         this._currentFrameBreakTint = Math.pow(Math.sin(globalTime * -6), 2) * 0.7;
         this.playCombo = playCombo;
         this.playScore = playScore;
+        this.playScoreMinus = (playScoreMinus !== undefined) ? playScoreMinus : 101;
         this.isPlaying = (isPlaying !== undefined) ? !!isPlaying : (playing !== undefined ? !!playing : false);
 
         // 若非播放中 (如暫停、更新譜面或拖曳時間軸)，立即清空判定文字特效，避免靜態殘留
@@ -1922,14 +1941,17 @@ export class SimaiRenderer {
         runOverlay('beforeNotes');
 
         // 4. 繪製順序優化
-        if (showSensor || showSensorText) this.drawSensors(showSensor, showSensorText);
+        const hasSensorHighlight = this.hasActiveSensorOverlay(activeSensors);
+        if (showSensor || showSensorText || hasSensorHighlight) {
+            this.drawSensors(showSensor, showSensorText, activeSensors);
+        }
         runOverlay('afterSensors');
 
         // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
         this.drawMiddleDisplay();
         runOverlay('afterMiddleDisplay');
 
-        if (this.settings.drawHanabiEffect) {
+        if (this.shouldDrawHanabiEffects()) {
             const touchBucket = buckets.touch;
             for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
             this.drawHanabiEffects();
@@ -2680,9 +2702,10 @@ export class SimaiRenderer {
         }
     }
 
-    drawSensors(showSensor, showSensorText) {
+    drawSensors(showSensor, showSensorText, activeSensors = null) {
         this.ensureSensorCaches();
-        if (!this._sensorShapeCache && !this._sensorTextCache) return;
+        const hasOverlay = this.hasActiveSensorOverlay(activeSensors);
+        if (!this._sensorShapeCache && !this._sensorTextCache && !hasOverlay) return;
 
         const { ctx } = this;
         const dimPx = Math.min(this.canvas.width, this.canvas.height);
@@ -2693,6 +2716,7 @@ export class SimaiRenderer {
         try {
             if (showSensor && this._sensorShapeCache) ctx.drawImage(this._sensorShapeCache, offsetX, offsetY);
             if (showSensorText && this._sensorTextCache) ctx.drawImage(this._sensorTextCache, offsetX, offsetY);
+            if (hasOverlay) this.drawActiveSensorOverlay(activeSensors);
         } finally {
             ctx.restore();
         }
@@ -2705,6 +2729,41 @@ export class SimaiRenderer {
      * 3. Hold 音符優化：徹底消除內部的 4 次 save/restore
      * 4. 特效集中批次：整幀混合模式只切換 1 次 'lighter'
      */
+    handleHoldCompletedOrTriggered(s, noteT, posInfo, drawHitEffect) {
+        if (-noteT > s.holdDuration) {
+            if (drawHitEffect) {
+                this.queueHitEffect(s.pos, s.holdDuration + noteT, s);
+            }
+            if (this.settings.showJudge !== false) {
+                this.queueJudgeEffect(s, null, s.time + s.holdDuration);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    resolveHoldVisualState(s, noteT) {
+        const isOn = noteT <= -0.15 && !s.isMine; // 150ms
+        const state = this._tempHoldState;
+        state.img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
+        state.isOn = isOn;
+        state.holdJudge = null;
+        return state;
+    }
+
+    handleTapOrStarCompletedOrTriggered(s, noteT, posInfo, drawHitEffect) {
+        if (noteT <= 0) {
+            if (drawHitEffect) {
+                this.queueHitEffect(s.pos, noteT, s, posInfo.x, posInfo.y);
+            }
+            if (this.settings.showJudge !== false) {
+                this.queueJudgeEffect(s, null, s.time);
+            }
+            return true;
+        }
+        return false;
+    }
+
     drawTapAndHoldList(notes) {
         if (!notes || notes.length === 0) return;
 
@@ -2712,7 +2771,7 @@ export class SimaiRenderer {
         const globalTime = this.globalTime;
         const md = this.settings.middleDistance;
         const baseSize = this.settings.noteBaseSize;
-        const drawHitEffect = this.settings.drawHitEffect;
+        const drawHitEffect = this.shouldDrawHitEffects();
         const rotateStars = this.settings.rotateStars;
         const pinkStars = this.settings.pinkStars;
 
@@ -2726,13 +2785,7 @@ export class SimaiRenderer {
 
             if (isHold) {
                 // drawHold
-                if (-noteT > s.holdDuration) {
-                    if (drawHitEffect) {
-                        this.queueHitEffect(s.pos, s.holdDuration + noteT, s);
-                    }
-                    if (this.settings.showJudge !== false) {
-                        this.queueJudgeEffect(s, null, s.time + s.holdDuration);
-                    }
+                if (this.handleHoldCompletedOrTriggered(s, noteT, posInfo, drawHitEffect)) {
                     continue;
                 }
 
@@ -2744,9 +2797,8 @@ export class SimaiRenderer {
                 const currentScale = t < md ? Math.max(0, (t + 0.9) / (0.9 + md)) : 1;
                 const size = baseSize * currentScale;
                 const sizeOffset = (t < md) ? 0 :
-                    Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize); // 20.35
-                const isOn = noteT <= -0.15 && !s.isMine; // 150ms
-                const img = this.getHoldImage(s.isMine, s.isBreak, s.isDouble, isOn);
+                    Math.max(0, Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize)); // 20.35
+                const { img, isOn, holdJudge } = this.resolveHoldVisualState(s, noteT);
                 if (!img) continue;
                 const brImg = getBrightenedImage(img, 1 + (s.isBreak && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI))) : 0));
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
@@ -2783,14 +2835,10 @@ export class SimaiRenderer {
                         ctx.drawImage(ex, 0, 145, 122, 55, -size * 0.5, size * 1.64 * (0.09 + sizeOffset), size, size * 1.64 * 0.275);
                     }
                 }
-                //ctx.globalAlpha = 1;
-                //ctx.fillStyle = "white";
-                //ctx.font = "3px mono";
-                //ctx.fillText(`t1:${(t1).toFixed(2)}, 1-t1:${(1 - t1).toFixed(2)}, t-md:${(t - md).toFixed(2)}`, 0, 10);
 
                 if (drawHitEffect) {
                     if (isOn) {
-                        this.queueHoldEffect(s.pos, noteT, null, posInfo.x * displayT, posInfo.y * displayT);
+                        this.queueHoldEffect(s.pos, noteT, holdJudge, posInfo.x * displayT, posInfo.y * displayT);
                     }
                 }
 
@@ -2798,13 +2846,7 @@ export class SimaiRenderer {
             } else {
                 // drawtap drawstar
                 // 普通 Tap / Star
-                if (noteT <= 0) {
-                    if (drawHitEffect) {
-                        this.queueHitEffect(s.pos, noteT, s, posInfo.x, posInfo.y);
-                    }
-                    if (this.settings.showJudge !== false) {
-                        this.queueJudgeEffect(s, null, s.time);
-                    }
+                if (this.handleTapOrStarCompletedOrTriggered(s, noteT, posInfo, drawHitEffect)) {
                     continue;
                 }
 
@@ -2855,44 +2897,82 @@ export class SimaiRenderer {
         }
     }
 
-    getTouchHanabi(s) {
-        const { time: noteTime, pos, touchPos, holdDuration } = s;
-        const noteT = (noteTime - this.globalTime);
-        if (noteT > 0) return;
+    getTouchHanabiTiming(s) {
+        const noteT = s.time - this.globalTime;
+        if (noteT > 0) return null;
+        const out = this._tempTouchHanabi;
+        out.effT = s.holdDuration ? (s.holdDuration + noteT) : noteT;
+        out.clearIfNotHanabi = true;
+        return out;
+    }
 
+    getTouchHanabi(s) {
+        const timing = this.getTouchHanabiTiming(s);
+        if (!timing) return;
+
+        const { time: noteTime, pos, touchPos } = s;
         const key = TOUCH_GROUP_TO_INDEX[touchPos] + (touchPos === 'C' ? 0 : pos - 1);
-        let existing = this.hanabiEffect[key];
+        const existing = this.hanabiEffect[key];
         if (existing.cleared === false && existing.time > noteTime) {
             return;
         }
 
-        const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
-        if (holdDuration) {
-            if (s.isHanabi) {
-                const effT = holdDuration + noteT;
-                existing.time = noteTime;
-                existing.x = posInfo.x;
-                existing.y = posInfo.y;
-                existing.noteT = (existing.cleared === false ? Math.max(existing.noteT, effT) : effT);
-                existing.isCenter = touchPos === "C";
-                existing.cleared = false;
-            } else {
-                existing.time = noteTime;
-                existing.cleared = true;
-            }
-            return;
-        }
         if (s.isHanabi) {
+            const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
+            const effT = timing.effT;
             existing.time = noteTime;
             existing.x = posInfo.x;
             existing.y = posInfo.y;
-            existing.noteT = (existing.cleared === false ? Math.max(existing.noteT, noteT) : noteT);
+            existing.noteT = (existing.cleared === false ? Math.max(existing.noteT, effT) : effT);
             existing.isCenter = touchPos === "C";
             existing.cleared = false;
-        } else {
+        } else if (timing.clearIfNotHanabi) {
             existing.time = noteTime;
             existing.cleared = true;
         }
+    }
+
+    handleTouchHoldCompletedOrTriggered(s, noteT, posInfo) {
+        if (-noteT > s.holdDuration) {
+            if (this.shouldDrawHitEffects()) {
+                this.queueHitEffect(null, s.holdDuration + noteT, s, posInfo.x, posInfo.y);
+            }
+            if (this.settings.showJudge !== false) {
+                this.queueJudgeEffect(s, null, s.time + s.holdDuration);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    resolveTouchHoldVisualState(s, noteT) {
+        const isOn = noteT <= -0.15; // 150ms
+        const state = this._tempTouchHoldState;
+        state.borderKey = "touchhold_border" + (s.isMine ? "_mine" : "");
+        state.isOn = isOn;
+        state.holdJudge = null;
+        return state;
+    }
+
+    handleTouchTapCompletedOrTriggered(s, noteT, posInfo) {
+        if (noteT <= 0) {
+            if (this.shouldDrawHitEffects()) {
+                this.queueHitEffect(null, noteT, s, posInfo.x, posInfo.y);
+            }
+            if (this.settings.showJudge !== false) {
+                this.queueJudgeEffect(s, null, s.time);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    shouldQueueTouchHoldHeadHitEffect(s, noteT) {
+        return noteT <= 0 && noteT >= -0.2 && !s.triggered;
+    }
+
+    drawTouchExtraOverlay() {
+        // 供子類（如遊玩模式）繪製額外疊加圖層（例如 JUST 提示）
     }
 
     drawTouch(s) {
@@ -2908,18 +2988,12 @@ export class SimaiRenderer {
         const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble);
 
         if (holdDuration) {
-            const isOn = (noteTime - this.globalTime) <= -0.15; // 150ms
-            const touchBorder = this.images["touchhold_border" + (isMine ? "_mine" : "")];
-
-            if (-noteT > holdDuration) {
-                if (this.settings.drawHitEffect) {
-                    this.queueHitEffect(null, holdDuration + noteT, s, posInfo.x, posInfo.y);
-                }
-                if (this.settings.showJudge !== false) {
-                    this.queueJudgeEffect(s, null, noteTime + holdDuration);
-                }
+            if (this.handleTouchHoldCompletedOrTriggered(s, noteT, posInfo)) {
                 return;
             }
+
+            const { borderKey, isOn, holdJudge } = this.resolveTouchHoldVisualState(s, noteT);
+            const touchBorder = this.images[borderKey];
 
             const size = this.settings.noteBaseSize * 0.7;
             const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
@@ -2947,22 +3021,16 @@ export class SimaiRenderer {
             this.drawImgAtcenter(touchPoint, size * 0.4);
             this.ctx.restore();
 
-            if (this.settings.drawHitEffect) {
-                if (noteT <= 0 && noteT >= -0.2) {
-                    this.queueHitEffect(null, noteT, s, posInfo.x, posInfo.y);
+            if (this.shouldDrawHitEffects()) {
+                if (this.shouldQueueTouchHoldHeadHitEffect(s, noteT)) {
+                    this.queueHitEffect(null, noteT, s.judgeResult || s, posInfo.x, posInfo.y);
                 }
-                if (isOn) this.queueHoldEffect(null, noteT, null, posInfo.x, posInfo.y);
+                if (isOn) this.queueHoldEffect(null, noteT, holdJudge, posInfo.x, posInfo.y);
             }
             return;
         }
 
-        if (noteT <= 0) {
-            if (this.settings.drawHitEffect) {
-                this.queueHitEffect(null, noteT, s, posInfo.x, posInfo.y);
-            }
-            if (this.settings.showJudge !== false) {
-                this.queueJudgeEffect(s, null, noteTime);
-            }
+        if (this.handleTouchTapCompletedOrTriggered(s, noteT, posInfo)) {
             return;
         }
 
@@ -2986,7 +3054,17 @@ export class SimaiRenderer {
         }
         this.ctx.globalAlpha = 1;
         this.drawImgAtcenter(touchPoint, size * 0.4);
+        this.drawTouchExtraOverlay(s, noteT, size);
         this.ctx.restore();
+    }
+
+    shouldSkipSlideTrack(s, noteT, displaySlideProgress) {
+        const c = s.slideDelay + (s.cullSkipExtend ?? 0) + s.slideDuration;
+        return (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c);
+    }
+
+    getSlideTrackProgress(s, noteT, displaySlideProgress) {
+        return s.isMine ? 0 : Math.min(1, displaySlideProgress);
     }
 
     drawSlideTrack(s) {
@@ -2998,8 +3076,7 @@ export class SimaiRenderer {
             displaySlideProgress = (-noteT - slideDelay) / slideDuration;
         }
 
-        const c = slideDelay + (s.cullSkipExtend ?? 0) + slideDuration;
-        if ((displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c)) {
+        if (this.shouldSkipSlideTrack(s, noteT, displaySlideProgress)) {
             return;
         }
 
@@ -3017,12 +3094,25 @@ export class SimaiRenderer {
         const isTaped = -noteT > 0;
         this.ctx.globalAlpha = isTaped ? 1 : 0.75 * clamp(((t - this.settings.middleDistance) / (1 - this.settings.middleDistance)) + this.settings.slideSpeed, 0, 1);
 
-        displaySlideProgress = Math.min(1, displaySlideProgress);
-
         const isWiFi = s.slideType === "w";
         const prefixOrKey = isWiFi ? prefix : standardKey;
-        this.drawPathWithArrows(p, s.isMine ? 0 : displaySlideProgress, prefixOrKey, isWiFi, (isTaped && s.isBreak ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0), isIllegalRed, 0.3963 * size);
+        const trackProgress = this.getSlideTrackProgress(s, noteT, displaySlideProgress);
+        const br = (isTaped && s.isBreak && !s.isMine && !isIllegalRed) ? (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25 : 0;
+        this.drawPathWithArrows(p, trackProgress, prefixOrKey, isWiFi, br, isIllegalRed, 0.3963 * size);
         this.ctx.restore();
+    }
+
+    shouldSkipSlideStar(s, noteT, displaySlideProgress, path) {
+        if (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish || !s.nextSlide)) {
+            if (this.settings.showJudge !== false) {
+                const p = path || generatePath(s.pos, s.slideEnd);
+                if (s.endTangent === undefined && p) s.endTangent = p.endTangent;
+                if (s.lastSlide) this.queueJudgeEffect(s, null, s.time + s.slideDelay + s.slideDuration);
+            }
+        }
+
+        const c = s.slideDelay + (s.cullSkipExtend ?? 0) + s.slideDuration;
+        return (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c);
     }
 
     drawSlideStar(s) {
@@ -3034,16 +3124,7 @@ export class SimaiRenderer {
             displaySlideProgress = (-noteT - slideDelay) / slideDuration;
         }
 
-        if (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish || !s.nextSlide)) {
-            if (this.settings.showJudge !== false) {
-                const p = path || generatePath(pos, slideEnd);
-                if (s.endTangent === undefined && p) s.endTangent = p.endTangent;
-                if (s.lastSlide) this.queueJudgeEffect(s, null, noteTime + slideDelay + slideDuration);
-            }
-        }
-
-        const c = slideDelay + (s.cullSkipExtend ?? 0) + slideDuration;
-        if ((displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c)) {
+        if (this.shouldSkipSlideStar(s, noteT, displaySlideProgress, path)) {
             return;
         }
 
@@ -3565,12 +3646,7 @@ export class SimaiVisualEditor {
     }
 
     getMemoizedTintedImage(imgKeyOrImg, opacity, config) {
-        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
-        if (!img) return null;
-
-        const conf = typeof config === 'string' ? { colorCode: config } : (config || { colorCode: '#ffffff' });
-        const cacheKey = `${imgKey}_${(opacity || 0).toFixed(2)}_${conf.colorCode}`;
-        return getOrSetMemoizedImage(this._tintCache, cacheKey, () => getTintedImage(img, opacity, conf));
+        return memoizeTintedImage(this.images, this._tintCache, imgKeyOrImg, opacity, config, false);
     }
 
     /**
@@ -3579,15 +3655,7 @@ export class SimaiVisualEditor {
      * @param {number} [brightness=1] 亮度倍率 (0 = 全黑, 1 = 原圖, > 1 = 提亮)
      */
     getMemoizedBrightnessImage(imgKeyOrImg, brightness = 1) {
-        const { imgKey, img } = resolveImageInput(this.images, imgKeyOrImg);
-        if (!img) return null;
-
-        const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
-        const snappedBrightness = Math.round(safeBrightness * 20) / 20;
-        if (snappedBrightness === 1) return img;
-
-        const cacheKey = `${imgKey}_${snappedBrightness.toFixed(2)}`;
-        return getOrSetMemoizedImage(this._brightnessCache, cacheKey, () => getBrightenedImage(img, snappedBrightness));
+        return memoizeBrightenedImage(this.images, this._brightnessCache, imgKeyOrImg, brightness);
     }
 
     getCanvasWH() {

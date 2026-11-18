@@ -3161,10 +3161,8 @@ function closeSubmenu(menuTitle) {
     delete menuTitle.dataset.hoverOpen;
     const submenu = getSubmenuElement(menuTitle);
     if (submenu) {
+        // 保留在 utilityContainerEl 中，避免搬移 DOM 中斷關閉動畫
         submenu.classList.remove('open');
-        if (submenu.parentElement !== menuTitle) {
-            menuTitle.appendChild(submenu);
-        }
     }
 }
 
@@ -3329,9 +3327,11 @@ function openSubmenu(menuTitle, content, byHover = false) {
     menuTitle.classList.add('open');
     if (utilityContainerEl && submenu.parentElement !== utilityContainerEl) {
         utilityContainerEl.appendChild(submenu);
+        // 剛搬移進 portal 容器時需強制重排，確保初始隱藏樣式生效後再觸發過渡動畫
+        void submenu.offsetWidth;
     }
-    submenu.classList.add('open');
     positionSubmenu(menuTitle);
+    submenu.classList.add('open');
 }
 
 function closeAllDropdowns() {
@@ -3340,10 +3340,8 @@ function closeAllDropdowns() {
         const content = d._dropdownContent || d.querySelector('.utilityDropdown-content');
         if (content) {
             closeSubmenusInContent(content);
+            // 保留在 utilityContainerEl 中，避免搬回工具列導致關閉過渡動畫被強制中斷或裁切
             content.classList.remove('open');
-            if (content.parentElement !== d) {
-                d.appendChild(content);
-            }
         }
     });
 }
@@ -3400,8 +3398,16 @@ utilityDropdowns.forEach((utilityDropdown) => {
 
     utilityDropdown._dropdownContent = content;
 
+    // 初始化時即掛載到外層 utilityContainerEl（避免開關當下搬移 DOM 導致 CSS transition 失效）
+    if (utilityContainerEl && content.parentElement !== utilityContainerEl) {
+        utilityContainerEl.appendChild(content);
+    }
+
     content.querySelectorAll('.utilityMenuTitle').forEach((menuTitle) => {
-        getSubmenuElement(menuTitle);
+        const sub = getSubmenuElement(menuTitle);
+        if (utilityContainerEl && sub && sub.parentElement !== utilityContainerEl) {
+            utilityContainerEl.appendChild(sub);
+        }
     });
 
     utilityDropdownBtn.addEventListener('click', (event) => {
@@ -3413,9 +3419,10 @@ utilityDropdowns.forEach((utilityDropdown) => {
             utilityDropdown.classList.add('open');
             if (utilityContainerEl && content.parentElement !== utilityContainerEl) {
                 utilityContainerEl.appendChild(content);
+                void content.offsetWidth;
             }
-            content.classList.add('open');
             positionDropdownContent(utilityDropdown);
+            content.classList.add('open');
         }
     });
 

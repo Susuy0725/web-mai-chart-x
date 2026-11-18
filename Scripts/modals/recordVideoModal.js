@@ -1,4 +1,12 @@
-import { ensureMediabunny, simpleToast, popupWindow, createLabeledInput1, getButton } from '../helper.js';
+import { ensureMediabunny, simpleToast, popupWindow, getButton } from '../helper.js';
+import {
+    createSettingSectionTitle,
+    createSettingRow,
+    createSettingDropdown,
+    createSettingNumberInput,
+    createSettingRangeInput,
+    createSettingCheckbox,
+} from './settingsModal.js';
 import { videoRender } from '../features/videoRender.js';
 import { SimaiLogicControler } from '../core/simaiLogicControler.js';
 import { SimaiRenderer } from '../renderer.js';
@@ -41,7 +49,7 @@ export async function openRecordVideoModal({
     }
 
     const container = document.createElement('div');
-    container.className = 'popup-form-container';
+    container.className = 'popup-form-container record-video-modal';
 
     const inputRefs = {};
     const endTime = typeof getEndTime === 'function' ? getEndTime() : 0;
@@ -89,57 +97,45 @@ export async function openRecordVideoModal({
 
     // 預覽卡片介面
     const previewCard = document.createElement('div');
-    previewCard.className = 'render-preview-card';
-    previewCard.style.cssText = 'display:flex;flex-direction:column;gap:8px;background:var(--popup-surface-active, rgba(255,255,255,0.04));border:1px solid var(--popup-border, rgba(255,255,255,0.1));border-radius:8px;padding:10px;margin-bottom:6px;';
+    previewCard.className = 'render-preview-card record-video-preview-card';
 
     const previewHeader = document.createElement('div');
-    previewHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    previewHeader.className = 'record-video-preview-header';
 
     const previewTitle = document.createElement('span');
-    previewTitle.style.cssText = 'font-size:12px;font-weight:600;color:var(--popup-text, #fff);display:flex;align-items:center;gap:6px;';
-    previewTitle.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;color:var(--popup-accent, #4a90e2);" translate="no">videocam</span> ${t('popup.recordVideo.previewTitle')}`;
+    previewTitle.className = 'record-video-preview-title';
+    previewTitle.innerHTML = `<span class="material-symbols-outlined" translate="no">videocam</span><span>${t('popup.recordVideo.previewTitle')}</span>`;
 
     const previewHeaderRight = document.createElement('div');
-    previewHeaderRight.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    previewHeaderRight.className = 'record-video-preview-actions';
 
     const previewTimeBadge = document.createElement('span');
-    previewTimeBadge.style.cssText = 'font-size:11px;font-family:monospace;font-weight:600;color:var(--popup-accent, #4a90e2);background:rgba(74, 144, 226, 0.12);padding:2px 6px;border-radius:4px;border:1px solid rgba(74, 144, 226, 0.25);';
+    previewTimeBadge.className = 'record-video-time-badge';
 
     const headerSettingsBtn = document.createElement('button');
     headerSettingsBtn.type = 'button';
+    headerSettingsBtn.className = 'popup-setting-sub-reset-btn record-video-header-btn';
     headerSettingsBtn.title = t('menu.settings') || '設定';
-    headerSettingsBtn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 6px;font-size:11px;color:#ccc;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;transition:all 0.2s;';
-    headerSettingsBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px;" translate="no">settings</span><span>${t('menu.settings') || '設定'}</span>`;
-    headerSettingsBtn.addEventListener('mouseenter', () => {
-        headerSettingsBtn.style.background = 'rgba(255,255,255,0.16)';
-        headerSettingsBtn.style.color = '#fff';
-    });
-    headerSettingsBtn.addEventListener('mouseleave', () => {
-        headerSettingsBtn.style.background = 'rgba(255,255,255,0.08)';
-        headerSettingsBtn.style.color = '#ccc';
-    });
+    headerSettingsBtn.innerHTML = `<span class="material-symbols-outlined" translate="no">settings</span><span>${t('menu.settings') || '設定'}</span>`;
     headerSettingsBtn.addEventListener('click', openSettings);
 
     previewHeaderRight.append(previewTimeBadge, headerSettingsBtn);
     previewHeader.append(previewTitle, previewHeaderRight);
 
     const previewViewport = document.createElement('div');
-    previewViewport.className = 'render-preview-viewport';
-    previewViewport.style.cssText = 'width:100%;max-height:240px;background:#050508;border-radius:6px;overflow:hidden;position:relative;box-shadow:0 4px 16px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.08);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;';
+    previewViewport.className = 'render-preview-viewport record-video-preview-viewport';
     previewViewport.appendChild(previewCanvas);
 
     // 時間軸與控制項
     const previewControls = document.createElement('div');
-    previewControls.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:2px;';
+    previewControls.className = 'record-video-preview-controls';
 
     const createSmallBtn = (html, title, onClick) => {
         const btn = document.createElement('button');
         btn.type = 'button';
+        btn.className = 'popup-setting-kb-icon-btn record-video-ctrl-btn';
         btn.innerHTML = html;
         btn.title = title;
-        btn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#eee;cursor:pointer;transition:all 0.2s;flex-shrink:0;';
-        btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(255,255,255,0.16)');
-        btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(255,255,255,0.08)');
         btn.addEventListener('click', onClick);
         return btn;
     };
@@ -148,7 +144,7 @@ export async function openRecordVideoModal({
     let previewPlayRafId = null;
     let lastPlayTimestamp = 0;
 
-    const playPauseBtn = createSmallBtn('<span class="material-symbols-outlined" style="font-size:18px;" translate="no">play_arrow</span>', t('popup.recordVideo.playPreview'), () => {
+    const playPauseBtn = createSmallBtn('<span class="material-symbols-outlined" translate="no">play_arrow</span>', t('popup.recordVideo.playPreview'), () => {
         if (isPreviewPlaying) {
             stopPreviewPlay();
         } else {
@@ -156,11 +152,11 @@ export async function openRecordVideoModal({
         }
     });
 
-    const jumpStartBtn = createSmallBtn('<span class="material-symbols-outlined" style="font-size:18px;" translate="no">skip_previous</span>', t('popup.recordVideo.jumpStart'), () => {
+    const jumpStartBtn = createSmallBtn('<span class="material-symbols-outlined" translate="no">skip_previous</span>', t('popup.recordVideo.jumpStart'), () => {
         setPreviewCurrentTime(Number(startInput.value));
     });
 
-    const jumpEndBtn = createSmallBtn('<span class="material-symbols-outlined" style="font-size:18px;" translate="no">skip_next</span>', t('popup.recordVideo.jumpEnd'), () => {
+    const jumpEndBtn = createSmallBtn('<span class="material-symbols-outlined" translate="no">skip_next</span>', t('popup.recordVideo.jumpEnd'), () => {
         setPreviewCurrentTime(Number(endInput.value));
     });
 
@@ -170,31 +166,38 @@ export async function openRecordVideoModal({
     timelineSlider.max = String(maxDuration);
     timelineSlider.step = '0.01';
     timelineSlider.value = '0';
-    timelineSlider.className = 'custom-slider';
-    timelineSlider.style.cssText = 'flex:1;cursor:pointer;accent-color:var(--popup-accent, #4a90e2);height:6px;';
+    timelineSlider.className = 'popup-setting-range record-video-timeline-slider';
+
+    const updateTimelineSliderFill = () => {
+        const minNum = parseFloat(timelineSlider.min) || 0;
+        const maxNum = parseFloat(timelineSlider.max) || 0;
+        const curVal = parseFloat(timelineSlider.value) || 0;
+        const pct = (maxNum <= minNum) ? 0 : Math.max(0, Math.min(100, ((curVal - minNum) / (maxNum - minNum)) * 100));
+        timelineSlider.style.setProperty('--range-pct', `${pct}%`);
+    };
 
     previewControls.append(jumpStartBtn, playPauseBtn, jumpEndBtn, timelineSlider);
     previewCard.append(previewHeader, previewViewport, previewControls);
 
     // ==========================================
-    // 2. 核心：建立【雙向時間範圍選取器】组件
+    // 2. 核心：建立【雙向時間範圍選取器】組件
     // ==========================================
     const timeWrapper = document.createElement('div');
-    timeWrapper.style.cssText = 'display:flex;flex-direction:column;margin-bottom:6px;';
+    timeWrapper.className = 'record-video-range-block';
 
-    const timeLabel = document.createElement('label');
-    timeLabel.style.cssText = 'font-size:12px;color:#888;margin-bottom:2px;';
+    const timeLabel = document.createElement('span');
+    timeLabel.className = 'popup-setting-text record-video-range-label';
 
     const sliderContainer = document.createElement('div');
-    sliderContainer.className = 'dual-range-slider';
+    sliderContainer.className = 'dual-range-slider record-video-dual-slider';
 
     // 灰色底軌
     const baseTrack = document.createElement('div');
-    baseTrack.style.cssText = 'position:absolute;top:50%;left:0;width:100%;height:6px;background:var(--popup-surface-active);transform:translateY(-50%);border-radius:3px;';
+    baseTrack.className = 'record-video-dual-base';
 
-    // 藍色進度條（代表被選中的範圍）
+    // 主題色進度條（代表被選中的範圍）
     const highlightTrack = document.createElement('div');
-    highlightTrack.style.cssText = 'position:absolute;top:50%;height:6px;background:var(--popup-accent);transform:translateY(-50%);border-radius:3px;box-shadow:0 0 8px var(--popup-accent-glow);';
+    highlightTrack.className = 'record-video-dual-highlight';
 
     const startInput = document.createElement('input');
     startInput.type = 'range'; startInput.min = '0'; startInput.max = String(maxDuration); startInput.step = '0.01'; startInput.value = '0';
@@ -228,40 +231,38 @@ export async function openRecordVideoModal({
     // ==========================================
     // 3. 解析度選單 + 自訂欄位
     // ==========================================
-    const resField = createLabeledInput1({
-        value: '1280x720',
-        labelText: t('popup.recordVideo.resolution'),
-        type: 'select',
-        assign: 'record_res_select',
-        ref: inputRefs,
-        options: [
-            { value: '2560x1440', label: '2560 x 1440 (2K 1440p 16:9)' },
-            { value: '1440x1440', label: '1440 x 1440 (2K 1:1)' },
-            { value: '1920x1080', label: '1920 x 1080 (1080p 16:9)' },
-            { value: '1080x1080', label: '1080 x 1080 (1080p 1:1)' },
-            { value: '1280x720', label: '1280 x 720 (720p 16:9)' },
-            { value: '720x720', label: '720 x 720 (720p 1:1)' },
-            { value: '854x480', label: '854 x 480 (480p 16:9)' },
-            { value: '640x360', label: '640 x 360 (360p 16:9)' },
-            { value: 'custom', label: t('popup.recordVideo.custom') }
-        ]
-    });
+    const resSelect = createSettingDropdown('1280x720', [
+        { value: '2560x1440', label: '2560 x 1440 (2K 1440p 16:9)' },
+        { value: '1440x1440', label: '1440 x 1440 (2K 1:1)' },
+        { value: '1920x1080', label: '1920 x 1080 (1080p 16:9)' },
+        { value: '1080x1080', label: '1080 x 1080 (1080p 1:1)' },
+        { value: '1280x720', label: '1280 x 720 (720p 16:9)' },
+        { value: '720x720', label: '720 x 720 (720p 1:1)' },
+        { value: '854x480', label: '854 x 480 (480p 16:9)' },
+        { value: '640x360', label: '640 x 360 (360p 16:9)' },
+        { value: 'custom', label: t('popup.recordVideo.custom') }
+    ], 'record-video-dropdown');
+    const resRow = createSettingRow(t('popup.recordVideo.resolution'), resSelect);
+    const resField = { wrapper: resRow, input: resSelect };
+
+    const customWidthInput = createSettingNumberInput(1920, 2, 100, 7680);
+    const customHeightInput = createSettingNumberInput(1080, 2, 100, 4320);
+    inputRefs.custom_w = customWidthInput;
+    inputRefs.custom_h = customHeightInput;
 
     const customResContainer = document.createElement('div');
-    customResContainer.style.cssText = 'display:none; gap:8px; margin-top:4px;';
-    const customWidth = createLabeledInput1({ value: 1920, labelText: t('popup.recordVideo.customWidth'), type: 'number', assign: 'custom_w', ref: inputRefs });
-    const customHeight = createLabeledInput1({ value: 1080, labelText: t('popup.recordVideo.customHeight'), type: 'number', assign: 'custom_h', ref: inputRefs });
-    customWidth.wrapper.style.flex = '1';
-    customHeight.wrapper.style.flex = '1';
-    customResContainer.append(customWidth.wrapper, customHeight.wrapper);
-    resField.wrapper.appendChild(customResContainer);
+    customResContainer.className = 'popup-setting-subbody record-video-subbody';
+    customResContainer.append(
+        createSettingRow(t('popup.recordVideo.customWidth'), customWidthInput),
+        createSettingRow(t('popup.recordVideo.customHeight'), customHeightInput)
+    );
 
-    resField.input.addEventListener('change', (e) => {
-        customResContainer.style.display = e.target.value === 'custom' ? 'flex' : 'none';
+    resSelect.addEventListener('change', (e) => {
+        customResContainer.classList.toggle('open', e.target.value === 'custom');
         requestPreviewUpdate();
     });
-    customWidth.input?.addEventListener('input', () => requestPreviewUpdate());
-    customHeight.input?.addEventListener('input', () => requestPreviewUpdate());
+    customWidthInput.addEventListener('input', () => requestPreviewUpdate());
+    customHeightInput.addEventListener('input', () => requestPreviewUpdate());
 
     const getTargetResolution = () => {
         if (resField.input.value === 'custom') {
@@ -282,124 +283,87 @@ export async function openRecordVideoModal({
     // ==========================================
     // 4. FPS 選單 + 自訂欄位
     // ==========================================
-    const fpsField = createLabeledInput1({
-        value: '60',
-        labelText: 'FPS:',
-        type: 'select',
-        assign: 'record_fps_select',
-        ref: inputRefs,
-        options: [
-            { value: '120', label: '120 FPS' },
-            { value: '60', label: '60 FPS' },
-            { value: '30', label: '30 FPS' },
-            { value: '24', label: '24 FPS' },
-            { value: 'custom', label: t('popup.recordVideo.custom') }
-        ]
-    });
+    const fpsSelect = createSettingDropdown('60', [
+        { value: '120', label: '120 FPS' },
+        { value: '60', label: '60 FPS' },
+        { value: '30', label: '30 FPS' },
+        { value: '24', label: '24 FPS' },
+        { value: 'custom', label: t('popup.recordVideo.custom') }
+    ], 'record-video-dropdown');
+    const fpsRow = createSettingRow('FPS:', fpsSelect);
+    const fpsField = { wrapper: fpsRow, input: fpsSelect };
 
-    const customFps = createLabeledInput1({ value: 60, labelText: t('popup.recordVideo.customFps'), type: 'number', assign: 'custom_fps', ref: inputRefs });
-    customFps.wrapper.style.cssText = 'display:none; margin-top:4px;';
-    fpsField.wrapper.appendChild(customFps.wrapper);
+    const customFpsInput = createSettingNumberInput(60, 1, 1, 240);
+    inputRefs.custom_fps = customFpsInput;
 
-    fpsField.input.addEventListener('change', (e) => {
-        customFps.wrapper.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    const customFpsContainer = document.createElement('div');
+    customFpsContainer.className = 'popup-setting-subbody record-video-subbody';
+    customFpsContainer.appendChild(createSettingRow(t('popup.recordVideo.customFps'), customFpsInput));
+
+    fpsSelect.addEventListener('change', (e) => {
+        customFpsContainer.classList.toggle('open', e.target.value === 'custom');
     });
 
     // ==========================================
     // 4.1 畫質 / 碼率選單 + 自訂欄位
     // ==========================================
-    const qualityField = createLabeledInput1({
-        value: 'low',
-        labelText: t('popup.recordVideo.quality') || '畫質 / 碼率:',
-        type: 'select',
-        assign: 'record_quality_select',
-        ref: inputRefs,
-        options: [
-            { value: 'ultra', label: t('popup.recordVideo.qualityUltra') || '極致超清 (~25 Mbps)' },
-            { value: 'high', label: t('popup.recordVideo.qualityHigh') || '高畫質 (~18 Mbps, 推薦)' },
-            { value: 'medium', label: t('popup.recordVideo.qualityMedium') || '標準畫質 (~10 Mbps)' },
-            { value: 'low', label: t('popup.recordVideo.qualityLow') || '低畫質 (~5 Mbps)' },
-            { value: 'lowest', label: t('popup.recordVideo.qualityLowest') || '極低畫質 (~2 Mbps)' },
-            { value: 'custom', label: t('popup.recordVideo.custom') }
-        ]
-    });
+    const qualitySelect = createSettingDropdown('low', [
+        { value: 'ultra', label: t('popup.recordVideo.qualityUltra') || '極致超清 (~25 Mbps)' },
+        { value: 'high', label: t('popup.recordVideo.qualityHigh') || '高畫質 (~18 Mbps, 推薦)' },
+        { value: 'medium', label: t('popup.recordVideo.qualityMedium') || '標準畫質 (~10 Mbps)' },
+        { value: 'low', label: t('popup.recordVideo.qualityLow') || '低畫質 (~5 Mbps)' },
+        { value: 'lowest', label: t('popup.recordVideo.qualityLowest') || '極低畫質 (~2 Mbps)' },
+        { value: 'custom', label: t('popup.recordVideo.custom') }
+    ], 'record-video-dropdown');
+    const qualityRow = createSettingRow(t('popup.recordVideo.quality') || '畫質 / 碼率:', qualitySelect);
+    const qualityField = { wrapper: qualityRow, input: qualitySelect };
 
-    const customBitrate = createLabeledInput1({ value: 18, labelText: t('popup.recordVideo.customBitrate') || '自訂碼率 (Mbps):', type: 'number', assign: 'custom_bitrate', ref: inputRefs });
-    customBitrate.wrapper.style.cssText = 'display:none; margin-top:4px;';
-    qualityField.wrapper.appendChild(customBitrate.wrapper);
+    const customBitrateInput = createSettingNumberInput(18, 1, 1, 200);
+    inputRefs.custom_bitrate = customBitrateInput;
 
-    qualityField.input.addEventListener('change', (e) => {
-        customBitrate.wrapper.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    const customBitrateContainer = document.createElement('div');
+    customBitrateContainer.className = 'popup-setting-subbody record-video-subbody';
+    customBitrateContainer.appendChild(createSettingRow(t('popup.recordVideo.customBitrate') || '自訂碼率 (Mbps):', customBitrateInput));
+
+    qualitySelect.addEventListener('change', (e) => {
+        customBitrateContainer.classList.toggle('open', e.target.value === 'custom');
     });
 
     // ==========================================
     // 4.2 編碼加速模式選單
     // ==========================================
-    const speedField = createLabeledInput1({
-        value: 'fast',
-        labelText: t('popup.recordVideo.speedMode') || '匯出速度模式:',
-        type: 'select',
-        assign: 'record_speed_select',
-        ref: inputRefs,
-        options: [
-            { value: 'fast', label: t('popup.recordVideo.speedFast') || '極速硬體編碼 (推薦，近乎即時)' },
-            { value: 'quality', label: t('popup.recordVideo.speedQuality') || '高壓品質模式 (深度運算壓縮)' }
-        ]
-    });
+    const speedSelect = createSettingDropdown('fast', [
+        { value: 'fast', label: t('popup.recordVideo.speedFast') || '極速硬體編碼 (推薦，近乎即時)' },
+        { value: 'quality', label: t('popup.recordVideo.speedQuality') || '高壓品質模式 (深度運算壓縮)' }
+    ], 'record-video-dropdown');
+    const speedRow = createSettingRow(t('popup.recordVideo.speedMode') || '匯出速度模式:', speedSelect);
+    const speedField = { wrapper: speedRow, input: speedSelect };
 
     // ==========================================
     // 5. 音量與音訊控制項
     // ==========================================
-    const bgmVolField = createLabeledInput1({ value: settings.musicVolume ?? 0.8, labelText: t('popup.recordVideo.bgmVolume'), type: 'number', assign: 'record_bgm_vol', ref: inputRefs });
-    const sfxVolField = createLabeledInput1({ value: settings.SfxVolume ?? 1, labelText: t('popup.recordVideo.sfxVolume'), type: 'number', assign: 'record_sfx_vol', ref: inputRefs });
+    const bgmVolInput = createSettingNumberInput(settings.musicVolume ?? 0.8, 0.1, 0, 5);
+    const sfxVolInput = createSettingNumberInput(settings.SfxVolume ?? 1, 0.1, 0, 5);
+    inputRefs.record_bgm_vol = bgmVolInput;
+    inputRefs.record_sfx_vol = sfxVolInput;
+    const bgmVolField = { wrapper: createSettingRow(t('popup.recordVideo.bgmVolume'), bgmVolInput), input: bgmVolInput };
+    const sfxVolField = { wrapper: createSettingRow(t('popup.recordVideo.sfxVolume'), sfxVolInput), input: sfxVolInput };
 
     // ==========================================
     // 6. 畫面與明暗度控制滑桿 (整體影片 / 音符)
     // ==========================================
-    const brightSectionTitle = document.createElement('div');
-    brightSectionTitle.style.cssText = 'font-size:12px;font-weight:600;color:var(--popup-text-sub, #aaa);margin:10px 0 6px 0;border-top:1px solid var(--popup-border, rgba(255,255,255,0.08));padding-top:8px;';
-    brightSectionTitle.textContent = t('popup.recordVideo.brightnessSection');
+    const brightSectionTitle = createSettingSectionTitle(t('popup.recordVideo.brightnessSection'));
 
     const createBrightnessSlider = ({ labelText, min = 0, max = 150, step = 1, defaultValue = 100 }) => {
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;flex-direction:column;margin-bottom:8px;';
-
-        const label = document.createElement('label');
-        label.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--popup-text-sub, #aaa);margin-bottom:3px;user-select:none;';
-
-        const titleSpan = document.createElement('span');
-        titleSpan.textContent = labelText;
-
-        const valSpan = document.createElement('span');
-        valSpan.style.cssText = 'font-weight:600;color:var(--popup-accent, #4a90e2);font-family:monospace;font-size:12px;';
-
-        label.append(titleSpan, valSpan);
-
-        const input = document.createElement('input');
-        input.type = 'range';
-        input.min = String(min);
-        input.max = String(max);
-        input.step = String(step);
-        input.value = String(defaultValue);
-        input.className = 'custom-slider';
-        input.style.cssText = 'width:100%;cursor:pointer;accent-color:var(--popup-accent, #4a90e2);margin:2px 0;';
-
-        const updateVal = (val) => {
-            valSpan.textContent = `${val}%`;
-        };
-
-        input.addEventListener('input', (e) => {
-            updateVal(e.target.value);
+        const sliderWrap = createSettingRangeInput(defaultValue, min, max, step, () => {
             requestPreviewUpdate();
-        });
-
-        updateVal(defaultValue);
-        wrapper.append(label, input);
+        }, { suffix: '%' });
+        const row = createSettingRow(labelText, sliderWrap);
 
         return {
-            wrapper,
-            input,
-            get value() { return Number(input.value); }
+            wrapper: row,
+            input: sliderWrap,
+            get value() { return Number(sliderWrap.value); }
         };
     };
 
@@ -417,54 +381,20 @@ export async function openRecordVideoModal({
         defaultValue: 100
     });
 
-    const createCustomSwitch = (labelText, defaultChecked) => {
-        const labelWrapper = document.createElement('label');
-        labelWrapper.style.cssText = 'display:flex;align-items:center;justify-content:between;gap:12px;cursor:pointer;margin-top:4px;user-select:none;width:fit-content;';
-
-        const span = document.createElement('span');
-        span.textContent = labelText;
-        span.style.cssText = 'color:#ddd;font-size:13px;width:110px;';
-
-        const switchTrack = document.createElement('div');
-        switchTrack.style.cssText = 'display:flex;align-items:center;width:36px;height:20px;background:#333;border-radius:10px;position:relative;transition:all 0.2s ease;border:1px solid #444;';
-
-        const switchThumb = document.createElement('div');
-        switchThumb.style.cssText = 'width:14px;height:14px;background:#fff;border-radius:50%;position:absolute;left:2px;transition:all 0.2s ease;';
-        switchTrack.appendChild(switchThumb);
-
-        let isChecked = defaultChecked;
-
-        const refreshUI = () => {
-            if (isChecked) {
-                switchTrack.style.background = '#4a90e2';
-                switchTrack.style.borderColor = '#5fa4f5';
-                switchThumb.style.left = '18px';
-            } else {
-                switchTrack.style.background = '#1a1a1a';
-                switchTrack.style.borderColor = '#333';
-                switchThumb.style.left = '3px';
-            }
-        };
-        refreshUI();
-
-        labelWrapper.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            isChecked = !isChecked;
-            refreshUI();
-        });
-
-        labelWrapper.append(span, switchTrack);
+    const createSettingSwitch = (labelText, defaultChecked) => {
+        const checkbox = createSettingCheckbox(defaultChecked);
+        const row = createSettingRow(labelText, checkbox);
 
         return {
-            wrapper: labelWrapper,
-            get checked() { return isChecked; }
+            wrapper: row,
+            checkbox,
+            get checked() { return checkbox.checked; }
         };
     };
 
-    const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
-    const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
-    const introSwitch = createCustomSwitch(t('popup.recordVideo.includeIntro'), true);
+    const audioSwitch = createSettingSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
+    const sfxSwitch = createSettingSwitch(t('popup.recordVideo.includeSfx'), true);
+    const introSwitch = createSettingSwitch(t('popup.recordVideo.includeIntro'), true);
 
     // ==========================================
     // 7. 預覽渲染排程與控制器邏輯
@@ -475,6 +405,7 @@ export async function openRecordVideoModal({
         if (syncSlider) {
             timelineSlider.value = String(currentPreviewTime);
         }
+        updateTimelineSliderFill();
         previewTimeBadge.textContent = `${formatTime(currentPreviewTime)} / ${formatTime(maxDuration)}`;
         updateVideoTime(currentPreviewTime);
         requestPreviewUpdate();
@@ -500,7 +431,7 @@ export async function openRecordVideoModal({
     const startPreviewPlay = () => {
         if (isPreviewPlaying) return;
         isPreviewPlaying = true;
-        playPauseBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;" translate="no">pause</span>';
+        playPauseBtn.innerHTML = '<span class="material-symbols-outlined" translate="no">pause</span>';
         playPauseBtn.title = t('popup.recordVideo.pausePreview');
         lastPlayTimestamp = performance.now();
 
@@ -523,7 +454,7 @@ export async function openRecordVideoModal({
 
     const stopPreviewPlay = () => {
         isPreviewPlaying = false;
-        playPauseBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;" translate="no">play_arrow</span>';
+        playPauseBtn.innerHTML = '<span class="material-symbols-outlined" translate="no">play_arrow</span>';
         playPauseBtn.title = t('popup.recordVideo.playPreview');
         if (previewPlayRafId) {
             cancelAnimationFrame(previewPlayRafId);
@@ -686,8 +617,11 @@ export async function openRecordVideoModal({
         previewCard,
         timeWrapper,
         resField.wrapper,
+        customResContainer,
         fpsField.wrapper,
+        customFpsContainer,
         qualityField.wrapper,
+        customBitrateContainer,
         speedField.wrapper,
         bgmVolField.wrapper,
         sfxVolField.wrapper,

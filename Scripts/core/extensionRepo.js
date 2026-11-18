@@ -46,6 +46,114 @@ function isPlainObject(val) {
     return val !== null && typeof val === 'object' && !Array.isArray(val);
 }
 
+function ensureIndexJsonUrl(urlObj) {
+    urlObj.hash = '';
+    const pathname = urlObj.pathname || '/';
+    if (!/\.json$/i.test(pathname)) {
+        urlObj.pathname = pathname.endsWith('/') ? `${pathname}index.json` : `${pathname}/index.json`;
+    }
+    return urlObj.href;
+}
+
+function normalizeGitHubPagesOrIndexUrl(urlObj) {
+    if (urlObj.hostname.toLowerCase() === 'github.com') {
+        const parts = urlObj.pathname.split('/').filter(Boolean);
+        if (parts.length >= 2 && !/\.json$/i.test(parts[parts.length - 1])) {
+            return `https://${parts[0]}.github.io/${parts[1]}/index.json`;
+        }
+    }
+    return ensureIndexJsonUrl(urlObj);
+}
+
+/**
+ * 解析使用者輸入的資料源簡寫或網址，自動補全成標準 HTTPS 索引網址 (index.json)
+ * 支援格式：`owner/reponame`、`owner.github.io/reponame`、`https://owner.github.io/reponame/`、`github.com/owner/reponame`
+ * @param {string} rawInput
+ * @returns {{ url: string, autoSearchable: boolean, isCompleted: boolean } | null}
+ */
+export function resolveRepoInputUrl(rawInput) {
+    if (typeof rawInput !== 'string') return null;
+    const trimmed = rawInput.trim();
+    if (!trimmed) return null;
+
+    if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed) && !/^https:\/\//i.test(trimmed)) {
+        return { url: trimmed, autoSearchable: false, isCompleted: false };
+    }
+
+    if (/^https:\/\//i.test(trimmed)) {
+        try {
+            const parsed = new URL(trimmed);
+            if (!parsed.hostname || !parsed.hostname.includes('.')) {
+                return null;
+            }
+            const hostParts = parsed.hostname.split('.').filter(Boolean);
+            const hasValidTld = hostParts.length >= 2 && hostParts[hostParts.length - 1].length >= 2;
+            const hasExplicitSlash = trimmed.slice('https://'.length).includes('/');
+            const isIncompleteGitHubRepo = parsed.hostname.toLowerCase() === 'github.com' &&
+                parsed.pathname.split('/').filter(Boolean).length < 2;
+            const resolved = normalizeGitHubPagesOrIndexUrl(parsed);
+            return {
+                url: resolved,
+                autoSearchable: hasValidTld && hasExplicitSlash && !isIncompleteGitHubRepo,
+                isCompleted: resolved !== trimmed
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    const clean = trimmed.replace(/^\/+/, '');
+    if (!clean) return null;
+    const slashIdx = clean.indexOf('/');
+    const head = slashIdx === -1 ? clean : clean.slice(0, slashIdx);
+    const tail = slashIdx === -1 ? '' : clean.slice(slashIdx + 1);
+
+    if (head.includes('.')) {
+        try {
+            const parsed = new URL(`https://${clean}`);
+            const hostParts = parsed.hostname.split('.').filter(Boolean);
+            const hasValidTld = hostParts.length >= 2 && hostParts[hostParts.length - 1].length >= 2;
+            if (!hasValidTld) return null;
+            const hasPathOrSlash = slashIdx !== -1;
+            const isIncompleteGitHubRepo = parsed.hostname.toLowerCase() === 'github.com' &&
+                parsed.pathname.split('/').filter(Boolean).length < 2;
+            const resolved = normalizeGitHubPagesOrIndexUrl(parsed);
+            return {
+                url: resolved,
+                autoSearchable: hasPathOrSlash && !isIncompleteGitHubRepo,
+                isCompleted: true
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    if (!/^[a-zA-Z0-9-]+$/.test(head)) {
+        return null;
+    }
+
+    const cleanTail = tail.replace(/^\/+/, '');
+    if (!cleanTail) {
+        return {
+            url: `https://${head}.github.io/index.json`,
+            autoSearchable: false,
+            isCompleted: true
+        };
+    }
+
+    try {
+        const parsed = new URL(`https://${head}.github.io/${cleanTail}`);
+        const resolved = ensureIndexJsonUrl(parsed);
+        return {
+            url: resolved,
+            autoSearchable: true,
+            isCompleted: true
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
 /**
  * 正規化並驗證儲存庫索引網址（必須為 HTTPS）
  * @param {string} rawUrl
@@ -257,15 +365,23 @@ export function validateRegistryIndex(data, registryUrl) {
 /**
  * 取得並驗證遠端 WERP 索引
  * @param {string} rawUrl
+ * @param {{ signal?: AbortSignal }} [options]
  * @returns {Promise<{ url: string, index: Object }>}
  */
-export async function fetchAndValidateRegistry(rawUrl) {
-    const normalizedUrl = normalizeRepoUrl(rawUrl);
+export async function fetchAndValidateRegistry(rawUrl, options = {}) {
+    const resolved = resolveRepoInputUrl(rawUrl);
+    const normalizedUrl = normalizeRepoUrl(resolved ? resolved.url : rawUrl);
 
     let response;
     try {
-        response = await fetch(normalizedUrl, { cache: 'no-store' });
+        response = await fetch(normalizedUrl, {
+            cache: 'no-store',
+            signal: options?.signal
+        });
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw error;
+        }
         throw new WerpError(
             WERP_ERROR_CODES.REGISTRY_FETCH_FAILED,
             t('extensions.repoErrFetchFailed', { detail: error?.message || 'Network error' })

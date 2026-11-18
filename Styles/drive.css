@@ -93,6 +93,7 @@
     flex-shrink: 0;
     min-height: 44px;
     box-sizing: border-box;
+    margin-top: 10px;
 }
 
 .drive-account-avatar {
@@ -216,14 +217,24 @@
 
 .drive-signout-btn,
 .drive-refresh-btn {
-    background: transparent;
+    /*background: transparent;
     border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
     color: var(--popup-text-sub, #bbb);
     border-radius: var(--popup-radius-sm, 4px);
     cursor: pointer;
     font-size: 11px;
-    padding: 3px 8px;
+    padding: 3px 8px;    
     transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;*/
+    padding: 5px 12px;
+    height: 30px;
+    background: transparent;
+    color: var(--popup-text-main, #ffffff);
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.16));
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s, border-color 0.2s, transform 0.1s;
     white-space: nowrap;
 }
 

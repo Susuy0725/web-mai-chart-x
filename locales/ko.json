@@ -222,7 +222,10 @@
     "repoEmptyHint": "상단의 \"소스 추가\"를 클릭하고 WERP 호환 HTTPS 인덱스 URL을 입력하세요.",
     "repoNoExtensions": "선택한 소스에 사용 가능한 확장 프로그램이 없습니다.",
     "repoAddTitle": "확장 프로그램 소스 추가",
-    "repoAddDesc": "지원되는 소스 저장소 인덱스 URL을 입력하세요. 형식을 검증한 후 저장소 정보를 표시합니다.",
+    "repoAddDesc": "example/reponame, example.github.io/reponame 또는 전체 HTTPS URL을 입력하면 자동으로 완성하여 검색합니다.",
+    "repoAddInputPlaceholder": "example/reponame, example.github.io/reponame 또는 https://...",
+    "repoResolvedLabel": "자동 완성:",
+    "repoTabToFill": "Tab으로 채우기",
     "repoFetchPreview": "소스 확인",
     "repoFetching": "인덱스를 가져와 검증하는 중...",
     "repoConfirmAdd": "추가 확인",
@@ -897,6 +900,11 @@
       "legalTitle": "약관 및 정책",
       "privacyPolicy": "개인정보처리방침",
       "termsOfService": "서비스 약관"
+    },
+    "changelog": {
+      "title": "변경 내역",
+      "viewOnGithub": "GitHub에서 보기",
+      "loadFailed": "CHANGELOG.md 파일을 불러올 수 없습니다"
     },
     "welcome": {
       "step1Desc": "오픈소스 기반의 사용하기 쉬운 maimai 온라인 채보 에디터",

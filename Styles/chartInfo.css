@@ -8,33 +8,21 @@
 }
 
 .chart-info-btn {
-    padding: 8px 12px;
-    background: #202020;
-    color: #ffffff;
-    border: 1px solid #404040;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
     width: 100%;
-    transition: background 0.2s, border-color 0.2s, filter 0.2s;
-}
-
-.chart-info-btn:hover {
-    background: #2a2a2a;
-    border-color: var(--accent-color);
-}
-
-.chart-info-btn:active {
-    filter: brightness(0.9);
+    padding: 7px 12px;
+    font-size: 12.5px;
+    text-align: center;
+    box-sizing: border-box;
 }
 
 .chart-info-img-container {
-    width: 50%;
+    width: 40%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
+    gap: 8px;
 }
 
 .chart-info-img {
@@ -48,17 +36,17 @@
     width: 100%;
     aspect-ratio: 1 / 1;
     overflow: hidden;
-    border: 1px solid #333333;
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
     border-radius: 8px;
     cursor: pointer;
     position: relative;
-    background: #000000;
+    background: #050508;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .chart-info-img-wrapper:hover {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 4px rgba(68, 153, 238, 0.2);
+    border-color: var(--accent-color, #4499ee);
+    box-shadow: 0 0 0 3px var(--popup-accent-glow, rgba(68, 153, 238, 0.28));
 }
 
 .chart-info-overlay {
@@ -80,9 +68,46 @@
 
 .chart-info-diff-container {
     width: 60%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 8px;
+}
+
+.chart-info-input {
+    width: 165px;
+    flex: 0 1 165px;
+    max-width: 60%;
+    min-width: 0;
+}
+
+.chart-info-dropdown {
+    width: 165px;
+    flex: 0 1 165px;
+    max-width: 60%;
+    min-width: 110px;
+}
+
+.chart-info-subbody {
+    margin-top: 0;
+    margin-bottom: 2px;
+}
+
+.chart-info-textarea-row {
+    flex-direction: column;
+    align-items: stretch;
     gap: 6px;
+    margin-top: 2px;
+}
+
+.chart-info-textarea {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    min-height: 76px;
+    flex: 1 1 auto !important;
+    resize: vertical;
+    line-height: 1.4;
 }
 
 @media (max-width: 640px) {
@@ -99,5 +124,12 @@
 
     .chart-info-img-wrapper {
         max-width: 200px;
+    }
+
+    .chart-info-input,
+    .chart-info-dropdown {
+        width: 58%;
+        flex: 0 1 58%;
+        max-width: 220px;
     }
 }

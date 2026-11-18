@@ -392,6 +392,7 @@
       "SfxVolume": "SFX音量",
       "sfxVolumes": "各効果音の音量",
       "playHoldEnd": "Hold終端の効果音を再生",
+      "readyBeat": "予備拍を再生",
       "autocomplete": "エディタの括弧自動補完",
       "enableSyntaxCheck": "構文チェックを有効化",
       "maxSlideCount": "画面内の最大Slide数",

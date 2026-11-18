@@ -78,7 +78,6 @@ let
     isImagesLoaded = false,
     isDatabaseEmpty = false,
     images = {},
-    readyBeat = false,
     maidata = {},
     nowDifficulty = 5,
     backgroundImage,
@@ -176,7 +175,6 @@ const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
 const hideUtilityButton = getButton("hideUtility", "utility");
 const showUtilityButton = document.getElementById("showUtilityBtn");
-const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
 const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
@@ -2105,17 +2103,6 @@ settingsButton.addEventListener('click', () => {
 
 chartInfoButton.addEventListener('click', () => {
     openChartInfoModal();
-});
-
-readyBeatCheckbox.checked = readyBeat;
-readyBeatCheckbox.addEventListener('change', () => {
-    readyBeat = readyBeatCheckbox.checked;
-    projSet('ready_beat', readyBeatCheckbox.checked).then(() => {
-        console.log("已儲存預備拍狀態到 IndexedDB:", readyBeatCheckbox.checked);
-    }).catch((error) => {
-        console.error("儲存預備拍狀態到 IndexedDB 失敗:", error);
-    });
-    inputDebounce();
 });
 
 // --- Undo/Redo 系統 ---
@@ -4355,7 +4342,7 @@ function draw(dt = 0) {
         musicDelay,
         playing,
         timeControlSliding: playbackEngine.timeControlSliding,
-        readyBeat,
+        readyBeat: !!settings.readyBeat,
         clockBpm,
         playedClock,
         settings,
@@ -4460,7 +4447,6 @@ async function loadProjectData(step, expectedGen = null) {
         bg,
         bgVideo,
         hideEditor,
-        savedReadyBeat,
         tb1,
         tb2,
     ] = await Promise.all([
@@ -4471,7 +4457,6 @@ async function loadProjectData(step, expectedGen = null) {
         projGet('background_image'),
         projGet('background_video'),
         projGet('hide_editor'),
-        projGet('ready_beat'),
         projGet('tb1'),
         projGet('tb2'),
     ]);
@@ -4479,9 +4464,6 @@ async function loadProjectData(step, expectedGen = null) {
     if (myGen !== loadGeneration) return;
 
     restoreTimebase(tb1, tb2);
-
-    readyBeat = savedReadyBeat === true || savedReadyBeat === 'true';
-    readyBeatCheckbox.checked = readyBeat;
 
     const targetRealTime = (savedTimeControl && !isNaN(savedTimeControl)) ? Number(savedTimeControl) : 0;
 

@@ -392,6 +392,7 @@
       "SfxVolume": "효과음 볼륨",
       "sfxVolumes": "개별 효과음 볼륨",
       "playHoldEnd": "Hold 종료 효과음 재생",
+      "readyBeat": "준비 박자 재생",
       "autocomplete": "편집기 괄호 자동 완성",
       "enableSyntaxCheck": "구문 검사 활성화",
       "maxSlideCount": "화면에 표시할 최대 슬라이드 별 개수",

@@ -392,6 +392,7 @@
       "SfxVolume": "SFX Volume",
       "sfxVolumes": "Individual SFX Volume",
       "playHoldEnd": "Play Hold end SFX",
+      "readyBeat": "Play Prep Beats",
       "autocomplete": "Editor Bracket Autocomplete",
       "enableSyntaxCheck": "Enable Syntax Check",
       "maxSlideCount": "Max Onscreen Slides",

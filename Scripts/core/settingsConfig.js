@@ -53,6 +53,7 @@ export const defaultSettings = {
     enablePreviewWaveform: true,
     // Sound & Playback
     playHoldEnd: true,
+    readyBeat: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
     globalVolume: 0.65, // 全局音量，0 到 1 之間
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
@@ -269,6 +270,12 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.playHoldEnd',
                 def: defaultSettings.playHoldEnd ?? true
+            },
+            {
+                id: 'readyBeat',
+                type: 'checkbox',
+                label: 'settings.items.readyBeat',
+                def: defaultSettings.readyBeat ?? false
             }
         ]
     },

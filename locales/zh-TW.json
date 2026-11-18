@@ -392,6 +392,7 @@
       "SfxVolume": "音效音量",
       "sfxVolumes": "個別音效音量",
       "playHoldEnd": "播放 Hold 結尾音效",
+      "readyBeat": "播放預備拍",
       "autocomplete": "編輯器自動補齊括號",
       "enableSyntaxCheck": "啟用語法檢查",
       "maxSlideCount": "螢幕上最大滑星顯示數量",

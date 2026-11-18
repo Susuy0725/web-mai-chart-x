@@ -166,6 +166,7 @@ if (typeof document !== 'undefined' && document.fonts) {
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
 const timeline = document.getElementById('timeControl');
+const timeDisplayCapsule = document.getElementById('timeDisplayCapsule');
 const keyboardButton = getButton("keyboard", "control");
 const playButton = getButton("play/pause", "control");
 const hideButton = getButton("hide", "control");
@@ -1320,7 +1321,36 @@ const setEndtime = (e) => {
     updateSlider(realTime, true);
 };
 
+let lastTimeCapsuleText = '';
+
+/**
+ * 將秒數格式化為分:秒.百分秒，供時間顯示膠囊使用。
+ * @param {number} sec
+ * @returns {string}
+ */
+const formatCapsuleTime = (sec) => {
+    const s = Math.max(0, Number.isFinite(sec) ? sec : 0);
+    const m = Math.floor(s / 60);
+    const rem = (s % 60).toFixed(2).padStart(5, '0');
+    return `${String(m).padStart(2, '0')}:${rem}`;
+};
+
+/**
+ * 更新播放控制器上方懸浮時間膠囊文字，僅於內容變化時寫入 DOM。
+ * @param {number} time
+ */
+const updateTimeCapsule = (time) => {
+    if (!timeDisplayCapsule || settings.timeDisplayCapsule === false) return;
+    const clampedCurrent = Math.max(cachedTimelineMin, Math.min(cachedTimelineMax, Number(time) || 0));
+    const text = `${formatCapsuleTime(clampedCurrent)} / ${formatCapsuleTime(cachedTimelineMax)}`;
+    if (text !== lastTimeCapsuleText) {
+        lastTimeCapsuleText = text;
+        timeDisplayCapsule.textContent = text;
+    }
+};
+
 const updateSlider = (time, force = false) => {
+    updateTimeCapsule(time);
     if (!timeline || timeline.style.display === 'none') {
         return;
     }
@@ -1566,10 +1596,11 @@ function applyDecodeResult(result, simaiDataValue) {
     // 預先計算二分搜尋結構與前綴和，確保播放無冷啟動延遲
     simaiLogicControler.prepare(notes, playScoreRes);
 
-    warnings = settings.disableSyntaxCheck ? [] : (result.warnings || []);
-    warningPositions = settings.disableSyntaxCheck ? [] : (result.errpositions || []);
+    const syntaxCheckEnabled = settings.enableSyntaxCheck !== false;
+    warnings = syntaxCheckEnabled ? (result.warnings || []) : [];
+    warningPositions = syntaxCheckEnabled ? (result.errpositions || []) : [];
     warningPositionsConst = warningPositions;
-    if (!settings.disableSyntaxCheck && result.warnings && result.warnings.length > 0) {
+    if (syntaxCheckEnabled && result.warnings && result.warnings.length > 0) {
         warnEl.style.visibility = 'visible';
         warnEl.querySelector('.warnCount').textContent = result.warnings.length;
         console.warn('Decode warnings:', result.warnings);
@@ -1592,7 +1623,7 @@ const getres = async (simaiDataValue, options = {}) => {
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
 
-    const decodeOpts = { disableSyntaxCheck: !!settings.disableSyntaxCheck, ...options };
+    const decodeOpts = { enableSyntaxCheck: settings.enableSyntaxCheck !== false, ...options };
 
     // 若指定同步或 Worker 不可用，直接同步解析 (維持最高相容性)
     if (options.sync || !decodeWorkerManager.isAvailable()) {
@@ -1994,6 +2025,13 @@ const setEditorCss = (visible = null) => {
     syncHighlightLayerScroll();
 
     timeline.style.display = settings.globalTimeline ? 'block' : 'none';
+    if (timeDisplayCapsule) {
+        const showCapsule = hideButton.dataset.hidden !== 'true' && settings.timeDisplayCapsule !== false;
+        timeDisplayCapsule.style.display = showCapsule ? '' : 'none';
+        if (showCapsule) {
+            updateTimeCapsule(playbackEngine?.realTime ?? realTime);
+        }
+    }
     if (visible === null) return;
 
     const visualMode = isVisualMode();
@@ -3654,7 +3692,7 @@ let _lastRenderedHighlightText = null;
 let _lastRenderedWarningKey = null;
 
 function renderHighlightNow(text) {
-    const warningRanges = settings.disableSyntaxCheck ? [] : warningPositions.map(index => {
+    const warningRanges = settings.enableSyntaxCheck === false ? [] : warningPositions.map(index => {
         const range = getNoteRangeAtIndex(index);
         return { start: range.start, end: range.end };
     });
@@ -3814,11 +3852,19 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
         timeline.style.display = 'none';
         mc.style.display = 'none';
         pc.style.display = 'none';
+        if (timeDisplayCapsule) timeDisplayCapsule.style.display = 'none';
         hideButton.dataset.hidden = 'true';
         d.setProperty('--playControls-height', '0px');
         showPlayControlsBtn.style.display = 'flex';
     } else {
         showPlayControlsBtn.style.display = 'none';
+        if (timeDisplayCapsule) {
+            const showCapsule = settings.timeDisplayCapsule !== false;
+            timeDisplayCapsule.style.display = showCapsule ? '' : 'none';
+            if (showCapsule) {
+                updateTimeCapsule(playbackEngine?.realTime ?? realTime);
+            }
+        }
         hideButton.dataset.hidden = 'false';
         timeline.style.display = settings.globalTimeline ? 'block' : 'none';
         mc.style.display = 'block';
@@ -4981,17 +5027,17 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
 
     // 3. 背景與影片設定即時生效
     if (key === 'moviebrightness') applyMovieBrightness(value);
-    if (['disableVideo', 'hideBackgroundWhenPaused', 'showCoverWhenPaused'].includes(key)) {
+    if (['enableVideo', 'showBackgroundWhenPaused', 'showCoverWhenPaused'].includes(key)) {
         updateVideoBackgroundDisplay();
     }
     if (key === 'renderSurroundingAuxiliaryText') {
         emitViewModeChanged();
     }
 
-    // 4. 判定圈顯示開關
-    if (key === 'hideOutline') {
+    // 4. 判定線顯示開關
+    if (key === 'showOutline') {
         const canvasOutline = document.getElementById('canvasOutline');
-        if (canvasOutline) canvasOutline.style.display = value ? 'none' : '';
+        if (canvasOutline) canvasOutline.style.display = value ? '' : 'none';
     }
 
     // 5. 低解析度模式
@@ -5001,9 +5047,9 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
 
     // 6. 需觸發畫布重繪的項目
     const redrawKeys = [
-        'hideOutline',
+        'showOutline', 'showBorder',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
-        'drawHitEffect', 'drawHanabiEffect', 'richHanabi', 'disablePreviewWaveform', 'rotateStars', 'pinkStars',
+        'drawHitEffect', 'drawHanabiEffect', 'richHanabi', 'enablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
         'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed',
         'noteBaseSize', 'middleDistance'
@@ -5017,9 +5063,9 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         switchSkin(value);
     }
 
-    // 8. 禁用語法檢查
-    if (key === 'disableSyntaxCheck') {
-        if (value) {
+    // 8. 啟用語法檢查
+    if (key === 'enableSyntaxCheck') {
+        if (!value) {
             warnEl.style.visibility = 'hidden';
             warnings = [];
             warningPositions = [];

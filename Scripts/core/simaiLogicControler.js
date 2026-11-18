@@ -353,7 +353,7 @@ export class SimaiLogicControler {
                             const shouldPlayEndSound =
                                 (noteType === "slide" && note.lastSlide && note.isBreak) ||
                                 note.isHanabi ||
-                                (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
+                                (note.holdDuration !== undefined && noteType !== "tap" && settings.playHoldEnd !== false);
                             if (shouldPlayEndSound) {
                                 audioManager.queueSound(note, endTargetT);
                             }
@@ -599,7 +599,7 @@ export class SimaiLogicControler {
                             const shouldPlayEndSound =
                                 (noteType === "slide" && note.lastSlide && note.isBreak) ||
                                 note.isHanabi ||
-                                (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd);
+                                (note.holdDuration !== undefined && noteType !== "tap" && settings.playHoldEnd !== false);
                             if (shouldPlayEndSound) {
                                 audioManager.queueSound(note, endTargetT);
                             }

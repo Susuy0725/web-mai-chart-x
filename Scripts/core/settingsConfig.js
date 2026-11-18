@@ -27,8 +27,8 @@ export const defaultSettings = {
     maxSlideCount: 500, // on screen,
     inputDebounceTime: 800, // ms
     showSensorTextWhenPaused: true,
-    hideBackgroundWhenPaused: false,
-    disableVideo: false, // 關閉影片背景（如果有的話）
+    showBackgroundWhenPaused: true,
+    enableVideo: true, // 啟用影片背景（如果有的話）
     renderSurroundingAuxiliaryText: true,
     visualZoom: 200, // 視覺模式下的縮放倍率
     gridDivision: 4, // SimaiVisualEditor 的網格切分 (4, 8, 12, 16, 24, 32...)
@@ -42,7 +42,7 @@ export const defaultSettings = {
     canvasSnapped: false, // Canvas 是否被 snap 隱藏
     slideIllegalRed: false,
     slideArrowHideBySensor: true, // 滑星依感應器消失
-    hideOutline: false, // 隱藏判定圈
+    showOutline: true, // 顯示判定線
     showCoverWhenPaused: false, // 暫停時顯示封面圖
     lowRes: false, // 低解析度模式
     majdataWsUrl: 'ws://127.0.0.1:8083/majdata',
@@ -50,9 +50,9 @@ export const defaultSettings = {
     showUI: false,
     enableQuickPanel: true,
     richHanabi: true,
-    disablePreviewWaveform: false,
+    enablePreviewWaveform: true,
     // Sound & Playback
-    notPlayHoldEnd: false,
+    playHoldEnd: true,
     playbackSpeed: 1, // 播放速度，1 是正常速度
     globalVolume: 0.65, // 全局音量，0 到 1 之間
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
@@ -77,13 +77,14 @@ export const defaultSettings = {
     syntaxColors: { ...defaultSyntaxColors },
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
-    disableSyntaxCheck: false, // 禁用語法檢查
+    enableSyntaxCheck: true, // 啟用語法檢查
     cursorFollow: true, // 游標跟隨
     globalTimeline: true, // 全局時間軸
+    timeDisplayCapsule: true, // 懸浮時間膠囊
     drawHitEffect: true,
     drawHanabiEffect: true,
     richHitEffectBeta: false,
-    noBorder: false,
+    showBorder: true,
     customKeybindings: {}
 };
 
@@ -150,16 +151,16 @@ export const settingsConfig = [
                 def: defaultSettings.slideArrowHideBySensor ?? true
             },
             {
-                id: 'hideOutline',
+                id: 'showOutline',
                 type: 'checkbox',
-                label: 'settings.items.hideOutline',
-                def: defaultSettings.hideOutline || false,
+                label: 'settings.items.showOutline',
+                def: defaultSettings.showOutline ?? true,
             },
             {
-                id: 'noBorder',
+                id: 'showBorder',
                 type: 'checkbox',
-                label: 'settings.items.noBorder',
-                def: defaultSettings.noBorder || false
+                label: 'settings.items.showBorder',
+                def: defaultSettings.showBorder ?? true
             },
             { type: 'header', label: 'settings.sections.effectsAndJudge' },
             {
@@ -207,16 +208,16 @@ export const settingsConfig = [
                 }
             },
             {
-                id: 'disableVideo',
+                id: 'enableVideo',
                 type: 'checkbox',
-                label: 'settings.items.disableVideo',
-                def: defaultSettings.disableVideo || false,
+                label: 'settings.items.enableVideo',
+                def: defaultSettings.enableVideo ?? true,
             },
             {
-                id: 'hideBackgroundWhenPaused',
+                id: 'showBackgroundWhenPaused',
                 type: 'checkbox',
-                label: 'settings.items.hideBackgroundWhenPaused',
-                def: defaultSettings.hideBackgroundWhenPaused,
+                label: 'settings.items.showBackgroundWhenPaused',
+                def: defaultSettings.showBackgroundWhenPaused ?? true,
             },
             {
                 id: 'showCoverWhenPaused',
@@ -264,10 +265,10 @@ export const settingsConfig = [
             },
             { type: 'header', label: 'settings.sections.sfxBehavior' },
             {
-                id: 'notPlayHoldEnd',
+                id: 'playHoldEnd',
                 type: 'checkbox',
-                label: 'settings.items.notPlayHoldEnd',
-                def: defaultSettings.notPlayHoldEnd
+                label: 'settings.items.playHoldEnd',
+                def: defaultSettings.playHoldEnd ?? true
             }
         ]
     },
@@ -279,7 +280,7 @@ export const settingsConfig = [
                 id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
             },
             {
-                id: 'disableSyntaxCheck', type: 'checkbox', label: 'settings.items.disableSyntaxCheck', def: defaultSettings.disableSyntaxCheck || false
+                id: 'enableSyntaxCheck', type: 'checkbox', label: 'settings.items.enableSyntaxCheck', def: defaultSettings.enableSyntaxCheck ?? true
             },
             {
                 id: 'syntaxColors',
@@ -328,6 +329,9 @@ export const settingsConfig = [
             },
             {
                 id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
+            },
+            {
+                id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule
             },
             {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
@@ -388,10 +392,10 @@ export const settingsConfig = [
                 def: defaultSettings.lowRes || false,
             },
             {
-                id: 'disablePreviewWaveform',
+                id: 'enablePreviewWaveform',
                 type: 'checkbox',
-                label: 'settings.items.disablePreviewWaveform',
-                def: defaultSettings.disablePreviewWaveform || false
+                label: 'settings.items.enablePreviewWaveform',
+                def: defaultSettings.enablePreviewWaveform ?? true
             },
             {
                 id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount

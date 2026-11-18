@@ -239,8 +239,28 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
         };
     }
 
-    // 檢查是否有缺少的新設定項目
+    // 檢查是否有缺少的新設定項目，並遷移已反轉語意的舊設定鍵
     let hasNewKeys = false;
+    const legacyInvertedMap = [
+        ['hideOutline', 'showOutline'],
+        ['noBorder', 'showBorder'],
+        ['disableVideo', 'enableVideo'],
+        ['hideBackgroundWhenPaused', 'showBackgroundWhenPaused'],
+        ['notPlayHoldEnd', 'playHoldEnd'],
+        ['disableSyntaxCheck', 'enableSyntaxCheck'],
+        ['disablePreviewWaveform', 'enablePreviewWaveform'],
+    ];
+    if (parsedSettings) {
+        for (const [oldKey, newKey] of legacyInvertedMap) {
+            if (oldKey in parsedSettings) {
+                if (!(newKey in parsedSettings)) {
+                    settings[newKey] = !parsedSettings[oldKey];
+                }
+                delete settings[oldKey];
+                hasNewKeys = true;
+            }
+        }
+    }
     for (const key in ctx.defaultSettings) {
         if (!parsedSettings || !(key in parsedSettings)) {
             hasNewKeys = true;
@@ -387,7 +407,7 @@ async function finalizeInit(ctx, settings) {
     ctx.setPlaybackSpeed(settings.playbackSpeed);
 
     if (ctx.canvasOutline) {
-        ctx.canvasOutline.style.display = settings.hideOutline ? 'none' : '';
+        ctx.canvasOutline.style.display = settings.showOutline === false ? 'none' : '';
     }
 
     ctx.applyMovieBrightness(settings.moviebrightness);

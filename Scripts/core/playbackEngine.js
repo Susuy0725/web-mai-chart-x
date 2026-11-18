@@ -162,9 +162,9 @@ export class PlaybackEngine {
 
     updatePauseBackgroundDisplay() {
         const settings = this.opts.getSettings();
-        const hideBg = !!settings.hideBackgroundWhenPaused;
+        const hideBg = settings.showBackgroundWhenPaused === false;
         const showCover = !!settings.showCoverWhenPaused;
-        const videoDisabled = !!settings.disableVideo;
+        const videoDisabled = settings.enableVideo === false;
 
         const bgVideo = this.opts.getBackgroundVideo?.();
         const bgImg = this.opts.getBackgroundImage?.();
@@ -198,11 +198,11 @@ export class PlaybackEngine {
 
         if (!editorBackgroundImage || !editorBackgroundVideo) return;
 
-        if (settings.disableVideo) {
+        if (settings.enableVideo === false) {
             editorBackgroundVideo.pause();
             editorBackgroundVideo.style.display = 'none';
             const hasImage = !!(bgImg && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
-            const hideBg = !isPlaying && !!settings.hideBackgroundWhenPaused;
+            const hideBg = !isPlaying && settings.showBackgroundWhenPaused === false;
             editorBackgroundImage.style.display = (hasImage && !hideBg) ? 'block' : 'none';
         } else {
             if (isPlaying) {
@@ -269,7 +269,7 @@ export class PlaybackEngine {
         this.lastStartTime = this.realTime;
         this.notifyTime();
         const settings = this.opts.getSettings();
-        const videoDisabled = !!settings.disableVideo;
+        const videoDisabled = settings.enableVideo === false;
         const editorBackgroundImage = this.opts.editorBackgroundImage;
         const editorBackgroundVideo = this.opts.editorBackgroundVideo;
 
@@ -562,7 +562,7 @@ export class PlaybackEngine {
             this.lastTimestamp = performance.now();
         }
 
-        if (!settings.disableVideo && editorBackgroundVideo && editorBackgroundVideo.src) {
+        if (settings.enableVideo !== false && editorBackgroundVideo && editorBackgroundVideo.src) {
             const setTimeAndTryPlay = () => {
                 try {
                     editorBackgroundVideo.currentTime = this.realTime;
@@ -598,7 +598,7 @@ export class PlaybackEngine {
     _handleVideoSeekDebounce(time) {
         const settings = this.opts.getSettings();
         const editorBackgroundVideo = this.opts.editorBackgroundVideo;
-        if (!settings.disableVideo && editorBackgroundVideo && editorBackgroundVideo.readyState >= 1) {
+        if (settings.enableVideo !== false && editorBackgroundVideo && editorBackgroundVideo.readyState >= 1) {
             if (Math.abs(editorBackgroundVideo.currentTime - time) > 0.05) {
                 try {
                     if (typeof editorBackgroundVideo.fastSeek === 'function') {
@@ -674,7 +674,7 @@ export class PlaybackEngine {
 
             // 背景影片同步邏輯
             const editorBackgroundVideo = this.opts.editorBackgroundVideo;
-            if (!settings.disableVideo && (this.bgmUpdateTimer === null || this.bgmUpdateTimer >= 1)) {
+            if (settings.enableVideo !== false && (this.bgmUpdateTimer === null || this.bgmUpdateTimer >= 1)) {
                 if (editorBackgroundVideo?.src && editorBackgroundVideo.readyState >= 2) {
                     const nowSec = performance.now() / 1000;
                     const diff = Math.abs(editorBackgroundVideo.currentTime - this.realTime);

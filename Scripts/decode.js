@@ -1345,10 +1345,14 @@ break: ${breakCounts}`
  * Decodes Simai chart data into structured note, tag, and timing data.
  * @param {string} data Raw Simai chart string
  * @param {boolean} baseOffset Whether to compute initial offset based on first BPM tag
- * @param {Object} options 解析選項 (如 disableSyntaxCheck, forceFull, debug)
+ * @param {Object} options 解析選項 (如 enableSyntaxCheck, disableSyntaxCheck, forceFull, debug)
  */
 export function simaiDecode(data = "", baseOffset = true, options = {}) {
-    _disableSyntaxCheck = !!(options && options.disableSyntaxCheck);
+    if (options && typeof options.enableSyntaxCheck === 'boolean') {
+        _disableSyntaxCheck = !options.enableSyntaxCheck;
+    } else {
+        _disableSyntaxCheck = !!(options && options.disableSyntaxCheck);
+    }
     warns = [];
     warnpos = [];
 

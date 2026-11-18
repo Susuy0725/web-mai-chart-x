@@ -68,7 +68,7 @@ export class SecondaryWindowManager {
             backgroundContainer.style.display = '';
         }
         if (canvasOutline) {
-            canvasOutline.style.display = settings.hideOutline ? 'none' : '';
+            canvasOutline.style.display = settings.showOutline === false ? 'none' : '';
         }
 
         if (typeof updatePauseBackgroundDisplay === 'function') {

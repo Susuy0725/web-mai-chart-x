@@ -22,7 +22,7 @@ const defaultSettings = {
     rotateStars: true,
     pinkStars: false,
     autoPlay: 'computer', // 'computer': Autoplay (電腦), 'simulate': Autoplay (模擬), 'off': 手動遊玩
-    hideOutline: false, // 隱藏判定圈
+    showOutline: true, // 顯示判定線
     sensorHighlight: true, // 感應器高亮
     fatFinger: true, // 肥手指擴張判定
     fatFingerRadius: 4.2, // 肥手指判定半徑
@@ -40,9 +40,9 @@ const defaultSettings = {
     maxSlideCount: 500, // on screen,
     inputDebounceTime: 800, // ms
     showSensorTextWhenPaused: true,
-    hideBackgroundWhenPaused: false,
+    showBackgroundWhenPaused: true,
     showCoverWhenPaused: false, // 暫停時顯示封面圖
-    disableVideo: false, // 關閉影片背景（如果有的話）
+    enableVideo: true, // 啟用影片背景（如果有的話）
     renderSurroundingAuxiliaryText: true,
     splitRatio: 0.5, // 左右面板分割比例
     slideIllegalRed: false,
@@ -51,7 +51,7 @@ const defaultSettings = {
     simplayUseButton: true,
     randomOffset: 0,
     // Sound & Playback
-    notPlayHoldEnd: false,
+    playHoldEnd: true,
     playbackSpeed: 1, // 播放速度，1 是正常速度
     globalVolume: 0.65, // 全局音量，0 到 1 之間
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
@@ -379,6 +379,23 @@ if (savedSettings) {
         const parsed = JSON.parse(savedSettings);
         if (parsed && typeof parsed === 'object') {
             settings = { ...defaultSettings, ...parsed };
+            const legacyInvertedMap = [
+                ['hideOutline', 'showOutline'],
+                ['noBorder', 'showBorder'],
+                ['disableVideo', 'enableVideo'],
+                ['hideBackgroundWhenPaused', 'showBackgroundWhenPaused'],
+                ['notPlayHoldEnd', 'playHoldEnd'],
+                ['disableSyntaxCheck', 'enableSyntaxCheck'],
+                ['disablePreviewWaveform', 'enablePreviewWaveform'],
+            ];
+            for (const [oldKey, newKey] of legacyInvertedMap) {
+                if (oldKey in parsed) {
+                    if (!(newKey in parsed)) {
+                        settings[newKey] = !parsed[oldKey];
+                    }
+                    delete settings[oldKey];
+                }
+            }
             if (defaultSettings.sfxVolumes) {
                 settings.sfxVolumes = { ...defaultSettings.sfxVolumes, ...(parsed.sfxVolumes || {}) };
             }
@@ -531,7 +548,7 @@ const timeControl = document.getElementById("timeControl");
 
 function updateOutlineUI() {
     if (canvasOutline) {
-        canvasOutline.style.display = settings.hideOutline ? 'none' : '';
+        canvasOutline.style.display = settings.showOutline === false ? 'none' : '';
     }
 }
 updateOutlineUI();
@@ -1775,7 +1792,7 @@ function restart() {
 }
 
 function updatePauseBackgroundDisplay() {
-    const hideBg = !!settings.hideBackgroundWhenPaused;
+    const hideBg = settings.showBackgroundWhenPaused === false;
     const showCover = !!settings.showCoverWhenPaused;
 
     const hasVideo = !!(gameBackgroundVideo && gameBackgroundVideo.src && gameBackgroundVideo.readyState >= 1);
@@ -2115,7 +2132,7 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                         };
                         spawnJudgeEffect(note, note.judgeResult);
 
-                        if (!settings.notPlayHoldEnd && noteType !== 'tap') {
+                        if (settings.playHoldEnd !== false && noteType !== 'tap') {
                             const soundKey = note.isBreak ? 'judge_break' : (note.isEx ? 'judge_ex' : 'judge');
                             audioManager.queueSoundSingle(soundKey, globalTime);
                         }
@@ -2402,7 +2419,7 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         spawnJudgeEffect(note, note.judgeResult);
 
                         // 結算音效 (手動遊玩結尾音效)
-                        if (!settings.notPlayHoldEnd && noteType !== 'tap' && finalGrade !== 'MISS') {
+                        if (settings.playHoldEnd !== false && noteType !== 'tap' && finalGrade !== 'MISS') {
                             const soundKey = note.isBreak ? 'judge_break' : (note.isEx ? 'judge_ex' : 'judge');
                             audioManager.queueSoundSingle(soundKey, globalTime);
                         }
@@ -3029,7 +3046,7 @@ function draw() {
             if (endNoteT <= lookAhead && !note._endEffectPlayed) {
                 const shouldPlayEndSound =
                     (noteType === "slide" && note.lastSlide && note.isBreak && (note.slideFinish || (note.slideProgress ?? 0) >= 0.5)) ||
-                    (note.holdDuration !== undefined && noteType !== "tap" && !settings.notPlayHoldEnd && (note._holdPressed || note.holdFinish) && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
+                    (note.holdDuration !== undefined && noteType !== "tap" && settings.playHoldEnd !== false && (note._holdPressed || note.holdFinish) && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
                 if (shouldPlayEndSound && endNoteT >= -0.1) {
                     const soundGrade = note.judgeResult?.grade || note._headJudge?.grade || null;
                     note._startEffectPlayed = true;
@@ -3195,7 +3212,7 @@ async function loadProject(projectId, targetDifficulty = null) {
         if (bg) {
             backgroundImage = bg;
             gameBackgroundImage.src = URL.createObjectURL(bg);
-            gameBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
+            gameBackgroundImage.style.display = settings.showBackgroundWhenPaused === false ? 'none' : 'block';
         }
 
         tryUpdateBackgroundBrightness();
@@ -3754,9 +3771,9 @@ function openSettings() {
                     }
                 },
                 {
-                    id: 'hideOutline', type: 'checkbox', label: 'settings.items.hideOutline', def: defaultSettings.hideOutline,
+                    id: 'showOutline', type: 'checkbox', label: 'settings.items.showOutline', def: defaultSettings.showOutline,
                     apply: (val) => {
-                        settings.hideOutline = val;
+                        settings.showOutline = val;
                         updateOutlineUI();
                     }
                 },
@@ -3800,9 +3817,9 @@ function openSettings() {
                     apply: (val) => { renderer.settings.showSensorTextWhenPaused = val; draw(); }
                 },
                 {
-                    id: 'hideBackgroundWhenPaused', type: 'checkbox', label: 'settings.items.hideBackgroundWhenPaused', def: defaultSettings.hideBackgroundWhenPaused,
+                    id: 'showBackgroundWhenPaused', type: 'checkbox', label: 'settings.items.showBackgroundWhenPaused', def: defaultSettings.showBackgroundWhenPaused,
                     apply: (val) => {
-                        settings.hideBackgroundWhenPaused = val;
+                        settings.showBackgroundWhenPaused = val;
                         if (!playing) updatePauseBackgroundDisplay();
                     }
                 },
@@ -3877,8 +3894,8 @@ function openSettings() {
                     }
                 },
                 {
-                    id: 'notPlayHoldEnd', type: 'checkbox', label: 'settings.items.notPlayHoldEnd', def: defaultSettings.notPlayHoldEnd,
-                    apply: (val) => { settings.notPlayHoldEnd = val; }
+                    id: 'playHoldEnd', type: 'checkbox', label: 'settings.items.playHoldEnd', def: defaultSettings.playHoldEnd,
+                    apply: (val) => { settings.playHoldEnd = val; }
                 },
                 {
                     id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,

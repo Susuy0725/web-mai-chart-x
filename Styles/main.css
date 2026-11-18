@@ -208,13 +208,34 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     height: var(--playControls-height);
     bottom: 0;
     left: 0;
-    z-index: 10;
+    z-index: 105;
     background: var(--main-color);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     box-shadow: 0px -1px 4px #00000040;
+}
+
+#playControls #timeDisplayCapsule {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 14px;
+    border-radius: 9999px;
+    background: var(--main-color);
+    border: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    color: rgba(255, 255, 255, 0.9);
+    font-family: 'mono', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 11;
 }
 
 #playControls #timeControl {

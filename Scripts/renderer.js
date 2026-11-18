@@ -1934,8 +1934,8 @@ export class SimaiRenderer {
         }
         runOverlay('afterClear');
 
-        // 3. 繪製外框輪廓 (若未隱藏外框)
-        if (!this.settings?.hideOutline) {
+        // 3. 繪製外框輪廓 (若啟用顯示判定線)
+        if (this.settings?.showOutline !== false) {
             this.drawOutline();
         }
         runOverlay('beforeNotes');
@@ -1972,7 +1972,7 @@ export class SimaiRenderer {
         this.drawJudgeEffects();
         runOverlay('afterEffects');
 
-        if (!this.settings.noBorder) this.drawStaticBackground();
+        if (this.settings.showBorder !== false) this.drawStaticBackground();
         runOverlay('afterBorder');
 
         if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
@@ -2477,7 +2477,7 @@ export class SimaiRenderer {
     }
 
     drawOutline() {
-        if (this.settings?.hideOutline) return;
+        if (this.settings?.showOutline === false) return;
         const img = this.getOutlineImage();
         if (!img) return;
 
@@ -5993,7 +5993,7 @@ export class SimaiPreviewRenderer {
             });
         };
 
-        if (!this.settings.disablePreviewWaveform) this.drawAudioWaveform(audioBuffer, offset);
+        if (this.settings.enablePreviewWaveform !== false) this.drawAudioWaveform(audioBuffer, offset);
         // 先繪製譜面切分線 (split tags)，再繪製 BPM 與黃節拍線 (bpm tags，疊在切分線之上)
         const tags = visualBuckets.tags || [];
         for (let i = 0; i < tags.length; i++) {

@@ -379,9 +379,13 @@ ctx.render.registerOverlay({
 - 權限需求：`ui:toast`
 - 參數：
   - `options`：物件或字串。傳入物件時支援：
+    - `id`：字串，選填，同一 ID 的提示會原地更新。系統會自動加上 `ext.<擴充識別碼>.` 前綴以防止碰撞。
+    - `title`：字串，標題文字。若直接傳入字串作為 `options`，將作為 `title` 使用。
     - `content`：字串，提示內容文字。
     - `type`：字串，提示類型，例如 `'info'`、`'success'`、`'warning'`、`'error'`。
     - `timeout`：數值，顯示持續毫秒數。
+- 回傳：Toast 控制器物件，含 `id`、`extensionId`、`element`、`close()`、`update()` 等欄位；若擴充未啟用或不可用則回傳 `null`。
+- 生命週期與來源追蹤：系統會自動在提示元素上標記 `dataset.extensionId`（及 `_extensionId`）供識別來源，且擴充停用時將自動關閉其尚未消失的提示。
 
 #### `ctx.ui.registerMenuItem(item)`
 - 權限需求：`ui:menu`

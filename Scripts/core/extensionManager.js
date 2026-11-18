@@ -302,10 +302,25 @@ class ExtensionManager {
             const uiApi = {};
             if (hasUiToast) {
                 uiApi.toast = (options) => {
+                    if (!isContextActive()) return null;
                     const toastFn = appContext.get('simpleToast');
-                    if (typeof toastFn === 'function') {
-                        toastFn(options);
+                    if (typeof toastFn !== 'function') return null;
+                    const normalized = typeof options === 'string'
+                        ? { title: options }
+                        : (options && typeof options === 'object' ? options : {});
+                    const scopedOptions = {
+                        ...normalized,
+                        // 強制覆寫來源識別碼並隔離自訂 id，防止擴充偽造或覆寫他處提示
+                        extensionId: extId
+                    };
+                    if (normalized.id) {
+                        scopedOptions.id = `ext.${extId}.${normalized.id}`;
                     }
+                    const controller = toastFn(scopedOptions);
+                    if (controller && typeof controller.close === 'function') {
+                        disposables.push(() => controller.close());
+                    }
+                    return controller || null;
                 };
             }
             if (hasUiMenu) {

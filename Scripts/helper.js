@@ -808,6 +808,7 @@ export function simpleToast(options = {}) {
     const opts = typeof options === 'string' ? { title: options } : (options || {});
     const {
         id = null,
+        extensionId = null,
         title = "",
         content = "",
         detail = "",
@@ -869,6 +870,10 @@ export function simpleToast(options = {}) {
     if (id) {
         popup._toastId = id;
         popup.dataset.toastId = id;
+    }
+    if (extensionId) {
+        popup._extensionId = extensionId;
+        popup.dataset.extensionId = extensionId;
     }
 
     const contentWrapper = document.createElement('div');
@@ -1129,6 +1134,7 @@ export function simpleToast(options = {}) {
 
     const controller = {
         id,
+        extensionId,
         element: popup,
         close: removePopup,
         update: (newOpts) => {

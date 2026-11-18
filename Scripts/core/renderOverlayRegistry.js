@@ -7,7 +7,7 @@
 import { appContext } from './appContext.js';
 import { t } from '../i18n.js';
 
-const VALID_TARGETS = new Set(['main', 'visual']);
+const VALID_TARGETS = new Set(['main', 'visual', 'preview']);
 const VALID_PHASES_BY_TARGET = {
     main: new Set([
         'afterClear',
@@ -20,6 +20,11 @@ const VALID_PHASES_BY_TARGET = {
         'afterNotes'
     ]),
     visual: new Set([
+        'beforeNotes',
+        'afterNoteObjects',
+        'afterNotes'
+    ]),
+    preview: new Set([
         'beforeNotes',
         'afterNoteObjects',
         'afterNotes'
@@ -73,7 +78,7 @@ class RenderOverlayRegistry {
     /**
      * 註冊 Canvas 疊加繪圖回呼
      * @param {Object} options
-     * @param {'main'|'visual'} [options.target='main'] 目標畫布
+     * @param {'main'|'visual'|'preview'} [options.target='main'] 目標畫布
      * @param {string} [options.phase='afterNotes'] 繪製階段
      * @param {number} [options.order=0] 排序權重，數值小者先繪製
      * @param {Function} options.draw 繪圖回呼 (renderContext) => void
@@ -132,7 +137,7 @@ class RenderOverlayRegistry {
 
     /**
      * 檢查指定目標與階段是否有任何疊加圖層（快速路徑避免無謂配置）
-     * @param {'main'|'visual'} target
+     * @param {'main'|'visual'|'preview'} target
      * @param {string} phase
      * @param {boolean} [isRenderingVideo=false]
      * @returns {boolean}
@@ -253,7 +258,7 @@ class RenderOverlayRegistry {
 
     /**
      * 安全執行符合目標畫布與階段的所有疊加圖層
-     * @param {'main'|'visual'} target
+     * @param {'main'|'visual'|'preview'} target
      * @param {string} phase
      * @param {Object} renderContext
      */

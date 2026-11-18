@@ -5973,9 +5973,26 @@ export class SimaiPreviewRenderer {
         this.ctx.clearRect(0, 0, w, h);
         this.ctx.lineJoin = 'bevel';
 
-        const { globalTime, visualBuckets, audioBuffer, offset, indexTime, cursorIndexTime } = state;
+        const { globalTime, visualBuckets, audioBuffer, offset, indexTime, cursorIndexTime, isPlaying } = state;
         this.globalTime = globalTime;
         this.indexTime = indexTime ?? 0;
+
+        const runPreviewOverlay = (phase) => {
+            if (!renderOverlayRegistry.hasOverlays('preview', phase)) return;
+            renderOverlayRegistry.run('preview', phase, {
+                ctx: this.ctx,
+                width: w,
+                height: h,
+                scale: this.zoom || 1,
+                scaleBase: h,
+                unitPx: this.zoom || 1,
+                globalTime,
+                isPlaying: Boolean(isPlaying),
+                target: 'preview',
+                phase
+            });
+        };
+
         if (!this.settings.disablePreviewWaveform) this.drawAudioWaveform(audioBuffer, offset);
         // 先繪製譜面切分線 (split tags)，再繪製 BPM 與黃節拍線 (bpm tags，疊在切分線之上)
         const tags = visualBuckets.tags || [];
@@ -5985,6 +6002,7 @@ export class SimaiPreviewRenderer {
         for (let i = 0; i < tags.length; i++) {
             if (tags[i].type !== 'split') this.drawTag(tags[i]);
         }
+        runPreviewOverlay('beforeNotes');
         visualBuckets.slide.forEach(n => this.drawSlide(n));
         visualBuckets.tapnhold.forEach(n => {
             if (n.type === "hold") this.drawHold(n);
@@ -5992,6 +6010,7 @@ export class SimaiPreviewRenderer {
             else this.drawTap(n);
         });
         visualBuckets.touch.forEach(n => this.drawTouch(n));
+        runPreviewOverlay('afterNoteObjects');
         const ct = hw + (cursorIndexTime - globalTime) * this.zoom;
         this.drawTriangle(
             ct - h * 0.1, 0,
@@ -6006,5 +6025,6 @@ export class SimaiPreviewRenderer {
             '#ff0000ce', 1);
         this.drawLine(hw, 0, hw, h, '#ff0000ce', 1);
         this.drawSelectionRange();
+        runPreviewOverlay('afterNotes');
     }
 }

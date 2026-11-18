@@ -245,7 +245,7 @@ ctx.hasPermission(permissionString);
 - 權限需求：`render:overlay`
 - 參數：
   - `options`：物件，疊加圖層設定項：
-    - `target`：字串，選填，目標畫布，可選值為 `'main'` 或 `'visual'`，預設為 `'main'`。
+    - `target`：字串，選填，目標畫布，可選值為 `'main'`、`'visual'` 或 `'preview'`，預設為 `'main'`。
     - `phase`：字串，選填，繪製階段，預設為 `'afterNotes'`。若傳入目標畫布不支援的 `phase`，系統將拋出 `TypeError`。各目標畫布支援的階段依由底層至頂層繪製順序如下：
       - 主畫布 `'main'`：
         - `'afterClear'`：清除畫布後、外框輪廓前。
@@ -260,6 +260,10 @@ ctx.hasPermission(permissionString);
         - `'beforeNotes'`：背景、波形、標籤與時間基準線後、音符前。
         - `'afterNoteObjects'`：音符本體後、選取框與預覽標記前。
         - `'afterNotes'`：所有編輯互動覆蓋層之後的最頂層。
+      - 底部預覽軌道 `'preview'`：
+        - `'beforeNotes'`：波形、切分線與節拍線後、音符前。
+        - `'afterNoteObjects'`：音符本體後、游標指針與選取範圍前。
+        - `'afterNotes'`：所有原生圖層與選取範圍之後的最頂層。
     - `order`：數值，選填，排序權重，預設為 `0`，數值小者先繪製。
     - `includeInVideo`：布林值，選填，預設為 `false`，決定該圖層是否於影片匯出期間一併繪製。
     - `prepareVideoFrame`：函式，選填，離線影片匯出前置非同步準備回呼，僅於 `target` 為 `'main'` 且 `includeInVideo` 為 `true` 時於每幀同步繪製前依 `order` 順序執行，接收物件 `{ globalTime, frameIndex, frameCount, dt, width, height, signal }`，可回傳 Promise。其中 `signal` 為 `AbortSignal`，使用者取消匯出時會觸發中斷。
@@ -275,14 +279,14 @@ ctx.hasPermission(permissionString);
 - `ctx`：Canvas 2D 渲染上下文。
 - `width`：數值，目標畫布像素寬度。
 - `height`：數值，目標畫布像素高度。
-- `scale`：數值，當前縮放倍率。於主畫布為渲染器縮放比例，於視覺化編輯器為視圖縮放比例。
+- `scale`：數值，當前縮放倍率。於主畫布為渲染器縮放比例，於視覺化編輯器與底部預覽軌道為時間軸縮放比例。
 - `scaleBase`：數值，畫布基準縮放長度。
-- `unitPx`：數值，單位像素比例。
+- `unitPx`：數值，單位像素比例。於底部預覽軌道與視覺化編輯器為每秒像素倍率。
 - `stageRect`：唯讀物件，於主畫布繪製時提供，包含 `x`、`y`、`width`、`height` 四個物理像素數值欄位，表示置中的十六比九舞台安全區域座標與尺寸，當畫布寬高比小於或等於十六比九時等同於完整畫布範圍。
-- `globalTime`：數值，當前全域時間秒數。
+- `globalTime`：數值，當前全域時間秒數。於底部預覽軌道中，畫布水平中心 `width * 0.5` 對應此時間點。
 - `isPlaying`：布林值，表示當前是否處於播放狀態。
 - `isRenderingVideo`：布林值，表示目前是否處於影片匯出渲染期間，由主畫布提供。
-- `target`：字串，當前繪圖目標畫布，為 `'main'` 或 `'visual'`。
+- `target`：字串，當前繪圖目標畫布，為 `'main'`、`'visual'` 或 `'preview'`。
 - `phase`：字串，當前繪圖階段，對應註冊時指定的圖層階段名稱。
 
 #### 畫布狀態與錯誤隔離機制

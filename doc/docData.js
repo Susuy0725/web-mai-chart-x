@@ -1514,7 +1514,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         sidebarLabel: 'registerOverlay()',
         sidebarMono: true,
         badge: '渲染',
-        subtitle: '於主畫布或視覺化編輯器指定階段註冊每幀自訂繪圖回呼，並可選擇納入影片匯出。',
+        subtitle: '於主畫布、視覺化編輯器或底部預覽軌道指定階段註冊每幀自訂繪圖回呼，並可選擇納入影片匯出。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1523,7 +1523,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
             apiVersion: 'API v1'
         },
         overview: [
-            '在 `SimaiRenderer` 或 `SimaiVisualEditor` 的繪製管線特定階段插入自訂繪圖邏輯。註冊或註銷時系統會自動發布 `canvas:redraw` 事件更新畫面。',
+            '在 `SimaiRenderer`、`SimaiVisualEditor` 或 `SimaiPreviewRenderer` 的繪製管線特定階段插入自訂繪圖邏輯。註冊或註銷時系統會自動發布 `canvas:redraw` 事件更新畫面。',
             '每個圖層的 `draw` 呼叫前後，底層皆會自動執行 `ctx.save()` 與 `finally` 中的 `ctx.restore()` 進行狀態隔離，並以 `try...catch` 包裹防止例外中斷主迴圈。'
         ],
         syntax: `const unregister = ctx.render.registerOverlay(options)`,
@@ -1545,7 +1545,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                         type: 'string',
                         required: false,
                         defaultValue: "'main'",
-                        description: '目標畫布，可選 `main` 或 `visual`。'
+                        description: '目標畫布，可選 `main`、`visual` 或 `preview`。'
                     },
                     {
                         name: 'phase',
@@ -1613,6 +1613,15 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                 ]
             },
             {
+                title: '底部預覽軌道 preview 支援的繪製階段，依底層至頂層順序',
+                columns: ['階段名稱', '繪製時機說明'],
+                rows: [
+                    ['`beforeNotes`', '波形、切分線與節拍線後、音符前'],
+                    ['`afterNoteObjects`', '音符本體後、游標指針與選取範圍前'],
+                    ['`afterNotes`', '所有原生圖層與選取範圍之後的最頂層']
+                ]
+            },
+            {
                 title: '傳入 draw(renderContext) 的物件欄位',
                 columns: ['欄位名稱', '型別', '說明'],
                 rows: [
@@ -1621,12 +1630,12 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                     ['`height`', '`number`', '目標畫布像素高度'],
                     ['`scale`', '`number`', '當前縮放倍率'],
                     ['`scaleBase`', '`number`', '畫布基準縮放長度'],
-                    ['`unitPx`', '`number`', '單位像素比例'],
+                    ['`unitPx`', '`number`', '單位像素比例，於視覺化編輯器與底部預覽軌道為每秒像素倍率'],
                     ['`stageRect`', '`Object`', '主畫布置中的十六比九舞台安全區域 `{ x, y, width, height }`，唯讀'],
-                    ['`globalTime`', '`number`', '當前全域時間秒數'],
+                    ['`globalTime`', '`number`', '當前全域時間秒數，於底部預覽軌道對應畫布水平中心'],
                     ['`isPlaying`', '`boolean`', '當前是否處於播放狀態'],
                     ['`isRenderingVideo`', '`boolean`', '是否處於影片匯出渲染期間，由主畫布提供'],
-                    ['`target`', '`string`', '當前繪圖目標畫布，為 `main` 或 `visual`'],
+                    ['`target`', '`string`', '當前繪圖目標畫布，為 `main`、`visual` 或 `preview`'],
                     ['`phase`', '`string`', '當前繪圖階段名稱']
                 ]
             }

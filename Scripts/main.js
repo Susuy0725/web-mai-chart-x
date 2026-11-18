@@ -2587,6 +2587,7 @@ document.addEventListener('selectionchange', () => {
                 offset: musicDelay,
                 indexTime: dataIndexToTime[nowIndex],
                 cursorIndexTime: cursorLastIndexTime,
+                isPlaying: Boolean(playing),
             });
         }
     }
@@ -4370,6 +4371,7 @@ function draw(dt = 0) {
             offset: musicDelay,
             indexTime: (lastStartTime ?? 0) - musicDelay,
             cursorIndexTime: cursorLastIndexTime,
+            isPlaying: Boolean(playing),
         });
         frameProfiler.end('3. previewDraw');
     }

@@ -255,6 +255,20 @@ export const KEYBINDING_DEFINITIONS = [
         allowRepeat: true,
     },
     {
+        id: 'playback.seekBackward',
+        category: 'playback',
+        labelKey: 'keybindings.actions.playbackSeekBackward',
+        defaultShortcut: 'Mod+ArrowLeft',
+        allowRepeat: true,
+    },
+    {
+        id: 'playback.seekForward',
+        category: 'playback',
+        labelKey: 'keybindings.actions.playbackSeekForward',
+        defaultShortcut: 'Mod+ArrowRight',
+        allowRepeat: true,
+    },
+    {
         id: 'playback.jumpToCursor',
         category: 'playback',
         labelKey: 'keybindings.actions.jumpToCursor',
@@ -523,7 +537,7 @@ export function canTriggerActionInContext(e, actionDef, matchedShortcut, { isVis
         if (actionDef.id === 'edit.undo' || actionDef.id === 'edit.redo') {
             return false;
         }
-        if (/^(Mod\+([ACVXZY]))$/i.test(matchedShortcut)) {
+        if (/^(Mod\+([ACVXZY]|Arrow(Left|Right)))$/i.test(matchedShortcut)) {
             return false;
         }
         return true;

@@ -238,6 +238,18 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     z-index: 11;
 }
 
+#playControls #timeDisplayCapsule[data-position="left"] {
+    left: 10px;
+    right: auto;
+    transform: none;
+}
+
+#playControls #timeDisplayCapsule[data-position="right"] {
+    left: auto;
+    right: 10px;
+    transform: none;
+}
+
 #playControls #timeControl {
     appearance: none;
     -webkit-appearance: none;
@@ -1317,11 +1329,25 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
         visibility 0.16s;
 }
 
+#extensionsDropdownContent {
+    overflow-y: hidden;
+}
+
 #extensionsMenuList {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+}
+
+#extensionsMenuList:empty {
+    display: none;
 }
 
 .utilityButton:hover {
@@ -1457,17 +1483,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     position: sticky;
     left: 0;
     width: 100%;
-    height: 20px;
+    height: 16px;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    background-color: var(--main-color);
     color: rgba(255, 255, 255, 0.72);
     z-index: 5;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    cursor: pointer;
     box-sizing: border-box;
     transition: opacity 0.16s ease, visibility 0.16s, color 0.12s ease;
 }
@@ -1479,14 +1503,14 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 .utility-scroll-indicator-top {
     top: -4px;
-    margin-bottom: -22px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: -18px;
+    background: linear-gradient(to bottom, var(--main-color) 45%, transparent);
 }
 
 .utility-scroll-indicator-bottom {
     bottom: -4px;
-    margin-top: -22px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: -18px;
+    background: linear-gradient(to top, var(--main-color) 45%, transparent);
 }
 
 .utilityDropdown-content.is-scrollable.can-scroll-up .utility-scroll-indicator-top,
@@ -1495,7 +1519,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .utilitySubmenu.is-scrollable.can-scroll-down .utility-scroll-indicator-bottom {
     opacity: 1;
     visibility: visible;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .utility-scroll-indicator:hover {
@@ -2211,6 +2235,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 /* 全域統一滾動條樣式 */
 .utilityDropdown-content,
+#extensionsMenuList,
 .utilitySubmenu,
 .editor-layer,
 .visual-sub-palette,
@@ -2228,6 +2253,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityDropdown-content::-webkit-scrollbar,
+#extensionsMenuList::-webkit-scrollbar,
 .utilitySubmenu::-webkit-scrollbar,
 .editor-layer::-webkit-scrollbar,
 .visual-sub-palette::-webkit-scrollbar,
@@ -2245,6 +2271,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityDropdown-content::-webkit-scrollbar-track,
+#extensionsMenuList::-webkit-scrollbar-track,
 .utilitySubmenu::-webkit-scrollbar-track,
 .editor-layer::-webkit-scrollbar-track,
 .visual-sub-palette::-webkit-scrollbar-track,
@@ -2262,6 +2289,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityDropdown-content::-webkit-scrollbar-thumb,
+#extensionsMenuList::-webkit-scrollbar-thumb,
 .utilitySubmenu::-webkit-scrollbar-thumb,
 .editor-layer::-webkit-scrollbar-thumb,
 .visual-sub-palette::-webkit-scrollbar-thumb,
@@ -2281,6 +2309,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityDropdown-content::-webkit-scrollbar-thumb:hover,
+#extensionsMenuList::-webkit-scrollbar-thumb:hover,
 .utilitySubmenu::-webkit-scrollbar-thumb:hover,
 .editor-layer::-webkit-scrollbar-thumb:hover,
 .visual-sub-palette::-webkit-scrollbar-thumb:hover,

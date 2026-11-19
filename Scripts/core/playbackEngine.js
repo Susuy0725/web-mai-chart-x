@@ -389,7 +389,7 @@ export class PlaybackEngine {
         const musicDelay = this.opts.getMusicDelay?.() || 0;
         this.globalTime = this.realTime - musicDelay;
         this.notifyTime();
-        this.opts.updateSlider?.(this.realTime);
+        this.opts.updateSlider?.(this.realTime, true);
 
         // 停止音效、排程與 BGM
         this.audioManager?.clearSoundQueue();
@@ -435,7 +435,7 @@ export class PlaybackEngine {
         const musicDelay = this.opts.getMusicDelay?.() || 0;
         this.globalTime = this.realTime - musicDelay;
         this.notifyTime();
-        this.opts.updateSlider?.(this.realTime);
+        this.opts.updateSlider?.(this.realTime, true);
 
         // 停止音效、排程與 BGM
         this.audioManager?.clearSoundQueue();
@@ -505,7 +505,7 @@ export class PlaybackEngine {
         this.globalTime = targetRealTime - musicDelay;
         this.notifyTime();
 
-        this.opts.updateSlider?.(this.realTime);
+        this.opts.updateSlider?.(this.realTime, true);
 
         // 1. 立即清除舊音效與佇列，防止歷史音效轟炸
         this.audioManager?.clearSoundQueue();
@@ -697,7 +697,7 @@ export class PlaybackEngine {
             if (this.globalTime >= endTime) {
                 this._isPlaying = false;
                 this.globalTime = endTime;
-                this.opts.updateSlider?.(endTime);
+                this.opts.updateSlider?.(endTime, true);
                 this.playStartTimestamp = null;
                 if (!this.keepRenderingWhilePause) {
                     this.cancelNextFrame();

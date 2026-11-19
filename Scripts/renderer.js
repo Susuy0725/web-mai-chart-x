@@ -2301,6 +2301,10 @@ export class SimaiRenderer {
             this._cachedFpsVal = 'PAUSE';
         }
 
+        const horizPos = this.settings.showUIHorizontalPosition === 'right' ? 'right' : 'left';
+        const vertPos = this.settings.showUIVerticalPosition === 'bottom' ? 'bottom' : 'top';
+        const textAlign = horizPos === 'right' ? 'right' : 'left';
+
         if (!this._uiCacheCanvas) {
             this._uiCacheCanvas = (typeof OffscreenCanvas !== 'undefined')
                 ? new OffscreenCanvas(200, 110)
@@ -2308,7 +2312,13 @@ export class SimaiRenderer {
             this._uiCacheCanvas.width = 200;
             this._uiCacheCanvas.height = 110;
             this._uiCacheCtx = this._uiCacheCanvas.getContext('2d');
-            this._lastUiTextUpdateTime = 0;
+            this._lastUiTextUpdateTime = -Infinity;
+            this._lastUiTextAlign = textAlign;
+        }
+
+        if (this._lastUiTextAlign !== textAlign) {
+            this._lastUiTextAlign = textAlign;
+            this._lastUiTextUpdateTime = -Infinity;
         }
 
         if (now - this._lastUiTextUpdateTime >= 100) {
@@ -2318,8 +2328,9 @@ export class SimaiRenderer {
                 uctx.clearRect(0, 0, 200, 110);
                 uctx.font = "14px mono, monospace";
                 uctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-                uctx.textAlign = "left";
+                uctx.textAlign = textAlign;
                 uctx.textBaseline = "top";
+                const textX = textAlign === 'right' ? 196 : 4;
 
                 const fpsText = `FPS: ${this._cachedFpsVal}`;
                 const avgFpsText = `Avg FPS: ${this._cachedAvgVal}`;
@@ -2327,18 +2338,21 @@ export class SimaiRenderer {
                 const low01Text = `0.1% Low: ${this._cachedLow01Val}`;
                 const timeText = `Time: ${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
 
-                uctx.fillText(fpsText, 4, 4);
-                uctx.fillText(avgFpsText, 4, 24);
-                uctx.fillText(low1Text, 4, 44);
-                uctx.fillText(low01Text, 4, 64);
-                uctx.fillText(timeText, 4, 84);
+                uctx.fillText(fpsText, textX, 4);
+                uctx.fillText(avgFpsText, textX, 24);
+                uctx.fillText(low1Text, textX, 44);
+                uctx.fillText(low01Text, textX, 64);
+                uctx.fillText(timeText, textX, 84);
             }
         }
 
-        const startX = -w / 2 + 2;
-        const startY = -h / 2 + 2;
+        const uiWidth = 40;
+        const uiHeight = 22;
+        const margin = 2;
+        const startX = horizPos === 'right' ? (w / 2 - uiWidth - margin) : (-w / 2 + margin);
+        const startY = vertPos === 'bottom' ? (h / 2 - uiHeight - margin) : (-h / 2 + margin);
         // 離屏畫布尺寸為 200x110，在邏輯坐標系中以 40x22 比例繪製 (5:1 縮放，高 DPI 銳利清晰)
-        ctx.drawImage(this._uiCacheCanvas, startX, startY, 40, 22);
+        ctx.drawImage(this._uiCacheCanvas, startX, startY, uiWidth, uiHeight);
     }
 
     drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
@@ -2800,7 +2814,8 @@ export class SimaiRenderer {
                     Math.max(0, Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize)); // 20.35
                 const { img, isOn, holdJudge } = this.resolveHoldVisualState(s, noteT);
                 if (!img) continue;
-                const brImg = getBrightenedImage(img, 1 + (s.isBreak && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI))) : 0));
+                const bri = (s.isBreak && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI - 0.5 * Math.PI))) : 0);
+                const brImg = getBrightenedImage(img, 1 + bri);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
                 const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
 
@@ -4069,7 +4084,7 @@ export class SimaiVisualEditor {
                                 ctx.font = 'bold 4.5px Arial';
                                 ctx.textAlign = 'center';
                                 ctx.textBaseline = 'middle';
-                                ctx.fillText(`{${tag.value}}`, capX + capW / 2, y);
+                                ctx.fillText(`{ ${tag.value}} `, capX + capW / 2, y);
                                 ctx.restore();
                             }
                         } else {
@@ -4840,7 +4855,7 @@ export class SimaiVisualEditor {
             const gridDiv = this.settings?.gridDivision || 4;
             const tickPeriod = (240 / bpm) / gridDiv;
             const numTicks = Math.max(1, Math.round(holdDuration / tickPeriod));
-            const labelText = `${gridDiv}:${numTicks}`;
+            const labelText = `${gridDiv}:${numTicks} `;
 
             // 與膠囊手把完全 1:1 一樣大的黑底膠囊
             const capsuleW = Math.round(boxW * 0.62 * 10) / 10;
@@ -4865,11 +4880,11 @@ export class SimaiVisualEditor {
 
             // 自適應字體大小，保證文字不溢出黑底膠囊
             let fontSize = 2.2;
-            ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+            ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", "Noto Sans TC", sans - serif`;
             const textMetrics = ctx.measureText(labelText);
             if (textMetrics.width > badgeW - 1.2) {
                 fontSize = Math.max(1.3, fontSize * ((badgeW - 1.2) / textMetrics.width));
-                ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", "Noto Sans TC", sans-serif`;
+                ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", "Noto Sans TC", sans - serif`;
             }
 
             ctx.fillStyle = '#FFFFFF';

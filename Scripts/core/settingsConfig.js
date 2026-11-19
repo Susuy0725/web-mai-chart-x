@@ -48,6 +48,8 @@ export const defaultSettings = {
     majdataWsUrl: 'ws://127.0.0.1:8083/majdata',
     autoConnectMajdataView: false,
     showUI: false,
+    showUIHorizontalPosition: 'left',
+    showUIVerticalPosition: 'top',
     enableQuickPanel: true,
     richHanabi: true,
     enablePreviewWaveform: true,
@@ -55,6 +57,7 @@ export const defaultSettings = {
     playHoldEnd: true,
     readyBeat: false,
     playbackSpeed: 1, // 播放速度，1 是正常速度
+    seekStepSeconds: 5, // 快捷鍵前後跳轉秒數 (Ctrl+← / Ctrl+→)
     globalVolume: 0.65, // 全局音量，0 到 1 之間
     musicVolume: 0.8, // 音樂音量，0 到 1 之間
     SfxVolume: 1, // 音效音量，0 到 1 之間
@@ -82,6 +85,7 @@ export const defaultSettings = {
     cursorFollow: true, // 游標跟隨
     globalTimeline: true, // 全局時間軸
     timeDisplayCapsule: true, // 懸浮時間膠囊
+    timeDisplayCapsulePosition: 'center', // 懸浮時間膠囊位置: 'left' | 'center' | 'right'
     drawHitEffect: true,
     drawHanabiEffect: true,
     richHitEffectBeta: false,
@@ -341,7 +345,27 @@ export const settingsConfig = [
                 id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule
             },
             {
+                id: 'timeDisplayCapsulePosition',
+                type: 'dropdown',
+                label: 'settings.items.timeDisplayCapsulePosition',
+                options: [
+                    { value: 'left', label: 'settings.positionOpts.left' },
+                    { value: 'center', label: 'settings.positionOpts.center' },
+                    { value: 'right', label: 'settings.positionOpts.right' },
+                ],
+                def: defaultSettings.timeDisplayCapsulePosition || 'center'
+            },
+            {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
+            },
+            {
+                id: 'seekStepSeconds',
+                type: 'number',
+                label: 'settings.items.seekStepSeconds',
+                min: 0.5,
+                max: 60,
+                step: 0.5,
+                def: defaultSettings.seekStepSeconds ?? 5
             },
             { type: 'header', label: 'settings.sections.wheelControl' },
             {
@@ -391,6 +415,26 @@ export const settingsConfig = [
             { type: 'header', label: 'settings.sections.performanceAndUi' },
             {
                 id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
+            },
+            {
+                id: 'showUIHorizontalPosition',
+                type: 'dropdown',
+                label: 'settings.items.showUIHorizontalPosition',
+                options: [
+                    { value: 'left', label: 'settings.positionOpts.left' },
+                    { value: 'right', label: 'settings.positionOpts.right' },
+                ],
+                def: defaultSettings.showUIHorizontalPosition || 'left'
+            },
+            {
+                id: 'showUIVerticalPosition',
+                type: 'dropdown',
+                label: 'settings.items.showUIVerticalPosition',
+                options: [
+                    { value: 'top', label: 'settings.positionOpts.top' },
+                    { value: 'bottom', label: 'settings.positionOpts.bottom' },
+                ],
+                def: defaultSettings.showUIVerticalPosition || 'top'
             },
             {
                 id: 'lowRes',

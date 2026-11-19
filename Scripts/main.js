@@ -1347,6 +1347,19 @@ const updateTimeCapsule = (time) => {
     }
 };
 
+let isTimelineDragging = false;
+
+const syncTimelineProgress = (time) => {
+    if (!timeline) return;
+    const min = Number(timeline.min) || 0;
+    const max = Number(timeline.max) || cachedTimelineMax;
+    const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
+    const thumbWidth = 16;
+    const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
+    timeline.style.setProperty('--timeline-progress', stopPos);
+    return ratio;
+};
+
 const updateSlider = (time, force = false) => {
     updateTimeCapsule(time);
     if (!timeline || timeline.style.display === 'none') {
@@ -1371,10 +1384,10 @@ const updateSlider = (time, force = false) => {
     const roundedRatio = Math.round(ratio * cachedTimelineWidth);
     if (force || roundedRatio !== lastSliderRatio) {
         lastSliderRatio = roundedRatio;
-        timeline.value = time;
-        const thumbWidth = 16;
-        const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-        timeline.style.setProperty('--timeline-progress', stopPos);
+        if (!isTimelineDragging) {
+            timeline.value = time;
+        }
+        syncTimelineProgress(isTimelineDragging ? parseFloat(timeline.value) : time);
     }
 };
 
@@ -2024,6 +2037,8 @@ const setEditorCss = (visible = null) => {
 
     timeline.style.display = settings.globalTimeline ? 'block' : 'none';
     if (timeDisplayCapsule) {
+        const pos = settings.timeDisplayCapsulePosition;
+        timeDisplayCapsule.dataset.position = (pos === 'left' || pos === 'right') ? pos : 'center';
         const showCapsule = hideButton.dataset.hidden !== 'true' && settings.timeDisplayCapsule !== false;
         timeDisplayCapsule.style.display = showCapsule ? '' : 'none';
         if (showCapsule) {
@@ -3259,6 +3274,14 @@ function updateScrollIndicatorState(container) {
 
 function syncScrollableState(container) {
     if (!container) return;
+    if (container.id === 'extensionsDropdownContent' || getComputedStyle(container).overflowY === 'hidden') {
+        container.classList.remove('is-scrollable', 'can-scroll-up', 'can-scroll-down');
+        container._scrollTopIndicator?.remove();
+        container._scrollTopIndicator = null;
+        container._scrollBottomIndicator?.remove();
+        container._scrollBottomIndicator = null;
+        return;
+    }
     ensureScrollIndicators(container);
     container.classList.remove('is-scrollable', 'can-scroll-up', 'can-scroll-down');
     const needsScroll = container.scrollHeight > container.clientHeight + 1;
@@ -3391,6 +3414,16 @@ function positionDropdownContent(dropdown) {
 
     const maxAvailableHeight = Math.max(80, vh - top - DROPDOWN_VIEWPORT_MARGIN);
     content.style.maxHeight = `${maxAvailableHeight}px`;
+    if (content.id === 'extensionsDropdownContent') {
+        content.style.overflowY = 'hidden';
+        const extList = content.querySelector('#extensionsMenuList');
+        if (extList) {
+            extList.style.flex = '0 1 auto';
+            extList.style.minHeight = '0';
+            extList.style.overflowY = 'auto';
+            extList.style.overflowX = 'hidden';
+        }
+    }
     syncScrollableState(content);
 
     content.querySelectorAll('.utilityMenuTitle.open').forEach((menuTitle) => {
@@ -3452,11 +3485,19 @@ utilityDropdowns.forEach((utilityDropdown) => {
         }
     });
 
-    content.addEventListener('scroll', () => {
-        updateScrollIndicatorState(content);
+    const updateOpenSubmenus = () => {
         content.querySelectorAll('.utilityMenuTitle.open').forEach((menuTitle) => {
             positionSubmenu(menuTitle);
         });
+    };
+
+    content.addEventListener('scroll', () => {
+        updateScrollIndicatorState(content);
+        updateOpenSubmenus();
+    }, { passive: true });
+
+    content.querySelector('#extensionsMenuList')?.addEventListener('scroll', () => {
+        updateOpenSubmenus();
     }, { passive: true });
 
     content.addEventListener('click', (event) => {
@@ -3741,7 +3782,7 @@ const playbackEngine = new PlaybackEngine({
     changeDifficulty,
     getMaidata: () => maidata,
     draw: (dt) => draw(dt),
-    updateSlider: (time) => updateSlider(time),
+    updateSlider: (time, force = false) => updateSlider(time, force),
     projSet,
     t,
     simpleToast,
@@ -3778,6 +3819,7 @@ resetButton.addEventListener('click', () => playbackEngine.reset());
 stopButton.addEventListener('click', () => playbackEngine.stop());
 
 timeline.addEventListener('pointerdown', () => {
+    isTimelineDragging = true;
     playbackEngine.timeControlSliding = true;
     if (playbackEngine.isPlaying) {
         audioManager?.stopBGM();
@@ -3785,13 +3827,24 @@ timeline.addEventListener('pointerdown', () => {
 });
 timeline.addEventListener('input', () => {
     playbackEngine.timeControlSliding = true;
-    updateVisualTime(parseFloat(timeline.value));
+    const val = parseFloat(timeline.value);
+    syncTimelineProgress(val);
+    updateVisualTime(val);
     slideInputDebounce();
 });
 timeline.addEventListener('pointerup', () => {
+    isTimelineDragging = false;
+    slideInputDebounce();
+});
+timeline.addEventListener('pointercancel', () => {
+    isTimelineDragging = false;
+    syncTimelineProgress(parseFloat(timeline.value));
     slideInputDebounce();
 });
 timeline.addEventListener('change', () => {
+    isTimelineDragging = false;
+    const val = parseFloat(timeline.value);
+    syncTimelineProgress(val);
     slideInputDebounce();
     projSet('timeControl', playbackEngine.realTime).catch(() => { });
 });
@@ -4186,6 +4239,18 @@ const KEYBINDING_HANDLERS = {
         const sp = Math.max(0.25, (settings.playbackSpeed || 1) - 0.25);
         setPlaybackSpeed(sp);
         simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    },
+    'playback.seekBackward': () => {
+        const rawStep = Number(settings.seekStepSeconds);
+        const step = (Number.isFinite(rawStep) && rawStep > 0) ? rawStep : 5;
+        const cur = playbackEngine?.realTime ?? realTime ?? 0;
+        updateVisualTime(cur - step);
+    },
+    'playback.seekForward': () => {
+        const rawStep = Number(settings.seekStepSeconds);
+        const step = (Number.isFinite(rawStep) && rawStep > 0) ? rawStep : 5;
+        const cur = playbackEngine?.realTime ?? realTime ?? 0;
+        updateVisualTime(cur + step);
     },
     'playback.jumpToCursor': () => getCursorNoteIndex?.click(),
     'playback.cursorToPlayhead': () => getNowNoteIndex?.click(),
@@ -5027,9 +5092,12 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         resize(true);
     }
 
-    // 6. 需觸發畫布重繪的項目
+    // 6. 需觸發畫布重繪與膠囊同步的項目
+    if (key === 'timeDisplayCapsule' || key === 'timeDisplayCapsulePosition') {
+        setEditorCss();
+    }
     const redrawKeys = [
-        'showOutline', 'showBorder',
+        'showOutline', 'showBorder', 'showUI', 'showUIHorizontalPosition', 'showUIVerticalPosition',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
         'drawHitEffect', 'drawHanabiEffect', 'richHanabi', 'enablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',

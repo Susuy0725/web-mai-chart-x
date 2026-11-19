@@ -431,7 +431,11 @@
       "smoothScroll": "Smooth Wheel Scrolling",
       "wheelSensitivity": "Wheel Scroll Sensitivity",
       "syntaxColors": "Syntax Highlighting Colors",
-      "customKeybindings": "Custom Shortcuts"
+      "customKeybindings": "Custom Shortcuts",
+      "timeDisplayCapsulePosition": "Floating Time Capsule Position",
+      "showUIHorizontalPosition": "FPS Interface Horizontal Position",
+      "showUIVerticalPosition": "FPS Interface Vertical Position",
+      "seekStepSeconds": "Seek Jump Step (s)"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -450,6 +454,13 @@
       "preview": "Preview Track Only",
       "visualEditor": "Visual Editor Only",
       "both": "Both"
+    },
+    "positionOpts": {
+      "left": "Left",
+      "center": "Center",
+      "right": "Right",
+      "top": "Top",
+      "bottom": "Bottom"
     },
     "syntaxColorPresets": {
       "title": "Color Presets",
@@ -1214,6 +1225,8 @@
       "playbackStop": "Stop Playback",
       "playbackSpeedUp": "Speed Up (+0.25x)",
       "playbackSpeedDown": "Speed Down (-0.25x)",
+      "playbackSeekBackward": "Seek Backward",
+      "playbackSeekForward": "Seek Forward",
       "jumpToCursor": "Jump Playhead to Cursor",
       "cursorToPlayhead": "Move Cursor to Playhead",
       "editSave": "Save Chart",

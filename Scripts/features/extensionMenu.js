@@ -207,6 +207,7 @@ export function renderExtensionMenu() {
         renderedCount++;
     }
 
+    listContainer.style.display = renderedCount > 0 ? 'flex' : 'none';
     dividerEl.style.display = renderedCount > 0 ? '' : 'none';
 }
 

@@ -431,7 +431,11 @@
       "smoothScroll": "平滑時間軸滾動",
       "wheelSensitivity": "滾輪靈敏度",
       "syntaxColors": "語法高亮自訂顏色",
-      "customKeybindings": "自訂快速鍵"
+      "customKeybindings": "自訂快速鍵",
+      "timeDisplayCapsulePosition": "懸浮時間膠囊位置",
+      "showUIHorizontalPosition": "FPS 介面水平位置",
+      "showUIVerticalPosition": "FPS 介面垂直位置",
+      "seekStepSeconds": "時間軸跳轉秒數 (Ctrl+←/→)"
     },
     "middleDisplayOpts": {
       "off": "關閉",
@@ -450,6 +454,13 @@
       "preview": "僅預覽軌道",
       "visualEditor": "僅視覺化編輯器",
       "both": "兩者皆反轉"
+    },
+    "positionOpts": {
+      "left": "左",
+      "center": "中",
+      "right": "右",
+      "top": "上",
+      "bottom": "下"
     },
     "syntaxColorPresets": {
       "title": "主題色系",
@@ -1214,6 +1225,8 @@
       "playbackStop": "停止播放",
       "playbackSpeedUp": "加速播放 (+0.25x)",
       "playbackSpeedDown": "減速播放 (-0.25x)",
+      "playbackSeekBackward": "時間軸倒退",
+      "playbackSeekForward": "時間軸快進",
       "jumpToCursor": "播放頭移至游標",
       "cursorToPlayhead": "游標移至播放頭",
       "editSave": "保存譜面",

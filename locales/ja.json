@@ -431,7 +431,11 @@
       "smoothScroll": "滑らかなタイムライン移動",
       "wheelSensitivity": "ホイール感度",
       "syntaxColors": "構文強調カスタム色",
-      "customKeybindings": "ショートカット設定"
+      "customKeybindings": "ショートカット設定",
+      "timeDisplayCapsulePosition": "フローティング時間カプセルの位置",
+      "showUIHorizontalPosition": "FPS インターフェース水平位置",
+      "showUIVerticalPosition": "FPS インターフェース垂直位置",
+      "seekStepSeconds": "シーク移動秒数 (Ctrl+←/→)"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -450,6 +454,13 @@
       "preview": "プレビュー軌道のみ反転",
       "visualEditor": "ビジュアルエディタのみ反転",
       "both": "両方反転"
+    },
+    "positionOpts": {
+      "left": "左",
+      "center": "中央",
+      "right": "右",
+      "top": "上",
+      "bottom": "下"
     },
     "syntaxColorPresets": {
       "title": "プリセット配色",
@@ -1214,6 +1225,8 @@
       "playbackStop": "再生を停止",
       "playbackSpeedUp": "再生速度を上げる (+0.25x)",
       "playbackSpeedDown": "再生速度を下げる (-0.25x)",
+      "playbackSeekBackward": "巻き戻し",
+      "playbackSeekForward": "早送り",
       "jumpToCursor": "再生位置をカーソルへ移動",
       "cursorToPlayhead": "カーソルを再生位置へ移動",
       "editSave": "譜面を保存",

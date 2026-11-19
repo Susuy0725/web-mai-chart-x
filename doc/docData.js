@@ -2116,34 +2116,42 @@ ctx.ui.registerMenuItem({
             apiVersion: 'API v1'
         },
         overview: [
-            '於畫面左上方或目前彈窗適應位置顯示非侵入式的提示訊息列，支援傳入設定物件或純文字字串。'
+            '於畫面左上方或目前彈窗適應位置顯示非侵入式的提示訊息列，支援傳入設定物件或純文字字串。',
+            '系統會自動在提示元素上標記 `dataset.extensionId`（及 `_extensionId`）供識別來源，並於擴充程式停用時自動關閉尚未消失的提示。'
         ],
-        syntax: `ctx.ui.toast(options)`,
+        syntax: `const controller = ctx.ui.toast(options)`,
         parameters: [
             {
                 name: 'options',
                 type: 'Object | string',
                 required: true,
-                description: '提示設定物件或純文字訊息字串。',
+                description: '提示設定物件或純文字訊息字串；直接傳入字串時將作為 `title` 使用。',
                 children: [
-                    { name: 'content', type: 'string', required: true, description: '提示內容文字' },
+                    { name: 'id', type: 'string', required: false, description: '提示識別碼，同一 ID 的提示會原地更新；系統會自動加上 `ext.<擴充識別碼>.` 前綴以防止碰撞' },
+                    { name: 'title', type: 'string', required: false, description: '提示標題文字' },
+                    { name: 'content', type: 'string', required: false, description: '提示內容文字' },
                     { name: 'type', type: 'string', required: false, defaultValue: "'info'", description: '提示類型，支援 `info`、`success`、`warning` 與 `error`' },
                     { name: 'timeout', type: 'number', required: false, description: '自動消失的持續毫秒數' }
                 ]
             }
         ],
         returns: {
-            type: 'undefined',
-            description: '無回傳值。'
+            type: 'ToastController | null',
+            description: '回傳 Toast 控制器物件，含 `id`、`extensionId`、`element`、`close()` 與 `update()`；若擴充未啟用或不可用則回傳 `null`。'
         },
         examples: [
             {
-                label: '顯示成功與警告吐司通知',
-                code: `ctx.ui.toast({
+                label: '顯示成功吐司並透過控制器原地更新與關閉',
+                code: `const toast = ctx.ui.toast({
+    id: 'render-status',
+    title: '自訂渲染',
     content: '已套用自訂渲染設定',
     type: 'success',
-    timeout: 2500
-});`
+    timeout: 3000
+});
+
+// 同一 ID 可直接透過控制器原地更新內容
+toast?.update({ content: '已完成畫面重繪', type: 'info' });`
             }
         ],
         summary: {

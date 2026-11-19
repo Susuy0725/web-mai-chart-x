@@ -8,7 +8,7 @@
     "update": "新バージョンが利用可能です！ページを更新して適用してください。"
   },
   "menu": {
-    "file": "ファイル",
+    "file": "プロジェクトデータ",
     "fileNew": "新規プロジェクト",
     "fileProjectManager": "プロジェクトマネージャー",
     "fileReadFolder": "フォルダを読み込む",
@@ -679,18 +679,18 @@
     },
     "chartInfo": {
       "title": "譜面情報",
-      "titleLabel": "曲名:",
+      "titleLabel": "曲名",
       "artistLabel": "アーティスト:",
-      "designerLabel": "譜面制作者:",
-      "diffLabel": "難易度:",
+      "designerLabel": "全域ノーツデザインナ",
+      "diffLabel": "難易度",
       "saveBtn": "保存",
       "noTitle": "タイトルなし",
       "clickToChangeImage": "クリックして画像を変更",
-      "readFromTrack": "現在のトラックから読み込む",
-      "readOtherMetadata": "他の音声メタデータを読み込む",
+      "readFromTrack": "プロジェクトオーディオファイルから読み取る",
+      "readOtherMetadata": "他の音声ファイルから読み取る",
       "levelLabel": "レベル",
-      "designerDiffLabel": "譜面デザイナー",
-      "customLabel": "カスタムコマンド"
+      "designerDiffLabel": "難易度ノーツデザインナ",
+      "customLabel": "カスタムパラメータ"
     },
     "projectManager": {
       "title": "プロジェクトマネージャー",

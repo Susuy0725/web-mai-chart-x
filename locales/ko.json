@@ -8,7 +8,7 @@
     "update": "게임의 새 버전이 업데이트되었습니다! 페이지를 새로고침하여 적용해 주세요."
   },
   "menu": {
-    "file": "파일",
+    "file": "프로젝트 데이터",
     "fileNew": "새로 만들기",
     "fileProjectManager": "프로젝트 관리자",
     "fileReadFolder": "폴더 읽기",
@@ -679,18 +679,18 @@
     },
     "chartInfo": {
       "title": "채보 정보",
-      "titleLabel": "제목 (Title):",
-      "artistLabel": "아티스트 (Artist):",
-      "designerLabel": "채보 제작자 (Designer):",
-      "diffLabel": "난이도 (Difficulty):",
+      "titleLabel": "노래 제목",
+      "artistLabel": "구성하다",
+      "designerLabel": "글로벌 차트 디자인",
+      "diffLabel": "난이도",
       "saveBtn": "저장",
       "noTitle": "제목 없음",
       "clickToChangeImage": "클릭하여 이미지 변경",
-      "readFromTrack": "현재 Track에서 읽기",
-      "readOtherMetadata": "다른 오디오 Metadata 읽기",
+      "readFromTrack": "프로젝트 오디오 파일에서 읽기",
+      "readOtherMetadata": "다른 오디오 파일에서 읽기",
       "levelLabel": "레벨",
-      "designerDiffLabel": "난이도 제작",
-      "customLabel": "사용자 지정 명령"
+      "designerDiffLabel": "난이도 차트 디자인",
+      "customLabel": "맞춤 매개변수"
     },
     "projectManager": {
       "title": "프로젝트 관리자",
@@ -984,7 +984,7 @@
     "swap": "패널 위치 전환"
   },
   "skinChange": {
-    "restart": "스킨이 적용되었습니다! 다음 실행 시 적용됩니다"
+    "restart": "모양이 적용되었으며 다음 시작 시 적용됩니다."
   },
   "common": {
     "apply": "적용",

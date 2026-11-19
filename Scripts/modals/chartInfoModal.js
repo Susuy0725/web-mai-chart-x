@@ -257,21 +257,25 @@ export function openChartInfoModal(options = {}) {
             .filter(key => !excludedKeys.has(key) && !key.startsWith('lv_') && !key.startsWith('des_') && !key.startsWith('inote_'))
             .map(key => `&${key} = ${tempData[key]}`)
             .join("\n");
-        const customRow = document.createElement('div');
-        customRow.className = 'popup-setting-row chart-info-textarea-row';
-        const customLabel = document.createElement('label');
-        customLabel.className = 'popup-setting-text';
-        customLabel.textContent = t('popup.chartInfo.customLabel');
+        const customDetails = document.createElement('details');
+        customDetails.className = 'chart-info-custom-details';
+        const customSummary = document.createElement('summary');
+        customSummary.className = 'chart-info-custom-summary';
+        customSummary.textContent = t('popup.chartInfo.customLabel');
+        const customBody = document.createElement('div');
+        customBody.className = 'chart-info-custom-body';
         const customTextarea = document.createElement('textarea');
         customTextarea.className = 'popup-setting-input chart-info-textarea';
         customTextarea.rows = 3;
         customTextarea.value = insVal;
+        customTextarea.setAttribute('aria-label', t('popup.chartInfo.customLabel'));
         customTextarea.addEventListener('input', () => {
             tempData.custom = customTextarea.value;
         });
         inputRefs.custom = customTextarea;
-        customRow.append(customLabel, customTextarea);
-        diffContainer.appendChild(customRow);
+        customBody.appendChild(customTextarea);
+        customDetails.append(customSummary, customBody);
+        diffContainer.appendChild(customDetails);
 
         container.appendChild(imgContainer);
         container.appendChild(diffContainer);
@@ -281,6 +285,9 @@ export function openChartInfoModal(options = {}) {
     popupWindow({
         title: t('popup.chartInfo.title'),
         customContent: createPopupContent(),
+        width: '90%',
+        maxWidth: 560,
+        maxHeight: '90dvh',
         buttons: [
             {
                 text: t('popup.ok'),

@@ -26,9 +26,17 @@
     --submenu-hover-pointer-events: auto;
     --scrollbar-size: 8px;
     --scrollbar-track: transparent;
-    --scrollbar-thumb: rgba(255, 255, 255, 0.24);
-    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.36);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.54);
     --scrollbar-radius: 9999px;
+    color-scheme: dark;
+}
+
+@media (prefers-contrast: more) {
+    :root {
+        --scrollbar-thumb: #ffffff;
+        --scrollbar-track: #000000;
+    }
 }
 
 @font-face {
@@ -2222,78 +2230,144 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-repo-manage-list,
 .popup-setting-sidebar,
 .popup-setting-content,
-.project-manager-grid {
+.project-manager-grid,
+.popup-body,
+.popup-buttons,
+.popup-content,
+.popup-search-results,
+.popup-diff-list,
+.changelog-markdown,
+.resource-manager-modal,
+.chart-info-textarea {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
-.utilityDropdown-content::-webkit-scrollbar,
-.utilitySubmenu::-webkit-scrollbar,
-.editor-layer::-webkit-scrollbar,
-.visual-sub-palette::-webkit-scrollbar,
-.visual-note-palette::-webkit-scrollbar,
-.visual-modifier-palette::-webkit-scrollbar,
-.visual-division-palette::-webkit-scrollbar,
-.ext-card-grid::-webkit-scrollbar,
-.ext-detail-scroll-body::-webkit-scrollbar,
-.ext-repo-manage-list::-webkit-scrollbar,
-.popup-setting-sidebar::-webkit-scrollbar,
-.popup-setting-content::-webkit-scrollbar,
-.project-manager-grid::-webkit-scrollbar {
-    width: var(--scrollbar-size);
-    height: var(--scrollbar-size);
-}
+@supports not (scrollbar-color: auto) {
+    .utilityDropdown-content,
+    .utilitySubmenu,
+    .editor-layer,
+    .visual-sub-palette,
+    .visual-note-palette,
+    .visual-modifier-palette,
+    .visual-division-palette,
+    .ext-card-grid,
+    .ext-detail-scroll-body,
+    .ext-repo-manage-list,
+    .popup-setting-sidebar,
+    .popup-setting-content,
+    .project-manager-grid,
+    .popup-body,
+    .popup-buttons,
+    .popup-content,
+    .popup-search-results,
+    .popup-diff-list,
+    .changelog-markdown,
+    .resource-manager-modal,
+    .chart-info-textarea {
+        scrollbar-width: auto;
+    }
 
-.utilityDropdown-content::-webkit-scrollbar-track,
-.utilitySubmenu::-webkit-scrollbar-track,
-.editor-layer::-webkit-scrollbar-track,
-.visual-sub-palette::-webkit-scrollbar-track,
-.visual-note-palette::-webkit-scrollbar-track,
-.visual-modifier-palette::-webkit-scrollbar-track,
-.visual-division-palette::-webkit-scrollbar-track,
-.ext-card-grid::-webkit-scrollbar-track,
-.ext-detail-scroll-body::-webkit-scrollbar-track,
-.ext-repo-manage-list::-webkit-scrollbar-track,
-.popup-setting-sidebar::-webkit-scrollbar-track,
-.popup-setting-content::-webkit-scrollbar-track,
-.project-manager-grid::-webkit-scrollbar-track {
-    background: var(--scrollbar-track);
-    border-radius: var(--scrollbar-radius);
-}
+    .utilityDropdown-content::-webkit-scrollbar,
+    .utilitySubmenu::-webkit-scrollbar,
+    .editor-layer::-webkit-scrollbar,
+    .visual-sub-palette::-webkit-scrollbar,
+    .visual-note-palette::-webkit-scrollbar,
+    .visual-modifier-palette::-webkit-scrollbar,
+    .visual-division-palette::-webkit-scrollbar,
+    .ext-card-grid::-webkit-scrollbar,
+    .ext-detail-scroll-body::-webkit-scrollbar,
+    .ext-repo-manage-list::-webkit-scrollbar,
+    .popup-setting-sidebar::-webkit-scrollbar,
+    .popup-setting-content::-webkit-scrollbar,
+    .project-manager-grid::-webkit-scrollbar,
+    .popup-body::-webkit-scrollbar,
+    .popup-buttons::-webkit-scrollbar,
+    .popup-content::-webkit-scrollbar,
+    .popup-search-results::-webkit-scrollbar,
+    .popup-diff-list::-webkit-scrollbar,
+    .changelog-markdown::-webkit-scrollbar,
+    .resource-manager-modal::-webkit-scrollbar,
+    .chart-info-textarea::-webkit-scrollbar {
+        width: var(--scrollbar-size);
+        height: var(--scrollbar-size);
+    }
 
-.utilityDropdown-content::-webkit-scrollbar-thumb,
-.utilitySubmenu::-webkit-scrollbar-thumb,
-.editor-layer::-webkit-scrollbar-thumb,
-.visual-sub-palette::-webkit-scrollbar-thumb,
-.visual-note-palette::-webkit-scrollbar-thumb,
-.visual-modifier-palette::-webkit-scrollbar-thumb,
-.visual-division-palette::-webkit-scrollbar-thumb,
-.ext-card-grid::-webkit-scrollbar-thumb,
-.ext-detail-scroll-body::-webkit-scrollbar-thumb,
-.ext-repo-manage-list::-webkit-scrollbar-thumb,
-.popup-setting-sidebar::-webkit-scrollbar-thumb,
-.popup-setting-content::-webkit-scrollbar-thumb,
-.project-manager-grid::-webkit-scrollbar-thumb {
-    background-color: var(--scrollbar-thumb);
-    border: 2px solid transparent;
-    background-clip: content-box;
-    border-radius: var(--scrollbar-radius);
-}
+    .utilityDropdown-content::-webkit-scrollbar-track,
+    .utilitySubmenu::-webkit-scrollbar-track,
+    .editor-layer::-webkit-scrollbar-track,
+    .visual-sub-palette::-webkit-scrollbar-track,
+    .visual-note-palette::-webkit-scrollbar-track,
+    .visual-modifier-palette::-webkit-scrollbar-track,
+    .visual-division-palette::-webkit-scrollbar-track,
+    .ext-card-grid::-webkit-scrollbar-track,
+    .ext-detail-scroll-body::-webkit-scrollbar-track,
+    .ext-repo-manage-list::-webkit-scrollbar-track,
+    .popup-setting-sidebar::-webkit-scrollbar-track,
+    .popup-setting-content::-webkit-scrollbar-track,
+    .project-manager-grid::-webkit-scrollbar-track,
+    .popup-body::-webkit-scrollbar-track,
+    .popup-buttons::-webkit-scrollbar-track,
+    .popup-content::-webkit-scrollbar-track,
+    .popup-search-results::-webkit-scrollbar-track,
+    .popup-diff-list::-webkit-scrollbar-track,
+    .changelog-markdown::-webkit-scrollbar-track,
+    .resource-manager-modal::-webkit-scrollbar-track,
+    .chart-info-textarea::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: var(--scrollbar-radius);
+    }
 
-.utilityDropdown-content::-webkit-scrollbar-thumb:hover,
-.utilitySubmenu::-webkit-scrollbar-thumb:hover,
-.editor-layer::-webkit-scrollbar-thumb:hover,
-.visual-sub-palette::-webkit-scrollbar-thumb:hover,
-.visual-note-palette::-webkit-scrollbar-thumb:hover,
-.visual-modifier-palette::-webkit-scrollbar-thumb:hover,
-.visual-division-palette::-webkit-scrollbar-thumb:hover,
-.ext-card-grid::-webkit-scrollbar-thumb:hover,
-.ext-detail-scroll-body::-webkit-scrollbar-thumb:hover,
-.ext-repo-manage-list::-webkit-scrollbar-thumb:hover,
-.popup-setting-sidebar::-webkit-scrollbar-thumb:hover,
-.popup-setting-content::-webkit-scrollbar-thumb:hover,
-.project-manager-grid::-webkit-scrollbar-thumb:hover {
-    background-color: var(--scrollbar-thumb-hover);
+    .utilityDropdown-content::-webkit-scrollbar-thumb,
+    .utilitySubmenu::-webkit-scrollbar-thumb,
+    .editor-layer::-webkit-scrollbar-thumb,
+    .visual-sub-palette::-webkit-scrollbar-thumb,
+    .visual-note-palette::-webkit-scrollbar-thumb,
+    .visual-modifier-palette::-webkit-scrollbar-thumb,
+    .visual-division-palette::-webkit-scrollbar-thumb,
+    .ext-card-grid::-webkit-scrollbar-thumb,
+    .ext-detail-scroll-body::-webkit-scrollbar-thumb,
+    .ext-repo-manage-list::-webkit-scrollbar-thumb,
+    .popup-setting-sidebar::-webkit-scrollbar-thumb,
+    .popup-setting-content::-webkit-scrollbar-thumb,
+    .project-manager-grid::-webkit-scrollbar-thumb,
+    .popup-body::-webkit-scrollbar-thumb,
+    .popup-buttons::-webkit-scrollbar-thumb,
+    .popup-content::-webkit-scrollbar-thumb,
+    .popup-search-results::-webkit-scrollbar-thumb,
+    .popup-diff-list::-webkit-scrollbar-thumb,
+    .changelog-markdown::-webkit-scrollbar-thumb,
+    .resource-manager-modal::-webkit-scrollbar-thumb,
+    .chart-info-textarea::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb);
+        border: 2px solid transparent;
+        background-clip: content-box;
+        border-radius: var(--scrollbar-radius);
+    }
+
+    .utilityDropdown-content::-webkit-scrollbar-thumb:hover,
+    .utilitySubmenu::-webkit-scrollbar-thumb:hover,
+    .editor-layer::-webkit-scrollbar-thumb:hover,
+    .visual-sub-palette::-webkit-scrollbar-thumb:hover,
+    .visual-note-palette::-webkit-scrollbar-thumb:hover,
+    .visual-modifier-palette::-webkit-scrollbar-thumb:hover,
+    .visual-division-palette::-webkit-scrollbar-thumb:hover,
+    .ext-card-grid::-webkit-scrollbar-thumb:hover,
+    .ext-detail-scroll-body::-webkit-scrollbar-thumb:hover,
+    .ext-repo-manage-list::-webkit-scrollbar-thumb:hover,
+    .popup-setting-sidebar::-webkit-scrollbar-thumb:hover,
+    .popup-setting-content::-webkit-scrollbar-thumb:hover,
+    .project-manager-grid::-webkit-scrollbar-thumb:hover,
+    .popup-body::-webkit-scrollbar-thumb:hover,
+    .popup-buttons::-webkit-scrollbar-thumb:hover,
+    .popup-content::-webkit-scrollbar-thumb:hover,
+    .popup-search-results::-webkit-scrollbar-thumb:hover,
+    .popup-diff-list::-webkit-scrollbar-thumb:hover,
+    .changelog-markdown::-webkit-scrollbar-thumb:hover,
+    .resource-manager-modal::-webkit-scrollbar-thumb:hover,
+    .chart-info-textarea::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar-thumb-hover);
+    }
 }
 
 @keyframes paletteSlideIn {

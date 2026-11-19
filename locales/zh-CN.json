@@ -8,7 +8,7 @@
     "update": "游戏有新版本更新！请刷新网页应用。"
   },
   "menu": {
-    "file": "文件",
+    "file": "项目资料",
     "fileNew": "新建",
     "fileProjectManager": "项目总管",
     "fileReadFolder": "读取文件夹",
@@ -679,18 +679,18 @@
     },
     "chartInfo": {
       "title": "谱面信息",
-      "titleLabel": "标题 (Title):",
-      "artistLabel": "艺术家 (Artist):",
-      "designerLabel": "谱面设计 (Designer):",
-      "diffLabel": "难度 (Difficulty):",
+      "titleLabel": "曲名",
+      "artistLabel": "作曲",
+      "designerLabel": "全域谱面设计",
+      "diffLabel": "难度",
       "saveBtn": "保存",
       "noTitle": "无标题",
       "clickToChangeImage": "点击更换图片",
-      "readFromTrack": "从目前 Track 读取",
-      "readOtherMetadata": "读取其他音频 Metadata",
+      "readFromTrack": "从专案音讯档案读取",
+      "readOtherMetadata": "从其他音讯档案读取",
       "levelLabel": "等级",
-      "designerDiffLabel": "难度设计",
-      "customLabel": "自定义指令"
+      "designerDiffLabel": "难度谱面设计",
+      "customLabel": "自订参数"
     },
     "projectManager": {
       "title": "项目总管",
@@ -984,7 +984,7 @@
     "swap": "互换面板位置"
   },
   "skinChange": {
-    "restart": "皮肤已应用！将在下次启动时生效"
+    "restart": "外观已套用，将在下次启动时生效"
   },
   "common": {
     "apply": "应用",

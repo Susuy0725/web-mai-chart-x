@@ -8,7 +8,7 @@
     "update": "New version update available! Please refresh the page to apply."
   },
   "menu": {
-    "file": "File",
+    "file": "Project Data",
     "fileNew": "New Project",
     "fileProjectManager": "Project Manager",
     "fileReadFolder": "Load Folder",
@@ -679,18 +679,18 @@
     },
     "chartInfo": {
       "title": "Chart Info",
-      "titleLabel": "Title:",
-      "artistLabel": "Artist:",
-      "designerLabel": "Designer:",
-      "diffLabel": "Difficulty:",
+      "titleLabel": "Song title",
+      "artistLabel": "Artist",
+      "designerLabel": "Global Note Designer",
+      "diffLabel": "Difficulty",
       "saveBtn": "Save",
       "noTitle": "Untitled",
       "clickToChangeImage": "Click to change image",
-      "readFromTrack": "Read from Current Track",
-      "readOtherMetadata": "Read Other Audio Metadata",
+      "readFromTrack": "Read from project audio file",
+      "readOtherMetadata": "Read from other audio files",
       "levelLabel": "Level",
-      "designerDiffLabel": "Chart Designer",
-      "customLabel": "Custom Commands"
+      "designerDiffLabel": "Difficulty chart design",
+      "customLabel": "Custom parameters"
     },
     "projectManager": {
       "title": "Project Manager",
@@ -984,7 +984,7 @@
     "swap": "Swap Panel Positions"
   },
   "skinChange": {
-    "restart": "Skin applied! Will take effect on next launch"
+    "restart": "The appearance has been applied and will take effect on the next startup"
   },
   "common": {
     "apply": "Apply",

@@ -8,7 +8,7 @@
     "update": "遊戲有新版本更新！請重新整理網頁套用。"
   },
   "menu": {
-    "file": "檔案",
+    "file": "專案資料",
     "fileNew": "新建",
     "fileProjectManager": "專案總管",
     "fileReadFolder": "讀取資料夾",
@@ -679,18 +679,18 @@
     },
     "chartInfo": {
       "title": "譜面資訊",
-      "titleLabel": "標題 (Title):",
-      "artistLabel": "藝術家 (Artist):",
-      "designerLabel": "譜面設計 (Designer):",
-      "diffLabel": "難度 (Difficulty):",
+      "titleLabel": "曲名",
+      "artistLabel": "作曲",
+      "designerLabel": "全域譜面設計",
+      "diffLabel": "難度",
       "saveBtn": "儲存",
       "noTitle": "無標題",
       "clickToChangeImage": "點擊更換圖片",
-      "readFromTrack": "從目前 Track 讀取",
-      "readOtherMetadata": "讀取其他音訊 Metadata",
+      "readFromTrack": "從專案音訊檔案讀取",
+      "readOtherMetadata": "從其他音訊檔案讀取",
       "levelLabel": "等級",
-      "designerDiffLabel": "難度設計",
-      "customLabel": "自訂指令"
+      "designerDiffLabel": "難度譜面設計",
+      "customLabel": "自訂參數"
     },
     "projectManager": {
       "title": "專案總管",
@@ -984,7 +984,7 @@
     "swap": "互換面板位置"
   },
   "skinChange": {
-    "restart": "皮膚已套用！將在下次啟動時生效"
+    "restart": "外觀已套用，將在下次啟動時生效"
   },
   "common": {
     "apply": "套用",

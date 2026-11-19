@@ -367,7 +367,7 @@
       "externalConnection": "외부 연결"
     },
     "items": {
-      "skin": "게임 스킨",
+      "skin": "메모 모양",
       "speed": " Tap/Hold 속도",
       "slideSpeed": " Slide 속도",
       "touchSpeed": " Touch 속도",
@@ -407,7 +407,7 @@
       "langAuto": "시스템 설정 따르기",
       "drawHitEffect": "타격 효과 렌더링",
       "drawHanabiEffect": "불꽃 효과 렌더링",
-      "lowRes": "저해상도 모드 (저사양 기기의 성능 향상을 위해 DPI를 1x로 제한)",
+      "lowRes": "저해상도 모드",
       "majdataWsUrl": "MajdataView WebSocket 주소",
       "autoConnectMajdataView": "MajdataView 자동 연결",
       "manageResources": "리소스 관리",
@@ -428,7 +428,7 @@
       "middleDistance": "슬라이딩 스타 중간 거리(middleDistance)",
       "noteBaseSize": "노트 베이스 크기(noteBaseSize)",
       "invertWheelDirection": "마우스 휠 스크롤 방향 반전",
-      "smoothScroll": "부드러운 스크롤 (타임라인 부드럽게 이동)",
+      "smoothScroll": "타임라인 부드럽게 이동",
       "wheelSensitivity": "마우스 휠 감도",
       "syntaxColors": "구문 강조 커스텀 색상",
       "customKeybindings": "사용자 지정 단축키"
@@ -446,7 +446,7 @@
       "off": "수동 플레이"
     },
     "invertWheelOpts": {
-      "none": "없음 (기본값)",
+      "none": "기본",
       "preview": "미리보기 트랙만 반전",
       "visualEditor": "비주얼 에디터만 반전",
       "both": "둘 다 반전"

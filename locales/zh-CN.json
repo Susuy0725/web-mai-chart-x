@@ -367,7 +367,7 @@
       "externalConnection": "外部连接"
     },
     "items": {
-      "skin": "游戏皮肤",
+      "skin": "音符外观",
       "speed": " Tap/Hold 速度",
       "slideSpeed": " Slide 速度",
       "touchSpeed": " Touch 速度",
@@ -407,7 +407,7 @@
       "langAuto": "跟随系统",
       "drawHitEffect": "渲染击打特效",
       "drawHanabiEffect": "渲染烟火特效",
-      "lowRes": "低分辨率模式 (限制 1x DPI 以提升低配设备性能)",
+      "lowRes": "低分辨率模式",
       "majdataWsUrl": "MajdataView WebSocket 地址",
       "autoConnectMajdataView": "自动连接 MajdataView",
       "manageResources": "资源管理",
@@ -417,9 +417,9 @@
       "importAllData": "导入备份包",
       "importAllDataBtn": "导入",
       "showJudge": "显示判定",
-      "showCriticalPerfect": "显示 critical perfect",
-      "showBreakCriticalPerfect": "显示 break critical perfect",
-      "showFastLate": "显示 fast / late",
+      "showCriticalPerfect": "显示 Critical Perfect",
+      "showBreakCriticalPerfect": "显示 Break Critical Perfect",
+      "showFastLate": "显示 Fast / Late",
       "autoPlay": "游玩模式",
       "showBorder": "显示边框遮罩",
       "renderSurroundingAuxiliaryText": "显示画布两侧信息",
@@ -428,7 +428,7 @@
       "noteBaseSize": "Note 基础大小 (noteBaseSize)",
       "middleDistance": "滑星中段距离 (middleDistance)",
       "invertWheelDirection": "反转滚轮滑动方向",
-      "smoothScroll": "平滑滚轮 (平滑时间轴滑动)",
+      "smoothScroll": "平滑时间轴滚动",
       "wheelSensitivity": "滚轮灵敏度",
       "syntaxColors": "语法高亮自定颜色",
       "customKeybindings": "自定义快捷键"
@@ -446,9 +446,9 @@
       "off": "手动游玩"
     },
     "invertWheelOpts": {
-      "none": "无 (默认)",
-      "preview": "仅预览轨道 (Preview)",
-      "visualEditor": "仅可视化编辑器 (Visual Editor)",
+      "none": "默认",
+      "preview": "仅预览轨道",
+      "visualEditor": "仅可视化编辑器",
       "both": "两者皆反转"
     },
     "syntaxColorPresets": {

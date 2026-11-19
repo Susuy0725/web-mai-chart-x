@@ -367,7 +367,7 @@
       "externalConnection": "外部接続"
     },
     "items": {
-      "skin": "ゲームスキン",
+      "skin": "ノートの外観",
       "speed": "Tap/Hold速度",
       "slideSpeed": "Slide速度",
       "touchSpeed": "Touch速度",
@@ -405,7 +405,7 @@
       "simplayUseButton": "Simplay で外枠ボタンを使用",
       "lang": "言語",
       "langAuto": "システム設定",
-      "lowRes": "低解像度モード (1x 解像度に制限して軽量化)",
+      "lowRes": "低解像度モード",
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "起動時に MajdataView に自動接続",
       "drawHanabiEffect": "花火のエフェクトのレンダリング",
@@ -428,7 +428,7 @@
       "middleDistance": "スライディングスター中距離(middleDistance)",
       "noteBaseSize": "ノートベースサイズ (noteBaseSize)",
       "invertWheelDirection": "マウスホイールのスクロール方向反転",
-      "smoothScroll": "スムーズスクロール (滑らかなタイムライン移動)",
+      "smoothScroll": "滑らかなタイムライン移動",
       "wheelSensitivity": "ホイール感度",
       "syntaxColors": "構文強調カスタム色",
       "customKeybindings": "ショートカット設定"
@@ -446,7 +446,7 @@
       "off": "マニュアル"
     },
     "invertWheelOpts": {
-      "none": "なし (デフォルト)",
+      "none": "デフォルト",
       "preview": "プレビュー軌道のみ反転",
       "visualEditor": "ビジュアルエディタのみ反転",
       "both": "両方反転"

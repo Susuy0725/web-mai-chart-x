@@ -367,7 +367,7 @@
       "externalConnection": "External Connection"
     },
     "items": {
-      "skin": "Game Skin",
+      "skin": "note skin",
       "speed": "Tap/Hold Speed",
       "slideSpeed": "Slide Speed",
       "touchSpeed": "Touch Speed",
@@ -407,7 +407,7 @@
       "langAuto": "Follow system",
       "drawHitEffect": "Render Hit Effects",
       "drawHanabiEffect": "Render Hanabi Effects",
-      "lowRes": "Low Resolution Mode (Limit 1x DPI for low-end devices)",
+      "lowRes": "Low Resolution Mode",
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "Auto-connect to MajdataView",
       "manageResources": "Resource Manager",
@@ -446,7 +446,7 @@
       "off": "Manual Play"
     },
     "invertWheelOpts": {
-      "none": "None (Default)",
+      "none": "Default",
       "preview": "Preview Track Only",
       "visualEditor": "Visual Editor Only",
       "both": "Both"

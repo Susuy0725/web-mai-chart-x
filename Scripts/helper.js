@@ -515,7 +515,7 @@ export function popupWindow({
     width = 340,
     maxWidth = 600,
     height = undefined,
-    maxHeight = "100dvh",
+    maxHeight = undefined,
     unclosable = false,
     isPage = undefined,
     mode = undefined,
@@ -526,7 +526,7 @@ export function popupWindow({
 } = {}) {
     const popupWidth = typeof width === 'number' ? `${width}px` : width;
     const popupHeight = height ? (typeof height === 'number' ? `${height}px` : height) : 'auto';
-    const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : '100vh';
+    const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : null;
 
     // 判定是否為頁面模式 (Page Route) 或 對話框模式 (Dialog)
     // 預設規則：有 customContent 且非手動指定則為 Page，純文字提示 (只有 content) 預設為 Dialog
@@ -586,7 +586,9 @@ export function popupWindow({
     popup.style.maxWidth = maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%';
     popup.style.width = title ? popupWidth : 'fit-content';
     popup.style.height = popupHeight;
-    popup.style.maxHeight = popupMaxHeight;
+    if (popupMaxHeight) {
+        popup.style.maxHeight = popupMaxHeight;
+    }
 
     // 3. 建立頂部導覽列 (Header / AppBar)
     const headerElem = document.createElement('div');

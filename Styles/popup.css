@@ -268,12 +268,13 @@
 #hint-container {
     position: fixed;
     top: var(--toast-container-top, var(--utility-height, 40px));
-    left: 0;
+    right: 0;
     padding: 10px 12px;
     z-index: 100005;
     /* 確保高於所有彈窗與遮罩 (如 welcomeModal 的 99999) */
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     pointer-events: none;
     max-height: calc(100vh - 20px);
     box-sizing: border-box;
@@ -285,7 +286,7 @@
 :root:has(.wmc-welcome-overlay.active) #hint-container,
 #hint-container.has-popup {
     --toast-container-top: 14px;
-    padding-left: 16px;
+    padding-right: 16px;
 }
 
 /* 行動端全螢幕 Page 模式開啟時，避開頂部標題列與返回按鈕 */
@@ -301,11 +302,12 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    background: #202020;
+    background: var(--main-color, #131313);
     color: #ffffff;
-    border-left: 6px solid #404040;
-    border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --toast-status-color: #888888;
+    border: none;
+    border-radius: 7px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
     font-size: 13px;
     pointer-events: auto;
     cursor: pointer;
@@ -361,19 +363,19 @@
 }
 
 .toast-item.toast-info {
-    border-left-color: var(--toast-info);
+    --toast-status-color: var(--toast-info);
 }
 
 .toast-item.toast-error {
-    border-left-color: var(--toast-error);
+    --toast-status-color: var(--toast-error);
 }
 
 .toast-item.toast-success {
-    border-left-color: var(--toast-success);
+    --toast-status-color: var(--toast-success);
 }
 
 .toast-item.toast-warning {
-    border-left-color: var(--toast-warning);
+    --toast-status-color: var(--toast-warning);
 }
 
 /* Toast 內部排版 */
@@ -400,7 +402,7 @@
     color: #ffffff;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     line-height: 1.4;
 }
 
@@ -429,10 +431,21 @@
 .toast-body-text {
     display: flex;
     align-items: center;
+    gap: 8px;
     font-size: 12.5px;
     line-height: 1.45;
     color: #d4d4d4;
     word-break: break-word;
+}
+
+.toast-title:not(:empty)::before,
+.toast-content-wrapper:has(.toast-title:empty) .toast-body-text:not(:empty)::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--toast-status-color);
+    flex-shrink: 0;
 }
 
 .toast-detail-text {

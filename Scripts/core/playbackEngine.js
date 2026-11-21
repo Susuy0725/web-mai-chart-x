@@ -656,7 +656,8 @@ export class PlaybackEngine {
             const rawData = this.opts.getRawData?.() || [];
             const dataIndexToTime = this.opts.getDataIndexToTime?.() || [];
 
-            if (settings.cursorFollow && nowIndex !== this.lastCursorIndex && editorInput) {
+            const hasSelection = editorInput ? editorInput.selectionStart !== editorInput.selectionEnd : false;
+            if (settings.cursorFollow && !hasSelection && nowIndex !== this.lastCursorIndex && editorInput) {
                 this.lastCursorIndex = nowIndex;
                 this.cursorLastIndexTime = dataIndexToTime[nowIndex] || 0;
                 const point = this.opts.getCharOffsetAtIndex

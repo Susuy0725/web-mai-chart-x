@@ -694,32 +694,43 @@
     background: rgba(255, 255, 255, 0.08);
 }
 
-.popup-setting-color-preview {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 48px;
-    height: 22px;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: #141419;
-    font-family: 'mono', monospace, sans-serif;
-    font-size: 11.5px;
-    font-weight: 700;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-sizing: border-box;
-    user-select: none;
-    letter-spacing: 0.5px;
-}
-
 .popup-setting-color-hex {
     font-family: 'mono', monospace, sans-serif;
     font-size: 11.5px;
     color: #a0a0b4;
-    min-width: 60px;
+    min-width: 68px;
+    padding: 2px 4px;
+    border-radius: 4px;
     text-transform: uppercase;
     user-select: none;
     font-weight: 500;
+    cursor: text;
+    box-sizing: border-box;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.popup-setting-color-hex:hover,
+.popup-setting-color-hex:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    outline: none;
+}
+
+.popup-setting-color-hex-edit {
+    width: 68px;
+    min-width: 68px;
+    padding: 2px 4px;
+    border: 1px solid var(--accent-color, #4499ee);
+    border-radius: 4px;
+    background: var(--popup-surface, #202026);
+    color: var(--popup-text-main, #ffffff);
+    font-family: 'mono', monospace, sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    outline: none;
+    box-sizing: border-box;
+    box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.28));
 }
 
 .popup-setting-color-input {
@@ -747,6 +758,29 @@
 .popup-setting-color-input::-moz-color-swatch {
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 4px;
+}
+
+.popup-setting-codeblock {
+    margin: 2px 0 6px 0;
+    padding: 10px 12px;
+    background: var(--editor-background, #1F1F1F);
+    border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--popup-radius-md, 6px);
+    color: var(--hl-note, #d4d4d4);
+    font-family: 'mono', monospace, sans-serif;
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+    user-select: text;
+    -webkit-user-select: text;
+    box-sizing: border-box;
+}
+
+.popup-setting-codeblock code {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
 }
 
 .popup-setting-sub-reset-btn {

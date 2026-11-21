@@ -264,6 +264,20 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
             delete settings.enablePreviewWaveform;
             hasNewKeys = true;
         }
+        if (!('showUIPosition' in parsedSettings) && ('showUIHorizontalPosition' in parsedSettings || 'showUIVerticalPosition' in parsedSettings)) {
+            const horiz = parsedSettings.showUIHorizontalPosition === 'right' ? 'right' : 'left';
+            const vert = parsedSettings.showUIVerticalPosition === 'bottom' ? 'bottom' : 'top';
+            settings.showUIPosition = `${vert}-${horiz}`;
+            hasNewKeys = true;
+        }
+        if ('showUIHorizontalPosition' in settings) {
+            delete settings.showUIHorizontalPosition;
+            hasNewKeys = true;
+        }
+        if ('showUIVerticalPosition' in settings) {
+            delete settings.showUIVerticalPosition;
+            hasNewKeys = true;
+        }
     }
     if (parsedSettings) {
         for (const [oldKey, newKey] of legacyInvertedMap) {

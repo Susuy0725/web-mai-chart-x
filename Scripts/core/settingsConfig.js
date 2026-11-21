@@ -48,8 +48,7 @@ export const defaultSettings = {
     majdataWsUrl: 'ws://127.0.0.1:8083/majdata',
     autoConnectMajdataView: false,
     showUI: false,
-    showUIHorizontalPosition: 'left',
-    showUIVerticalPosition: 'top',
+    showUIPosition: 'top-left',
     enableQuickPanel: true,
     richHanabi: true,
     previewAudioVisualMode: 'waveform', // 'off' | 'waveform' | 'spectrogram'
@@ -192,16 +191,25 @@ export const settingsConfig = [
                 id: 'richHanabi',
                 type: 'checkbox',
                 label: 'settings.items.richHanabi',
+                visibleWhen: (s) => Boolean(s.drawHanabiEffect),
                 def: defaultSettings.richHanabi || true
             },
             {
                 id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,
             },
             {
-                id: 'showCriticalPerfect', type: 'checkbox', label: 'settings.items.showCriticalPerfect', def: defaultSettings.showCriticalPerfect ?? true,
+                id: 'showCriticalPerfect',
+                type: 'checkbox',
+                label: 'settings.items.showCriticalPerfect',
+                visibleWhen: (s) => Boolean(s.showJudge),
+                def: defaultSettings.showCriticalPerfect ?? true,
             },
             {
-                id: 'showBreakCriticalPerfect', type: 'checkbox', label: 'settings.items.showBreakCriticalPerfect', def: defaultSettings.showBreakCriticalPerfect ?? true,
+                id: 'showBreakCriticalPerfect',
+                type: 'checkbox',
+                label: 'settings.items.showBreakCriticalPerfect',
+                visibleWhen: (s) => Boolean(s.showJudge) && Boolean(s.showCriticalPerfect),
+                def: defaultSettings.showBreakCriticalPerfect ?? true,
             },
             { type: 'header', label: 'settings.sections.backgroundAndSensor' },
             {
@@ -258,6 +266,68 @@ export const settingsConfig = [
                 label: 'settings.items.renderSurroundingAuxiliaryText',
                 def: defaultSettings.renderSurroundingAuxiliaryText ?? true
             },
+            {
+                id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
+            },
+            {
+                id: 'showUIPosition',
+                type: 'dropdown',
+                label: 'settings.items.showUIPosition',
+                visibleWhen: (s) => Boolean(s.showUI),
+                options: [
+                    { value: 'top-left', label: 'settings.positionOpts.topLeft' },
+                    { value: 'top-right', label: 'settings.positionOpts.topRight' },
+                    { value: 'bottom-left', label: 'settings.positionOpts.bottomLeft' },
+                    { value: 'bottom-right', label: 'settings.positionOpts.bottomRight' },
+                ],
+                def: defaultSettings.showUIPosition || 'top-left'
+            },
+            {
+                id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
+            },
+            {
+                id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule
+            },
+            {
+                id: 'timeDisplayCapsulePosition',
+                type: 'dropdown',
+                label: 'settings.items.timeDisplayCapsulePosition',
+                visibleWhen: (s) => Boolean(s.timeDisplayCapsule),
+                options: [
+                    { value: 'left', label: 'settings.positionOpts.left' },
+                    { value: 'center', label: 'settings.positionOpts.center' },
+                    { value: 'right', label: 'settings.positionOpts.right' },
+                ],
+                def: defaultSettings.timeDisplayCapsulePosition || 'center'
+            },
+            {
+                id: 'highlightCurrentNote', type: 'checkbox', label: 'settings.items.highlightCurrentNote', def: defaultSettings.highlightCurrentNote ?? true
+            },
+            {
+                id: 'syntaxColors',
+                type: 'color-object',
+                label: 'settings.items.syntaxColors',
+                def: defaultSettings.syntaxColors,
+                subLabels: {
+                    note: 'settings.syntaxColorOpts.note',
+                    comment: 'settings.syntaxColorOpts.comment',
+                    bpm: 'settings.syntaxColorOpts.bpm',
+                    split: 'settings.syntaxColorOpts.split',
+                    time: 'settings.syntaxColorOpts.time',
+                    slide: 'settings.syntaxColorOpts.slide',
+                    customSlide: 'settings.syntaxColorOpts.customSlide',
+                    hold: 'settings.syntaxColorOpts.hold',
+                    break: 'settings.syntaxColorOpts.break',
+                    ex: 'settings.syntaxColorOpts.ex',
+                    mine: 'settings.syntaxColorOpts.mine',
+                    hanabi: 'settings.syntaxColorOpts.hanabi',
+                    touch: 'settings.syntaxColorOpts.touch',
+                    comma: 'settings.syntaxColorOpts.comma',
+                },
+                apply: (val) => {
+                    applySyntaxColors(val);
+                }
+            },
             { type: 'header', label: 'settings.sections.previewTrack' },
             {
                 id: 'previewAudioVisualMode',
@@ -274,12 +344,14 @@ export const settingsConfig = [
                 id: 'previewWaveformColor',
                 type: 'color',
                 label: 'settings.items.previewWaveformColor',
+                visibleWhen: (s) => (s.previewAudioVisualMode || 'waveform') === 'waveform',
                 def: defaultSettings.previewWaveformColor || '#888888'
             },
             {
                 id: 'previewSpectrogramMinFreq',
                 type: 'range',
                 label: 'settings.items.previewSpectrogramMinFreq',
+                visibleWhen: (s) => s.previewAudioVisualMode === 'spectrogram',
                 min: 0,
                 max: 16000,
                 step: 50,
@@ -290,6 +362,7 @@ export const settingsConfig = [
                 id: 'previewSpectrogramMaxFreq',
                 type: 'range',
                 label: 'settings.items.previewSpectrogramMaxFreq',
+                visibleWhen: (s) => s.previewAudioVisualMode === 'spectrogram',
                 min: 500,
                 max: 22050,
                 step: 100,
@@ -300,6 +373,7 @@ export const settingsConfig = [
                 id: 'previewSpectrogramBrightness',
                 type: 'range',
                 label: 'settings.items.previewSpectrogramBrightness',
+                visibleWhen: (s) => s.previewAudioVisualMode === 'spectrogram',
                 min: 0,
                 max: 2,
                 step: 0.05,
@@ -370,72 +444,11 @@ export const settingsConfig = [
                 id: 'cursorFollow', type: 'checkbox', label: 'settings.items.cursorFollow', def: defaultSettings.cursorFollow ?? true
             },
             {
-                id: 'highlightCurrentNote', type: 'checkbox', label: 'settings.items.highlightCurrentNote', def: defaultSettings.highlightCurrentNote ?? true
-            },
-            {
                 id: 'editorAutoScroll', type: 'checkbox', label: 'settings.items.editorAutoScroll', def: defaultSettings.editorAutoScroll ?? true
-            },
-            {
-                id: 'syntaxColors',
-                type: 'color-object',
-                label: 'settings.items.syntaxColors',
-                def: defaultSettings.syntaxColors,
-                subLabels: {
-                    note: 'settings.syntaxColorOpts.note',
-                    comment: 'settings.syntaxColorOpts.comment',
-                    bpm: 'settings.syntaxColorOpts.bpm',
-                    split: 'settings.syntaxColorOpts.split',
-                    time: 'settings.syntaxColorOpts.time',
-                    slide: 'settings.syntaxColorOpts.slide',
-                    customSlide: 'settings.syntaxColorOpts.customSlide',
-                    hold: 'settings.syntaxColorOpts.hold',
-                    break: 'settings.syntaxColorOpts.break',
-                    ex: 'settings.syntaxColorOpts.ex',
-                    mine: 'settings.syntaxColorOpts.mine',
-                    hanabi: 'settings.syntaxColorOpts.hanabi',
-                    touch: 'settings.syntaxColorOpts.touch',
-                    comma: 'settings.syntaxColorOpts.comma',
-                },
-                subPreviews: {
-                    note: '1',
-                    comment: '/* 註釋 */',
-                    bpm: '(120)',
-                    split: '{4}',
-                    time: '[1:4]',
-                    slide: '-^v',
-                    customSlide: '<A1>',
-                    hold: 'h',
-                    break: 'b',
-                    ex: 'x',
-                    mine: 'm',
-                    hanabi: 'f',
-                    touch: 'A1',
-                    comma: ',',
-                },
-                apply: (val) => {
-                    applySyntaxColors(val);
-                }
             },
             { type: 'header', label: 'settings.sections.timelineAndPanel' },
             {
                 id: 'autoPauseOnScroll', type: 'checkbox', label: 'settings.items.autoPauseOnScroll', def: defaultSettings.autoPauseOnScroll
-            },
-            {
-                id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
-            },
-            {
-                id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule
-            },
-            {
-                id: 'timeDisplayCapsulePosition',
-                type: 'dropdown',
-                label: 'settings.items.timeDisplayCapsulePosition',
-                options: [
-                    { value: 'left', label: 'settings.positionOpts.left' },
-                    { value: 'center', label: 'settings.positionOpts.center' },
-                    { value: 'right', label: 'settings.positionOpts.right' },
-                ],
-                def: defaultSettings.timeDisplayCapsulePosition || 'center'
             },
             {
                 id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
@@ -495,29 +508,6 @@ export const settingsConfig = [
         label: 'settings.tabs.other',
         items: [
             { type: 'header', label: 'settings.sections.performanceAndUi' },
-            {
-                id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
-            },
-            {
-                id: 'showUIHorizontalPosition',
-                type: 'dropdown',
-                label: 'settings.items.showUIHorizontalPosition',
-                options: [
-                    { value: 'left', label: 'settings.positionOpts.left' },
-                    { value: 'right', label: 'settings.positionOpts.right' },
-                ],
-                def: defaultSettings.showUIHorizontalPosition || 'left'
-            },
-            {
-                id: 'showUIVerticalPosition',
-                type: 'dropdown',
-                label: 'settings.items.showUIVerticalPosition',
-                options: [
-                    { value: 'top', label: 'settings.positionOpts.top' },
-                    { value: 'bottom', label: 'settings.positionOpts.bottom' },
-                ],
-                def: defaultSettings.showUIVerticalPosition || 'top'
-            },
             {
                 id: 'lowRes',
                 type: 'checkbox',

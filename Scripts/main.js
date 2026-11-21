@@ -5598,7 +5598,7 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         setEditorCss();
     }
     const redrawKeys = [
-        'showOutline', 'showBorder', 'showUI', 'showUIHorizontalPosition', 'showUIVerticalPosition',
+        'showOutline', 'showBorder', 'showUI', 'showUIPosition',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
         'drawHitEffect', 'drawHanabiEffect', 'richHanabi',
         'previewAudioVisualMode', 'previewWaveformColor',

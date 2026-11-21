@@ -1,4 +1,4 @@
-import { popupWindow, clamp, simpleToast, defaultSyntaxColors, applySyntaxColors, syntaxColorPresets } from '../helper.js';
+import { popupWindow, clamp, simpleToast, defaultSyntaxColors, applySyntaxColors, syntaxColorPresets, getHighlight } from '../helper.js';
 import { settingsConfig, isEasterEggUnlocked } from '../core/settingsConfig.js';
 import { t, setLang } from '../i18n.js';
 import { idbSet } from '../indexDB.js';
@@ -665,22 +665,27 @@ export function openSettingsModal(options = {}) {
 
     const createRangeInput = createSettingRangeInput;
 
-    const createColorInput = (value, onInputCallback, previewText = '') => {
+    const normalizeHexColor = (raw) => {
+        if (typeof raw !== 'string') return null;
+        const cleaned = raw.trim().replace(/^#/, '');
+        if (/^[0-9a-fA-F]{3}$/.test(cleaned)) {
+            return `#${cleaned.split('').map((ch) => ch + ch).join('').toLowerCase()}`;
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+            return `#${cleaned.toLowerCase()}`;
+        }
+        return null;
+    };
+
+    const createColorInput = (value, onInputCallback) => {
         const wrap = document.createElement('div');
         wrap.className = 'popup-setting-color-wrap';
-
-        const preview = document.createElement('span');
-        preview.className = 'popup-setting-color-preview';
-        preview.textContent = previewText;
-        if (previewText) {
-            preview.style.color = value;
-        } else {
-            preview.style.backgroundColor = value;
-        }
 
         const hexText = document.createElement('span');
         hexText.className = 'popup-setting-color-hex';
         hexText.textContent = (value || '').toUpperCase();
+        hexText.tabIndex = 0;
+        hexText.setAttribute('role', 'button');
 
         const input = document.createElement('input');
         input.type = 'color';
@@ -689,17 +694,75 @@ export function openSettingsModal(options = {}) {
 
         const updateColor = (newVal) => {
             input.value = newVal;
-            if (previewText) {
-                preview.style.color = newVal;
-            } else {
-                preview.style.backgroundColor = newVal;
-            }
             hexText.textContent = (newVal || '').toUpperCase();
         };
 
         input.addEventListener('input', () => {
             updateColor(input.value);
             if (onInputCallback) onInputCallback(input.value);
+        });
+
+        let isEditingHex = false;
+        const enterHexEditMode = () => {
+            if (isEditingHex) return;
+            isEditingHex = true;
+
+            const editInput = document.createElement('input');
+            editInput.type = 'text';
+            editInput.className = 'popup-setting-color-hex-edit';
+            editInput.maxLength = 7;
+            editInput.spellcheck = false;
+            editInput.value = (input.value || '').toUpperCase();
+
+            let finished = false;
+            const finishEdit = (commit) => {
+                if (finished) return;
+                finished = true;
+                isEditingHex = false;
+
+                if (commit) {
+                    const normalized = normalizeHexColor(editInput.value);
+                    if (normalized) {
+                        updateColor(normalized);
+                        if (onInputCallback) onInputCallback(normalized);
+                    }
+                }
+
+                if (editInput.parentNode) {
+                    editInput.replaceWith(hexText);
+                }
+            };
+
+            editInput.addEventListener('click', (e) => e.stopPropagation());
+            editInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    finishEdit(true);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    finishEdit(false);
+                }
+            });
+            editInput.addEventListener('blur', () => finishEdit(true));
+
+            hexText.replaceWith(editInput);
+            editInput.focus();
+            editInput.select();
+        };
+
+        hexText.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            enterHexEditMode();
+        });
+        hexText.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                enterHexEditMode();
+            }
         });
 
         wrap.setValue = (newVal) => {
@@ -713,7 +776,6 @@ export function openSettingsModal(options = {}) {
             updateColor(input.value);
         };
 
-        wrap.appendChild(preview);
         wrap.appendChild(hexText);
         wrap.appendChild(input);
         return wrap;
@@ -1094,6 +1156,31 @@ export function openSettingsModal(options = {}) {
     const inputRefs = {};
     let popupCtx = null;
 
+    const getCurrentFormValues = () => {
+        const snapshot = { ...settings };
+        Object.values(inputRefs).forEach((ref) => {
+            if (!ref || ref.type === 'button') return;
+            if (ref.type === 'checkbox') {
+                snapshot[ref.key] = ref.el.checked;
+            } else if (ref.type === 'dropdown') {
+                snapshot[ref.key] = isNaN(ref.el.value) ? ref.el.value : parseFloat(ref.el.value);
+            } else if (ref.type === 'object' || ref.type === 'color-object' || ref.type === 'keybindings') {
+                snapshot[ref.key] = { ...ref.el.value };
+            } else {
+                snapshot[ref.key] = ref.el.value;
+            }
+        });
+        return snapshot;
+    };
+
+    const syncConditionalRows = () => {
+        const snapshot = getCurrentFormValues();
+        Object.values(inputRefs).forEach((ref) => {
+            if (!ref.rowEl || typeof ref.visibleWhen !== 'function') return;
+            ref.rowEl.style.display = ref.visibleWhen(snapshot) ? '' : 'none';
+        });
+    };
+
     // 生成各分類與設定項
     settingsConfig.forEach((category) => {
         if (category.secret && !isEasterEggUnlocked()) {
@@ -1130,6 +1217,7 @@ export function openSettingsModal(options = {}) {
                         appContext.setSetting(targetKey, checked);
                         if (item.apply) item.apply(checked);
                     } catch (err) { }
+                    syncConditionalRows();
                 });
                 el.addEventListener('click', (e) => e.stopPropagation());
             }
@@ -1142,6 +1230,7 @@ export function openSettingsModal(options = {}) {
                         targetRef[targetKey] = newValue;
                         appContext.setSetting(targetKey, newValue);
                     } catch (err) { }
+                    syncConditionalRows();
                     if (item.id === 'lang') {
                         el.disabled = true;
                         const success = await setLang(newValue);
@@ -1184,7 +1273,7 @@ export function openSettingsModal(options = {}) {
                         appContext.setSetting(targetKey, newColor);
                         if (item.apply) item.apply(newColor);
                     } catch (err) { }
-                }, item.previewText || '');
+                });
             }
             // --- D. 處理 Text ---
             else if (item.type === 'text') {
@@ -1312,13 +1401,30 @@ export function openSettingsModal(options = {}) {
                     el._updateDisplay();
                 });
                 toolbarRow.appendChild(resetBtn);
+
+                const previewSample = '|| Simai\n(180){8}1,2b,3x,4m,\n1h[4:1],A1f,C,\n5-8[8:1],6<A1>7[4:1],';
+                const codeBlock = document.createElement('pre');
+                codeBlock.className = 'popup-setting-codeblock';
+                const codeEl = document.createElement('code');
+                codeEl.innerHTML = getHighlight(previewSample);
+                codeBlock.appendChild(codeEl);
+
+                const syncPreviewColors = (colors) => {
+                    const merged = { ...defaultSyntaxColors, ...(colors || {}) };
+                    Object.entries(merged).forEach(([k, color]) => {
+                        const cssVar = `--hl-${k.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+                        codeBlock.style.setProperty(cssVar, color);
+                    });
+                };
+
+                el.appendChild(codeBlock);
+                syncPreviewColors(el.value);
                 el.appendChild(toolbarRow);
 
                 Object.keys(item.def).forEach((subKey) => {
                     const subDefault = item.def[subKey];
                     const subCurrent = currentVal[subKey] ?? subDefault;
                     const subLabel = t(item.subLabels?.[subKey] || subKey);
-                    const previewText = item.subPreviews?.[subKey] || '';
 
                     const colorInput = createColorInput(subCurrent, (newColor) => {
                         try {
@@ -1327,8 +1433,9 @@ export function openSettingsModal(options = {}) {
                             appContext.setSetting(targetKey, targetRef[targetKey]);
                             if (item.apply) item.apply(targetRef[targetKey]);
                             presetSelect.value = detectMatchingPreset(targetRef[targetKey]);
+                            syncPreviewColors(el.value);
                         } catch (e) { }
-                    }, previewText);
+                    });
 
                     el._subRefs[subKey] = colorInput;
 
@@ -1342,6 +1449,7 @@ export function openSettingsModal(options = {}) {
                         if (el._subRefs[subKey]?.setValue) el._subRefs[subKey].setValue(val);
                     });
                     presetSelect.value = detectMatchingPreset(targetRef[targetKey]);
+                    syncPreviewColors(targetRef[targetKey] ?? item.def);
                 };
             }
             // --- F2. 處理自訂快速鍵面板 (Keybindings) ---
@@ -1362,21 +1470,25 @@ export function openSettingsModal(options = {}) {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
             }
 
+            const rowEl = item.type === 'keybindings'
+                ? el
+                : createRow(t(item.label), el);
+
             inputRefs[item.id] = {
                 el,
+                rowEl,
                 def: item.def,
                 type: item.type,
                 apply: item.apply,
+                visibleWhen: item.visibleWhen,
                 ref: targetRef,
                 key: targetKey
             };
-            if (item.type === 'keybindings') {
-                section.appendChild(el);
-            } else {
-                section.appendChild(createRow(t(item.label), el));
-            }
+            section.appendChild(rowEl);
         });
     });
+
+    syncConditionalRows();
 
     if (typeof initialTab === 'string') {
         const matchedIdx = categoryTabIds.indexOf(initialTab);
@@ -1457,6 +1569,7 @@ export function openSettingsModal(options = {}) {
                         }
                     });
 
+                    syncConditionalRows();
                     if (draw) draw();
                     simpleToast({ content: t('toast.restoreSaved'), type: 'info', timeout: 1500 });
                 }

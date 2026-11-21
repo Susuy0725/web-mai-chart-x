@@ -436,8 +436,7 @@
       "syntaxColors": "語法高亮自訂顏色",
       "customKeybindings": "自訂快速鍵",
       "timeDisplayCapsulePosition": "懸浮時間膠囊位置",
-      "showUIHorizontalPosition": "FPS 介面水平位置",
-      "showUIVerticalPosition": "FPS 介面垂直位置",
+      "showUIPosition": "FPS 介面位置",
       "seekStepSeconds": "時間軸跳轉秒數 (Ctrl+←/→)",
       "cursorFollow": "播放時文字游標跟隨進度",
       "highlightCurrentNote": "根據進度高亮目前音符",
@@ -451,8 +450,8 @@
       "previewBpmLineOpacity": "BPM 線透明度"
     },
     "previewAudioVisualOpts": {
-      "waveform": "波形圖 (Waveform)",
-      "spectrogram": "頻譜圖 (Spectrogram)",
+      "waveform": "波形圖",
+      "spectrogram": "頻譜圖",
       "off": "關閉"
     },
     "middleDisplayOpts": {
@@ -477,8 +476,10 @@
       "left": "左",
       "center": "中",
       "right": "右",
-      "top": "上",
-      "bottom": "下"
+      "topLeft": "左上",
+      "topRight": "右上",
+      "bottomLeft": "左下",
+      "bottomRight": "右下"
     },
     "syntaxColorPresets": {
       "title": "主題色系",
@@ -491,21 +492,21 @@
       "cyberpunk": "霓虹 (Cyberpunk)"
     },
     "syntaxColorOpts": {
-      "resetColors": "重設為預設色彩",
-      "note": "一般音符 / 預設字元 (1~8)",
-      "comment": "註釋 (/*...*/, ||)",
-      "bpm": "BPM 標記 ( (120) )",
-      "split": "分拍標記 ( {4} )",
-      "time": "時值標記 ( [1:4] )",
-      "slide": "滑條路徑 (-^v...)",
-      "customSlide": "特殊滑條 (<A1>)",
-      "hold": "長押 (h)",
-      "break": "絕讚 (b)",
-      "ex": "EX 音符 (x)",
-      "mine": "地雷 / 假鍵 (m)",
-      "hanabi": "煙火特效 (f)",
-      "touch": "Touch 感應區 (A1, C)",
-      "comma": "拍子分隔逗號 (,)"
+      "resetColors": "重設",
+      "note": "一般音符 / 預設字元",
+      "comment": "註釋",
+      "bpm": "BPM 標記",
+      "split": "分拍標記",
+      "time": "時值標記",
+      "slide": "滑條路徑",
+      "customSlide": "特殊滑條",
+      "hold": "Hold音符",
+      "break": "Break音符",
+      "ex": "EX 音符",
+      "mine": "地雷",
+      "hanabi": "煙火特效",
+      "touch": "Touch 感應區",
+      "comma": "拍子分隔逗號"
     },
     "sfxVolumeOpts": {
       "clock": "倒數節拍音",

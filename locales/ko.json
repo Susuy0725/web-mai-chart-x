@@ -436,8 +436,7 @@
       "syntaxColors": "구문 강조 커스텀 색상",
       "customKeybindings": "사용자 지정 단축키",
       "timeDisplayCapsulePosition": "플로팅 시간 캡슐 위치",
-      "showUIHorizontalPosition": "FPS UI 가로 위치",
-      "showUIVerticalPosition": "FPS UI 세로 위치",
+      "showUIPosition": "FPS UI 위치",
       "seekStepSeconds": "탐색 건너뛰기 (초)",
       "cursorFollow": "재생 시 텍스트 커서 위치 추적",
       "highlightCurrentNote": "진행 위치에 따라 현재 노트 강조",
@@ -451,8 +450,8 @@
       "previewBpmLineOpacity": "BPM 선 투명도"
     },
     "previewAudioVisualOpts": {
-      "waveform": "파형 (Waveform)",
-      "spectrogram": "스펙트로그램 (Spectrogram)",
+      "waveform": "파형 그래프",
+      "spectrogram": "스펙트로그램",
       "off": "끄기"
     },
     "middleDisplayOpts": {
@@ -477,8 +476,10 @@
       "left": "왼쪽",
       "center": "가운데",
       "right": "오른쪽",
-      "top": "위",
-      "bottom": "아래"
+      "topLeft": "왼쪽 위",
+      "topRight": "오른쪽 위",
+      "bottomLeft": "왼쪽 아래",
+      "bottomRight": "오른쪽 아래"
     },
     "syntaxColorPresets": {
       "title": "프리셋 색상",
@@ -491,21 +492,21 @@
       "cyberpunk": "네온 (Cyberpunk)"
     },
     "syntaxColorOpts": {
-      "resetColors": "기본 색상으로 재설정",
-      "note": "일반 노트 / 기본 문자 (1~8)",
-      "comment": "주석 (/*...*/, ||)",
-      "bpm": "BPM 마커 ( (120) )",
-      "split": "박자 분할 마커 ( {4} )",
-      "time": "시간 길이 마커 ( [1:4] )",
-      "slide": "슬라이드 경로 (-^v...)",
-      "customSlide": "특수 슬라이드 (<A1>)",
-      "hold": "홀드 (h)",
-      "break": "브레이크 (b)",
-      "ex": "EX 노트 (x)",
-      "mine": "지뢰 노트 (m)",
-      "hanabi": "불꽃 효과 (f)",
-      "touch": "터치 센서 (A1, C)",
-      "comma": "박자 구분 쉼표 (,)"
+      "resetColors": "다시 놓기",
+      "note": "일반 노트 / 기본 문자",
+      "comment": "주석",
+      "bpm": "BPM 마커",
+      "split": "박자 분할 마커",
+      "time": "시간 길이 마커",
+      "slide": "슬라이드 경로",
+      "customSlide": "특수 슬라이드",
+      "hold": "홀드",
+      "break": "브레이크",
+      "ex": "EX 노트",
+      "mine": "지뢰 노트",
+      "hanabi": "불꽃 효과",
+      "touch": "터치 센서",
+      "comma": "박자 구분 쉼표"
     },
     "sfxVolumeOpts": {
       "clock": "카운트다운 비트음",

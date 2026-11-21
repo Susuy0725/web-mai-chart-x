@@ -436,8 +436,7 @@
       "syntaxColors": "構文強調カスタム色",
       "customKeybindings": "ショートカット設定",
       "timeDisplayCapsulePosition": "フローティング時間カプセルの位置",
-      "showUIHorizontalPosition": "FPS インターフェース水平位置",
-      "showUIVerticalPosition": "FPS インターフェース垂直位置",
+      "showUIPosition": "FPS インターフェース位置",
       "seekStepSeconds": "シーク移動秒数 (Ctrl+←/→)",
       "cursorFollow": "再生時にテキストカーソルを追従",
       "highlightCurrentNote": "進捗に合わせて現在のノーツを強調表示",
@@ -451,8 +450,8 @@
       "previewBpmLineOpacity": "BPM ライン不透明度"
     },
     "previewAudioVisualOpts": {
-      "waveform": "波形 (Waveform)",
-      "spectrogram": "スペクトログラム (Spectrogram)",
+      "waveform": "波形グラフ",
+      "spectrogram": "スペクトログラム",
       "off": "オフ"
     },
     "middleDisplayOpts": {
@@ -477,8 +476,10 @@
       "left": "左",
       "center": "中央",
       "right": "右",
-      "top": "上",
-      "bottom": "下"
+      "topLeft": "左上",
+      "topRight": "右上",
+      "bottomLeft": "左下",
+      "bottomRight": "右下"
     },
     "syntaxColorPresets": {
       "title": "プリセット配色",
@@ -491,21 +492,21 @@
       "cyberpunk": "ネオン (Cyberpunk)"
     },
     "syntaxColorOpts": {
-      "resetColors": "デフォルト色にリセット",
-      "note": "通常ノート / デフォルト文字 (1~8)",
-      "comment": "コメント (/*...*/, ||)",
-      "bpm": "BPM マーカー ( (120) )",
-      "split": "拍分割マーカー ( {4} )",
-      "time": "時間長マーカー ( [1:4] )",
-      "slide": "スライド軌道 (-^v...)",
-      "customSlide": "特殊スライド (<A1>)",
-      "hold": "ホールド (h)",
-      "break": "ブレイク (b)",
-      "ex": "EX ノート (x)",
-      "mine": "地雷ノート (m)",
-      "hanabi": "花火エフェクト (f)",
-      "touch": "タッチセンサー (A1, C)",
-      "comma": "拍区切りカンマ (,)"
+      "resetColors": "リセット",
+      "note": "通常ノート / デフォルト文字",
+      "comment": "コメント",
+      "bpm": "BPM マーカー",
+      "split": "拍分割マーカー",
+      "time": "時間長マーカー",
+      "slide": "スライド軌道",
+      "customSlide": "特殊スライド",
+      "hold": "ホールド",
+      "break": "ブレイク",
+      "ex": "EX ノート",
+      "mine": "地雷ノート",
+      "hanabi": "花火エフェクト",
+      "touch": "タッチセンサー",
+      "comma": "拍区切りカンマ"
     },
     "sfxVolumeOpts": {
       "clock": "カウントダウン音",

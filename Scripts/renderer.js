@@ -2302,8 +2302,9 @@ export class SimaiRenderer {
             this._cachedFpsVal = 'PAUSE';
         }
 
-        const horizPos = this.settings.showUIHorizontalPosition === 'right' ? 'right' : 'left';
-        const vertPos = this.settings.showUIVerticalPosition === 'bottom' ? 'bottom' : 'top';
+        const uiPos = this.settings.showUIPosition || 'top-left';
+        const horizPos = uiPos.endsWith('right') ? 'right' : 'left';
+        const vertPos = uiPos.startsWith('bottom') ? 'bottom' : 'top';
         const textAlign = horizPos === 'right' ? 'right' : 'left';
 
         if (!this._uiCacheCanvas) {

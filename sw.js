@@ -319,6 +319,9 @@ self.addEventListener('fetch', (event) => {
                     .catch(() => {
                         // 網路斷線且無快取時的 Fallback
                         if (event.request.destination === 'document' || event.request.mode === 'navigate') {
+                            if (relUrl === './doc' || (relUrl && relUrl.startsWith('./doc/'))) {
+                                return cache.match('./doc/index.html');
+                            }
                             return cache.match('./index.html');
                         }
                     });

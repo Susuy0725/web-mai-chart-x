@@ -3,6 +3,21 @@
  * @description Web mai Chart X 開發者手冊詞條與導覽結構資料。
  */
 
+export const DOC_CORE_NOTICES = [
+    {
+        label: '信任模型',
+        text: '所有插件皆透過動態 ESM 載入並運行於瀏覽器主執行緒，無系統級沙盒隔離，可修改頁面 DOM 並讀取專案資料；`ctx` 屬於介面層級權限控管。'
+    },
+    {
+        label: 'Worker 模式未實作',
+        text: '`manifest.json` 雖允許 `runtime: "worker"` 通過格式驗證，但該模式屬於保留但未實作功能，啟用時會立即進入錯誤狀態並拒絕啟動。'
+    },
+    {
+        label: '錄影逐幀離線渲染',
+        text: '譜面影片匯出採用固定幀率逐幀離線渲染，動畫必須完全依 `renderContext.globalTime` 計算，不得依賴 `requestAnimationFrame`、`Date.now()` 或 `performance.now()`。'
+    }
+];
+
 export const DOC_CATEGORIES = [
     { id: 'guide', label: '快速開始', defaultDocId: 'guide-overview' },
     { id: 'api', label: 'Context API', defaultDocId: 'ctx-base' },
@@ -141,34 +156,36 @@ export const DOC_ITEMS = [
         id: 'guide-overview',
         category: 'guide',
         groupId: 'group-guide',
+       stability: 'stable',
         title: '擴充程式系統架構概述',
         sidebarLabel: '系統架構概述',
         sidebarMono: false,
-        subtitle: 'Web mai Chart X 第三方外掛的最小權限模型、受限上下文與生命週期設計原則。',
+        subtitle: 'Web mai Chart X 插件開發者 API 系統設計、主執行緒信任模型與權限控管原則。',
         status: {
             variant: 'free',
             label: '核心概念',
             permissions: ['免宣告額外權限'],
-            envs: ['Trusted 模式', 'Worker 沙箱規劃中'],
+            envs: ['Trusted 主執行緒模式', 'worker 模式未實作'],
             apiVersion: 'API v1'
         },
         overview: [
-            'Web mai Chart X 擴充程式架構旨在提供第三方外掛動態擴充編輯器功能的機制，同時兼顧效能、主程式穩定性與使用者資料安全。',
-            '外掛啟用時不會取得底層的 `appContext` 或原始資料庫參照，而是由主程式依據 `manifest.json` 的權限宣告組裝專屬的受限上下文物件 `ctx`。'
+            '本手冊面向 Web mai Chart X 第三方插件開發者，僅涵蓋擴充程式 API、生命週期、離線錄影疊加與儲存庫協定，並非譜面寫譜教學。',
+            '外掛啟用時不會直接取得底層的 `appContext` 或原始資料庫參照，而是由主程式依據 `manifest.json` 宣告的權限清單組裝專屬的受限上下文物件 `ctx`。',
+            '就信任模型而言，現行所有擴充程式皆透過動態 ESM 載入並運行於瀏覽器主執行緒，沒有獨立的系統級安全沙盒，插件可修改頁面 DOM 並讀取當前專案資料。`ctx` 屬於官方介面層級的權限控管與誤操作防護，並非安全隔離邊界。'
         ],
         notes: [
             '最小權限原則：擴充程式必須在描述檔案中明確宣告所需權限，未宣告的權限不會注入對應的官方介面與方法。',
-            '受限上下文控管：擴充程式應透過 `ctx` 提供的標準方法與主程式互動，避免直接操作底層內部狀態。',
+            '受限上下文控管：擴充程式應透過 `ctx` 提供的標準方法與主程式互動，避免直接操作底層未公開的內部狀態。',
             '宣告式介面整合：頂欄選單與設定面板採用宣告式結構，由主程式統一渲染並自動套用原站深色毛玻璃視覺樣式。',
             '自動生命週期追蹤：透過 `ctx` 註冊的指令、事件監聽器、疊加圖層、選單項目、浮動元件、設定與素材覆寫由主程式統一追蹤，停用或移除時自動回收。'
         ],
         callouts: [
             {
                 variant: 'warning',
-                title: '現行執行環境提醒',
+                title: '信任模型與 runtime: worker 未實作警告',
                 items: [
-                    '在現行 `trusted` 執行模式下，擴充程式仍運行於與主程式同源的瀏覽器主執行緒環境，此機制屬於官方介面層級的存取控管與誤操作防護，並非獨立的系統級安全沙盒隔離。',
-                    '若將 `runtime` 設定為 `worker`，由於 Worker 沙箱目前尚未啟用，嘗試啟用時會產生錯誤並標記為錯誤狀態。'
+                    '插件直接執行於主應用程式同源的瀏覽器主執行緒，具備完整的 DOM 操作權限，無沙盒隔離；請勿在不受信任環境執行未審核之第三方插件。',
+                    '`manifest.json` 的 `runtime` 欄位若設為 `worker`，雖可通過描述檔字串格式檢查，但 Worker 執行通道屬於「保留但未實作」狀態，系統尚未提供 Worker 沙盒，嘗試啟用時會立即拋出錯誤並將外掛標記為 `error` 狀態，請勿將其當成可用功能。'
                 ]
             }
         ],
@@ -194,15 +211,149 @@ export const DOC_ITEMS = [
             permission: '無',
             constant: '無',
             async: '支援同步或非同步進入點',
+            runtime: 'Trusted 主執行緒模式，無沙盒',
+            since: 'API v1'
+        },
+        seeAlso: ['guide-minimal-plugin', 'guide-manifest', 'guide-permissions', 'guide-lifecycle-events', 'ctx-base']
+    },
+    {
+        id: 'guide-minimal-plugin',
+        category: 'guide',
+        groupId: 'group-guide',
+       stability: 'stable',
+        title: '最小可運作插件',
+        codeTitle: 'manifest.json + index.js',
+        sidebarLabel: '最小可運作插件',
+        sidebarMono: false,
+        subtitle: '彙整 manifest.json 全部 12 個欄位、兩種插件載入方式，並提供從零到可直接執行的完整端到端範例。',
+        status: {
+            variant: 'free',
+            label: '快速實作總覽',
+            permissions: ['commands:register', 'ui:menu', 'ui:toast'],
+            envs: ['ZIP 本機匯入', 'WERP 遠端安裝', 'Trusted 主執行緒'],
+            apiVersion: 'API v1'
+        },
+        overview: [
+            '一個可執行的 Web mai Chart X 插件至少需要 `manifest.json` 描述檔與進入點 JavaScript 模組兩份檔案，打包為 `.zip` 壓縮檔即可安裝啟用。',
+            '支援兩種載入與安裝路徑：開發測試時可透過編輯器頂欄拼圖選單內的「管理擴充程式」直接匯入本機 `.zip` 檔；公開發布時則可託管符合 WERP 協定的靜態 `index.json` 與 `.zip` 套件，由擴充程式管理器的「擴充來源」分頁下載並經 SHA-256 校驗後安裝至 IndexedDB。'
+        ],
+        tables: [
+            {
+                title: 'manifest.json 全部 12 個欄位規格',
+                columns: ['欄位名稱', '型別', '必填', '預設值', '驗證規則與說明'],
+                rows: [
+                    ['`id`', 'string', '是', '無', '反向網域格式唯一識別碼，須符合 `/^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$/i`，例如 `com.example.hello-plugin`'],
+                    ['`name`', 'string', '是', '無', '插件顯示名稱，不可為空字串'],
+                    ['`version`', 'string', '是', '無', '插件版本字串，建議採用語意化版本格式如 `1.0.0`'],
+                    ['`apiVersion`', 'number', '否', '`1`', '目標擴充 API 版本，須為正整數且不可高於系統現行版本 `1`'],
+                    ['`description`', 'string', '否', '`""`', '顯示於管理視窗與權限確認框的簡要功能說明'],
+                    ['`author`', 'string', '否', '`""`', '開發者或維護團隊名稱'],
+                    ['`entry`', 'string', '否', '`"index.js"`', '進入點 ESM 模組於壓縮包內的相對路徑'],
+                    ['`permissions`', 'Array<string>', '否', '`[]`', '宣告所需官方權限識別碼陣列，出現任何不在 19 項白名單內的字串即拒絕載入'],
+                    ['`runtime`', 'string', '否', '`"trusted"`', '執行環境宣告，僅支援 `trusted`；`worker` 字串雖可通過描述檔格式驗證，但屬於保留但未實作功能，啟用時會進入錯誤狀態'],
+                    ['`homepage`', 'string', '否', '`""`', '插件首頁或原始碼倉庫網址，非空時必須為 `https://` 協定'],
+                    ['`termsUrl`', 'string', '否', '`""`', '服務條款頁面網址，非空時必須為 `https://` 協定'],
+                    ['`privacyUrl`', 'string', '否', '`""`', '隱私權政策頁面網址，非空時必須為 `https://` 協定']
+                ]
+            },
+            {
+                title: '兩種插件載入方式比較',
+                columns: ['載入方式', '操作路徑', '適用情境', '驗證與儲存行為'],
+                rows: [
+                    ['本機 ZIP 匯入', '頂欄拼圖選單 → 管理擴充程式 → 匯入擴充程式', '本機開發除錯與單機安裝', '解析 ZIP 後驗證 `manifest.json`、彈出權限授權視窗，確認後寫入 IndexedDB 並以 Blob URL 載入執行'],
+                    ['WERP 遠端來源', '管理擴充程式 → 擴充來源 → 新增索引網址', '公開發布與自動更新檢查', '讀取同源 HTTPS `index.json`、依 `sha256` 校驗下載之 `.zip` 後驗證 manifest 並請求權限授權']
+                ]
+            }
+        ],
+        callouts: [
+            {
+                variant: 'warning',
+                title: '執行模式提醒',
+                items: [
+                    '請省略 `runtime` 或明確設為 `"trusted"`。切勿依賴 `"worker"` 進行沙盒隔離，該模式目前僅保留欄位檢查而未實作執行通道。',
+                    '所有插件皆於瀏覽器主執行緒執行，可存取頁面 DOM 與專案資料，安裝前會向使用者展示所宣告的 `permissions` 與開發者連結。'
+                ]
+            }
+        ],
+        examples: [
+            {
+                label: '1. manifest.json',
+                code: `{
+  "id": "com.example.minimal-stats",
+  "name": "最小譜面字數統計插件",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "於頂欄選單新增按鈕，點擊時讀取編輯器內容並顯示提示訊息。",
+  "author": "Plugin Developer",
+  "entry": "index.js",
+  "runtime": "trusted",
+  "permissions": [
+    "editor:read",
+    "commands:register",
+    "ui:menu",
+    "ui:toast"
+  ]
+}`
+            },
+            {
+                label: '2. index.js',
+                code: `export default function activate(ctx) {
+    const offCommand = ctx.commands.register('countChars', () => {
+        const text = ctx.editor.getText();
+        ctx.ui.toast({
+            content: \`目前譜面文字長度：\${text.length} 字元\`,
+            type: 'info',
+            timeout: 2500
+        });
+    }, { title: '統計譜面字數' });
+
+    const offMenu = ctx.ui.registerMenuItem({
+        id: 'count-chars',
+        label: '統計譜面字數',
+        commandId: 'countChars'
+    });
+
+    ctx.ui.toast({
+        content: \`[\${ctx.extensionId}] 插件已啟動\`,
+        type: 'success',
+        timeout: 2000
+    });
+
+    return () => {
+        offMenu();
+        offCommand();
+    };
+}`
+            },
+            {
+                label: '3. 壓縮打包指令',
+                code: `# PowerShell
+Compress-Archive -Path "manifest.json", "index.js" -DestinationPath "minimal-stats-1.0.0.zip" -Force
+
+# Bash / macOS / Linux
+zip -r minimal-stats-1.0.0.zip manifest.json index.js`
+            }
+        ],
+        notes: [
+            'ZIP 壓縮包支援兩種檔案階層：將 `manifest.json` 與 `index.js` 直接放在壓縮檔根目錄，或包在唯一一層子資料夾內。',
+            '進入點模組必須提供 `export default function activate(ctx)` 或具名匯出 `export function activate(ctx)`，缺少匯出函式時會拋出載入錯誤。',
+            '即使不手動呼叫 `offMenu()` 或 `offCommand()`，停用或卸載時系統仍會透過 `disposables` 自動回收官方介面註冊項；若插件有自行建立 `setInterval` 或全域事件監聽，則必須在回傳的清理函式中自行清除。'
+        ],
+        summary: {
+            namespace: '開發入門',
+            permission: '依實際呼叫的 API 宣告',
+            constant: 'EXTENSION_API_VERSION = 1',
+            async: '支援同步或非同步 activate',
             runtime: 'Trusted 主執行緒模式',
             since: 'API v1'
         },
-        seeAlso: ['guide-manifest', 'guide-permissions', 'ctx-base', 'guide-lifecycle']
+        seeAlso: ['guide-manifest', 'guide-permissions', 'guide-lifecycle-events', 'guide-packaging', 'ctx-base']
     },
     {
         id: 'guide-manifest',
         category: 'guide',
         groupId: 'group-guide',
+       stability: 'stable',
         title: '擴充包與描述檔規格',
         codeTitle: 'manifest.json',
         sidebarLabel: 'manifest.json 規格',
@@ -232,7 +383,7 @@ export const DOC_ITEMS = [
                     ['`author`', '字串', '否', '`""`', '作者或維護組織名稱'],
                     ['`entry`', '字串', '否', '`"index.js"`', 'JavaScript 進入點模組相對路徑'],
                     ['`permissions`', '字串陣列', '否', '`[]`', '請求的權限清單，若包含未定義字串將導致載入驗證失敗'],
-                    ['`runtime`', '字串', '否', '`"trusted"`', '執行模式，支援 `trusted` 與 `worker`'],
+                    ['`runtime`', '字串', '否', '`"trusted"`', '執行模式：目前僅支援 `trusted` 主執行緒模式；`worker` 為保留但未實作欄位，啟用時會回報錯誤'],
                     ['`homepage`', '字串', '否', '`""`', '專案首頁、原始碼倉庫或文件網址，須使用 `https://`'],
                     ['`termsUrl`', '字串', '否', '`""`', '開發者提供的服務條款網址，須使用 `https://`'],
                     ['`privacyUrl`', '字串', '否', '`""`', '開發者提供的隱私權政策網址，須使用 `https://`']
@@ -241,7 +392,8 @@ export const DOC_ITEMS = [
         ],
         notes: [
             '識別碼 `id` 驗證正規表達式為 `/^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$/i`，至少須包含一段小數點區隔。',
-            '`homepage`、`termsUrl` 與 `privacyUrl` 僅接受 `https://` 協定網址；個人開發者可直接填寫 GitHub 倉庫或公開文件連結。'
+            '`homepage`、`termsUrl` 與 `privacyUrl` 僅接受 `https://` 協定網址；個人開發者可直接填寫 GitHub 倉庫或公開文件連結。',
+            '`runtime: "worker"` 僅通過 `validateExtensionManifest` 的欄位格式檢查，主程式尚未實作 Worker 隔離執行環境，呼叫 `activate()` 時會立即拒絕並設定為 `error` 狀態。'
         ],
         examples: [
             {
@@ -293,6 +445,7 @@ my-extension.zip
         id: 'guide-permissions',
         category: 'guide',
         groupId: 'group-guide',
+        stability: 'stable',
         title: '權限常數對照表',
         codeTitle: 'EXTENSION_PERMISSIONS',
         sidebarLabel: '權限常數表',
@@ -350,6 +503,7 @@ my-extension.zip
         id: 'guide-lifecycle',
         category: 'guide',
         groupId: 'group-guide',
+        stability: 'stable',
         title: '生命週期與資源清理機制',
         codeTitle: 'activate(ctx)',
         sidebarLabel: '生命週期與清理',
@@ -408,6 +562,7 @@ export function activate(ctx) {
         id: 'guide-security',
         category: 'guide',
         groupId: 'group-guide',
+        stability: 'stable',
         title: '安全性規範與介面隔離',
         sidebarLabel: '安全規範與隔離',
         sidebarMono: false,
@@ -482,6 +637,7 @@ shadow.append(style, box);`
         id: 'guide-packaging',
         category: 'guide',
         groupId: 'group-guide',
+        stability: 'stable',
         title: '打包測試與安裝步驟',
         sidebarLabel: '打包與安裝測試',
         sidebarMono: false,
@@ -526,6 +682,7 @@ shadow.append(style, box);`
         id: 'ctx-base',
         category: 'api',
         groupId: 'group-ctx-base',
+       stability: 'stable',
         title: '受限上下文物件',
         codeTitle: 'ctx',
         sidebarLabel: 'ctx 總覽',
@@ -536,12 +693,23 @@ shadow.append(style, box);`
             variant: 'free',
             label: '預設注入',
             permissions: ['免權限'],
-            envs: ['Trusted 模式'],
+            envs: ['Trusted 主執行緒模式', '無隔離沙盒'],
             apiVersion: 'API v1'
         },
         overview: [
             '不論擴充程式在 `manifest.json` 宣告何種權限，主程式調用 `activate(ctx)` 時必定會於 `ctx` 物件注入基礎屬性 `apiVersion`、`extensionId` 與查詢方法 `hasPermission()`。',
-            '其餘子命名空間如 `ctx.editor`、`ctx.playback`、`ctx.render` 等，則僅於對應權限獲得授權時才建立並凍結注入，未獲授權者為 `undefined`。'
+            '其餘子命名空間如 `ctx.editor`、`ctx.playback`、`ctx.render` 等，則僅於對應權限獲得授權時才建立並凍結注入，未獲授權者為 `undefined`。',
+            '重要信任模型說明：目前所有插件皆跑在瀏覽器主執行緒、無系統級沙盒隔離，可存取與修改頁面 DOM 並讀取當前專案資料。`ctx` 的凍結與權限過濾屬於介面層級的存取控管，而非安全沙盒。'
+        ],
+        callouts: [
+            {
+                variant: 'warning',
+                title: '主執行緒執行與 runtime: worker 未實作說明',
+                items: [
+                    '插件在主執行緒以動態 `import()` 執行，與主應用程式共享同源 DOM、IndexedDB 與全域環境；`Object.freeze(scoped)` 僅限制官方介面物件屬性，無法阻止直接存取瀏覽器全域物件。',
+                    '`manifest.json` 中的 `runtime: "worker"` 目前為保留但未實作欄位；設定為 `worker` 的外掛在啟用階段會被拒絕並標記為錯誤狀態，請勿將其視為可用功能。'
+                ]
+            }
         ],
         tables: [
             {
@@ -567,20 +735,25 @@ shadow.append(style, box);`
 }`
             }
         ],
+        notes: [
+            '所有注入的子命名空間與 `ctx` 本身皆經過 `Object.freeze` 凍結，不可新增或覆寫屬性。',
+            '若擴充已被停用或進入錯誤狀態，先前持有之事件訂閱、圖層註冊與解碼器回呼會依啟用世代序號失效或自動回收。'
+        ],
         summary: {
             namespace: 'ctx',
             permission: '無',
             constant: '無',
             async: '同步物件',
-            runtime: 'Trusted 模式',
+            runtime: 'Trusted 主執行緒模式，無沙盒',
             since: 'API v1'
         },
-        seeAlso: ['ctx.apiVersion', 'ctx.extensionId', 'ctx.hasPermission']
+        seeAlso: ['ctx.apiVersion', 'ctx.extensionId', 'ctx.hasPermission', 'guide-overview', 'guide-minimal-plugin']
     },
     {
         id: 'ctx.apiVersion',
         category: 'api',
         groupId: 'group-ctx-base',
+        stability: 'stable',
         title: '擴充介面版本號',
         codeTitle: 'ctx.apiVersion',
         sidebarLabel: 'apiVersion',
@@ -626,6 +799,7 @@ shadow.append(style, box);`
         id: 'ctx.extensionId',
         category: 'api',
         groupId: 'group-ctx-base',
+        stability: 'stable',
         title: '擴充程式識別碼',
         codeTitle: 'ctx.extensionId',
         sidebarLabel: 'extensionId',
@@ -669,6 +843,7 @@ shadow.append(style, box);`
         id: 'ctx.hasPermission',
         category: 'api',
         groupId: 'group-ctx-base',
+        stability: 'stable',
         title: '檢查是否具備指定權限',
         codeTitle: 'ctx.hasPermission()',
         sidebarLabel: 'hasPermission()',
@@ -724,6 +899,7 @@ shadow.append(style, box);`
         id: 'ctx.editor',
         category: 'api',
         groupId: 'group-ctx-editor',
+        stability: 'stable',
         title: '編輯器介面',
         codeTitle: 'ctx.editor',
         sidebarLabel: '總覽',
@@ -767,6 +943,7 @@ shadow.append(style, box);`
         id: 'ctx.editor.getText',
         category: 'api',
         groupId: 'group-ctx-editor',
+        stability: 'stable',
         title: '取得編輯器全文',
         codeTitle: 'ctx.editor.getText()',
         sidebarLabel: 'getText()',
@@ -811,6 +988,7 @@ console.log({ lines, beats });`
         id: 'ctx.editor.getSelection',
         category: 'api',
         groupId: 'group-ctx-editor',
+        stability: 'stable',
         title: '取得編輯器選取區',
         codeTitle: 'ctx.editor.getSelection()',
         sidebarLabel: 'getSelection()',
@@ -860,6 +1038,7 @@ if (selection.end > selection.start) {
         id: 'ctx.editor.on',
         category: 'api',
         groupId: 'group-ctx-editor',
+        stability: 'stable',
         title: '監聽編輯器事件',
         codeTitle: 'ctx.editor.on()',
         sidebarLabel: 'on()',
@@ -928,6 +1107,7 @@ const offKey = ctx.editor.on('keydown', (e) => {
         id: 'ctx.editor.replaceSelection',
         category: 'api',
         groupId: 'group-ctx-editor',
+        stability: 'stable',
         title: '置換編輯器選取區文字',
         codeTitle: 'ctx.editor.replaceSelection()',
         sidebarLabel: 'replaceSelection()',
@@ -999,6 +1179,7 @@ if (sel.text && !sel.text.includes('b')) {
         id: 'ctx.playback',
         category: 'api',
         groupId: 'group-ctx-playback',
+        stability: 'stable',
         title: '播放控制介面',
         codeTitle: 'ctx.playback',
         sidebarLabel: '總覽',
@@ -1042,6 +1223,7 @@ if (sel.text && !sel.text.includes('b')) {
         id: 'ctx.playback.getState',
         category: 'api',
         groupId: 'group-ctx-playback',
+        stability: 'stable',
         title: '讀取播放狀態快照',
         codeTitle: 'ctx.playback.getState()',
         sidebarLabel: 'getState()',
@@ -1089,6 +1271,7 @@ console.log({ isPlaying, realTime, globalTime });`
         id: 'ctx.playback.getDuration',
         category: 'api',
         groupId: 'group-ctx-playback',
+        stability: 'stable',
         title: '取得音軌總長度',
         codeTitle: 'ctx.playback.getDuration()',
         sidebarLabel: 'getDuration()',
@@ -1132,6 +1315,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         id: 'ctx.playback.seek',
         category: 'api',
         groupId: 'group-ctx-playback',
+        stability: 'stable',
         title: '跳轉至指定時間',
         codeTitle: 'ctx.playback.seek()',
         sidebarLabel: 'seek()',
@@ -1181,6 +1365,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         id: 'ctx.playback.nudge',
         category: 'api',
         groupId: 'group-ctx-playback',
+        stability: 'stable',
         title: '相對微調播放時間',
         codeTitle: 'ctx.playback.nudge()',
         sidebarLabel: 'nudge()',
@@ -1234,6 +1419,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         id: 'ctx.chart',
         category: 'api',
         groupId: 'group-ctx-chart',
+        stability: 'stable',
         title: '譜面讀取介面',
         codeTitle: 'ctx.chart',
         sidebarLabel: '總覽',
@@ -1275,6 +1461,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         id: 'ctx.chart.getSnapshot',
         category: 'api',
         groupId: 'group-ctx-chart',
+        stability: 'stable',
         title: '取得譜面唯讀快照',
         codeTitle: 'ctx.chart.getSnapshot()',
         sidebarLabel: 'getSnapshot()',
@@ -1325,6 +1512,7 @@ console.log('難度索引:', snapshot.difficulty, '音符數:', snapshot.notes.l
         id: 'ctx.chart.getCoverImageUrl',
         category: 'api',
         groupId: 'group-ctx-chart',
+        stability: 'stable',
         title: '取得專案封面圖片網址',
         codeTitle: 'ctx.chart.getCoverImageUrl()',
         sidebarLabel: 'getCoverImageUrl()',
@@ -1374,6 +1562,7 @@ if (coverUrl) {
         id: 'ctx.view',
         category: 'api',
         groupId: 'group-ctx-view',
+        stability: 'stable',
         title: '檢視模式介面',
         codeTitle: 'ctx.view',
         sidebarLabel: '總覽',
@@ -1413,6 +1602,7 @@ if (coverUrl) {
         id: 'ctx.view.getMode',
         category: 'api',
         groupId: 'group-ctx-view',
+        stability: 'stable',
         title: '取得編輯器檢視模式快照',
         codeTitle: 'ctx.view.getMode()',
         sidebarLabel: 'getMode()',
@@ -1467,22 +1657,35 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         id: 'ctx.render',
         category: 'api',
         groupId: 'group-ctx-render',
+       stability: 'stable',
         title: '渲染疊加介面',
         codeTitle: 'ctx.render',
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '於主畫布或視覺化編輯器畫布的多個分層階段插入自訂 Canvas 2D 繪圖邏輯，並支援影片匯出。',
+        subtitle: '於主畫布或視覺化編輯器畫布的多個分層階段插入自訂 Canvas 2D 繪圖邏輯，並支援逐幀離線影片匯出。',
         status: {
             variant: 'perm',
             label: '需要權限',
             permissions: ['render:overlay'],
-            envs: ['Trusted 模式', '離線影片渲染支援'],
+            envs: ['Trusted 模式', '逐幀離線錄影支援'],
             apiVersion: 'API v1'
         },
         overview: [
             '宣告 `render:overlay` 權限時注入此介面；未宣告時為 `undefined`。',
-            '系統內建嚴密的狀態防護、例外隔離與效能熔斷保護，確保擴充繪圖不會污染核心渲染狀態或導致主畫面永久卡頓。'
+            '系統內建嚴密的狀態防護、例外隔離與效能熔斷保護，確保擴充繪圖不會污染核心渲染狀態或導致主畫面永久卡頓。',
+            '錄影匯出採用固定幀率逐幀離線渲染，而非即時螢幕畫面擷取。在 `registerOverlay` 註冊 `target: "main"` 且啟用 `includeInVideo: true` 的圖層會納入匯出影片的每一幀渲染。'
+        ],
+        callouts: [
+            {
+                variant: 'warning',
+                title: '離線錄影計時與 Safari 及 iOS 平台限制',
+                items: [
+                    '離線錄影迴圈不依賴 `requestAnimationFrame`，且因影格編碼耗時與主執行緒讓出排程，真實時鐘時間與影片時間軸完全無關。所有繪圖與動態效果必須依據傳入的 `renderContext.globalTime` 或 `prepareVideoFrame` 之 `globalTime` 計算，不得使用 `Date.now()`、`performance.now()` 或自行啟動 `requestAnimationFrame` 計時。',
+                    '僅 `target: "main"` 圖層支援納入影片匯出，`visual` 與 `preview` 畫布不會在錄影流程中執行。',
+                    'Safari 與 iOS 平台限制：H.264 與 WebCodecs 編碼強制輸出寬高為正偶數；部分 Safari 與 iOS WebKit 版本對 `CanvasRenderingContext2D.filter` 支援有限或無效，繪圖時應避免僅依賴 `ctx.filter`；行動版瀏覽器分頁記憶體上限較低，離線解碼與大型離屏畫布必須及時釋放以免分頁崩潰。'
+                ]
+            }
         ],
         tables: [
             {
@@ -1490,17 +1693,21 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                 columns: ['方法', '所需權限', '說明'],
                 rows: [
                     ['`registerOverlay(options)`', '`render:overlay`', '註冊畫布疊加圖層並回傳取消註冊函式'],
-                    ['`requestRedraw()`', '`render:overlay`', '發布重繪事件請求畫布立即重新繪製'],
+                    ['`requestRedraw()`', '`render:overlay`', '發布重繪事件請求互動畫布立即重繪，不影響離線錄影迴圈'],
                     ['`createVideoFrameDecoder(source, options)`', '`render:overlay`', '建立受控的逐幀影片解碼器供離線匯出循序取幀']
                 ]
             }
+        ],
+        notes: [
+            '於離線影片渲染期間，`renderContext.isRenderingVideo` 為 `true`，`dt` 固定為 `1 / fps`，且系統會關閉 12 毫秒效能熔斷機制以免高解析度繪圖遭到中斷。',
+            '若需於每幀錄影繪製前非同步載入外部影片影格，請搭配 `prepareVideoFrame` 鉤子與 `createVideoFrameDecoder()`。'
         ],
         summary: {
             namespace: 'ctx.render',
             permission: 'render:overlay',
             constant: 'EXTENSION_PERMISSIONS.RENDER_OVERLAY',
             async: '同步繪製與選填非同步準備鉤子',
-            runtime: 'Trusted 模式',
+            runtime: 'Trusted 模式，支援逐幀離線錄影',
             since: 'API v1'
         },
         seeAlso: ['ctx.render.registerOverlay', 'ctx.render.requestRedraw', 'ctx.render.createVideoFrameDecoder', 'arch-renderer-audio']
@@ -1509,6 +1716,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         id: 'ctx.render.registerOverlay',
         category: 'api',
         groupId: 'group-ctx-render',
+        stability: 'stable',
         title: '註冊畫布疊加圖層',
         codeTitle: 'ctx.render.registerOverlay()',
         sidebarLabel: 'registerOverlay()',
@@ -1643,12 +1851,19 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         callouts: [
             {
                 variant: 'warning',
-                title: '效能熔斷與影片匯出超時保護',
+                title: '離線逐幀錄影、計時規則與 Safari 及 iOS 限制',
                 items: [
+                    '錄影機制為固定幀率逐幀離線渲染而非即時擷取，不經由 `requestAnimationFrame` 驅動，也不依據 `Date.now()` 或 `performance.now()` 推進時間；插件畫面若需隨時間變化，必須完全根據 `rc.globalTime` 計算，否則匯出影片中的動畫將停滯或倍速錯亂。',
                     '非影片匯出渲染期間，若單一疊加圖層連續 30 幀的單幀繪製耗時超過 12 毫秒，系統會自動移除該圖層並以提示訊息通知使用者。請將模糊、影像解碼等重度運算預先在離屏畫布完成。',
-                    '影片匯出時的逐幀離線渲染不計入 12 毫秒熔斷限制；若提供的 `prepareVideoFrame` 連續逾時達 10 幀，該次匯出會略過前置等待以防卡死。'
+                    '影片匯出時的逐幀離線渲染不計入 12 毫秒熔斷限制；若提供的 `prepareVideoFrame` 連續逾時達 10 幀，該次匯出會略過前置等待以防卡死。',
+                    'Safari 與 iOS 限制：錄影離屏畫布關閉透明通道且強制輸出尺寸為正偶數；部分 Safari 與 iOS WebKit 版本對 `rc.ctx.filter` 支援度不足，建議改用雙向混合、半透明遮罩或預先離屏處理取代 CSS 濾鏡字串，並控制離屏畫布解析度以避免超出 iOS 分頁記憶體上限。'
                 ]
             }
+        ],
+        notes: [
+            '僅 `target: "main"` 且設定 `includeInVideo: true` 的圖層會於匯出影片時執行繪製與 `prepareVideoFrame`。',
+            '`prepareVideoFrame` 僅接收 `{ globalTime, frameIndex, frameCount, dt, width, height, signal }`，請於非同步工作前後檢查 `signal?.aborted`，確保使用者取消錄影時立即中止。',
+            '擴充停用或卸載時系統會自動註銷圖層並觸發 `canvas:redraw` 事件。'
         ],
         examples: [
             {
@@ -1687,27 +1902,33 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         id: 'ctx.render.requestRedraw',
         category: 'api',
         groupId: 'group-ctx-render',
+       stability: 'stable',
         title: '請求畫布立即重繪',
         codeTitle: 'ctx.render.requestRedraw()',
         sidebarLabel: 'requestRedraw()',
         sidebarMono: true,
         badge: '渲染',
-        subtitle: '主動發布畫布重繪事件，使靜止暫停中的畫布即時呈現最新的疊加圖層變化。',
+        subtitle: '主動發布畫布重繪事件，使靜止暫停中的互動畫布即時呈現最新的疊加圖層變化。',
         status: {
             variant: 'perm',
             label: '需要權限',
             permissions: ['render:overlay'],
-            envs: ['Trusted 模式'],
+            envs: ['Trusted 模式', '僅作用於即時預覽'],
             apiVersion: 'API v1'
         },
         overview: [
-            '當音軌處於暫停狀態而外掛內部狀態或設定變更時，可呼叫此方法觸發主渲染器與預覽畫布進行單次重繪。'
+            '當音軌處於暫停狀態而外掛內部狀態或設定變更時，可呼叫此方法觸發主渲染器與預覽畫布進行單次重繪。',
+            '離線影片錄影採用逐幀控制迴圈繪製，不會監聽或響應 `requestRedraw()` 觸發的 `canvas:redraw` 事件。'
         ],
         syntax: `ctx.render.requestRedraw()`,
         returns: {
             type: 'undefined',
             description: '無回傳值。'
         },
+        notes: [
+            '內部直接發布 `canvas:redraw` 事件，並依賴主編輯器既有的繪製排程執行即時畫面更新。',
+            '在逐幀離線錄影期間不應於 `draw()` 內部呼叫此方法，以免多餘事件干擾主畫面。'
+        ],
         examples: [
             {
                 label: '變更設定後觸發重繪',
@@ -1719,7 +1940,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
             permission: 'render:overlay',
             constant: 'EXTENSION_PERMISSIONS.RENDER_OVERLAY',
             async: '同步排程',
-            runtime: 'Trusted 模式',
+            runtime: 'Trusted 模式，即時畫布重繪',
             since: 'API v1'
         },
         seeAlso: ['ctx.render.registerOverlay', 'events-list']
@@ -1728,6 +1949,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         id: 'ctx.render.createVideoFrameDecoder',
         category: 'api',
         groupId: 'group-ctx-render',
+        stability: 'stable',
         title: '建立逐幀影片解碼器',
         codeTitle: 'ctx.render.createVideoFrameDecoder()',
         sidebarLabel: 'createVideoFrameDecoder()',
@@ -1796,6 +2018,20 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                 ]
             }
         ],
+        callouts: [
+            {
+                variant: 'warning',
+                title: '離線取幀計時與 Safari 及 iOS 限制',
+                items: [
+                    '請一律將 `prepareVideoFrame` 傳入的 `globalTime` 傳給 `decoder.getFrameAt(globalTime)`，切勿改用 `Date.now()` 或即時播放進度計算時間，才能確保每幀畫面精準對應匯出時間軸。',
+                    '此方法底層依賴 Mediabunny 與瀏覽器 WebCodecs 視訊解碼器：不支援 WebCodecs 的舊版 Safari 或受限 iOS WebKit 環境無法使用；於支援的 iOS 裝置上，建議明確設定較小的 `width` 與 `height` 降低解碼紋理記憶體用量，並於不再需要或使用者更換影片時立即呼叫 `await decoder.dispose()`。'
+                ]
+            }
+        ],
+        notes: [
+            '順向取幀會直接推進底層 `CanvasSink` 迭代器；若時間倒退或向前跳轉超過 2 秒，解碼器會自動重建迭代器。',
+            '擴充停用或卸載時系統會自動呼叫 `dispose()` 回收資源；非影片匯出時的即時預覽畫面若使用 `<video>` 元素，在 iOS WebKit 上應配合 `playsInline`、`webkit-playsinline` 與靜音設定以確保內嵌播放正常。'
+        ],
         examples: [
             {
                 label: '搭配 prepareVideoFrame 進行離線逐幀繪製',
@@ -1841,6 +2077,7 @@ ctx.render.registerOverlay({
         id: 'ctx.commands',
         category: 'api',
         groupId: 'group-ctx-commands',
+        stability: 'stable',
         title: '指令註冊介面',
         codeTitle: 'ctx.commands',
         sidebarLabel: '總覽',
@@ -1881,6 +2118,7 @@ ctx.render.registerOverlay({
         id: 'ctx.commands.register',
         category: 'api',
         groupId: 'group-ctx-commands',
+        stability: 'stable',
         title: '註冊命名空間自訂指令',
         codeTitle: 'ctx.commands.register()',
         sidebarLabel: 'register()',
@@ -1958,6 +2196,7 @@ ctx.ui.registerMenuItem({
         id: 'ctx.events',
         category: 'api',
         groupId: 'group-ctx-events',
+        stability: 'stable',
         title: '事件訂閱介面',
         codeTitle: 'ctx.events',
         sidebarLabel: '總覽',
@@ -1997,6 +2236,7 @@ ctx.ui.registerMenuItem({
         id: 'ctx.events.on',
         category: 'api',
         groupId: 'group-ctx-events',
+        stability: 'stable',
         title: '訂閱白名單事件',
         codeTitle: 'ctx.events.on()',
         sidebarLabel: 'on()',
@@ -2058,6 +2298,7 @@ ctx.ui.registerMenuItem({
         id: 'ctx.ui',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '使用者介面',
         codeTitle: 'ctx.ui',
         sidebarLabel: '總覽',
@@ -2102,6 +2343,7 @@ ctx.ui.registerMenuItem({
         id: 'ctx.ui.toast',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '顯示全域吐司通知',
         codeTitle: 'ctx.ui.toast()',
         sidebarLabel: 'toast()',
@@ -2168,6 +2410,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         id: 'ctx.ui.registerMenuItem',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '註冊頂欄擴充選單項目',
         codeTitle: 'ctx.ui.registerMenuItem()',
         sidebarLabel: 'registerMenuItem()',
@@ -2234,6 +2477,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         id: 'ctx.ui.openPopover',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '開啟宣告式設定面板',
         codeTitle: 'ctx.ui.openPopover()',
         sidebarLabel: 'openPopover()',
@@ -2302,6 +2546,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         id: 'ctx.ui.closePopover',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '關閉擴充設定面板',
         codeTitle: 'ctx.ui.closePopover()',
         sidebarLabel: 'closePopover()',
@@ -2343,6 +2588,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         id: 'ctx.ui.getSettings',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '讀取擴充設定值',
         codeTitle: 'ctx.ui.getSettings()',
         sidebarLabel: 'getSettings()',
@@ -2398,6 +2644,7 @@ const settings = ctx.ui.getSettings(SETTINGS_SCHEMA);`
         id: 'ctx.ui.createFloatingWidget',
         category: 'api',
         groupId: 'group-ctx-ui',
+        stability: 'stable',
         title: '建立浮動掛件容器',
         codeTitle: 'ctx.ui.createFloatingWidget()',
         sidebarLabel: 'createFloatingWidget()',
@@ -2465,6 +2712,7 @@ shadow.appendChild(text);`
         id: 'ctx.storage',
         category: 'api',
         groupId: 'group-ctx-storage',
+        stability: 'stable',
         title: '資料儲存介面',
         codeTitle: 'ctx.storage',
         sidebarLabel: '總覽',
@@ -2509,6 +2757,7 @@ shadow.appendChild(text);`
         id: 'ctx.storage.get',
         category: 'api',
         groupId: 'group-ctx-storage',
+        stability: 'stable',
         title: '讀取隔離儲存資料',
         codeTitle: 'ctx.storage.get()',
         sidebarLabel: 'get()',
@@ -2554,6 +2803,7 @@ shadow.appendChild(text);`
         id: 'ctx.storage.set',
         category: 'api',
         groupId: 'group-ctx-storage',
+        stability: 'stable',
         title: '寫入隔離儲存資料',
         codeTitle: 'ctx.storage.set()',
         sidebarLabel: 'set()',
@@ -2599,6 +2849,7 @@ shadow.appendChild(text);`
         id: 'ctx.storage.remove',
         category: 'api',
         groupId: 'group-ctx-storage',
+        stability: 'stable',
         title: '移除隔離儲存項目',
         codeTitle: 'ctx.storage.remove()',
         sidebarLabel: 'remove()',
@@ -2643,6 +2894,7 @@ shadow.appendChild(text);`
         id: 'ctx.storage.clear',
         category: 'api',
         groupId: 'group-ctx-storage',
+        stability: 'stable',
         title: '清空隔離儲存空間',
         codeTitle: 'ctx.storage.clear()',
         sidebarLabel: 'clear()',
@@ -2684,6 +2936,7 @@ shadow.appendChild(text);`
         id: 'ctx.storage.keys',
         category: 'api',
         groupId: 'group-ctx-storage',
+        stability: 'stable',
         title: '列出已儲存鍵名',
         codeTitle: 'ctx.storage.keys()',
         sidebarLabel: 'keys()',
@@ -2730,6 +2983,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         id: 'ctx.i18n',
         category: 'api',
         groupId: 'group-ctx-i18n',
+        stability: 'stable',
         title: '國際化多語系介面',
         codeTitle: 'ctx.i18n',
         sidebarLabel: '總覽',
@@ -2771,6 +3025,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         id: 'ctx.i18n.registerTranslations',
         category: 'api',
         groupId: 'group-ctx-i18n',
+        stability: 'stable',
         title: '註冊擴充多語系詞典',
         codeTitle: 'ctx.i18n.registerTranslations()',
         sidebarLabel: 'registerTranslations()',
@@ -2829,6 +3084,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         id: 'ctx.i18n.t',
         category: 'api',
         groupId: 'group-ctx-i18n',
+        stability: 'stable',
         title: '查詢擴充翻譯字串',
         codeTitle: 'ctx.i18n.t()',
         sidebarLabel: 't()',
@@ -2879,6 +3135,7 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         id: 'ctx.settings',
         category: 'api',
         groupId: 'group-ctx-settings',
+        stability: 'stable',
         title: '原生設定介面',
         codeTitle: 'ctx.settings',
         sidebarLabel: '總覽',
@@ -2929,6 +3186,7 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         id: 'ctx.settings.get',
         category: 'api',
         groupId: 'group-ctx-settings',
+        stability: 'stable',
         title: '讀取單一原生設定項目',
         codeTitle: 'ctx.settings.get()',
         sidebarLabel: 'get()',
@@ -2974,6 +3232,7 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         id: 'ctx.settings.getAll',
         category: 'api',
         groupId: 'group-ctx-settings',
+        stability: 'stable',
         title: '取得完整原生設定快照',
         codeTitle: 'ctx.settings.getAll()',
         sidebarLabel: 'getAll()',
@@ -3016,6 +3275,7 @@ console.log(allSettings);`
         id: 'ctx.settings.override',
         category: 'api',
         groupId: 'group-ctx-settings',
+        stability: 'stable',
         title: '層疊覆寫單一原生設定',
         codeTitle: 'ctx.settings.override()',
         sidebarLabel: 'override()',
@@ -3065,6 +3325,7 @@ revertNoBorder();`
         id: 'ctx.settings.overrideMany',
         category: 'api',
         groupId: 'group-ctx-settings',
+        stability: 'stable',
         title: '批次層疊覆寫多項設定',
         codeTitle: 'ctx.settings.overrideMany()',
         sidebarLabel: 'overrideMany()',
@@ -3112,6 +3373,7 @@ revertNoBorder();`
         id: 'ctx.settings.clearOverrides',
         category: 'api',
         groupId: 'group-ctx-settings',
+        stability: 'stable',
         title: '清除所有設定覆寫',
         codeTitle: 'ctx.settings.clearOverrides()',
         sidebarLabel: 'clearOverrides()',
@@ -3157,6 +3419,7 @@ revertNoBorder();`
         id: 'ctx.assets',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '素材覆寫介面',
         codeTitle: 'ctx.assets',
         sidebarLabel: '總覽',
@@ -3208,6 +3471,7 @@ revertNoBorder();`
         id: 'ctx.assets.listImageKeys',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '列出可用圖片素材鍵名',
         codeTitle: 'ctx.assets.listImageKeys()',
         sidebarLabel: 'listImageKeys()',
@@ -3250,6 +3514,7 @@ console.log('貼圖清單:', imageKeys);`
         id: 'ctx.assets.listSoundKeys',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '列出可用音效素材鍵名',
         codeTitle: 'ctx.assets.listSoundKeys()',
         sidebarLabel: 'listSoundKeys()',
@@ -3292,6 +3557,7 @@ console.log('音效清單:', soundKeys);`
         id: 'ctx.assets.overrideImage',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '覆寫單一圖片貼圖素材',
         codeTitle: 'ctx.assets.overrideImage()',
         sidebarLabel: 'overrideImage()',
@@ -3347,6 +3613,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         id: 'ctx.assets.overrideImages',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '批次覆寫多組圖片素材',
         codeTitle: 'ctx.assets.overrideImages()',
         sidebarLabel: 'overrideImages()',
@@ -3394,6 +3661,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         id: 'ctx.assets.overrideSound',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '覆寫單一打擊音效素材',
         codeTitle: 'ctx.assets.overrideSound()',
         sidebarLabel: 'overrideSound()',
@@ -3439,6 +3707,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         id: 'ctx.assets.overrideSounds',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '批次覆寫多組打擊音效',
         codeTitle: 'ctx.assets.overrideSounds()',
         sidebarLabel: 'overrideSounds()',
@@ -3486,6 +3755,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         id: 'ctx.assets.clearOverrides',
         category: 'api',
         groupId: 'group-ctx-assets',
+        stability: 'stable',
         title: '清除所有素材覆寫',
         codeTitle: 'ctx.assets.clearOverrides()',
         sidebarLabel: 'clearOverrides()',
@@ -3528,9 +3798,117 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
        十五、事件與設定面板
        ====================================================================== */
     {
+        id: 'guide-lifecycle-events',
+        category: 'events-schema',
+        groupId: 'group-events-schema',
+       stability: 'stable',
+        title: '生命週期與事件總表',
+        codeTitle: 'Lifecycle & Events',
+        sidebarLabel: '生命週期與事件總表',
+        sidebarMono: false,
+        subtitle: '完整說明擴充程式載入、註冊、啟用、停用與卸載的執行順序，以及系統可訂閱事件的觸發時機與參數規格。',
+        status: {
+            variant: 'perm',
+            label: '生命週期與事件',
+            permissions: ['events:subscribe'],
+            envs: ['自動資源回收', '9 項白名單事件', '安全模式支援'],
+            apiVersion: 'API v1'
+        },
+        overview: [
+            'Web mai Chart X 由 `extensionLoader.js` 負責套件封裝解析與持久化，並由 `extensionManager.js` 負責狀態機、權限上下文建構與資源回收。',
+            '所有透過官方 `ctx` 介面建立的訂閱與註冊項都會登錄於該次啟用世代的 `disposables` 清單；當插件停用、更新重載或遭遇初始化例外時，系統會逆序自動回收資源。'
+        ],
+        tables: [
+            {
+                title: '擴充程式載入、啟用與卸載順序',
+                columns: ['階段', '執行動作與狀態轉換', '說明與對應系統行為'],
+                rows: [
+                    ['1. 啟動安全檢查', '讀取 `wmcx_ext_activating` 與 `?safeMode` 參數', '若上次啟動期間發生未攔截崩潰導致重載，自動將該插件標記停用；網址含 `?safeMode=1` 或 `true` 時僅載入登錄而不自動啟用'],
+                    ['2. 解析與驗證', '`parseExtensionZip()` → `validateExtensionManifest()`', '檢查 `.zip` 結構、`manifest.json` 欄位格式、19 項權限白名單與 `https://` 連結'],
+                    ['3. 匯入與註冊', '產生 `blob:` 網址 → 動態 `import()` → `extensionManager.register()`', '識別 `default` 或 `activate` 工廠函式；狀態設為 `registered` 或 `inactive`，發布內部事件 `extension:registered`'],
+                    ['4. 建構與啟用', '`extensionManager.activate()` → `_createScopedContext()` → `factory(ctx)`', '先檢查 `runtime === "worker"`，若為 worker 直接標記 `error` 並停止；否則遞增 `activationGen`、凍結組裝 `ctx`、呼叫 `activate(ctx)` 並收集回傳的清理函式或 `dispose()` 物件，發布 `extension:activated`'],
+                    ['5. 停用與回收', '`extensionManager.deactivate()` → `_runDisposables()`', '先關閉設定彈窗，再由後往前執行 `disposables` 清單並呼叫 `clearAllOverrides()` 還原設定與素材覆寫，狀態改為 `inactive`，發布 `extension:deactivated`'],
+                    ['6. 移除與卸載', '`extensionManager.unregister()` → `uninstallExtension()`', '若仍處於 `active` 則先觸發停用流程，自執行期清單刪除紀錄，並清除 IndexedDB 套件與 `localStorage` 設定及隔離資料']
+                ]
+            },
+            {
+                title: '系統白名單事件觸發時機與參數總表',
+                columns: ['事件名稱', '觸發時機', '酬載型別與參數欄位'],
+                rows: [
+                    ['`app:ready`', '主程式初始化與擴充選單掛載完成後觸發一次', '無參數'],
+                    ['`project:loaded`', '建立新專案、切換專案或匯入譜面資料完成後觸發', '無參數'],
+                    ['`maidata:changed`', '譜面原始標頭或文字內容發生實質變更後觸發', '`maidata` 譜面資料物件'],
+                    ['`chart:decoded`', '譜面完成解碼或重新解析，例如切換難度或編輯音符後', '`{ difficulty, noteCount }`，含難度索引與已解析音符總數'],
+                    ['`view:mode-changed`', '切換全螢幕、隱藏編輯器、直橫版面或輔助文字顯示時', '`{ isEditorHidden, isFullscreen, isVerticalMode, showAuxiliaryText }`'],
+                    ['`playback:state-changed`', '播放引擎切換播放與暫停狀態時', '`{ isPlaying }` 布林值物件'],
+                    ['`playback:seek`', '使用者拖曳進度條或程式跳轉時間軸位置時', '`{ time }`，代表跳轉目標秒數'],
+                    ['`canvas:redraw`', '畫布完成一次重繪請求或主動呼叫 `ctx.render.requestRedraw()`', '無參數'],
+                    ['`settings:changed`', '使用者調整原生設定，或擴充透過 `ctx.settings` 變更覆寫時', '`{ key, value, oldVal, allSettings, isExtensionOverride }`']
+                ]
+            }
+        ],
+        callouts: [
+            {
+                variant: 'info',
+                title: '事件退訂與自行建立資源的清理邊界',
+                items: [
+                    '透過 `ctx.events.on` 與 `ctx.editor.on` 建立的監聽器會自動註冊至 `disposables`，插件停用時即自動退訂。',
+                    '若插件自行建立 `setInterval`、`setTimeout`、DOM 全域監聽或外部連線，必須於 `activate(ctx)` 回傳清理函式 `() => { ... }` 或 `{ dispose() { ... } }` 手動清除。'
+                ]
+            }
+        ],
+        examples: [
+            {
+                label: '完整生命週期、事件訂閱與清理寫法',
+                code: `export default function activate(ctx) {
+    const cleanups = [];
+
+    if (ctx.hasPermission('events:subscribe')) {
+        cleanups.push(ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
+            console.log('譜面解碼完成:', difficulty, noteCount);
+        }));
+        cleanups.push(ctx.events.on('playback:state-changed', ({ isPlaying }) => {
+            console.log('播放狀態變更:', isPlaying);
+        }));
+    }
+
+    const onWindowResize = () => {
+        if (ctx.hasPermission('render:overlay')) {
+            ctx.render.requestRedraw();
+        }
+    };
+    window.addEventListener('resize', onWindowResize);
+    cleanups.push(() => window.removeEventListener('resize', onWindowResize));
+
+    return () => {
+        while (cleanups.length > 0) {
+            const dispose = cleanups.pop();
+            dispose();
+        }
+    };
+}`
+            }
+        ],
+        notes: [
+            '若 `activate(ctx)` 回傳 Promise 且在等待解析期間插件已被停用，系統會在 Promise 解析後檢查 `activationGen`，立即執行其回傳的清理函式以避免資源洩漏。',
+            '非同步 `activate(ctx)` 若在執行途中拋出例外，系統會自動關閉設定面板、執行已登錄的 `disposables` 並將狀態切換為 `error`。',
+            '編輯器輸入、按鍵與選取區事件不屬於全域 `ctx.events`，須透過 `ctx.editor.on` 訂閱，並宣告 `editor:read` 權限。'
+        ],
+        summary: {
+            namespace: 'Lifecycle & Events',
+            permission: '依訂閱介面宣告 events:subscribe',
+            constant: 'SUBSCRIBABLE_EVENTS',
+            async: '支援同步與非同步啟用及逆序回收',
+            runtime: 'Trusted 主執行緒模式',
+            since: 'API v1'
+        },
+        seeAlso: ['guide-lifecycle', 'events-list', 'ctx.events.on', 'ctx.editor.on', 'guide-minimal-plugin']
+    },
+    {
         id: 'events-list',
         category: 'events-schema',
         groupId: 'group-events-schema',
+       stability: 'stable',
         title: '可訂閱事件白名單',
         codeTitle: 'SUBSCRIBABLE_EVENTS',
         sidebarLabel: '可訂閱事件清單',
@@ -3589,6 +3967,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         id: 'settings-schema',
         category: 'events-schema',
         groupId: 'group-events-schema',
+        stability: 'stable',
         title: '原生設定面板與綱要格式',
         codeTitle: 'SETTINGS_SCHEMA',
         sidebarLabel: '設定面板與 Schema',
@@ -3687,6 +4066,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         id: 'werp-overview',
         category: 'werp',
         groupId: 'group-werp',
+        stability: 'stable',
         title: 'WERP 協定架構與安全規範',
         codeTitle: 'WERP v1.0',
         sidebarLabel: '協定架構與安全',
@@ -3734,6 +4114,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         id: 'werp-index-spec',
         category: 'werp',
         groupId: 'group-werp',
+        stability: 'stable',
         title: '索引 JSON 規格與錯誤碼',
         codeTitle: 'index.json',
         sidebarLabel: '索引規格與錯誤碼',
@@ -3826,6 +4207,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         id: 'werp-install-flow',
         category: 'werp',
         groupId: 'group-werp',
+        stability: 'stable',
         title: '來源管理、安裝程序與部署',
         sidebarLabel: '安裝流程與部署指南',
         sidebarMono: false,
@@ -3874,6 +4256,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         id: 'arch-overview',
         category: 'architecture',
         groupId: 'group-architecture',
+        stability: 'stable',
         title: '核心系統生命週期與事件通訊',
         codeTitle: 'AppContext & EventBus',
         sidebarLabel: '生命週期與事件匯流排',
@@ -3926,6 +4309,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         id: 'arch-modules',
         category: 'architecture',
         groupId: 'group-architecture',
+        stability: 'stable',
         title: '專案模組與目錄職責手冊',
         sidebarLabel: '模組職責索引',
         sidebarMono: false,
@@ -3984,6 +4368,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         id: 'arch-renderer-audio',
         category: 'architecture',
         groupId: 'group-architecture',
+        stability: 'stable',
         title: '渲染與音訊運算引擎機制',
         codeTitle: 'SimaiRenderer & AudioManager',
         sidebarLabel: '渲染與音訊引擎',

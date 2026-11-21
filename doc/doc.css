@@ -204,6 +204,8 @@ a:hover {
 }
 
 .doc-topnav-btn {
+    display: inline-flex;
+    align-items: center;
     border: 1px solid transparent;
     background: transparent;
     color: var(--popup-text-sub, #bbbbbb);
@@ -214,12 +216,14 @@ a:hover {
     border-radius: var(--popup-radius-md, 6px);
     cursor: pointer;
     white-space: nowrap;
+    text-decoration: none;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .doc-topnav-btn:hover {
     background: var(--popup-surface-hover, #32323c);
     color: #ffffff;
+    text-decoration: none;
 }
 
 .doc-topnav-btn.is-active {
@@ -458,6 +462,8 @@ a:hover {
 }
 
 .doc-crumb-btn {
+    display: inline-flex;
+    align-items: center;
     border: none;
     background: transparent;
     padding: 2px 5px;
@@ -466,12 +472,14 @@ a:hover {
     font-family: inherit;
     font-size: 12.5px;
     cursor: pointer;
+    text-decoration: none;
     transition: color 0.15s ease, background 0.15s ease;
 }
 
 .doc-crumb-btn:hover {
     color: #ffffff;
     background: rgba(255, 255, 255, 0.08);
+    text-decoration: none;
 }
 
 .doc-crumb-sep {
@@ -799,6 +807,89 @@ a:hover {
     background: rgba(68, 153, 238, 0.16);
     border: 1px solid rgba(68, 153, 238, 0.35);
     color: #93c5fd;
+}
+
+.doc-stability-badge {
+    font-family: var(--doc-font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+}
+
+.doc-stability-badge.is-stable {
+    background: rgba(16, 185, 129, 0.14);
+    border-color: rgba(16, 185, 129, 0.38);
+    color: #6ee7b7;
+}
+
+.doc-stability-badge.is-experimental {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fcd34d;
+}
+
+.doc-stability-badge.is-deprecated {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+}
+
+.doc-stability-badge.is-unmarked {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--popup-text-sub, #bbbbbb);
+}
+
+.doc-md-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.doc-md-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: var(--popup-radius-sm, 4px);
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--popup-text-main, #d0d0d0);
+    font-family: var(--doc-font-mono);
+    font-size: 11.5px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.doc-md-action-btn:hover {
+    background: var(--popup-accent, #4499ee);
+    border-color: var(--popup-accent, #4499ee);
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.doc-md-action-btn.is-copied {
+    background: var(--popup-success-bg, rgba(16, 185, 129, 0.15));
+    border-color: var(--popup-success, #10b981);
+    color: #6ee7b7;
+}
+
+.doc-md-action-btn .material-symbols-outlined {
+    font-size: 14px;
+}
+
+.doc-empty-note {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: var(--popup-radius-md, 6px);
+    background: var(--doc-card-bg);
+    border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+    color: var(--popup-text-sub, #bbbbbb);
+    font-size: 13.5px;
 }
 
 .doc-article-title {

@@ -2,10 +2,15 @@
 <html lang="zh-Hant">
 
 <head>
+    <script src="./doc-ids.js"></script>
+    <script>(function(){var h=window.location.hash||'';if(h.length<2)return;var id;try{id=decodeURIComponent(h.slice(1));}catch(_){return;}if(!id||id.indexOf('sec-')===0)return;var valid=window.__DOC_IDS__;if(Array.isArray(valid)&&valid.indexOf(id)!==-1){window.location.replace('./'+encodeURIComponent(id)+'.html');}})();</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="Web mai Chart X 開發者手冊與 API 參考文件，涵蓋擴充程式受限上下文介面、事件訂閱、原生設定面板、WERP 儲存庫協定與核心架構說明。">
-    <title>Web mai Chart X 開發者手冊</title>
+    <meta name="description" content="Web mai Chart X 插件開發者手冊與 API 參考文件，涵蓋擴充程式受限上下文介面、生命週期、事件訂閱、逐幀離線錄影疊加與 WERP 儲存庫協定。">
+    <title>Web mai Chart X 插件開發者手冊</title>
+    <link rel="canonical" href="https://susuy0725.github.io/web-mai-chart-x/doc/">
+    <link rel="alternate" type="text/markdown" href="./llms.txt" title="LLM Documentation Index">
+    <link rel="alternate" type="text/markdown" href="./llms-full.txt" title="LLM Full Documentation">
     <link rel="icon" type="image/x-icon" href="../favicon.ico">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,7 +24,7 @@
     <link rel="stylesheet" href="./doc.css">
 </head>
 
-<body>
+<body data-doc-id="index" data-md-url="./llms.txt">
     <a class="doc-skip-link" href="#docMainHeading">跳至主要內容</a>
 
     <header class="doc-topbar">
@@ -28,16 +33,19 @@
                 aria-expanded="false" aria-controls="docSidebar">
                 <span class="material-symbols-outlined" aria-hidden="true">menu</span>
             </button>
-            <a href="#guide-overview" class="doc-brand" id="brandHomeLink">
-                <img src="../favicon.png" alt="Web mai Chart X" width="24" height="24" class="doc-brand-icon"
-                    onerror="this.style.display='none'">
+            <a href="./index.html" class="doc-brand" id="brandHomeLink" aria-current="page">
+                <img src="../favicon.png" alt="Web mai Chart X" width="24" height="24" class="doc-brand-icon">
                 <span class="doc-brand-title">WMCX</span>
-                <span class="doc-brand-badge">Docs</span>
+                <span class="doc-brand-badge">Plugin API</span>
             </a>
         </div>
 
         <nav class="doc-topnav" id="topCategoryNav" aria-label="手冊主分類">
-            <!-- 由 doc.js 動態渲染主分類頁籤 -->
+            <a class="doc-topnav-btn is-active" href="./guide-overview.html">快速開始</a>
+            <a class="doc-topnav-btn" href="./ctx-base.html">Context API</a>
+            <a class="doc-topnav-btn" href="./events-list.html">事件與設定</a>
+            <a class="doc-topnav-btn" href="./werp-overview.html">WERP 協定</a>
+            <a class="doc-topnav-btn" href="./arch-overview.html">核心架構</a>
         </nav>
 
         <div class="doc-topbar-right">
@@ -58,10 +66,13 @@
 
     <div class="doc-breadcrumb-bar" id="docBreadcrumbBar">
         <nav id="breadcrumbNav" class="doc-breadcrumb" aria-label="目前位置">
-            <!-- 由 doc.js 動態渲染麵包屑 -->
+            <a class="doc-crumb-btn" href="./index.html">WMCX</a>
+            <span class="material-symbols-outlined doc-crumb-sep" aria-hidden="true">chevron_right</span>
+            <span class="doc-crumb-current">插件開發者手冊首頁</span>
         </nav>
         <div class="doc-breadcrumb-meta">
             <span class="doc-meta-pill">API v1</span>
+            <a href="./llms.txt" class="doc-meta-link"><span>llms.txt</span></a>
             <a href="../_play/" target="_blank" rel="noopener noreferrer" class="doc-meta-link">
                 <span>遊玩模式</span>
                 <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
@@ -88,7 +99,64 @@
                     <button type="button" id="toggleAllGroupsBtn" class="doc-text-btn">全部收合</button>
                 </div>
                 <nav id="sidebarNav" class="doc-tree" aria-label="API 與文件索引">
-                    <!-- 由 doc.js 動態渲染樹狀目錄 -->
+                    <div class="doc-tree-section">
+                        <div class="doc-tree-section-title">快速開始</div>
+                        <details class="doc-tree-group" data-group-id="group-guide" open>
+                            <summary class="doc-tree-summary">
+                                <span class="material-symbols-outlined doc-tree-chevron" aria-hidden="true">chevron_right</span>
+                                <span>開發入門與規範</span>
+                            </summary>
+                            <div class="doc-tree-items">
+                                <a class="doc-tree-link" href="./guide-overview.html"><span class="doc-tree-link-label">系統架構概述</span></a>
+                                <a class="doc-tree-link" href="./guide-minimal-plugin.html"><span class="doc-tree-link-label">最小可運作插件</span></a>
+                                <a class="doc-tree-link" href="./guide-manifest.html"><span class="doc-tree-link-label">manifest.json 規格</span></a>
+                                <a class="doc-tree-link" href="./guide-permissions.html"><span class="doc-tree-link-label">權限常數表</span></a>
+                                <a class="doc-tree-link" href="./guide-lifecycle.html"><span class="doc-tree-link-label">生命週期與清理</span></a>
+                                <a class="doc-tree-link" href="./guide-security.html"><span class="doc-tree-link-label">安全規範與隔離</span></a>
+                                <a class="doc-tree-link" href="./guide-packaging.html"><span class="doc-tree-link-label">打包與安裝測試</span></a>
+                            </div>
+                        </details>
+                    </div>
+                    <div class="doc-tree-section">
+                        <div class="doc-tree-section-title">Context API</div>
+                        <details class="doc-tree-group" data-group-id="group-ctx-base" open>
+                            <summary class="doc-tree-summary">
+                                <span class="material-symbols-outlined doc-tree-chevron" aria-hidden="true">chevron_right</span>
+                                <span>受限上下文基礎</span>
+                            </summary>
+                            <div class="doc-tree-items">
+                                <a class="doc-tree-link" href="./ctx-base.html"><span class="doc-tree-link-label is-mono">ctx 總覽</span></a>
+                                <a class="doc-tree-link" href="./ctx.editor.html"><span class="doc-tree-link-label is-mono">ctx.editor</span></a>
+                                <a class="doc-tree-link" href="./ctx.playback.html"><span class="doc-tree-link-label is-mono">ctx.playback</span></a>
+                                <a class="doc-tree-link" href="./ctx.chart.html"><span class="doc-tree-link-label is-mono">ctx.chart</span></a>
+                                <a class="doc-tree-link" href="./ctx.view.html"><span class="doc-tree-link-label is-mono">ctx.view</span></a>
+                                <a class="doc-tree-link" href="./ctx.render.html"><span class="doc-tree-link-label is-mono">ctx.render</span></a>
+                                <a class="doc-tree-link" href="./ctx.commands.html"><span class="doc-tree-link-label is-mono">ctx.commands</span></a>
+                                <a class="doc-tree-link" href="./ctx.events.html"><span class="doc-tree-link-label is-mono">ctx.events</span></a>
+                                <a class="doc-tree-link" href="./ctx.ui.html"><span class="doc-tree-link-label is-mono">ctx.ui</span></a>
+                                <a class="doc-tree-link" href="./ctx.storage.html"><span class="doc-tree-link-label is-mono">ctx.storage</span></a>
+                                <a class="doc-tree-link" href="./ctx.i18n.html"><span class="doc-tree-link-label is-mono">ctx.i18n</span></a>
+                                <a class="doc-tree-link" href="./ctx.settings.html"><span class="doc-tree-link-label is-mono">ctx.settings</span></a>
+                                <a class="doc-tree-link" href="./ctx.assets.html"><span class="doc-tree-link-label is-mono">ctx.assets</span></a>
+                            </div>
+                        </details>
+                    </div>
+                    <div class="doc-tree-section">
+                        <div class="doc-tree-section-title">事件、協定與架構</div>
+                        <details class="doc-tree-group" data-group-id="group-events-schema" open>
+                            <summary class="doc-tree-summary">
+                                <span class="material-symbols-outlined doc-tree-chevron" aria-hidden="true">chevron_right</span>
+                                <span>事件、WERP 與架構</span>
+                            </summary>
+                            <div class="doc-tree-items">
+                                <a class="doc-tree-link" href="./guide-lifecycle-events.html"><span class="doc-tree-link-label">生命週期與事件總表</span></a>
+                                <a class="doc-tree-link" href="./events-list.html"><span class="doc-tree-link-label">可訂閱事件清單</span></a>
+                                <a class="doc-tree-link" href="./settings-schema.html"><span class="doc-tree-link-label">設定面板與 Schema</span></a>
+                                <a class="doc-tree-link" href="./werp-overview.html"><span class="doc-tree-link-label">WERP 協定架構</span></a>
+                                <a class="doc-tree-link" href="./arch-overview.html"><span class="doc-tree-link-label">核心系統架構</span></a>
+                            </div>
+                        </details>
+                    </div>
                 </nav>
                 <div id="sidebarEmptyState" class="doc-sidebar-empty" hidden>
                     找不到符合篩選條件的條目。
@@ -98,7 +166,132 @@
 
         <main class="doc-main" id="docMain">
             <article id="docArticle" class="doc-article">
-                <!-- 由 doc.js 動態渲染單篇詞條內容 -->
+                <header class="doc-article-header">
+                    <div class="doc-article-eyebrow">
+                        <span class="doc-eyebrow-tag">Plugin Developer Reference</span>
+                        <span class="doc-stability-badge is-stable">stable</span>
+                        <span class="doc-eyebrow-tag">API v1</span>
+                        <div class="doc-md-actions">
+                            <a class="doc-md-action-btn" href="./llms.txt">llms.txt 索引</a>
+                            <a class="doc-md-action-btn" href="./llms-full.txt">完整 Markdown</a>
+                        </div>
+                    </div>
+                    <h1 class="doc-article-title" id="docMainHeading" tabindex="-1">
+                        <span>Web mai Chart X 插件開發者手冊</span>
+                    </h1>
+                    <p class="doc-article-subtitle">專為第三方擴充程式開發者撰寫的 API 參考文件、生命週期總表、離線錄影疊加規格與 WERP 儲存庫協定，非譜面寫譜教學。</p>
+                </header>
+
+                <div class="doc-status-banner is-free">
+                    <div class="doc-status-left">
+                        <span class="material-symbols-outlined doc-status-icon" aria-hidden="true">verified_user</span>
+                        <span class="doc-status-label">靜態預渲染文件</span>
+                        <code class="doc-perm-chip">19 項官方權限</code>
+                        <code class="doc-perm-chip">9 項白名單事件</code>
+                    </div>
+                    <div class="doc-status-right">
+                        <span class="doc-env-badge is-supported">無須 JavaScript 可完整瀏覽</span>
+                        <span class="doc-env-badge">API v1</span>
+                    </div>
+                </div>
+
+                <section class="doc-section" id="sec-overview">
+                    <h2 class="doc-section-title" id="sec-overview-heading">
+                        <a class="doc-anchor-link" href="#sec-overview">手冊定位與適用對象</a>
+                    </h2>
+                    <div class="doc-prose">
+                        <p>本網站提供 Web mai Chart X 擴充程式系統的官方開發介面與封裝規格，協助開發者建立客製化視覺圖層、譜面輔助工具、介面面板與素材覆寫插件。</p>
+                        <p>每個詞條頁面皆提供獨立靜態 HTML 與對應純 Markdown 檔案，無須執行 JavaScript 即可直接讀取全部內容。</p>
+                    </div>
+                </section>
+
+                <section class="doc-section" id="sec-trust-model">
+                    <h2 class="doc-section-title" id="sec-trust-model-heading">
+                        <a class="doc-anchor-link" href="#sec-trust-model">執行環境信任模型與保留欄位警示</a>
+                    </h2>
+                    <div class="doc-callout is-warning">
+                        <div class="doc-callout-title">
+                            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                            <span>主執行緒執行與 runtime: worker 未實作</span>
+                        </div>
+                        <ul class="doc-bullet-list">
+                            <li>所有插件皆以動態 ESM 匯入並執行於瀏覽器主執行緒，無系統級安全沙盒隔離，可存取並修改頁面 DOM 與讀取專案資料。</li>
+                            <li>注入進入點的 <code class="doc-inline-code">ctx</code> 受限上下文物件屬於官方介面層級的權限控管與資源追蹤機制。</li>
+                            <li><code class="doc-inline-code">manifest.json</code> 中的 <code class="doc-inline-code">runtime: "worker"</code> 目前為保留但未實作欄位；嘗試啟用設定為 <code class="doc-inline-code">worker</code> 的插件會立即進入錯誤狀態並拒絕執行。</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section class="doc-section" id="sec-video-render">
+                    <h2 class="doc-section-title" id="sec-video-render-heading">
+                        <a class="doc-anchor-link" href="#sec-video-render">逐幀離線錄影渲染機制</a>
+                    </h2>
+                    <div class="doc-prose">
+                        <p>Web mai Chart X 的譜面影片匯出採用固定幀率逐幀離線渲染，並非即時螢幕擷取。於 <code class="doc-inline-code">ctx.render.registerOverlay</code> 設定 <code class="doc-inline-code">target: "main"</code> 且 <code class="doc-inline-code">includeInVideo: true</code> 的圖層會被納入輸出影片。</p>
+                        <p>離線渲染期間不依賴 <code class="doc-inline-code">requestAnimationFrame</code>，也不應使用 <code class="doc-inline-code">Date.now()</code> 或 <code class="doc-inline-code">performance.now()</code> 推算動畫進度，所有視覺效果必須完全依據傳入的 <code class="doc-inline-code">globalTime</code> 計算。</p>
+                    </div>
+                </section>
+
+                <section class="doc-section" id="sec-ai-endpoints">
+                    <h2 class="doc-section-title" id="sec-ai-endpoints-heading">
+                        <a class="doc-anchor-link" href="#sec-ai-endpoints">給 AI Agent 與自動化工具的 Markdown 端點</a>
+                    </h2>
+                    <div class="doc-table-wrap" tabindex="0" role="region" aria-labelledby="sec-ai-endpoints-heading">
+                        <table class="doc-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">端點</th>
+                                    <th scope="col">格式</th>
+                                    <th scope="col">用途說明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><a href="./llms.txt">./llms.txt</a></td>
+                                    <td>Markdown 索引</td>
+                                    <td>依 API 分類列出全部詞條一行摘要與獨立 Markdown 連結</td>
+                                </tr>
+                                <tr>
+                                    <td><a href="./llms-full.txt">./llms-full.txt</a></td>
+                                    <td>單檔完整 Markdown</td>
+                                    <td>一次匯總全部開發者手冊條目，適合長上下文讀取</td>
+                                </tr>
+                                <tr>
+                                    <td><a href="./md/ctx-base.md">./md/&lt;id&gt;.md</a></td>
+                                    <td>單詞條純 Markdown</td>
+                                    <td>按詞條識別碼精準讀取單一 API 或規範文件，節省上下文用量</td>
+                                </tr>
+                                <tr>
+                                    <td><a href="./search-index.json">./search-index.json</a></td>
+                                    <td>JSON</td>
+                                    <td>結構化詞條、分類與權限搜尋索引</td>
+                                </tr>
+                                <tr>
+                                    <td><a href="./sitemap.xml">./sitemap.xml</a></td>
+                                    <td>XML</td>
+                                    <td>全部靜態詞條頁面網址清單</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="doc-section" id="sec-entry-map">
+                    <h2 class="doc-section-title" id="sec-entry-map-heading">
+                        <a class="doc-anchor-link" href="#sec-entry-map">核心章節入口</a>
+                    </h2>
+                    <ul class="doc-seealso-list" role="list">
+                        <li><a class="doc-seealso-link" href="./guide-overview.html"><span>系統架構概述</span></a></li>
+                        <li><a class="doc-seealso-link" href="./guide-minimal-plugin.html"><span>最小可運作插件</span></a></li>
+                        <li><a class="doc-seealso-link" href="./guide-manifest.html"><span>manifest.json 規格</span></a></li>
+                        <li><a class="doc-seealso-link" href="./guide-permissions.html"><span>19 項權限常數表</span></a></li>
+                        <li><a class="doc-seealso-link" href="./guide-lifecycle-events.html"><span>生命週期與事件總表</span></a></li>
+                        <li><a class="doc-seealso-link" href="./ctx-base.html"><span>ctx 受限上下文物件</span></a></li>
+                        <li><a class="doc-seealso-link" href="./ctx.render.html"><span>ctx.render 畫布與離線錄影</span></a></li>
+                        <li><a class="doc-seealso-link" href="./ctx.ui.html"><span>ctx.ui 選單與原生設定面板</span></a></li>
+                        <li><a class="doc-seealso-link" href="./werp-overview.html"><span>WERP 儲存庫協定</span></a></li>
+                    </ul>
+                </section>
             </article>
         </main>
 
@@ -107,7 +300,11 @@
                 <h2 class="doc-toc-title">本頁目錄</h2>
                 <nav aria-label="章節錨點">
                     <ul id="tocList" class="doc-toc-list">
-                        <!-- 由 doc.js 動態渲染本頁章節 -->
+                        <li><a class="doc-toc-link is-active" href="#sec-overview" data-target-id="sec-overview">手冊定位與適用對象</a></li>
+                        <li><a class="doc-toc-link" href="#sec-trust-model" data-target-id="sec-trust-model">執行環境信任模型與保留欄位警示</a></li>
+                        <li><a class="doc-toc-link" href="#sec-video-render" data-target-id="sec-video-render">逐幀離線錄影渲染機制</a></li>
+                        <li><a class="doc-toc-link" href="#sec-ai-endpoints" data-target-id="sec-ai-endpoints">Markdown 與 AI 端點</a></li>
+                        <li><a class="doc-toc-link" href="#sec-entry-map" data-target-id="sec-entry-map">核心章節入口</a></li>
                     </ul>
                 </nav>
             </div>

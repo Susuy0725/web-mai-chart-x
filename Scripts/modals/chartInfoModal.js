@@ -1,4 +1,4 @@
-import { simpleToast, popupWindow, ensureJsMediaTags } from '../helper.js';
+import { simpleToast, popupWindow, ensureJsMediaTags, syncDifficultySelectIndicators } from '../helper.js';
 import { t } from '../i18n.js';
 import { appContext } from '../core/appContext.js';
 import {
@@ -227,7 +227,8 @@ export function openChartInfoModal(options = {}) {
             { value: '7', label: 'ORIGINAL' }, { value: '6', label: 'RE:MASTER' },
             { value: '5', label: 'MASTER' }, { value: '4', label: 'EXPERT' },
             { value: '3', label: 'ADVANCED' }, { value: '2', label: 'BASIC' }, { value: '1', label: 'EASY' }
-        ], 'chart-info-dropdown');
+        ], 'chart-info-dropdown difficulty-select');
+        syncDifficultySelectIndicators(diffSelect, tempData);
         inputRefs.difficulty = diffSelect;
         const dropdownRow = createSettingRow(t('popup.chartInfo.diffLabel'), diffSelect);
 

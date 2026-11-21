@@ -621,7 +621,7 @@ export function openSettingsModal(options = {}) {
                 finalVal = config.el.checked;
             } else if (config.type === 'dropdown') {
                 finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
-            } else if (config.type === 'text') {
+            } else if (config.type === 'text' || config.type === 'color') {
                 finalVal = config.el.value;
             } else if (config.type === 'object' || config.type === 'color-object' || config.type === 'keybindings') {
                 // 直接複製子選單同步完的物件結果
@@ -672,7 +672,11 @@ export function openSettingsModal(options = {}) {
         const preview = document.createElement('span');
         preview.className = 'popup-setting-color-preview';
         preview.textContent = previewText;
-        preview.style.color = value;
+        if (previewText) {
+            preview.style.color = value;
+        } else {
+            preview.style.backgroundColor = value;
+        }
 
         const hexText = document.createElement('span');
         hexText.className = 'popup-setting-color-hex';
@@ -685,7 +689,11 @@ export function openSettingsModal(options = {}) {
 
         const updateColor = (newVal) => {
             input.value = newVal;
-            preview.style.color = newVal;
+            if (previewText) {
+                preview.style.color = newVal;
+            } else {
+                preview.style.backgroundColor = newVal;
+            }
             hexText.textContent = (newVal || '').toUpperCase();
         };
 
@@ -696,6 +704,13 @@ export function openSettingsModal(options = {}) {
 
         wrap.setValue = (newVal) => {
             updateColor(newVal);
+        };
+        Object.defineProperty(wrap, 'value', {
+            get: () => input.value,
+            set: (newVal) => updateColor(newVal)
+        });
+        wrap._updateDisplay = () => {
+            updateColor(input.value);
         };
 
         wrap.appendChild(preview);
@@ -1159,7 +1174,17 @@ export function openSettingsModal(options = {}) {
                         appContext.setSetting(targetKey, val);
                         if (item.apply) item.apply(val);
                     } catch (err) { }
-                });
+                }, item.rangeOptions);
+            }
+            // --- C2. 處理單一 Color ---
+            else if (item.type === 'color') {
+                el = createColorInput(currentVal, (newColor) => {
+                    try {
+                        targetRef[targetKey] = newColor;
+                        appContext.setSetting(targetKey, newColor);
+                        if (item.apply) item.apply(newColor);
+                    } catch (err) { }
+                }, item.previewText || '');
             }
             // --- D. 處理 Text ---
             else if (item.type === 'text') {

@@ -248,8 +248,23 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
         ['hideBackgroundWhenPaused', 'showBackgroundWhenPaused'],
         ['notPlayHoldEnd', 'playHoldEnd'],
         ['disableSyntaxCheck', 'enableSyntaxCheck'],
-        ['disablePreviewWaveform', 'enablePreviewWaveform'],
     ];
+    if (parsedSettings) {
+        if (!('previewAudioVisualMode' in parsedSettings)) {
+            if (parsedSettings.disablePreviewWaveform === true || parsedSettings.enablePreviewWaveform === false) {
+                settings.previewAudioVisualMode = 'off';
+                hasNewKeys = true;
+            }
+        }
+        if ('disablePreviewWaveform' in settings) {
+            delete settings.disablePreviewWaveform;
+            hasNewKeys = true;
+        }
+        if ('enablePreviewWaveform' in settings) {
+            delete settings.enablePreviewWaveform;
+            hasNewKeys = true;
+        }
+    }
     if (parsedSettings) {
         for (const [oldKey, newKey] of legacyInvertedMap) {
             if (oldKey in parsedSettings) {

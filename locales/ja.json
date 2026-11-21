@@ -358,6 +358,7 @@
       "effectsAndJudge": "エフェクト・判定",
       "backgroundAndSensor": "背景・センサー",
       "canvasInfo": "キャンバス情報",
+      "previewTrack": "プレビュー軌道・音声可視化",
       "volume": "音量設定",
       "sfxBehavior": "再生動作",
       "editorAssist": "エディター補助",
@@ -435,7 +436,22 @@
       "timeDisplayCapsulePosition": "フローティング時間カプセルの位置",
       "showUIHorizontalPosition": "FPS インターフェース水平位置",
       "showUIVerticalPosition": "FPS インターフェース垂直位置",
-      "seekStepSeconds": "シーク移動秒数 (Ctrl+←/→)"
+      "seekStepSeconds": "シーク移動秒数 (Ctrl+←/→)",
+      "cursorFollow": "再生時にテキストカーソルを追従",
+      "highlightCurrentNote": "進捗に合わせて現在のノーツを強調表示",
+      "editorAutoScroll": "再生時にエディターを自動スクロール",
+      "previewAudioVisualMode": "プレビュー音声表示モード",
+      "previewWaveformColor": "波形カラー",
+      "previewSpectrogramMinFreq": "スペクトログラム最小周波数",
+      "previewSpectrogramMaxFreq": "スペクトログラム最大周波数",
+      "previewSpectrogramBrightness": "スペクトログラム輝度",
+      "previewTagOpacity": "Tag ライン不透明度",
+      "previewBpmLineOpacity": "BPM ライン不透明度"
+    },
+    "previewAudioVisualOpts": {
+      "waveform": "波形 (Waveform)",
+      "spectrogram": "スペクトログラム (Spectrogram)",
+      "off": "オフ"
     },
     "middleDisplayOpts": {
       "off": "オフ",
@@ -686,7 +702,13 @@
       "confirm": "新しく譜面を作成しますか？これにより新規プロジェクトが作成されます。"
     },
     "warning": {
-      "title": "警告"
+      "title": "警告",
+      "errorsTab": "エラー ({count})",
+      "warningsTab": "警告 ({count})",
+      "emptyErrors": "エラーはありません",
+      "emptyWarnings": "警告はありません",
+      "btnTitle": "エラーと警告",
+      "btnAriaLabel": "譜面のエラーと警告情報"
     },
     "chartInfo": {
       "title": "譜面情報",
@@ -1256,6 +1278,82 @@
       "viewTogglePlayControls": "再生コントロールバーを表示 / 非表示",
       "viewFullscreen": "全画面表示を切替",
       "viewOpenSettings": "設定を開く"
+    }
+  },
+  "decode": {
+    "error": {
+      "unclosedBpmTag": "BPMタグ \"(\" が閉じられていないため、以降の拍区切りとタイミングが崩れます",
+      "invalidBpm": "無効な BPM 値 \"({value})\"",
+      "misplacedBpmTag": "BPMタグ \"{tag}\" の位置が不正です：小節の先頭に記述してください（\",\" の記述漏れはありませんか？）",
+      "unmatchedParen": "対応する \"(\" がない余分な \")\" があります",
+      "unclosedSplitTag": "拍分割タグ \"{\" が閉じられていないため、以降の拍分割とタイミングが崩れます",
+      "invalidSplitDuration": "無効な分割時間 \"{{value}}\"",
+      "invalidSplitValue": "無効な拍分割値 \"{{value}}\"",
+      "misplacedSplitTag": "拍分割タグ \"{tag}\" の位置が不正です：小節の先頭に記述してください（\",\" の記述漏れはありませんか？）",
+      "unmatchedBrace": "対応する \"{\" がない余分な \"}\" があります",
+      "unclosedBracket": "時間指定の角括弧 \"[\" が閉じられていないため、以降のカンマが正しく分割されません",
+      "unclosedPropertyTag": "プロパティタグ \"{tag}\" が閉じられていません",
+      "invalidPropertyTag": "無効なプロパティタグ <{tag}>：{reason}",
+      "misplacedPropertyTag": "プロパティタグ \"{tag}\" の位置が不正です：ノーツグループの先頭にのみ記述できます"
+    },
+    "propError": {
+      "empty": "プロパティタグが空です",
+      "invalidHs": "無効な HS 値 \"{value}\"",
+      "invalidSizeValue": "無効な SIZE 値 \"{value}\"",
+      "invalidSizeTuple": "無効な SIZE タプル値 \"{value}\"",
+      "invalidSizeFormat": "無効な SIZE 形式 \"{value}\"",
+      "invalidColorFormat": "無効な COLOR 形式（6桁または8桁の16進数が必要）：\"{value}\"",
+      "unknown": "不明なプロパティタグ \"{tag}\""
+    },
+    "warning": {
+      "notImplementedSlideType": "未実装のスライド種類 \"{type}\" のため直線として処理します",
+      "emptyBacktickNote": "バッククォート \"`\" 区切り内に空のノーツがあります",
+      "emptySplitNote": "スラッシュ \"/\" 区切り内に空のノーツがあります",
+      "overlappingNotePosition": "ノーツ位置が重複しています：\"{note}\"",
+      "invalidNotePosition": "無効なノーツ位置：\"{note}\"（1〜8を指定してください）",
+      "invalidTouchPosition": "無効なタッチ位置：\"{note}\"（1〜8を指定してください）",
+      "invalidNoteFormat": "無効なノーツ形式：\"{note}\"",
+      "invalidCharacters": "ノーツ \"{note}\" に無効な文字 \"{chars}\" が含まれています",
+      "invalidTapBrackets": "タップノーツ \"{note}\" に時間括弧は使用できません",
+      "breakInTouch": "タッチノーツにブレイク指定 \"b\" は使用できません",
+      "redundantStarOnSlide": "スライドには既にスターがあるため \"$\" は不要です",
+      "starInTouch": "タッチノーツにスター指定 \"$\" は使用できません",
+      "starInHold": "ホールドノーツにスター指定 \"$\" は使用できません",
+      "multipleHanabi": "花火指定 \"f\" が重複しています",
+      "hanabiNotAllowed": "花火指定 \"f\" はタッチノーツでのみ使用できます",
+      "holdInSlide": "スライドノーツにホールド指定 \"h\" は使用できません",
+      "invalidHoldFormat": "ホールドノーツ \"{note}\" の形式が無効です",
+      "invalidHoldDuration": "無効なホールド時間：{reason}",
+      "starFlagNotAllowed": "\"{flag}\" 指定はスライド以外のノーツでは使用できません",
+      "atFlagConflict": "\"@\"（始点非表示）は \"?\" や \"!\" と併用できません",
+      "contradictoryHeadFlags": "\"!\" と \"?\" を同時に指定することはできません",
+      "breakFlagPosition": "ブレイク指定 \"b\" をこの位置に書くことは推奨されません。スライド区間の末尾に記述してください",
+      "mineFlagPosition": "地雷指定 \"m\" をこの位置に書くことは推奨されません。スライド区間の末尾に記述してください",
+      "missingSlideTime": "スライドの時間指定 [...] がありません",
+      "invalidSlideTimeBrackets": "スライドの時間括弧が無効または空です",
+      "missingSlideType": "スライドの種類が指定されていません",
+      "invalidSlideDuration": "無効なスライド時間：{reason}",
+      "illegalSlidePath": "不正なスライド軌道 \"{slide}\"",
+      "invalidSlidePositions": "無効なスライド始点または終点です"
+    },
+    "timeError": {
+      "emptyMovement": "移動時間が空です",
+      "invalidSlideSeconds": "無効なスライド秒数 \"{value}\"",
+      "multipleHash": "複数の \"#\" を含む無効な形式です：\"{value}\"",
+      "invalidSlideBpm": "無効なスライド BPM 値 \"{value}\"",
+      "missingDurationAfterHash": "\"#\" の後に移動時間がありません",
+      "invalidSlideDuration": "無効なスライド時間形式 \"{value}\"",
+      "invalidBeatRatioFormat": "無効な拍数比率形式 \"{value}\"",
+      "invalidBeatRatioValues": "無効な拍数比率値 \"{value}\"",
+      "emptySlideDuration": "スライド時間形式が空です",
+      "multipleDoubleHash": "複数の \"##\" を含む無効な形式です：\"{value}\"",
+      "invalidSlideDelay": "無効なスライド待機時間 \"{value}\"",
+      "missingMoveAfterDoubleHash": "\"##\" の後に移動時間がありません",
+      "emptyHoldDuration": "ホールド時間形式が空です",
+      "invalidHoldValue": "無効なホールド時間値 \"{value}\"",
+      "invalidHoldBpm": "無効なホールド BPM 値 \"{value}\"",
+      "invalidHoldSeconds": "無効なホールド秒数 \"{value}\"",
+      "invalidHoldDuration": "無効なホールド時間形式 \"{value}\""
     }
   }
 }

@@ -382,11 +382,15 @@ export function getHighlight(text, errpos = []) {
     const normalizeRanges = (pos) => {
         if (!Array.isArray(pos) || pos.length === 0) return [];
 
-        const normalizeRange = ({ start, end }) => {
+        const normalizeRange = ({ start, end, level = 'warning' }) => {
             const s = Number(start);
             const e = Number(end);
             if (!Number.isFinite(s) || !Number.isFinite(e) || s >= e) return null;
-            return { start: Math.max(0, Math.min(text.length, s)), end: Math.max(0, Math.min(text.length, e)) };
+            return {
+                start: Math.max(0, Math.min(text.length, s)),
+                end: Math.max(0, Math.min(text.length, e)),
+                level: level === 'error' ? 'error' : 'warning'
+            };
         };
 
         const mergeRanges = (validRanges) => {
@@ -398,6 +402,7 @@ export function getHighlight(text, errpos = []) {
                     const last = merged[merged.length - 1];
                     if (current.start <= last.end) {
                         last.end = Math.max(last.end, current.end);
+                        if (current.level === 'error') last.level = 'error';
                     } else {
                         merged.push(current);
                     }
@@ -465,7 +470,8 @@ export function getHighlight(text, errpos = []) {
         if (cursor < range.start) {
             html += highlightText(text.slice(cursor, range.start));
         }
-        html += `<span class="highlight-warning">${highlightText(text.slice(range.start, range.end))}</span>`;
+        const cls = range.level === 'error' ? 'highlight-error' : 'highlight-warning';
+        html += `<span class="${cls}">${highlightText(text.slice(range.start, range.end))}</span>`;
         cursor = range.end;
     }
     if (cursor < text.length) {
@@ -2197,4 +2203,32 @@ export function disableNavigationGestures() {
         }
         lastTouchEndTime = now;
     }, { passive: false });
+}
+
+/**
+ * 同步難度下拉選單各選項的譜面資料指示狀態 (data-has-data)
+ * @param {HTMLSelectElement|null} selectEl
+ * @param {Object|null} maidata
+ * @param {string|number|null} [activeDiff=null]
+ * @param {string|null} [activeContent=null]
+ */
+export function syncDifficultySelectIndicators(selectEl, maidata, activeDiff = null, activeContent = null) {
+    if (!selectEl || !selectEl.options) return;
+    const activeKey = activeDiff != null ? String(activeDiff) : null;
+    for (let i = 0; i < selectEl.options.length; i++) {
+        const opt = selectEl.options[i];
+        const diffVal = String(opt.value);
+        let rawChart;
+        if (activeKey !== null && diffVal === activeKey && typeof activeContent === 'string') {
+            rawChart = activeContent;
+        } else {
+            rawChart = maidata?.[`inote_${diffVal}`];
+        }
+        const hasData = typeof rawChart === 'string' && rawChart.trim().length > 0;
+        if (hasData) {
+            opt.dataset.hasData = 'true';
+        } else {
+            delete opt.dataset.hasData;
+        }
+    }
 }

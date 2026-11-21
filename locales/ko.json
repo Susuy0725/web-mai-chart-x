@@ -358,6 +358,7 @@
       "effectsAndJudge": "이펙트 및 판정",
       "backgroundAndSensor": "배경 및 센서",
       "canvasInfo": "캔버스 정보",
+      "previewTrack": "미리보기 트랙 및 오디오 시각화",
       "volume": "음량 설정",
       "sfxBehavior": "재생 동작",
       "editorAssist": "에디터 보조",
@@ -435,7 +436,22 @@
       "timeDisplayCapsulePosition": "플로팅 시간 캡슐 위치",
       "showUIHorizontalPosition": "FPS UI 가로 위치",
       "showUIVerticalPosition": "FPS UI 세로 위치",
-      "seekStepSeconds": "탐색 건너뛰기 (초)"
+      "seekStepSeconds": "탐색 건너뛰기 (초)",
+      "cursorFollow": "재생 시 텍스트 커서 위치 추적",
+      "highlightCurrentNote": "진행 위치에 따라 현재 노트 강조",
+      "editorAutoScroll": "재생 시 에디터 자동 스크롤",
+      "previewAudioVisualMode": "미리보기 오디오 표시 모드",
+      "previewWaveformColor": "파형 색상",
+      "previewSpectrogramMinFreq": "스펙트로그램 최소 주파수",
+      "previewSpectrogramMaxFreq": "스펙트로그램 최대 주파수",
+      "previewSpectrogramBrightness": "스펙트로그램 밝기",
+      "previewTagOpacity": "Tag 선 투명도",
+      "previewBpmLineOpacity": "BPM 선 투명도"
+    },
+    "previewAudioVisualOpts": {
+      "waveform": "파형 (Waveform)",
+      "spectrogram": "스펙트로그램 (Spectrogram)",
+      "off": "끄기"
     },
     "middleDisplayOpts": {
       "off": "끄기",
@@ -686,7 +702,13 @@
       "confirm": "새 채보를 만드시겠습니까? 새 프로젝트가 생성됩니다."
     },
     "warning": {
-      "title": "경고"
+      "title": "경고",
+      "errorsTab": "오류 ({count})",
+      "warningsTab": "경고 ({count})",
+      "emptyErrors": "오류가 없습니다",
+      "emptyWarnings": "경고 항목이 없습니다",
+      "btnTitle": "오류 및 경고",
+      "btnAriaLabel": "채보 오류 및 경고 정보"
     },
     "chartInfo": {
       "title": "채보 정보",
@@ -1256,6 +1278,82 @@
       "viewTogglePlayControls": "재생 제어바 접기 / 펼치기",
       "viewFullscreen": "전체 화면 전환",
       "viewOpenSettings": "설정 열기"
+    }
+  },
+  "decode": {
+    "error": {
+      "unclosedBpmTag": "BPM 태그 \"(\"가 닫히지 않아 이후 박자 분할과 타이밍에 영향을 줍니다",
+      "invalidBpm": "유효하지 않은 BPM 값 \"({value})\"",
+      "misplacedBpmTag": "잘못된 위치의 BPM 태그 \"{tag}\": BPM 태그는 마디 시작 부분에만 있어야 합니다 (\",\"를 빠뜨리셨나요?)",
+      "unmatchedParen": "짝이 맞지 않는 닫는 괄호 \")\"",
+      "unclosedSplitTag": "박자 분할 태그 \"{\"가 닫히지 않아 이후 박자 분할과 타이밍에 영향을 줍니다",
+      "invalidSplitDuration": "유효하지 않은 분할 길이 \"{{value}}\"",
+      "invalidSplitValue": "유효하지 않은 분할 값 \"{{value}}\"",
+      "misplacedSplitTag": "잘못된 위치의 분할 태그 \"{tag}\": 분할 태그는 마디 시작 부분에만 있어야 합니다 (\",\"를 빠뜨리셨나요?)",
+      "unmatchedBrace": "짝이 맞지 않는 닫는 중괄호 \"}\"",
+      "unclosedBracket": "길이 대괄호 \"[\"가 닫히지 않아 이후 쉼표가 올바르게 분리되지 않습니다",
+      "unclosedPropertyTag": "속성 태그 \"{tag}\"가 닫히지 않았습니다",
+      "invalidPropertyTag": "유효하지 않은 속성 태그 <{tag}>: {reason}",
+      "misplacedPropertyTag": "잘못된 위치의 속성 태그 \"{tag}\": 속성 태그는 노트 그룹의 시작 부분에만 위치해야 합니다"
+    },
+    "propError": {
+      "empty": "빈 속성 태그",
+      "invalidHs": "유효하지 않은 HS 값 \"{value}\"",
+      "invalidSizeValue": "유효하지 않은 SIZE 값 \"{value}\"",
+      "invalidSizeTuple": "유효하지 않은 SIZE 튜플 값 \"{value}\"",
+      "invalidSizeFormat": "유효하지 않은 SIZE 형식 \"{value}\"",
+      "invalidColorFormat": "유효하지 않은 COLOR 형식 (6자리 또는 8자리 16진수 필요): \"{value}\"",
+      "unknown": "알 수 없는 속성 태그 \"{tag}\""
+    },
+    "warning": {
+      "notImplementedSlideType": "구현되지 않은 슬라이드 유형 \"{type}\"이므로 직선으로 처리합니다",
+      "emptyBacktickNote": "백틱(\"`\") 구분 내에 빈 노트가 감지되었습니다",
+      "emptySplitNote": "슬래시(\"/\") 구분 내에 빈 노트가 감지되었습니다",
+      "overlappingNotePosition": "노트 위치가 겹칩니다: \"{note}\"",
+      "invalidNotePosition": "유효하지 않은 노트 위치: \"{note}\" (1–8이어야 함)",
+      "invalidTouchPosition": "유효하지 않은 터치 위치: \"{note}\" (1–8이어야 함)",
+      "invalidNoteFormat": "유효하지 않은 노트 형식: \"{note}\"",
+      "invalidCharacters": "노트 \"{note}\"에 유효하지 않은 문자 \"{chars}\"가 있습니다",
+      "invalidTapBrackets": "탭 노트 \"{note}\"에 길이 대괄호를 사용할 수 없습니다",
+      "breakInTouch": "터치 노트에는 브레이크 플래그 \"b\"를 사용할 수 없습니다",
+      "redundantStarOnSlide": "슬라이드에는 이미 별이 있으므로 \"$\" 플래그가 불필요합니다",
+      "starInTouch": "터치 노트에는 별 플래그 \"$\"를 사용할 수 없습니다",
+      "starInHold": "홀드 노트에는 별 플래그 \"$\"를 사용할 수 없습니다",
+      "multipleHanabi": "중복된 불꽃 플래그 \"f\"가 감지되었습니다",
+      "hanabiNotAllowed": "불꽃 플래그 \"f\"는 터치 노트에서만 허용됩니다",
+      "holdInSlide": "슬라이드 노트에는 홀드 플래그 \"h\"를 사용할 수 없습니다",
+      "invalidHoldFormat": "홀드 노트 \"{note}\" 형식이 잘못되었습니다",
+      "invalidHoldDuration": "유효하지 않은 홀드 길이: {reason}",
+      "starFlagNotAllowed": "\"{flag}\" 플래그는 슬라이드 외 노트에서 허용되지 않습니다",
+      "atFlagConflict": "\"@\" 플래그는 \"?\" 또는 \"!\"와 함께 사용할 수 없습니다",
+      "contradictoryHeadFlags": "\"!\"와 \"?\"를 동시에 사용하는 것은 모순됩니다",
+      "breakFlagPosition": "브레이크 플래그 \"b\"를 이 위치에 쓰는 것은 권장되지 않습니다. 슬라이드 구간 끝에 작성하세요",
+      "mineFlagPosition": "지뢰 플래그 \"m\"을 이 위치에 쓰는 것은 권장되지 않습니다. 슬라이드 구간 끝에 작성하세요",
+      "missingSlideTime": "슬라이드 길이 형식 [...]이 누락되었습니다",
+      "invalidSlideTimeBrackets": "슬라이드 노트의 길이 대괄호가 잘못되었거나 비어 있습니다",
+      "missingSlideType": "슬라이드 노트에 슬라이드 유형이 누락되었습니다",
+      "invalidSlideDuration": "유효하지 않은 슬라이드 길이: {reason}",
+      "illegalSlidePath": "올바르지 않은 슬라이드 경로 \"{slide}\"",
+      "invalidSlidePositions": "유효하지 않은 슬라이드 시작 또는 끝 위치"
+    },
+    "timeError": {
+      "emptyMovement": "이동 길이가 비어 있습니다",
+      "invalidSlideSeconds": "유효하지 않은 슬라이드 초 값 \"{value}\"",
+      "multipleHash": "여러 개의 \"#\"이 포함된 잘못된 형식: \"{value}\"",
+      "invalidSlideBpm": "유효하지 않은 슬라이드 BPM 값 \"{value}\"",
+      "missingDurationAfterHash": "\"#\" 뒤에 이동 길이가 없습니다",
+      "invalidSlideDuration": "유효하지 않은 슬라이드 길이 형식 \"{value}\"",
+      "invalidBeatRatioFormat": "유효하지 않은 박자 비율 형식 \"{value}\"",
+      "invalidBeatRatioValues": "유효하지 않은 박자 비율 값 \"{value}\"",
+      "emptySlideDuration": "빈 슬라이드 길이 형식",
+      "multipleDoubleHash": "여러 개의 \"##\"이 포함된 잘못된 형식: \"{value}\"",
+      "invalidSlideDelay": "유효하지 않은 슬라이드 대기 시간 \"{value}\"",
+      "missingMoveAfterDoubleHash": "\"##\" 뒤에 이동 길이가 없습니다",
+      "emptyHoldDuration": "빈 홀드 길이 형식",
+      "invalidHoldValue": "유효하지 않은 홀드 길이 값 \"{value}\"",
+      "invalidHoldBpm": "유효하지 않은 홀드 BPM 값 \"{value}\"",
+      "invalidHoldSeconds": "유효하지 않은 홀드 초 값 \"{value}\"",
+      "invalidHoldDuration": "유효하지 않은 홀드 길이 형식 \"{value}\""
     }
   }
 }

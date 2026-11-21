@@ -2690,7 +2690,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 /* 擴充程式浮動元件與管理彈窗 */
 .extension-floating-widget {
     position: fixed;
-    z-index: 20;
+    z-index: 108;
     pointer-events: auto;
 }
 

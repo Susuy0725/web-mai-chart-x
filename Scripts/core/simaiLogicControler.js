@@ -18,6 +18,73 @@ function binarySearchUpperBound(arr, val) {
     return low;
 }
 
+/**
+ * 取得 Slide 的純幾何軌道識別鍵
+ * @param {Object} s
+ * @returns {string}
+ */
+export function getSlideTrackKey(s) {
+    return `${s.pos}_${s.slideType}_${s.slideMid ?? ''}_${s.slideEnd}`;
+}
+
+/**
+ * 依據 maxSlideCount 進行智慧型 Slide 剔除：
+ * 1. 未超出上限時全部保留。
+ * 2. 超出上限時，優先保留每條幾何軌道最早出現的一筆（讓重複軌道讓位給新軌道），
+ *    若不同軌道數仍未滿 maxSlideCount，再用剩餘名額依時間由早到晚補回重複項。
+ * 3. 最終維持降序（時間靠後在前先畫、靠前在後蓋於頂層）的渲染順序。
+ * @param {Array<Object>} slideBucket
+ * @param {number} maxSlideCount
+ */
+export function cullSlideBucket(slideBucket, maxSlideCount) {
+    if (!Array.isArray(slideBucket)) return;
+    const limit = Math.max(0, Math.floor(maxSlideCount ?? 500));
+    const len = slideBucket.length;
+    if (len <= limit) return;
+    if (limit === 0) {
+        slideBucket.length = 0;
+        return;
+    }
+
+    // 依據 Slide 實際開始滑動時間 (note.time + slideDelay) 由大到小排序 (靠後在前，靠前在後)
+    slideBucket.sort((a, b) => (b.time + (b.slideDelay ?? 0)) - (a.time + (a.slideDelay ?? 0)));
+
+    const keepFlags = new Uint8Array(len);
+    const seenTracks = new Set();
+    let kept = 0;
+
+    // 第一輪：由早到晚（陣列尾端 -> 開頭）優先保留每條幾何軌道的第一個出現項
+    for (let i = len - 1; i >= 0; i--) {
+        const key = getSlideTrackKey(slideBucket[i]);
+        if (!seenTracks.has(key)) {
+            seenTracks.add(key);
+            keepFlags[i] = 1;
+            kept++;
+            if (kept >= limit) break;
+        }
+    }
+
+    // 第二輪：若不同軌道數量尚不足 maxSlideCount，依時間由早到晚補入先前略過的重複項
+    if (kept < limit) {
+        for (let i = len - 1; i >= 0; i--) {
+            if (!keepFlags[i]) {
+                keepFlags[i] = 1;
+                kept++;
+                if (kept >= limit) break;
+            }
+        }
+    }
+
+    // 原地壓縮，保留降序繪製順序
+    let writeIdx = 0;
+    for (let i = 0; i < len; i++) {
+        if (keepFlags[i]) {
+            slideBucket[writeIdx++] = slideBucket[i];
+        }
+    }
+    slideBucket.length = writeIdx;
+}
+
 export class SimaiLogicControler {
     constructor() {
         this._buckets = { slide: [], tapnhold: [], touch: [] };
@@ -422,10 +489,7 @@ export class SimaiLogicControler {
             }
         }
 
-        if (buckets.slide.length > maxSlideCount) {
-            buckets.slide.sort((a, b) => (b.time + (b.slideDelay ?? 0)) - (a.time + (a.slideDelay ?? 0)));
-            buckets.slide.splice(0, buckets.slide.length - maxSlideCount);
-        }
+        cullSlideBucket(buckets.slide, maxSlideCount);
 
         this._visualBuckets.tags = decodedTags || [];
 
@@ -670,12 +734,7 @@ export class SimaiLogicControler {
             }
         }
 
-        if (buckets.slide.length > maxSlideCount) {
-            // 依據 Slide 實際開始滑動時間 (note.time + slideDelay) 由大到小排序 (時間靠後的在前，時間靠前的在後)
-            buckets.slide.sort((a, b) => (b.time + (b.slideDelay ?? 0)) - (a.time + (a.slideDelay ?? 0)));
-            // 優先保留時間最靠前 (陣列末尾) 的 maxSlideCount 個 Slide，裁剪掉開頭多餘的靠後 Slide
-            buckets.slide.splice(0, buckets.slide.length - maxSlideCount);
-        }
+        cullSlideBucket(buckets.slide, maxSlideCount);
 
         const tagsLength = decodedTags.length;
         for (let i = 0; i < tagsLength; i++) {

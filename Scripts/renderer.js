@@ -6,6 +6,7 @@ import {
     touchRefPos,
 } from './core/chartGeometry.js';
 import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
+import { getSpectrogramChunkTiles } from './core/audioSpectrogram.js';
 import {
     imgNotExists,
     getTintedImage,
@@ -4135,7 +4136,7 @@ export class SimaiVisualEditor {
 
         ctx.save();
         ctx.lineWidth = 1;
-        ctx.strokeStyle = '#888';
+        ctx.strokeStyle = this.settings?.previewWaveformColor || '#888888';
         ctx.globalAlpha = 0.8;
 
         const timePerPixel = 1 / zoom;
@@ -5590,7 +5591,13 @@ export class SimaiPreviewRenderer {
 
         if (minI > maxI) return;
 
+        const opacity = tag.type === 'bpm'
+            ? clamp(this.settings?.previewBpmLineOpacity ?? 1, 0, 1)
+            : clamp(this.settings?.previewTagOpacity ?? 1, 0, 1);
+        if (opacity <= 0) return;
+
         ctx.save();
+        ctx.globalAlpha *= opacity;
 
         if (tag.type === 'bpm') {
             const parts = (this.tb1 * this.tb2) / 4;
@@ -5834,7 +5841,8 @@ export class SimaiPreviewRenderer {
 
         ctx.save();
         ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(136, 136, 136, 0.25)';
+        ctx.strokeStyle = this.settings?.previewWaveformColor || '#888888';
+        ctx.globalAlpha *= 0.32;
         ctx.beginPath();
 
         const stepX = 2;
@@ -5871,6 +5879,56 @@ export class SimaiPreviewRenderer {
         }
 
         ctx.stroke();
+        ctx.restore();
+    }
+
+    drawAudioSpectrogram(audioBuffer, offset = 0) {
+        if (!audioBuffer) return;
+        const ctx = this.ctx;
+        const { width: w, height: h, halfWidth: hw } = this.getCanvasWH();
+        if (!ctx || w <= 0 || h <= 0) return;
+
+        const zoom = this.zoom || 200;
+        const gt = this.globalTime + offset;
+        const leftTime = gt - (hw / zoom);
+        const rightTime = gt + (hw / zoom);
+
+        const brightness = clamp(this.settings?.previewSpectrogramBrightness ?? 1, 0, 2);
+        if (brightness <= 0) return;
+
+        const minFreq = this.settings?.previewSpectrogramMinFreq ?? 20;
+        const maxFreq = this.settings?.previewSpectrogramMaxFreq ?? 16000;
+        const audioAmp = this.settings?.audioAmp || 1.0;
+
+        const tiles = getSpectrogramChunkTiles(audioBuffer, leftTime, rightTime, {
+            minFreq,
+            maxFreq,
+            audioAmp,
+            brightnessGain: brightness > 1 ? brightness : 1
+        });
+        if (!tiles || tiles.length === 0) return;
+
+        ctx.save();
+        ctx.globalAlpha *= Math.min(1, brightness);
+        ctx.imageSmoothingEnabled = true;
+        for (let i = 0; i < tiles.length; i++) {
+            const tile = tiles[i];
+            const visStart = Math.max(tile.chunkStartTime, leftTime);
+            const visEnd = Math.min(tile.chunkEndTime, rightTime);
+            if (visEnd <= visStart || tile.chunkDuration <= 0) continue;
+
+            const srcX = ((visStart - tile.chunkStartTime) / tile.chunkDuration) * tile.tileWidth;
+            const srcW = ((visEnd - visStart) / tile.chunkDuration) * tile.tileWidth;
+            const dstX = (visStart - leftTime) * zoom;
+            const dstW = (visEnd - visStart) * zoom;
+            if (srcW <= 0 || dstW <= 0) continue;
+
+            ctx.drawImage(
+                tile.canvas,
+                srcX, 0, srcW, tile.tileHeight,
+                dstX, 0, dstW, h
+            );
+        }
         ctx.restore();
     }
 
@@ -6008,7 +6066,13 @@ export class SimaiPreviewRenderer {
             });
         };
 
-        if (this.settings.enablePreviewWaveform !== false) this.drawAudioWaveform(audioBuffer, offset);
+        const audioVisualMode = this.settings.previewAudioVisualMode
+            ?? (this.settings.enablePreviewWaveform === false ? 'off' : 'waveform');
+        if (audioVisualMode === 'spectrogram') {
+            this.drawAudioSpectrogram(audioBuffer, offset);
+        } else if (audioVisualMode === 'waveform') {
+            this.drawAudioWaveform(audioBuffer, offset);
+        }
         // 先繪製譜面切分線 (split tags)，再繪製 BPM 與黃節拍線 (bpm tags，疊在切分線之上)
         const tags = visualBuckets.tags || [];
         for (let i = 0; i < tags.length; i++) {

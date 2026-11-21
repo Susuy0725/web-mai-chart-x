@@ -43,7 +43,8 @@ import {
     simpleToast,
     clamp,
     defaultSyntaxColors,
-    applySyntaxColors
+    applySyntaxColors,
+    syncDifficultySelectIndicators
 } from './helper.js';
 import { SimaiLogicControler } from './core/simaiLogicControler.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
@@ -319,7 +320,8 @@ let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持�
 let nowIndex = 0;
 let lastCursorIndex = -1;
 let visualCtx = null;
-let warnings = [], warningPositions = [], warningPositionsConst = [];
+let errors = [], errorPositions = [], errorItems = [];
+let warnings = [], warningPositions = [], warningPositionsConst = [], warningItems = [];
 let decodedTags = [];
 let cachedChartSnapshot = null;
 let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
@@ -1453,6 +1455,7 @@ function setDataEmpty(skipPersist = false) {
     updateUndoRedoUI();
     audioManager.removeBackgroundMusic().catch(() => { });
     changeDifficulty.value = nowDifficulty;
+    updateDifficultyIndicators();
     editorBackgroundImage.src = "";
     editorBackgroundImage.style.display = 'none';
     editorBackgroundVideo.src = "";
@@ -1470,7 +1473,10 @@ fetchFromMainoteButton.addEventListener('click', () => {
     openMainoteFetcher({
         audioManager,
         getMaidata: () => maidata,
-        setMaidata: (val) => { maidata = val; },
+        setMaidata: (val) => {
+            maidata = val;
+            updateDifficultyIndicators();
+        },
         setNowDifficulty: (val) => { nowDifficulty = val; },
         changeDifficulty,
         editorInput,
@@ -1608,23 +1614,63 @@ function applyDecodeResult(result, simaiDataValue) {
     simaiLogicControler.prepare(notes, playScoreRes);
 
     const syntaxCheckEnabled = settings.enableSyntaxCheck !== false;
+    errors = syntaxCheckEnabled ? (result.errors || []) : [];
+    errorPositions = syntaxCheckEnabled ? (result.errorPositions || []) : [];
+    errorItems = syntaxCheckEnabled ? (result.errorItems || []) : [];
     warnings = syntaxCheckEnabled ? (result.warnings || []) : [];
-    warningPositions = syntaxCheckEnabled ? (result.errpositions || []) : [];
+    warningPositions = syntaxCheckEnabled ? (result.warningPositions || result.errpositions || []) : [];
     warningPositionsConst = warningPositions;
-    if (syntaxCheckEnabled && result.warnings && result.warnings.length > 0) {
-        warnEl.style.visibility = 'visible';
-        warnEl.querySelector('.warnCount').textContent = result.warnings.length;
-        console.warn('Decode warnings:', result.warnings);
-    } else {
-        warnEl.style.visibility = 'hidden';
+    warningItems = syntaxCheckEnabled ? (result.warningItems || []) : [];
+
+    updateDiagnosticBadge(errors.length, warnings.length);
+    if (syntaxCheckEnabled) {
+        if (errors.length > 0) console.error('Decode dangerous:', errors);
+        if (warnings.length > 0) console.warn('Decode warnings:', warnings);
     }
     draw();
-    // 立即以 Worker/同步解析出的最新 warningPositions 重新繪製編輯器紅底線
+    // 立即以 Worker/同步解析出的最新 errorPositions / warningPositions 重新繪製編輯器紅/橘底線
     applyHighlight(editorInput.value, true);
     eventBus.emit(EVENTS.CHART_DECODED, {
         difficulty: nowDifficulty,
         noteCount: Array.isArray(notes) ? notes.length : 0
     });
+}
+
+function updateDiagnosticBadge(errCount, warnCount) {
+    if (!warnEl) return;
+    const errGroup = warnEl.querySelector('.errGroup');
+    const warnGroup = warnEl.querySelector('.warnGroup');
+    const errCountEl = warnEl.querySelector('.errCount');
+    const warnCountEl = warnEl.querySelector('.warnCount');
+
+    if (errGroup && errCountEl) {
+        errGroup.style.display = errCount > 0 ? 'inline-flex' : 'none';
+        errCountEl.textContent = errCount;
+    }
+    if (warnGroup && warnCountEl) {
+        warnGroup.style.display = warnCount > 0 ? 'inline-flex' : 'none';
+        warnCountEl.textContent = warnCount;
+    }
+
+    warnEl.classList.toggle('has-error', errCount > 0);
+    warnEl.style.visibility = (errCount > 0 || warnCount > 0) ? 'visible' : 'hidden';
+}
+
+function escapeDiagHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function formatDiagnosticItem(item, fallbackText) {
+    if (!item || !item.code) return fallbackText || '';
+    const params = { ...(item.params || {}) };
+    if (item.reasonCode) {
+        params.reason = t(item.reasonCode, item.reasonParams || {});
+    }
+    return t(item.code, params);
 }
 
 /**
@@ -1667,24 +1713,73 @@ const getres = async (simaiDataValue, options = {}) => {
 };
 
 warnEl.addEventListener('click', () => {
-    console.log(dataIndexToTime);
-    const contentHTML = warnings.map((w, i) => {
-        const errpos = warningPositionsConst[i];
-        console.log(warningPositionsConst, i, errpos);
-        if (errpos !== undefined) {
-            return `<div class="warning-item" style="cursor: pointer; color: #ccc; text-decoration: underline; margin-bottom: 8px; font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif; font-size: 13px;" data-errpos="${errpos}">• ${w}</div>`;
+    const buildDiagnosticRows = (items, fallbackList, posList, level, emptyKey) => {
+        const len = Math.max(items.length, fallbackList.length);
+        if (len === 0) {
+            return `<div class="diagnostic-empty">${escapeDiagHtml(t(emptyKey))}</div>`;
         }
-        return `<div style="margin-bottom: 8px; color: #ccc; font-family: sans-serif; font-size: 13px;">• ${w}</div>`;
-    }).join('');
+        const rows = [];
+        for (let i = 0; i < len; i++) {
+            const item = items[i];
+            const errpos = item?.errpos !== undefined ? item.errpos : posList[i];
+            const text = escapeDiagHtml(formatDiagnosticItem(item, fallbackList[i]));
+            const cls = level === 'error' ? 'warning-item is-error' : 'warning-item is-warning';
+            if (errpos !== undefined && errpos !== null) {
+                rows.push(`<div class="${cls} is-clickable" data-errpos="${errpos}">• ${text}</div>`);
+            } else {
+                rows.push(`<div class="${cls}">• ${text}</div>`);
+            }
+        }
+        return rows.join('');
+    };
+
+    const defaultTab = errors.length > 0 ? 'error' : 'warning';
+    const errorsTabLabel = escapeDiagHtml(t('popup.warning.errorsTab', { count: errors.length }));
+    const warningsTabLabel = escapeDiagHtml(t('popup.warning.warningsTab', { count: warnings.length }));
+    const errorRowsHTML = buildDiagnosticRows(errorItems, errors, errorPositions, 'error', 'popup.warning.emptyErrors');
+    const warningRowsHTML = buildDiagnosticRows(warningItems, warnings, warningPositionsConst, 'warning', 'popup.warning.emptyWarnings');
+
+    const contentHTML =
+        `<div class="diagnostic-popup">` +
+            `<div class="pm-tab-bar diagnostic-tabs" role="tablist">` +
+                `<button type="button" class="pm-tab-btn diagnostic-tab is-error${defaultTab === 'error' ? ' pm-tab-btn--active' : ''}" data-tab="error" role="tab" aria-selected="${defaultTab === 'error'}">` +
+                    `<span class="material-symbols-outlined errIcon" translate="no">dangerous</span>` +
+                    `<span>${errorsTabLabel}</span>` +
+                `</button>` +
+                `<button type="button" class="pm-tab-btn diagnostic-tab is-warning${defaultTab === 'warning' ? ' pm-tab-btn--active' : ''}" data-tab="warning" role="tab" aria-selected="${defaultTab === 'warning'}">` +
+                    `<span class="material-symbols-outlined warnIcon" translate="no">warning</span>` +
+                    `<span>${warningsTabLabel}</span>` +
+                `</button>` +
+            `</div>` +
+            `<div class="diagnostic-tab-panels">` +
+                `<div class="diagnostic-panel${defaultTab === 'error' ? ' active' : ''}" data-panel="error" role="tabpanel">${errorRowsHTML}</div>` +
+                `<div class="diagnostic-panel${defaultTab === 'warning' ? ' active' : ''}" data-panel="warning" role="tabpanel">${warningRowsHTML}</div>` +
+            `</div>` +
+        `</div>`;
 
     const popupCtx = popupWindow({
         title: t('popup.warning.title'),
         content: contentHTML,
+        width: 380,
     });
 
     popupCtx.elements.content.addEventListener('click', (e) => {
-        console.log(e.target);
-        const item = e.target.closest('.warning-item');
+        const tabBtn = e.target.closest('.diagnostic-tab');
+        if (tabBtn) {
+            const targetTab = tabBtn.dataset.tab;
+            const root = popupCtx.elements.content;
+            root.querySelectorAll('.diagnostic-tab').forEach(btn => {
+                const isActive = btn.dataset.tab === targetTab;
+                btn.classList.toggle('pm-tab-btn--active', isActive);
+                btn.setAttribute('aria-selected', String(isActive));
+            });
+            root.querySelectorAll('.diagnostic-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.panel === targetTab);
+            });
+            return;
+        }
+
+        const item = e.target.closest('.warning-item.is-clickable');
         if (item) {
             const errpos = parseInt(item.dataset.errpos, 10);
             if (!isNaN(errpos)) {
@@ -1744,6 +1839,7 @@ const inputDebounce = debounce(() => {
     getres(value);
     applyHighlight(value);
     maidata["inote_" + nowDifficulty] = value;
+    updateDifficultyIndicators();
     saveMaidata();
 }, settings.inputDebounceTime || 500);
 
@@ -2644,6 +2740,7 @@ editorInput.addEventListener('input', () => {
 
     // 立即更新顏色高亮 (視覺上達到打字立刻出現)
     applyHighlight(value);
+    updateDifficultyIndicators();
 
     // 延遲處理重解析與存檔 (避免打字時解析幾萬行導致卡頓)
     inputDebounce();
@@ -2698,6 +2795,7 @@ function maidataProcess(e) {
     }
     getres(editorInput.value);
     applyHighlight(editorInput.value);
+    updateDifficultyIndicators();
     // 載入譜面時，重置編輯歷史與 lastEditorValue
     undoStack = [];
     redoStack = [];
@@ -2714,7 +2812,10 @@ initFileHandlers({
     downloadButton,
     audioManager,
     getMaidata: () => maidata,
-    setMaidata: (val) => { maidata = val; },
+    setMaidata: (val) => {
+        maidata = val;
+        updateDifficultyIndicators();
+    },
     maidataProcess,
     setDataEmpty,
     draw,
@@ -2765,6 +2866,13 @@ const difficultyInputDebounce = debounce(() => {
     });
 }, 500);
 
+function updateDifficultyIndicators() {
+    syncDifficultySelectIndicators(changeDifficulty, maidata, nowDifficulty, editorInput?.value);
+}
+
+changeDifficulty.addEventListener('pointerdown', updateDifficultyIndicators);
+changeDifficulty.addEventListener('focus', updateDifficultyIndicators);
+
 changeDifficulty.addEventListener('change', (e) => {
     renderer?.clearJudgeEffects();
     renderer?.clearHitEffects();
@@ -2798,6 +2906,7 @@ changeDifficulty.addEventListener('change', (e) => {
 
     inputDebounce();
     difficultyInputDebounce();
+    updateDifficultyIndicators();
 });
 
 
@@ -3595,10 +3704,17 @@ ${t('popup.quickGenerate.beatLabel')} <input type="number" id="quickBeat" value=
 editorInput.addEventListener('scroll', () => {
     syncHighlightLayerScroll();
 });
+editorInput.addEventListener('wheel', () => {
+    cancelEditorAutoScroll();
+}, { passive: true });
+editorInput.addEventListener('pointerdown', () => {
+    cancelEditorAutoScroll();
+}, { passive: true });
 editorInput.addEventListener('touchmove', () => {
     syncHighlightLayerScroll();
 }, { passive: true });
 editorInput.addEventListener('touchstart', () => {
+    cancelEditorAutoScroll();
     syncHighlightLayerScroll();
 }, { passive: true });
 
@@ -3719,21 +3835,319 @@ let _pendingHighlightText = null;
 let _lastRenderedHighlightText = null;
 let _lastRenderedWarningKey = null;
 
-function renderHighlightNow(text) {
-    const warningRanges = settings.enableSyntaxCheck === false ? [] : warningPositions.map(index => {
-        const range = getNoteRangeAtIndex(index);
-        return { start: range.start, end: range.end };
-    });
-    const warningKey = warningRanges.map(r => `${r.start}:${r.end}`).join(',');
+const currentNoteBgLayer = document.createElement('div');
+currentNoteBgLayer.className = 'current-note-bg-layer';
+currentNoteBgLayer.setAttribute('aria-hidden', 'true');
+const currentNotePillPool = [];
+const CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL = 50; // ms：限制背景高亮更新頻率，避免密集音符時造成幀率抖動
+const _sharedNoteDomRange = document.createRange();
+let _highlightTextIndex = [];
+let _lastHighlightedNoteIndex = -1;
+let _lastHighlightedText = null;
+let _lastHighlightedEnabled = null;
+let _lastAutoScrollEnabled = null;
+let _lastHighlightUpdateTime = 0;
+let _highlightThrottleTimer = null;
+let _editorAutoScrollRafId = null;
+let _editorAutoScrollTarget = null;
 
-    // 若文字與警告範圍完全未變，直接跳過 DOM 重構以杜絕不必要的 Reflow
+function cancelEditorAutoScroll() {
+    if (_editorAutoScrollRafId !== null) {
+        cancelAnimationFrame(_editorAutoScrollRafId);
+        _editorAutoScrollRafId = null;
+    }
+    _editorAutoScrollTarget = null;
+}
+
+function smoothScrollEditorTo(targetTop) {
+    const viewH = editorInput.clientHeight;
+    const maxScroll = Math.max(0, editorInput.scrollHeight - viewH);
+    const clamped = Math.max(0, Math.min(maxScroll, targetTop));
+    if (Math.abs(clamped - editorInput.scrollTop) < 1) return;
+
+    _editorAutoScrollTarget = clamped;
+    if (_editorAutoScrollRafId !== null) return;
+
+    const step = () => {
+        _editorAutoScrollRafId = null;
+        if (_editorAutoScrollTarget === null) return;
+        const cur = editorInput.scrollTop;
+        const diff = _editorAutoScrollTarget - cur;
+        if (Math.abs(diff) <= 1.2) {
+            editorInput.scrollTop = _editorAutoScrollTarget;
+            highlightLayer.scrollTop = editorInput.scrollTop;
+            _editorAutoScrollTarget = null;
+            return;
+        }
+        const factor = Math.abs(diff) > editorInput.clientHeight ? 0.35 : 0.22;
+        editorInput.scrollTop = cur + diff * factor;
+        highlightLayer.scrollTop = editorInput.scrollTop;
+        _editorAutoScrollRafId = requestAnimationFrame(step);
+    };
+    _editorAutoScrollRafId = requestAnimationFrame(step);
+}
+
+function rebuildHighlightTextIndex() {
+    _highlightTextIndex = [];
+    let acc = 0;
+    const walker = document.createTreeWalker(highlightLayer, NodeFilter.SHOW_TEXT);
+    let tNode;
+    while ((tNode = walker.nextNode())) {
+        const len = tNode.nodeValue.length;
+        if (len > 0) {
+            _highlightTextIndex.push({ node: tNode, start: acc, end: acc + len });
+            acc += len;
+        }
+    }
+}
+
+function findHighlightDomPos(offset, isEnd = false) {
+    const arr = _highlightTextIndex;
+    if (!arr || arr.length === 0) return null;
+    const clamped = Math.max(0, offset);
+    let lo = 0;
+    let hi = arr.length - 1;
+    while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        const entry = arr[mid];
+        const hit = isEnd
+            ? (clamped > entry.start && clamped <= entry.end)
+            : (clamped >= entry.start && clamped < entry.end);
+        if (hit) {
+            return { node: entry.node, offset: clamped - entry.start };
+        }
+        if (clamped < entry.start || (isEnd && clamped === entry.start)) {
+            hi = mid - 1;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    if (!isEnd && clamped >= arr[arr.length - 1].end) {
+        const last = arr[arr.length - 1];
+        return { node: last.node, offset: last.node.nodeValue.length };
+    }
+    return { node: arr[0].node, offset: 0 };
+}
+
+function getTrimmedNoteRange(text, start, end) {
+    let s = Math.max(0, start);
+    let e = Math.min(text.length, end);
+    while (s < e) {
+        if (/\s/.test(text[s])) {
+            s++;
+        } else if (text[s] === '|' && text[s + 1] === '|') {
+            s += 2;
+            while (s < e && text[s] !== '\n' && text[s] !== '\r') s++;
+        } else if (text[s] === '|' && text[s + 1] === '*') {
+            s += 2;
+            while (s < e) {
+                if (text[s] === '*' && text[s + 1] === '|') {
+                    s += 2;
+                    break;
+                }
+                s++;
+            }
+        } else {
+            break;
+        }
+    }
+    while (e > s && /\s/.test(text[e - 1])) {
+        e--;
+    }
+    return { start: s, end: e };
+}
+
+function clearCurrentNoteHighlight() {
+    if (_highlightThrottleTimer !== null) {
+        clearTimeout(_highlightThrottleTimer);
+        _highlightThrottleTimer = null;
+    }
+    for (let i = 0; i < currentNotePillPool.length; i++) {
+        const pill = currentNotePillPool[i];
+        if (pill._visible !== false) {
+            pill.style.display = 'none';
+            pill._visible = false;
+        }
+    }
+    _lastHighlightedNoteIndex = -1;
+}
+
+function hideUnusedCurrentNotePills(fromIndex = 0) {
+    for (let i = fromIndex; i < currentNotePillPool.length; i++) {
+        const pill = currentNotePillPool[i];
+        if (pill._visible !== false) {
+            pill.style.display = 'none';
+            pill._visible = false;
+        }
+    }
+}
+
+function updateCurrentNoteHighlight(force = false) {
+    const highlightEnabled = settings.highlightCurrentNote !== false;
+    const autoScrollEnabled = settings.editorAutoScroll !== false && Boolean(playbackEngine?.isPlaying);
+    const editorShown = editorContainer && editorContainer.style.display !== 'none' && !isVisualMode();
+    if ((!highlightEnabled && !autoScrollEnabled) || !editorShown || notes.length === 0 || rawData.length === 0) {
+        if (_lastHighlightedEnabled !== false || _lastAutoScrollEnabled !== false || _lastHighlightedNoteIndex !== -1) {
+            clearCurrentNoteHighlight();
+            cancelEditorAutoScroll();
+            _lastHighlightedEnabled = false;
+            _lastAutoScrollEnabled = false;
+        }
+        return;
+    }
+
+    const text = editorInput.value;
+    if (
+        !force &&
+        _lastHighlightedEnabled === highlightEnabled &&
+        _lastAutoScrollEnabled === autoScrollEnabled &&
+        nowIndex === _lastHighlightedNoteIndex &&
+        text === _lastHighlightedText
+    ) {
+        return;
+    }
+
+    if (!force) {
+        const nowPerf = performance.now();
+        const elapsed = nowPerf - _lastHighlightUpdateTime;
+        if (elapsed < CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL) {
+            if (_highlightThrottleTimer === null) {
+                _highlightThrottleTimer = setTimeout(() => {
+                    _highlightThrottleTimer = null;
+                    updateCurrentNoteHighlight(true);
+                }, Math.max(1, CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL - elapsed));
+            }
+            return;
+        }
+    }
+
+    if (_highlightThrottleTimer !== null) {
+        clearTimeout(_highlightThrottleTimer);
+        _highlightThrottleTimer = null;
+    }
+    _lastHighlightUpdateTime = performance.now();
+
+    _lastHighlightedEnabled = highlightEnabled;
+    _lastAutoScrollEnabled = autoScrollEnabled;
+    _lastHighlightedNoteIndex = nowIndex;
+    _lastHighlightedText = text;
+
+    const rawRange = getNoteRangeAtIndex(nowIndex);
+    const rangeOffsets = getTrimmedNoteRange(text, rawRange.start, rawRange.end);
+    if (rangeOffsets.start >= rangeOffsets.end || _highlightTextIndex.length === 0) {
+        hideUnusedCurrentNotePills(0);
+        return;
+    }
+
+    const startPos = findHighlightDomPos(rangeOffsets.start, false);
+    const endPos = findHighlightDomPos(rangeOffsets.end, true);
+    if (!startPos || !endPos) {
+        hideUnusedCurrentNotePills(0);
+        return;
+    }
+
+    _sharedNoteDomRange.setStart(startPos.node, startPos.offset);
+    _sharedNoteDomRange.setEnd(endPos.node, endPos.offset);
+    const rawRects = _sharedNoteDomRange.getClientRects();
+
+    const mergedRects = [];
+    for (let i = 0; i < rawRects.length; i++) {
+        const r = rawRects[i];
+        if (r.width < 0.5 || r.height < 0.5) continue;
+        const prev = mergedRects[mergedRects.length - 1];
+        if (prev && Math.abs(r.top - prev.top) < 2 && Math.abs(r.bottom - prev.bottom) < 2 && r.left <= prev.right + 2) {
+            prev.right = Math.max(prev.right, r.right);
+            prev.top = Math.min(prev.top, r.top);
+            prev.bottom = Math.max(prev.bottom, r.bottom);
+            prev.width = prev.right - prev.left;
+            prev.height = prev.bottom - prev.top;
+        } else {
+            mergedRects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
+        }
+    }
+
+    const layerRect = highlightLayer.getBoundingClientRect();
+    const originX = layerRect.left + highlightLayer.clientLeft - highlightLayer.scrollLeft;
+    const originY = layerRect.top + highlightLayer.clientTop - highlightLayer.scrollTop;
+    const PAD_X = 2;
+
+    if (highlightEnabled) {
+        for (let i = 0; i < mergedRects.length; i++) {
+            let pill = currentNotePillPool[i];
+            if (!pill) {
+                pill = document.createElement('div');
+                pill.className = 'current-note-highlight-pill';
+                currentNotePillPool.push(pill);
+                currentNoteBgLayer.appendChild(pill);
+            }
+            const mr = mergedRects[i];
+            const x = Math.max(0, mr.left - originX - PAD_X);
+            const y = Math.max(0, mr.top - originY);
+            const w = mr.width + PAD_X * 2;
+            const h = mr.height;
+            if (pill._visible !== true) {
+                pill.style.display = 'block';
+                pill._visible = true;
+            }
+            const tf = `translate3d(${x}px, ${y}px, 0)`;
+            if (pill._tf !== tf) {
+                pill.style.transform = tf;
+                pill._tf = tf;
+            }
+            if (pill._w !== w) {
+                pill.style.width = `${w}px`;
+                pill._w = w;
+            }
+            if (pill._h !== h) {
+                pill.style.height = `${h}px`;
+                pill._h = h;
+            }
+        }
+        hideUnusedCurrentNotePills(mergedRects.length);
+    } else {
+        hideUnusedCurrentNotePills(0);
+    }
+
+    if (autoScrollEnabled && mergedRects.length > 0) {
+        const firstRect = mergedRects[0];
+        const noteTop = Math.max(0, firstRect.top - originY);
+        const noteBottom = noteTop + firstRect.height;
+        const viewTop = _editorAutoScrollTarget !== null ? _editorAutoScrollTarget : editorInput.scrollTop;
+        const viewH = editorInput.clientHeight;
+        if (viewH > 0) {
+            const topSafe = viewH * 0.15;
+            const bottomSafe = viewH * 0.65;
+            if (noteTop < viewTop + topSafe || noteBottom > viewTop + bottomSafe) {
+                smoothScrollEditorTo(noteTop - viewH * 0.35);
+            }
+        }
+    }
+}
+
+function renderHighlightNow(text) {
+    const diagnosticRanges = settings.enableSyntaxCheck === false ? [] : [
+        ...errorPositions.map(index => {
+            const range = getNoteRangeAtIndex(index);
+            return { start: range.start, end: range.end, level: 'error' };
+        }),
+        ...warningPositions.map(index => {
+            const range = getNoteRangeAtIndex(index);
+            return { start: range.start, end: range.end, level: 'warning' };
+        })
+    ];
+    const warningKey = diagnosticRanges.map(r => `${r.level}:${r.start}:${r.end}`).join(',');
+
+    // 若文字與錯誤/警告範圍完全未變，直接跳過 DOM 重構以杜絕不必要的 Reflow
     if (text === _lastRenderedHighlightText && warningKey === _lastRenderedWarningKey) {
         return;
     }
 
     _lastRenderedHighlightText = text;
     _lastRenderedWarningKey = warningKey;
-    highlightLayer.innerHTML = getHighlight(text, warningRanges);
+    highlightLayer.innerHTML = getHighlight(text, diagnosticRanges);
+    rebuildHighlightTextIndex();
+    highlightLayer.prepend(currentNoteBgLayer);
+    updateCurrentNoteHighlight(true);
 }
 
 function applyHighlight(text, immediate = false) {
@@ -3805,6 +4219,11 @@ eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying, realTime }) => {
     playButton.dataset.playing = isPlaying ? 'true' : 'false';
     playButton.children[0].innerText = isPlaying ? 'pause' : 'play_arrow';
     updateSlider(realTime ?? playbackEngine.realTime, true);
+    if (isPlaying) {
+        updateCurrentNoteHighlight(true);
+    } else {
+        cancelEditorAutoScroll();
+    }
 });
 
 // UI 控制按鈕綁定
@@ -4158,6 +4577,7 @@ function resize(force = false) {
     }
 
     draw();
+    updateCurrentNoteHighlight(true);
     emitViewModeChanged();
 }
 
@@ -4421,6 +4841,7 @@ function draw(dt = 0) {
     frameProfiler.end('1. logicGet');
 
     nowIndex = nowIndexRender;
+    updateCurrentNoteHighlight();
 
     // 渲染和更新
     frameProfiler.start('2. rendererDraw');
@@ -4550,6 +4971,7 @@ async function loadProjectData(step, expectedGen = null) {
         historyMap = {};
         lastEditorValue = editorInput.value || '';
         updateUndoRedoUI();
+        updateDifficultyIndicators();
 
         musicDelay = parseFloat(maidata.first) || 0;
         offsetInput.value = musicDelay;
@@ -4560,6 +4982,7 @@ async function loadProjectData(step, expectedGen = null) {
         maidata = {};
         editorInput.value = '';
         applyHighlight('');
+        updateDifficultyIndicators();
         undoStack = [];
         redoStack = [];
         historyMap = {};
@@ -4685,7 +5108,10 @@ if (projectManagerButton) {
             getFileHandlerCtx: () => ({
                 audioManager,
                 getMaidata: () => maidata,
-                setMaidata: (val) => { maidata = val; },
+                setMaidata: (val) => {
+            maidata = val;
+            updateDifficultyIndicators();
+        },
                 maidataProcess,
                 setDataEmpty,
                 draw,
@@ -4913,6 +5339,7 @@ appContext.register('getMaidata', () => maidata);
 appContext.register('setMaidata', (val) => {
     maidata = val;
     cachedChartSnapshot = null;
+    updateDifficultyIndicators();
 });
 appContext.register('getCurrentProjectId', () => currentProjectId);
 appContext.register('setCurrentProjectId', (val) => { currentProjectId = val; });
@@ -5062,6 +5489,9 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     if (visualEditorRenderer && visualEditorRenderer.settings) {
         visualEditorRenderer.settings[key] = value;
     }
+    if (previewRender && previewRender.settings) {
+        previewRender.settings[key] = value;
+    }
 
     // 2. 音效設定即時生效
     if (key === 'globalVolume') audioManager?.setGlobalVolume(value);
@@ -5099,7 +5529,11 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     const redrawKeys = [
         'showOutline', 'showBorder', 'showUI', 'showUIHorizontalPosition', 'showUIVerticalPosition',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
-        'drawHitEffect', 'drawHanabiEffect', 'richHanabi', 'enablePreviewWaveform', 'rotateStars', 'pinkStars',
+        'drawHitEffect', 'drawHanabiEffect', 'richHanabi',
+        'previewAudioVisualMode', 'previewWaveformColor',
+        'previewSpectrogramMinFreq', 'previewSpectrogramMaxFreq', 'previewSpectrogramBrightness',
+        'previewTagOpacity', 'previewBpmLineOpacity',
+        'enablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
         'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed',
         'noteBaseSize', 'middleDistance'
@@ -5113,13 +5547,23 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         switchSkin(value);
     }
 
-    // 8. 啟用語法檢查
+    // 8. 啟用語法檢查與目前音符高亮 / 自動捲動
+    if (key === 'highlightCurrentNote' || key === 'editorAutoScroll') {
+        if (key === 'editorAutoScroll' && !value) {
+            cancelEditorAutoScroll();
+        }
+        updateCurrentNoteHighlight(true);
+    }
     if (key === 'enableSyntaxCheck') {
         if (!value) {
-            warnEl.style.visibility = 'hidden';
+            errors = [];
+            errorPositions = [];
+            errorItems = [];
             warnings = [];
             warningPositions = [];
             warningPositionsConst = [];
+            warningItems = [];
+            updateDiagnosticBadge(0, 0);
             applyHighlight(editorInput.value);
         } else {
             getres(editorInput.value);

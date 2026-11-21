@@ -358,6 +358,7 @@
       "effectsAndJudge": "Effects & Judgment",
       "backgroundAndSensor": "Background & Sensors",
       "canvasInfo": "Canvas Info",
+      "previewTrack": "Preview Track & Audio Visuals",
       "volume": "Volume",
       "sfxBehavior": "Playback Behavior",
       "editorAssist": "Editor Assist",
@@ -435,7 +436,22 @@
       "timeDisplayCapsulePosition": "Floating Time Capsule Position",
       "showUIHorizontalPosition": "FPS Interface Horizontal Position",
       "showUIVerticalPosition": "FPS Interface Vertical Position",
-      "seekStepSeconds": "Seek Jump Step (s)"
+      "seekStepSeconds": "Seek Jump Step (s)",
+      "cursorFollow": "Follow Text Cursor During Playback",
+      "highlightCurrentNote": "Highlight Current Note During Playback",
+      "editorAutoScroll": "Auto-Scroll Editor During Playback",
+      "previewAudioVisualMode": "Preview Audio Visualization",
+      "previewWaveformColor": "Waveform Color",
+      "previewSpectrogramMinFreq": "Spectrogram Min Frequency",
+      "previewSpectrogramMaxFreq": "Spectrogram Max Frequency",
+      "previewSpectrogramBrightness": "Spectrogram Brightness",
+      "previewTagOpacity": "Tag Line Opacity",
+      "previewBpmLineOpacity": "BPM Line Opacity"
+    },
+    "previewAudioVisualOpts": {
+      "waveform": "Waveform",
+      "spectrogram": "Spectrogram",
+      "off": "Off"
     },
     "middleDisplayOpts": {
       "off": "Off",
@@ -686,7 +702,13 @@
       "confirm": "Do you want to create a new chart? This will create a new project."
     },
     "warning": {
-      "title": "Warnings"
+      "title": "Warnings",
+      "errorsTab": "Errors ({count})",
+      "warningsTab": "Warnings ({count})",
+      "emptyErrors": "No errors",
+      "emptyWarnings": "No warnings",
+      "btnTitle": "Errors & Warnings",
+      "btnAriaLabel": "Chart errors and warnings"
     },
     "chartInfo": {
       "title": "Chart Info",
@@ -1256,6 +1278,82 @@
       "viewTogglePlayControls": "Toggle Playback Bar",
       "viewFullscreen": "Toggle Fullscreen",
       "viewOpenSettings": "Open Settings"
+    }
+  },
+  "decode": {
+    "error": {
+      "unclosedBpmTag": "Unclosed BPM tag \"(\" breaks subsequent beat splitting and timing",
+      "invalidBpm": "Invalid BPM value \"({value})\"",
+      "misplacedBpmTag": "Misplaced BPM tag \"{tag}\": BPM tags must only appear at the start of a comma block (missing \",\"?)",
+      "unmatchedParen": "Unexpected closing \")\" outside a BPM tag",
+      "unclosedSplitTag": "Unclosed split tag \"{\" breaks subsequent beat division and timing",
+      "invalidSplitDuration": "Invalid split duration \"{{value}}\"",
+      "invalidSplitValue": "Invalid split value \"{{value}}\"",
+      "misplacedSplitTag": "Misplaced split tag \"{tag}\": split tags must only appear at the start of a comma block (missing \",\"?)",
+      "unmatchedBrace": "Unexpected closing \"}\" outside a split tag",
+      "unclosedBracket": "Unclosed duration bracket \"[\" swallows subsequent commas",
+      "unclosedPropertyTag": "Unclosed property tag \"{tag}\"",
+      "invalidPropertyTag": "Invalid property tag <{tag}>: {reason}",
+      "misplacedPropertyTag": "Misplaced property tag \"{tag}\": property tags must only appear at the beginning of the note group"
+    },
+    "propError": {
+      "empty": "Empty property tag",
+      "invalidHs": "Invalid HS value \"{value}\"",
+      "invalidSizeValue": "Invalid SIZE value \"{value}\"",
+      "invalidSizeTuple": "Invalid SIZE tuple values \"{value}\"",
+      "invalidSizeFormat": "Invalid SIZE format \"{value}\"",
+      "invalidColorFormat": "Invalid COLOR format (must be 6 or 8 hex digits): \"{value}\"",
+      "unknown": "Unknown property tag \"{tag}\""
+    },
+    "warning": {
+      "notImplementedSlideType": "Not implemented slide type \"{type}\", defaulting to straight line",
+      "emptyBacktickNote": "Empty note detected in backticks \"`\"",
+      "emptySplitNote": "Empty note detected in split \"/\"",
+      "overlappingNotePosition": "Overlapping note position: \"{note}\"",
+      "invalidNotePosition": "Invalid note position: \"{note}\" (must be 1–8)",
+      "invalidTouchPosition": "Invalid touch position: \"{note}\" (must be 1–8)",
+      "invalidNoteFormat": "Invalid note format: \"{note}\"",
+      "invalidCharacters": "Invalid character(s) \"{chars}\" detected in note \"{note}\"",
+      "invalidTapBrackets": "Invalid brackets in tap note \"{note}\"",
+      "breakInTouch": "Break flag \"b\" is not allowed in touch notes",
+      "redundantStarOnSlide": "Slide already has a star; flag \"$\" is unnecessary",
+      "starInTouch": "Star flag \"$\" is not allowed in touch notes",
+      "starInHold": "Star flag \"$\" is not allowed in hold notes",
+      "multipleHanabi": "Multiple Hanabi flags \"f\" detected",
+      "hanabiNotAllowed": "Hanabi flag \"f\" is only allowed in touch notes",
+      "holdInSlide": "Hold flag \"h\" is not allowed in slide notes",
+      "invalidHoldFormat": "Invalid format in hold note \"{note}\"",
+      "invalidHoldDuration": "Invalid hold duration: {reason}",
+      "starFlagNotAllowed": "Flag \"{flag}\" is not allowed in non-slide notes",
+      "atFlagConflict": "Star flag \"@\" cannot be combined with \"?\" or \"!\"",
+      "contradictoryHeadFlags": "Using \"!\" and \"?\" at the same time is contradictory",
+      "breakFlagPosition": "Not recommended to place break flag \"b\" here; place it at the end of the slide segment",
+      "mineFlagPosition": "Not recommended to place mine flag \"m\" here; place it at the end of the slide segment",
+      "missingSlideTime": "Missing slide duration format [...]",
+      "invalidSlideTimeBrackets": "Invalid or empty time brackets in slide note",
+      "missingSlideType": "Missing slide type in slide note",
+      "invalidSlideDuration": "Invalid slide duration: {reason}",
+      "illegalSlidePath": "Illegal slide path \"{slide}\"",
+      "invalidSlidePositions": "Invalid slide positions"
+    },
+    "timeError": {
+      "emptyMovement": "Empty movement duration",
+      "invalidSlideSeconds": "Invalid slide seconds value \"{value}\"",
+      "multipleHash": "Invalid format with multiple \"#\": \"{value}\"",
+      "invalidSlideBpm": "Invalid slide BPM value \"{value}\"",
+      "missingDurationAfterHash": "Missing slide duration after \"#\"",
+      "invalidSlideDuration": "Invalid slide duration format \"{value}\"",
+      "invalidBeatRatioFormat": "Invalid beat ratio format \"{value}\"",
+      "invalidBeatRatioValues": "Invalid beat ratio values \"{value}\"",
+      "emptySlideDuration": "Empty slide duration format",
+      "multipleDoubleHash": "Invalid slide timing format with multiple \"##\": \"{value}\"",
+      "invalidSlideDelay": "Invalid slide delay value \"{value}\"",
+      "missingMoveAfterDoubleHash": "Missing move duration after \"##\"",
+      "emptyHoldDuration": "Empty hold duration format",
+      "invalidHoldValue": "Invalid hold duration value \"{value}\"",
+      "invalidHoldBpm": "Invalid hold BPM value \"{value}\"",
+      "invalidHoldSeconds": "Invalid hold seconds value \"{value}\"",
+      "invalidHoldDuration": "Invalid hold duration format \"{value}\""
     }
   }
 }

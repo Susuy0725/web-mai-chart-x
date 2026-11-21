@@ -52,7 +52,13 @@ export const defaultSettings = {
     showUIVerticalPosition: 'top',
     enableQuickPanel: true,
     richHanabi: true,
-    enablePreviewWaveform: true,
+    previewAudioVisualMode: 'waveform', // 'off' | 'waveform' | 'spectrogram'
+    previewWaveformColor: '#888888',
+    previewSpectrogramMinFreq: 20,
+    previewSpectrogramMaxFreq: 16000,
+    previewSpectrogramBrightness: 0.5,
+    previewTagOpacity: 1,
+    previewBpmLineOpacity: 1,
     // Sound & Playback
     playHoldEnd: true,
     readyBeat: false,
@@ -83,6 +89,8 @@ export const defaultSettings = {
     autocomplete: true, // 編輯器自動補齊括號
     enableSyntaxCheck: true, // 啟用語法檢查
     cursorFollow: true, // 游標跟隨
+    highlightCurrentNote: true, // 根據進度高亮目前音符
+    editorAutoScroll: true, // 播放時編輯器自動捲動
     globalTimeline: true, // 全局時間軸
     timeDisplayCapsule: true, // 懸浮時間膠囊
     timeDisplayCapsulePosition: 'center', // 懸浮時間膠囊位置: 'left' | 'center' | 'right'
@@ -250,6 +258,71 @@ export const settingsConfig = [
                 label: 'settings.items.renderSurroundingAuxiliaryText',
                 def: defaultSettings.renderSurroundingAuxiliaryText ?? true
             },
+            { type: 'header', label: 'settings.sections.previewTrack' },
+            {
+                id: 'previewAudioVisualMode',
+                type: 'dropdown',
+                label: 'settings.items.previewAudioVisualMode',
+                options: [
+                    { value: 'waveform', label: 'settings.previewAudioVisualOpts.waveform' },
+                    { value: 'spectrogram', label: 'settings.previewAudioVisualOpts.spectrogram' },
+                    { value: 'off', label: 'settings.previewAudioVisualOpts.off' },
+                ],
+                def: defaultSettings.previewAudioVisualMode || 'waveform'
+            },
+            {
+                id: 'previewWaveformColor',
+                type: 'color',
+                label: 'settings.items.previewWaveformColor',
+                def: defaultSettings.previewWaveformColor || '#888888'
+            },
+            {
+                id: 'previewSpectrogramMinFreq',
+                type: 'range',
+                label: 'settings.items.previewSpectrogramMinFreq',
+                min: 0,
+                max: 16000,
+                step: 50,
+                rangeOptions: { suffix: ' Hz' },
+                def: defaultSettings.previewSpectrogramMinFreq ?? 20
+            },
+            {
+                id: 'previewSpectrogramMaxFreq',
+                type: 'range',
+                label: 'settings.items.previewSpectrogramMaxFreq',
+                min: 500,
+                max: 22050,
+                step: 100,
+                rangeOptions: { suffix: ' Hz' },
+                def: defaultSettings.previewSpectrogramMaxFreq ?? 16000
+            },
+            {
+                id: 'previewSpectrogramBrightness',
+                type: 'range',
+                label: 'settings.items.previewSpectrogramBrightness',
+                min: 0,
+                max: 2,
+                step: 0.05,
+                def: defaultSettings.previewSpectrogramBrightness ?? 1
+            },
+            {
+                id: 'previewTagOpacity',
+                type: 'range',
+                label: 'settings.items.previewTagOpacity',
+                min: 0,
+                max: 1,
+                step: 0.05,
+                def: defaultSettings.previewTagOpacity ?? 1
+            },
+            {
+                id: 'previewBpmLineOpacity',
+                type: 'range',
+                label: 'settings.items.previewBpmLineOpacity',
+                min: 0,
+                max: 1,
+                step: 0.05,
+                def: defaultSettings.previewBpmLineOpacity ?? 1
+            },
         ]
     },
     {
@@ -292,6 +365,15 @@ export const settingsConfig = [
             },
             {
                 id: 'enableSyntaxCheck', type: 'checkbox', label: 'settings.items.enableSyntaxCheck', def: defaultSettings.enableSyntaxCheck ?? true
+            },
+            {
+                id: 'cursorFollow', type: 'checkbox', label: 'settings.items.cursorFollow', def: defaultSettings.cursorFollow ?? true
+            },
+            {
+                id: 'highlightCurrentNote', type: 'checkbox', label: 'settings.items.highlightCurrentNote', def: defaultSettings.highlightCurrentNote ?? true
+            },
+            {
+                id: 'editorAutoScroll', type: 'checkbox', label: 'settings.items.editorAutoScroll', def: defaultSettings.editorAutoScroll ?? true
             },
             {
                 id: 'syntaxColors',
@@ -441,12 +523,6 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.lowRes',
                 def: defaultSettings.lowRes || false,
-            },
-            {
-                id: 'enablePreviewWaveform',
-                type: 'checkbox',
-                label: 'settings.items.enablePreviewWaveform',
-                def: defaultSettings.enablePreviewWaveform ?? true
             },
             {
                 id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100000, step: 1, def: defaultSettings.maxSlideCount

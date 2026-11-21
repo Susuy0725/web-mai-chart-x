@@ -1,6 +1,7 @@
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from '../Scripts/indexDB.js';
 import { SimaiRenderer } from './renderer.js';
 import { simaiDecode } from '../Scripts/decode.js';
+import { cullSlideBucket } from '../Scripts/core/simaiLogicControler.js';
 import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, clamp, imgNotExists } from '../Scripts/helper.js';
 import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
@@ -2833,7 +2834,6 @@ function draw() {
     let playCombo = 0;
     let playScore = 0;
     let lostScore = 0;
-    let slideOnScreenCount = 0;
     let foundIndexForThisFrame = false;
 
     // 正序 (0 ~ notesLength-1) 統計 Combo 與 Score (自動與手動完全統一判定標準)
@@ -3096,9 +3096,8 @@ function draw() {
             if (noteType === 'slide') {
                 const tail = note.chainTail || note;
                 const isFinished = tail.slideFinish || note.chainFinished;
-                if (!isFinished && slideOnScreenCount < maxSlideCount) {
+                if (!isFinished) {
                     buckets.slide.push(note);
-                    slideOnScreenCount++;
                 }
             } else if (noteType === 'hold' || noteType === 'tap') {
                 buckets.tapnhold.push(note);
@@ -3107,6 +3106,8 @@ function draw() {
             }
         }
     }
+
+    cullSlideBucket(buckets.slide, maxSlideCount);
 
     renderer.drawFrame({
         globalTime,

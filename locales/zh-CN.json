@@ -358,6 +358,7 @@
       "effectsAndJudge": "特效与判定",
       "backgroundAndSensor": "背景与感应器",
       "canvasInfo": "画布信息",
+      "previewTrack": "预览轨道与音频可视化",
       "volume": "音量设置",
       "sfxBehavior": "播放行为",
       "editorAssist": "编辑器辅助",
@@ -435,7 +436,22 @@
       "timeDisplayCapsulePosition": "悬浮时间胶囊位置",
       "showUIHorizontalPosition": "FPS 接口水平位置",
       "showUIVerticalPosition": "FPS 接口垂直位置",
-      "seekStepSeconds": "时间轴跳转秒数 (Ctrl+←/→)"
+      "seekStepSeconds": "时间轴跳转秒数 (Ctrl+←/→)",
+      "cursorFollow": "播放时文字光标跟随进度",
+      "highlightCurrentNote": "根据进度高亮当前音符",
+      "editorAutoScroll": "播放时编辑器自动滚动",
+      "previewAudioVisualMode": "预览轨道音频显示模式",
+      "previewWaveformColor": "波形图颜色",
+      "previewSpectrogramMinFreq": "频谱图最低频率",
+      "previewSpectrogramMaxFreq": "频谱图最高频率",
+      "previewSpectrogramBrightness": "频谱图亮度",
+      "previewTagOpacity": "Tag 线透明度",
+      "previewBpmLineOpacity": "BPM 线透明度"
+    },
+    "previewAudioVisualOpts": {
+      "waveform": "波形图 (Waveform)",
+      "spectrogram": "频谱图 (Spectrogram)",
+      "off": "关闭"
     },
     "middleDisplayOpts": {
       "off": "关闭",
@@ -686,7 +702,13 @@
       "confirm": "是否要创建新的谱面？这将创建一个新项目。"
     },
     "warning": {
-      "title": "警告"
+      "title": "警告",
+      "errorsTab": "错误 ({count})",
+      "warningsTab": "警告 ({count})",
+      "emptyErrors": "当前没有错误项目",
+      "emptyWarnings": "当前没有警告项目",
+      "btnTitle": "错误与警告",
+      "btnAriaLabel": "谱面错误与警告信息"
     },
     "chartInfo": {
       "title": "谱面信息",
@@ -1256,6 +1278,82 @@
       "viewTogglePlayControls": "收合 / 展开播放控制栏",
       "viewFullscreen": "切换全屏",
       "viewOpenSettings": "打开设置"
+    }
+  },
+  "decode": {
+    "error": {
+      "unclosedBpmTag": "BPM 标签 \"(\" 未闭合，将影响后续所有逗号分拍与时间轴",
+      "invalidBpm": "无效的 BPM 数值 \"({value})\"",
+      "misplacedBpmTag": "误置的 BPM 标签 \"{tag}\"：BPM 标签必须位于小节开头（是否遗漏了逗号 \",\"？）",
+      "unmatchedParen": "多余或未成对的右括号 \")\"",
+      "unclosedSplitTag": "分拍标签 \"{\" 未闭合，将影响后续所有逗号分拍与时间轴",
+      "invalidSplitDuration": "无效的分拍时长 \"{{value}}\"",
+      "invalidSplitValue": "无效的分拍数值 \"{{value}}\"",
+      "misplacedSplitTag": "误置的分拍标签 \"{tag}\"：分拍标签必须位于小节开头（是否遗漏了逗号 \",\"？）",
+      "unmatchedBrace": "多余或未成对的右大括号 \"}\"",
+      "unclosedBracket": "时长中括号 \"[\" 未闭合，将导致后续逗号无法正确切分",
+      "unclosedPropertyTag": "属性标签 \"{tag}\" 未闭合",
+      "invalidPropertyTag": "无效的属性标签 <{tag}>：{reason}",
+      "misplacedPropertyTag": "误置的属性标签 \"{tag}\"：属性标签必须位于音符群组开头"
+    },
+    "propError": {
+      "empty": "属性标签内容为空",
+      "invalidHs": "无效的 HS 数值 \"{value}\"",
+      "invalidSizeValue": "无效的 SIZE 数值 \"{value}\"",
+      "invalidSizeTuple": "无效的 SIZE 元组数值 \"{value}\"",
+      "invalidSizeFormat": "无效的 SIZE 格式 \"{value}\"",
+      "invalidColorFormat": "无效的 COLOR 格式（需为 6 或 8 位十六进制）：\"{value}\"",
+      "unknown": "未知的属性标签 \"{tag}\""
+    },
+    "warning": {
+      "notImplementedSlideType": "尚未支持的滑星类型 \"{type}\"，已默认改用直线路径",
+      "emptyBacktickNote": "反引号 \"`\" 分隔中检测到空白音符",
+      "emptySplitNote": "斜线 \"/\" 分隔中检测到空白音符",
+      "overlappingNotePosition": "音符位置重叠：\"{note}\"",
+      "invalidNotePosition": "无效的音符位置：\"{note}\"（必须为 1–8）",
+      "invalidTouchPosition": "无效的 Touch 位置：\"{note}\"（必须为 1–8）",
+      "invalidNoteFormat": "无效的音符格式：\"{note}\"",
+      "invalidCharacters": "音符 \"{note}\" 中包含无效字符 \"{chars}\"",
+      "invalidTapBrackets": "Tap 音符 \"{note}\" 不应包含时长中括号",
+      "breakInTouch": "Touch 音符不支持 Break 标记 \"b\"",
+      "redundantStarOnSlide": "滑星已自带星星，无需重复加上 \"$\" 标记",
+      "starInTouch": "Touch 音符不支持星星标记 \"$\"",
+      "starInHold": "Hold 音符不支持星星标记 \"$\"",
+      "multipleHanabi": "检测到重复的烟花标记 \"f\"",
+      "hanabiNotAllowed": "烟花标记 \"f\" 仅适用于 Touch 音符",
+      "holdInSlide": "Slide 音符不支持 Hold 标记 \"h\"",
+      "invalidHoldFormat": "Hold 音符 \"{note}\" 格式无效",
+      "invalidHoldDuration": "无效的 Hold 时长：{reason}",
+      "starFlagNotAllowed": "非滑星音符不支持 \"{flag}\" 标记",
+      "atFlagConflict": "\"@\"（无头滑星）不可与 \"?\" 或 \"!\" 同时使用",
+      "contradictoryHeadFlags": "同时使用 \"!\" 与 \"?\" 标记互相矛盾",
+      "breakFlagPosition": "不建议将 Break 标记 \"b\" 写在此处，请改放于滑星片段末尾",
+      "mineFlagPosition": "不建议将地雷标记 \"m\" 写在此处，请改放于滑星片段末尾",
+      "missingSlideTime": "滑星缺少时长格式 [...]",
+      "invalidSlideTimeBrackets": "滑星时长中括号格式无效或为空",
+      "missingSlideType": "滑星音符缺少路径类型",
+      "invalidSlideDuration": "无效的滑星时长：{reason}",
+      "illegalSlidePath": "不合法的滑星路径 \"{slide}\"",
+      "invalidSlidePositions": "无效的滑星起点或终点位置"
+    },
+    "timeError": {
+      "emptyMovement": "移动时长为空",
+      "invalidSlideSeconds": "无效的滑星秒数 \"{value}\"",
+      "multipleHash": "格式中不可包含多个 \"#\"：\"{value}\"",
+      "invalidSlideBpm": "无效的滑星 BPM 数值 \"{value}\"",
+      "missingDurationAfterHash": "\"#\" 后缺少移动时长",
+      "invalidSlideDuration": "无效的滑星时长格式 \"{value}\"",
+      "invalidBeatRatioFormat": "无效的拍数比例格式 \"{value}\"",
+      "invalidBeatRatioValues": "无效的拍数比例数值 \"{value}\"",
+      "emptySlideDuration": "滑星时长格式为空",
+      "multipleDoubleHash": "格式中不可包含多个 \"##\"：\"{value}\"",
+      "invalidSlideDelay": "无效的滑星延迟数值 \"{value}\"",
+      "missingMoveAfterDoubleHash": "\"##\" 后缺少移动时长",
+      "emptyHoldDuration": "Hold 时长格式为空",
+      "invalidHoldValue": "无效的 Hold 时长数值 \"{value}\"",
+      "invalidHoldBpm": "无效的 Hold BPM 数值 \"{value}\"",
+      "invalidHoldSeconds": "无效的 Hold 秒数 \"{value}\"",
+      "invalidHoldDuration": "无效的 Hold 时长格式 \"{value}\""
     }
   }
 }

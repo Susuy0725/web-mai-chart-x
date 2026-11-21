@@ -1,29 +1,63 @@
 import { PathRecorder, noteRefPos, innerCirleBase, isObject } from './core/chartGeometry.js';
 
+export let errs = [];
+export let errpos = [];
 export let warns = [];
 export let warnpos = [];
+
+let errItems = [];
+let warnItems = [];
+let _diagnosticKeys = new Set();
 
 let _sp = [];
 let _disableSyntaxCheck = false;
 
-const formatWarnArg = (arg) => {
-    if (typeof arg === 'string') return arg;
-    try {
-        if (isObject(arg)) {
-            if (arg.errpos !== undefined) {
-                if (!_disableSyntaxCheck) warnpos.push(arg.errpos);
-                return _sp[arg.errpos] !== undefined ? `${_sp[arg.errpos]}, at comma position: ${arg.errpos}` : `at comma position: ${arg.errpos}`;
-            }
-            return JSON.stringify(arg);
-        }
-    } catch {
-        return String(arg);
+const recordDiagnostic = (level, code, params = {}, fallbackMsg = '', posArg = null, extra = {}) => {
+    if (_disableSyntaxCheck) return;
+
+    let commaIdx;
+    let snippet;
+    if (isObject(posArg) && posArg.errpos !== undefined) {
+        commaIdx = posArg.errpos;
+        snippet = _sp[commaIdx];
+    } else if (typeof posArg === 'number') {
+        commaIdx = posArg;
+        snippet = _sp[commaIdx];
+    }
+
+    const dedupKey = `${level}:${code}:${commaIdx ?? ''}:${JSON.stringify(params)}`;
+    if (_diagnosticKeys.has(dedupKey)) return;
+    _diagnosticKeys.add(dedupKey);
+
+    const formattedMsg = fallbackMsg;
+
+    const item = {
+        level,
+        code,
+        params,
+        ...(extra.reasonCode ? { reasonCode: extra.reasonCode, reasonParams: extra.reasonParams || {} } : {}),
+        ...(commaIdx !== undefined ? { errpos: commaIdx } : {}),
+        ...(snippet !== undefined ? { snippet } : {}),
+        message: formattedMsg,
+    };
+
+    if (level === 'error') {
+        errs.push(formattedMsg);
+        errItems.push(item);
+        if (commaIdx !== undefined) errpos.push(commaIdx);
+    } else {
+        warns.push(formattedMsg);
+        warnItems.push(item);
+        if (commaIdx !== undefined) warnpos.push(commaIdx);
     }
 };
 
-const pushWarn = (...args) => {
-    if (_disableSyntaxCheck) return;
-    warns.push(args.map(formatWarnArg).join(' '));
+const pushError = (code, params, fallbackMsg, posArg = null, extra = {}) => {
+    recordDiagnostic('error', code, params, fallbackMsg, posArg, extra);
+};
+
+const pushWarning = (code, params, fallbackMsg, posArg = null, extra = {}) => {
+    recordDiagnostic('warning', code, params, fallbackMsg, posArg, extra);
 };
 
 // Pre-compiled regular expressions for optimal performance
@@ -47,23 +81,23 @@ const REGEX_POS_TOUCH_PREFIX = /^([ABCDE]\d+|C|\d+)/;
  *  - <COLOR*RRGGBB> or <COLOR*RRGGBBAA> (e.g. <COLOR*FF0000>, <COLOR*00FF00AA>)
  *
  * @param {string} tagContent - The content inside <...> without angle brackets
- * @returns {{ valid: boolean, type?: 'HS'|'SIZE'|'COLOR', value?: any, raw: string, error?: string }}
+ * @returns {{ valid: boolean, type?: 'HS'|'SIZE'|'COLOR', value?: any, raw: string, error?: string, errorCode?: string, errorParams?: Object }}
  */
 function parsePropertyTag(tagContent) {
     const trimmed = tagContent.trim();
     if (!trimmed) {
-        return { valid: false, raw: trimmed, error: 'Empty property tag' };
+        return { valid: false, raw: trimmed, error: 'Empty property tag', errorCode: 'decode.propError.empty', errorParams: {} };
     }
 
     // 1. HS Property: <HS*<number>>
     if (/^HS\*/i.test(trimmed)) {
         const valStr = trimmed.slice(3).trim();
         if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(valStr)) {
-            return { valid: false, raw: trimmed, error: `Invalid HS value: "${valStr}"` };
+            return { valid: false, raw: trimmed, error: `Invalid HS value: "${valStr}"`, errorCode: 'decode.propError.invalidHs', errorParams: { value: valStr } };
         }
         const num = parseFloat(valStr);
         if (isNaN(num) || !isFinite(num)) {
-            return { valid: false, raw: trimmed, error: `Invalid HS value: "${valStr}"` };
+            return { valid: false, raw: trimmed, error: `Invalid HS value: "${valStr}"`, errorCode: 'decode.propError.invalidHs', errorParams: { value: valStr } };
         }
         return { valid: true, type: 'HS', value: num, raw: trimmed };
     }
@@ -75,7 +109,7 @@ function parsePropertyTag(tagContent) {
         if (/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(valStr)) {
             const num = parseFloat(valStr);
             if (isNaN(num) || !isFinite(num)) {
-                return { valid: false, raw: trimmed, error: `Invalid SIZE value: "${valStr}"` };
+                return { valid: false, raw: trimmed, error: `Invalid SIZE value: "${valStr}"`, errorCode: 'decode.propError.invalidSizeValue', errorParams: { value: valStr } };
             }
             return { valid: true, type: 'SIZE', value: num, raw: trimmed };
         }
@@ -85,24 +119,24 @@ function parsePropertyTag(tagContent) {
             const v1 = parseFloat(tupleMatch[1]);
             const v2 = parseFloat(tupleMatch[2]);
             if (isNaN(v1) || !isFinite(v1) || isNaN(v2) || !isFinite(v2)) {
-                return { valid: false, raw: trimmed, error: `Invalid SIZE tuple values: "${valStr}"` };
+                return { valid: false, raw: trimmed, error: `Invalid SIZE tuple values: "${valStr}"`, errorCode: 'decode.propError.invalidSizeTuple', errorParams: { value: valStr } };
             }
             return { valid: true, type: 'SIZE', value: [v1, v2], raw: trimmed };
         }
         // Any other form (e.g. SIZE*NaN, SIZE*6,9 without parens) is invalid!
-        return { valid: false, raw: trimmed, error: `Invalid SIZE format: "${valStr}"` };
+        return { valid: false, raw: trimmed, error: `Invalid SIZE format: "${valStr}"`, errorCode: 'decode.propError.invalidSizeFormat', errorParams: { value: valStr } };
     }
 
     // 3. COLOR Property: <COLOR*RRGGBB> (6-digit hex) or <COLOR*RRGGBBAA> (8-digit hex)
     if (/^COLOR\*/i.test(trimmed)) {
         const valStr = trimmed.slice(6).trim();
         if (!/^(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(valStr)) {
-            return { valid: false, raw: trimmed, error: `Invalid COLOR format (must be 6 or 8 hex digits): "${valStr}"` };
+            return { valid: false, raw: trimmed, error: `Invalid COLOR format (must be 6 or 8 hex digits): "${valStr}"`, errorCode: 'decode.propError.invalidColorFormat', errorParams: { value: valStr } };
         }
         return { valid: true, type: 'COLOR', value: '#' + valStr, raw: trimmed };
     }
 
-    return { valid: false, raw: trimmed, error: `Unknown property tag: "${trimmed}"` };
+    return { valid: false, raw: trimmed, error: `Unknown property tag: "${trimmed}"`, errorCode: 'decode.propError.unknown', errorParams: { tag: trimmed } };
 }
 
 const REGEX_STRICT_NUMBER = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
@@ -125,10 +159,10 @@ function parseStrictNonNegNumber(str) {
  * @param {string} str 可為 "bpm#t:b"、"bpm#s"、"#s"、"t:b"，僅在 allowBareSeconds 為 true（即 "##" 右側）時才允許純秒數 "s"
  * @param {number} fallbackBpm
  * @param {boolean} [allowBareSeconds=false]
- * @returns {{ time: number, bpm?: number, error?: string }}
+ * @returns {{ time: number, bpm?: number, error?: string, errorCode?: string, errorParams?: Object }}
  */
 function parseSlideMovement(str, fallbackBpm, allowBareSeconds = false) {
-    if (!str) return { time: -1, error: 'Empty movement duration' };
+    if (!str) return { time: -1, error: 'Empty movement duration', errorCode: 'decode.timeError.emptyMovement', errorParams: {} };
     const s = str.trim();
 
     // 0. 直接指定秒數 "#seconds"（例如 [#1.234] 或 3###1.5）
@@ -136,7 +170,7 @@ function parseSlideMovement(str, fallbackBpm, allowBareSeconds = false) {
         const secStr = s.slice(1).trim();
         const sec = parseStrictNonNegNumber(secStr);
         if (isNaN(sec) || sec < 0) {
-            return { time: -1, error: `Invalid slide seconds value: "${s}"` };
+            return { time: -1, error: `Invalid slide seconds value: "${s}"`, errorCode: 'decode.timeError.invalidSlideSeconds', errorParams: { value: s } };
         }
         return { time: sec };
     }
@@ -145,17 +179,17 @@ function parseSlideMovement(str, fallbackBpm, allowBareSeconds = false) {
     if (s.includes('#')) {
         const parts = s.split('#');
         if (parts.length !== 2) {
-            return { time: -1, error: `Invalid slide format with multiple "#": "${s}"` };
+            return { time: -1, error: `Invalid slide format with multiple "#": "${s}"`, errorCode: 'decode.timeError.multipleHash', errorParams: { value: s } };
         }
         const bpmStr = parts[0].trim();
         const tbStr = parts[1].trim();
 
         const overrideBpm = parseStrictNonNegNumber(bpmStr);
         if (isNaN(overrideBpm) || overrideBpm <= 0) {
-            return { time: -1, error: `Invalid slide BPM value: "${bpmStr}"` };
+            return { time: -1, error: `Invalid slide BPM value: "${bpmStr}"`, errorCode: 'decode.timeError.invalidSlideBpm', errorParams: { value: bpmStr } };
         }
         if (!tbStr) {
-            return { time: -1, error: `Missing slide duration after "#"` };
+            return { time: -1, error: `Missing slide duration after "#"`, errorCode: 'decode.timeError.missingDurationAfterHash', errorParams: {} };
         }
 
         // 移動時間為拍數 "t:b"
@@ -168,7 +202,7 @@ function parseSlideMovement(str, fallbackBpm, allowBareSeconds = false) {
         // 移動時間為秒數 "s" (bpm#s)
         const sec = parseStrictNonNegNumber(tbStr);
         if (isNaN(sec) || sec < 0) {
-            return { time: -1, error: `Invalid slide seconds value: "${tbStr}"` };
+            return { time: -1, error: `Invalid slide seconds value: "${tbStr}"`, errorCode: 'decode.timeError.invalidSlideSeconds', errorParams: { value: tbStr } };
         }
         return { time: sec, bpm: overrideBpm };
     }
@@ -186,24 +220,24 @@ function parseSlideMovement(str, fallbackBpm, allowBareSeconds = false) {
         }
     }
 
-    return { time: -1, error: `Invalid slide duration format: "${s}"` };
+    return { time: -1, error: `Invalid slide duration format: "${s}"`, errorCode: 'decode.timeError.invalidSlideDuration', errorParams: { value: s } };
 }
 
 /**
  * 解析拍數比例 "t:b" 並計算時長 (240 / bpm) * (b / t)
  * @param {string} str "4:1"
  * @param {number} bpm
- * @returns {{ time: number, error?: string }}
+ * @returns {{ time: number, error?: string, errorCode?: string, errorParams?: Object }}
  */
 function parseBeatRatio(str, bpm) {
     const parts = str.split(':');
     if (parts.length !== 2) {
-        return { time: -1, error: `Invalid beat ratio format: "${str}"` };
+        return { time: -1, error: `Invalid beat ratio format: "${str}"`, errorCode: 'decode.timeError.invalidBeatRatioFormat', errorParams: { value: str } };
     }
     const t = parseStrictNonNegNumber(parts[0]);
     const b = parseStrictNonNegNumber(parts[1]);
     if (isNaN(t) || isNaN(b) || t <= 0 || b < 0) {
-        return { time: -1, error: `Invalid beat ratio values: "${str}"` };
+        return { time: -1, error: `Invalid beat ratio values: "${str}"`, errorCode: 'decode.timeError.invalidBeatRatioValues', errorParams: { value: str } };
     }
     const time = (240 / bpm) * (b / t);
     return { time };
@@ -213,37 +247,37 @@ function parseBeatRatio(str, bpm) {
  * 解析滑星時長字串 (支援 Simai 官方書式: [a:b], [bpm#a:b], [bpm#s], [#s], [delay##...])
  * @param {string} str 括號內字串，如 "1.5##160#4:1", "4:1", "#1.5", "160#8:3", "3##1.5" 等
  * @param {number} currentBpm 當前曲目/小節基準 BPM
- * @returns {{ time: number, delay: number, error?: string }}
+ * @returns {{ time: number, delay: number, error?: string, errorCode?: string, errorParams?: Object }}
  */
 export function parseSlideTime(str, currentBpm) {
     if (!str || typeof str !== 'string') {
-        return { time: -1, delay: -1, error: 'Empty slide duration format' };
+        return { time: -1, delay: -1, error: 'Empty slide duration format', errorCode: 'decode.timeError.emptySlideDuration', errorParams: {} };
     }
     const clean = str.trim();
     if (!clean) {
-        return { time: -1, delay: -1, error: 'Empty slide duration format' };
+        return { time: -1, delay: -1, error: 'Empty slide duration format', errorCode: 'decode.timeError.emptySlideDuration', errorParams: {} };
     }
 
     // 1. 自訂等待時間 (含有 "##")
     if (clean.includes('##')) {
         const parts = clean.split('##');
         if (parts.length !== 2) {
-            return { time: -1, delay: -1, error: `Invalid slide timing format with multiple "##": "${clean}"` };
+            return { time: -1, delay: -1, error: `Invalid slide timing format with multiple "##": "${clean}"`, errorCode: 'decode.timeError.multipleDoubleHash', errorParams: { value: clean } };
         }
         const delayStr = parts[0].trim();
         const moveStr = parts[1].trim();
 
         const delay = parseStrictNonNegNumber(delayStr);
         if (isNaN(delay) || delay < 0) {
-            return { time: -1, delay: -1, error: `Invalid slide delay value: "${delayStr}"` };
+            return { time: -1, delay: -1, error: `Invalid slide delay value: "${delayStr}"`, errorCode: 'decode.timeError.invalidSlideDelay', errorParams: { value: delayStr } };
         }
         if (!moveStr) {
-            return { time: -1, delay: -1, error: 'Missing move duration after "##"' };
+            return { time: -1, delay: -1, error: 'Missing move duration after "##"', errorCode: 'decode.timeError.missingMoveAfterDoubleHash', errorParams: {} };
         }
 
         const moveRes = parseSlideMovement(moveStr, currentBpm, true);
         if (moveRes.time < 0) {
-            return { time: -1, delay: -1, error: moveRes.error };
+            return { time: -1, delay: -1, error: moveRes.error, errorCode: moveRes.errorCode, errorParams: moveRes.errorParams };
         }
         return { time: moveRes.time, delay, error: null };
     }
@@ -251,7 +285,7 @@ export function parseSlideTime(str, currentBpm) {
     // 2. 未指定等待時間 (無 "##")，不允許裸寫純數字（如 [98] 須寫為 [#98]）
     const moveRes = parseSlideMovement(clean, currentBpm, false);
     if (moveRes.time < 0) {
-        return { time: -1, delay: -1, error: moveRes.error };
+        return { time: -1, delay: -1, error: moveRes.error, errorCode: moveRes.errorCode, errorParams: moveRes.errorParams };
     }
     const defaultDelay = 60 / (moveRes.bpm || currentBpm);
     return { time: moveRes.time, delay: defaultDelay, error: null };
@@ -261,15 +295,15 @@ export function parseSlideTime(str, currentBpm) {
  * 解析 Hold 音符時長字串（僅支援 "t:b"、"bpm#t:b"、"bpm#s"、"#s"，不允許無 # 的純數字如 [98]）
  * @param {string} str 如 "4:1", "160#4:1", "#1.234"
  * @param {number} currentBpm
- * @returns {{ time: number, delay: number, error?: string }}
+ * @returns {{ time: number, delay: number, error?: string, errorCode?: string, errorParams?: Object }}
  */
 export function parseHoldTime(str, currentBpm) {
     if (!str || typeof str !== 'string') {
-        return { time: -1, delay: 0, error: 'Empty hold duration format' };
+        return { time: -1, delay: 0, error: 'Empty hold duration format', errorCode: 'decode.timeError.emptyHoldDuration', errorParams: {} };
     }
     const clean = str.trim();
     if (!clean) {
-        return { time: -1, delay: 0, error: 'Empty hold duration format' };
+        return { time: -1, delay: 0, error: 'Empty hold duration format', errorCode: 'decode.timeError.emptyHoldDuration', errorParams: {} };
     }
 
     // 1. 直給秒數格式: "#seconds"
@@ -277,7 +311,7 @@ export function parseHoldTime(str, currentBpm) {
         const secStr = clean.slice(1).trim();
         const sec = parseStrictNonNegNumber(secStr);
         if (isNaN(sec) || sec < 0) {
-            return { time: -1, delay: 0, error: `Invalid hold duration value: "${clean}"` };
+            return { time: -1, delay: 0, error: `Invalid hold duration value: "${clean}"`, errorCode: 'decode.timeError.invalidHoldValue', errorParams: { value: clean } };
         }
         return { time: sec, delay: 0, error: null };
     }
@@ -286,21 +320,21 @@ export function parseHoldTime(str, currentBpm) {
     if (clean.includes('#')) {
         const parts = clean.split('#');
         if (parts.length !== 2) {
-            return { time: -1, delay: 0, error: `Invalid hold format with multiple "#": "${clean}"` };
+            return { time: -1, delay: 0, error: `Invalid hold format with multiple "#": "${clean}"`, errorCode: 'decode.timeError.multipleHash', errorParams: { value: clean } };
         }
         const overrideBpm = parseStrictNonNegNumber(parts[0]);
         if (isNaN(overrideBpm) || overrideBpm <= 0) {
-            return { time: -1, delay: 0, error: `Invalid hold BPM value: "${parts[0]}"` };
+            return { time: -1, delay: 0, error: `Invalid hold BPM value: "${parts[0]}"`, errorCode: 'decode.timeError.invalidHoldBpm', errorParams: { value: parts[0] } };
         }
         const tbStr = parts[1].trim();
         if (tbStr.includes(':')) {
             const beatRes = parseBeatRatio(tbStr, overrideBpm);
-            if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error };
+            if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error, errorCode: beatRes.errorCode, errorParams: beatRes.errorParams };
             return { time: beatRes.time, delay: 0, error: null };
         }
         const sec = parseStrictNonNegNumber(tbStr);
         if (isNaN(sec) || sec < 0) {
-            return { time: -1, delay: 0, error: `Invalid hold seconds value: "${tbStr}"` };
+            return { time: -1, delay: 0, error: `Invalid hold seconds value: "${tbStr}"`, errorCode: 'decode.timeError.invalidHoldSeconds', errorParams: { value: tbStr } };
         }
         return { time: sec, delay: 0, error: null };
     }
@@ -308,11 +342,11 @@ export function parseHoldTime(str, currentBpm) {
     // 3. 標準拍數: "t:b"
     if (clean.includes(':')) {
         const beatRes = parseBeatRatio(clean, currentBpm);
-        if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error };
+        if (beatRes.time < 0) return { time: -1, delay: 0, error: beatRes.error, errorCode: beatRes.errorCode, errorParams: beatRes.errorParams };
         return { time: beatRes.time, delay: 0, error: null };
     }
 
-    return { time: -1, delay: 0, error: `Invalid hold duration format: "${clean}"` };
+    return { time: -1, delay: 0, error: `Invalid hold duration format: "${clean}"`, errorCode: 'decode.timeError.invalidHoldDuration', errorParams: { value: clean } };
 }
 
 /**
@@ -508,7 +542,7 @@ function computeSlidePath(start, end, type, mid = null) {
             if (e) illegal = true;
             r.moveTo(startInfo.x, startInfo.y);
             r.lineTo(endInfo.x, endInfo.y);
-            pushWarn("Not implemented slide type, defaulting to straight line:", type);
+            pushWarning('decode.warning.notImplementedSlideType', { type }, `Not implemented slide type: "${type}", defaulting to straight line`);
             illegal = true;
             break;
     }
@@ -518,10 +552,14 @@ function computeSlidePath(start, end, type, mid = null) {
 
 function splitChartByComma(str) {
     const parts = [];
+    const unclosed = [];
     let current = '';
     let inBracket = 0; // [...]
     let inParen = 0;   // (...)
     let inBrace = 0;   // {...}
+    let bracketOpenComma = -1;
+    let parenOpenComma = -1;
+    let braceOpenComma = -1;
 
     for (let i = 0; i < str.length; i++) {
         // If we encounter a property tag e.g. <SIZE*(1.5,2)> or <HS*1.25>, consume it atomically
@@ -536,12 +574,25 @@ function splitChartByComma(str) {
         }
 
         const char = str[i];
-        if (char === '[') inBracket++;
-        else if (char === ']') inBracket = Math.max(0, inBracket - 1);
-        else if (char === '(') inParen++;
-        else if (char === ')') inParen = Math.max(0, inParen - 1);
-        else if (char === '{') inBrace++;
-        else if (char === '}') inBrace = Math.max(0, inBrace - 1);
+        if (char === '[') {
+            if (inBracket === 0) bracketOpenComma = parts.length;
+            inBracket++;
+        } else if (char === ']') {
+            inBracket = Math.max(0, inBracket - 1);
+            if (inBracket === 0) bracketOpenComma = -1;
+        } else if (char === '(') {
+            if (inParen === 0) parenOpenComma = parts.length;
+            inParen++;
+        } else if (char === ')') {
+            inParen = Math.max(0, inParen - 1);
+            if (inParen === 0) parenOpenComma = -1;
+        } else if (char === '{') {
+            if (inBrace === 0) braceOpenComma = parts.length;
+            inBrace++;
+        } else if (char === '}') {
+            inBrace = Math.max(0, inBrace - 1);
+            if (inBrace === 0) braceOpenComma = -1;
+        }
 
         if (char === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
             parts.push(current);
@@ -553,7 +604,12 @@ function splitChartByComma(str) {
     if (current !== '' || str.endsWith(',')) {
         parts.push(current);
     }
-    return parts;
+
+    if (inParen > 0 && parenOpenComma !== -1) unclosed.push({ type: 'paren', commaIndex: parenOpenComma });
+    if (inBrace > 0 && braceOpenComma !== -1) unclosed.push({ type: 'brace', commaIndex: braceOpenComma });
+    if (inBracket > 0 && bracketOpenComma !== -1) unclosed.push({ type: 'bracket', commaIndex: bracketOpenComma });
+
+    return { parts, unclosed };
 }
 
 let _incrementalCache = {
@@ -586,7 +642,7 @@ export function clearIncrementalCache() {
  */
 function decodeCommaBlock(e, noteCommaIndex, state, context) {
     let { nowTime, nowBpm, nowSplit, overrideSplitTime, hispeed, firstBpm, lastBpmTag, lastSplitTag, lastSplitTagCommIndex } = state;
-    const { baseOffset, tags, pushWarn } = context;
+    const { baseOffset, tags } = context;
     const commaNotes = [];
     const eventProps = [];
     let eventHispeed = null;
@@ -601,11 +657,14 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
         if (e.startsWith('(')) {
             hasTimingChange = true;
             const closeIdx = e.indexOf(')');
-            if (closeIdx === -1) { pushWarn("Unclosed BPM tag '(', ", { errpos: noteCommaIndex }); break; }
+            if (closeIdx === -1) {
+                pushError('decode.error.unclosedBpmTag', {}, "Unclosed BPM tag '('", { errpos: noteCommaIndex });
+                break;
+            }
             const bpmContent = e.slice(1, closeIdx).trim();
             const bpmVal = parseStrictNonNegNumber(bpmContent);
             if (isNaN(bpmVal) || bpmVal <= 0) {
-                pushWarn(`Invalid BPM value in (${bpmContent}), `, { errpos: noteCommaIndex });
+                pushError('decode.error.invalidBpm', { value: bpmContent }, `Invalid BPM value in (${bpmContent})`, { errpos: noteCommaIndex });
             } else {
                 nowBpm = bpmVal;
                 if (nowTime === 0 && baseOffset) nowTime = (60 / nowBpm) * 4;
@@ -630,12 +689,15 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
         } else if (e.startsWith('{')) {
             hasTimingChange = true;
             const closeIdx = e.indexOf('}');
-            if (closeIdx === -1) { pushWarn("Unclosed split tag '{', ", { errpos: noteCommaIndex }); break; }
+            if (closeIdx === -1) {
+                pushError('decode.error.unclosedSplitTag', {}, "Unclosed split tag '{'", { errpos: noteCommaIndex });
+                break;
+            }
             const splitContent = e.slice(1, closeIdx).trim();
             if (splitContent.startsWith('#')) {
                 const dur = parseStrictNonNegNumber(splitContent.slice(1));
                 if (isNaN(dur) || dur < 0) {
-                    pushWarn(`Invalid split duration in {${splitContent}}, `, { errpos: noteCommaIndex });
+                    pushError('decode.error.invalidSplitDuration', { value: splitContent }, `Invalid split duration in {${splitContent}}`, { errpos: noteCommaIndex });
                 } else {
                     overrideSplitTime = dur;
                     tags.push({
@@ -648,7 +710,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             } else {
                 const splitVal = parseStrictNonNegNumber(splitContent);
                 if (isNaN(splitVal) || splitVal <= 0) {
-                    pushWarn(`Invalid split value in {${splitContent}}, `, { errpos: noteCommaIndex });
+                    pushError('decode.error.invalidSplitValue', { value: splitContent }, `Invalid split value in {${splitContent}}`, { errpos: noteCommaIndex });
                 } else {
                     nowSplit = splitVal;
                     overrideSplitTime = null;
@@ -662,12 +724,21 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             }
             e = e.slice(closeIdx + 1);
         } else if (e.startsWith('<')) {
-            const match = e.match(/^<([A-Za-z]+\*[^>]*)>/);
-            if (!match) break;
+            const match = e.match(/^<([^>]*)>/);
+            if (!match) {
+                pushError('decode.error.unclosedPropertyTag', { tag: e }, `Unclosed property tag "${e}"`, { errpos: noteCommaIndex });
+                break;
+            }
             const tagContent = match[1];
             const parsed = parsePropertyTag(tagContent);
             if (!parsed.valid) {
-                pushWarn(`Invalid property tag <${tagContent}>: ${parsed.error || 'invalid syntax'}, `, { errpos: noteCommaIndex });
+                pushError(
+                    'decode.error.invalidPropertyTag',
+                    { tag: tagContent, reason: parsed.error || 'invalid syntax' },
+                    `Invalid property tag <${tagContent}>: ${parsed.error || 'invalid syntax'}`,
+                    { errpos: noteCommaIndex },
+                    { reasonCode: parsed.errorCode, reasonParams: parsed.errorParams }
+                );
             } else {
                 eventProps.push(parsed.raw);
                 if (parsed.type === 'HS') {
@@ -691,13 +762,63 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
     if (overrideSplitTime) nowBpm = 240 / overrideSplitTime;
 
-    // 2. Detect misplaced property tags inside e
+    // 2. Detect misplaced property, split, or BPM tags inside e (after notes)
     const misplacedTags = e.match(/<[A-Za-z]+\*[^>]*>/g);
     if (misplacedTags) {
         for (const tag of misplacedTags) {
-            pushWarn(`Misplaced property tag "${tag}": property tags must only appear at the beginning of the note group, `, { errpos: noteCommaIndex });
+            pushError(
+                'decode.error.misplacedPropertyTag',
+                { tag },
+                `Misplaced property tag "${tag}": property tags must only appear at the beginning of the note group`,
+                { errpos: noteCommaIndex }
+            );
         }
         e = e.replace(/<[A-Za-z]+\*[^>]*>/g, '');
+    }
+
+    let hasStructuralTimingError = false;
+    const misplacedSplitTags = e.match(/\{[^{}]*\}/g);
+    if (misplacedSplitTags) {
+        hasStructuralTimingError = true;
+        for (const tag of misplacedSplitTags) {
+            pushError(
+                'decode.error.misplacedSplitTag',
+                { tag },
+                `Misplaced split tag "${tag}": split tags must only appear at the beginning of the comma block`,
+                { errpos: noteCommaIndex }
+            );
+        }
+    }
+
+    const misplacedBpmTags = e.match(/\([^()]*\)/g);
+    if (misplacedBpmTags) {
+        hasStructuralTimingError = true;
+        for (const tag of misplacedBpmTags) {
+            pushError(
+                'decode.error.misplacedBpmTag',
+                { tag },
+                `Misplaced BPM tag "${tag}": BPM tags must only appear at the beginning of the comma block`,
+                { errpos: noteCommaIndex }
+            );
+        }
+    }
+
+    const strayDelimiterCheck = e.replace(/\{[^{}]*\}/g, '').replace(/\([^()]*\)/g, '');
+    if (strayDelimiterCheck.includes('(')) {
+        hasStructuralTimingError = true;
+        pushError('decode.error.unclosedBpmTag', {}, "Unclosed BPM tag '('", { errpos: noteCommaIndex });
+    }
+    if (strayDelimiterCheck.includes(')')) {
+        hasStructuralTimingError = true;
+        pushError('decode.error.unmatchedParen', {}, "Unexpected closing ')'", { errpos: noteCommaIndex });
+    }
+    if (strayDelimiterCheck.includes('{')) {
+        hasStructuralTimingError = true;
+        pushError('decode.error.unclosedSplitTag', {}, "Unclosed split tag '{'", { errpos: noteCommaIndex });
+    }
+    if (strayDelimiterCheck.includes('}')) {
+        hasStructuralTimingError = true;
+        pushError('decode.error.unmatchedBrace', {}, "Unexpected closing '}'", { errpos: noteCommaIndex });
     }
 
     const commaDuration = overrideSplitTime ?? (60 / nowBpm) * (4 / nowSplit);
@@ -705,7 +826,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
         maxEndTime = nowTime + commaDuration;
     }
 
-    if (!e || e === '') {
+    if (!e || e === '' || hasStructuralTimingError) {
         return {
             rawPart: e,
             commaIndex: noteCommaIndex,
@@ -736,7 +857,9 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
     for (let i = 0; i < rawSubNotes.length; i++) {
         const trimmed = rawSubNotes[i].trim();
         if (trimmed === '') {
-            if (e.includes('`')) pushWarn("Empty note detected in backticks, ", { errpos: noteCommaIndex });
+            if (e.includes('`')) {
+                pushWarning('decode.warning.emptyBacktickNote', {}, 'Empty note detected in backticks', { errpos: noteCommaIndex });
+            }
         } else {
             notesToProcess.push({ raw: trimmed, time: e.includes('`') ? nowTime + i * 0.001 : nowTime });
         }
@@ -758,19 +881,19 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
         }
 
         if (hasEmptySplit) {
-            pushWarn("Empty note detected in split, ", { errpos: noteCommaIndex });
+            pushWarning('decode.warning.emptySplitNote', {}, 'Empty note detected in split', { errpos: noteCommaIndex });
         }
 
         // Handle shorthand double tap e.g. "11" or "22"
         if (splitr.length === 1 && !isNaN(splitr[0]) && splitr[0].length === 2) {
             const s = splitr[0];
             if (s.charAt(0) === s.charAt(1)) {
-                pushWarn("Overlapping note position:", { errpos: noteCommaIndex });
+                pushWarning('decode.warning.overlappingNotePosition', { note: s }, `Overlapping note position: "${s}"`, { errpos: noteCommaIndex });
                 continue;
             }
             const p1 = parseInt(s.charAt(0)), p2 = parseInt(s.charAt(1));
             if (p1 < 1 || p1 > 8 || p2 < 1 || p2 > 8) {
-                pushWarn("Invalid note position:", { errpos: noteCommaIndex });
+                pushWarning('decode.warning.invalidNotePosition', { note: s }, `Invalid note position: "${s}"`, { errpos: noteCommaIndex });
                 continue;
             }
             commaNotes.push({
@@ -811,7 +934,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             const touchMatch = noteStr.match(REGEX_TOUCH_MATCH);
 
             if (!(posMatch || touchMatch)) {
-                pushWarn("Invalid note format:", { errpos: noteCommaIndex });
+                pushWarning('decode.warning.invalidNoteFormat', { note: noteStr }, `Invalid note format: "${noteStr}"`, { errpos: noteCommaIndex });
                 continue;
             }
 
@@ -825,7 +948,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                 .replace(REGEX_VALID_FLAGS, '');
 
             if (tempCheck.length > 0) {
-                pushWarn(`Invalid character(s) "${tempCheck}" detected in note "${noteStr}", `, { errpos: noteCommaIndex });
+                pushWarning('decode.warning.invalidCharacters', { chars: tempCheck, note: noteStr }, `Invalid character(s) "${tempCheck}" detected in note "${noteStr}"`, { errpos: noteCommaIndex });
                 continue;
             }
 
@@ -838,7 +961,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     touchPos = touchMatch[1];
                     pos = parseInt(touchMatch[2]);
                     if (pos < 1 || pos > 8) {
-                        pushWarn("Invalid touch position:", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.invalidTouchPosition', { note: noteStr }, `Invalid touch position: "${noteStr}"`, { errpos: noteCommaIndex });
                         continue;
                     }
                 }
@@ -847,7 +970,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             } else {
                 pos = parseInt(posMatch[0]);
                 if (pos < 1 || pos > 8) {
-                    pushWarn("Invalid note position:", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.invalidNotePosition', { note: noteStr }, `Invalid note position: "${noteStr}"`, { errpos: noteCommaIndex });
                     continue;
                 }
                 tapCounts++;
@@ -872,13 +995,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
             // Check Flags
             if (!noteStr.includes('h') && !slideMatch && (noteStr.includes('[') || noteStr.includes(']'))) {
-                pushWarn(`Invalid brackets in tap note "${noteStr}", `, { errpos: noteCommaIndex });
+                pushWarning('decode.warning.invalidTapBrackets', { note: noteStr }, `Invalid brackets in tap note "${noteStr}"`, { errpos: noteCommaIndex });
                 continue;
             }
 
             if (noteStr.includes('b') && !slideMatch) {
                 if (touchMatch) {
-                    pushWarn("Break flag 'b' is not allowed in touch notes, ", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.breakInTouch', {}, "Break flag 'b' is not allowed in touch notes", { errpos: noteCommaIndex });
                     continue;
                 }
                 noteObj.isBreak = true;
@@ -893,13 +1016,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             }
 
             if (noteStr.includes('$')) {
-                if (slideMatch) pushWarn("Slide already have a star! This is unnecessary,", { errpos: noteCommaIndex });
+                if (slideMatch) pushWarning('decode.warning.redundantStarOnSlide', {}, "Slide already has a star! Flag '$' is unnecessary", { errpos: noteCommaIndex });
                 if (touchMatch) {
-                    pushWarn("Star flag '$' is not allowed in touch notes, ", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.starInTouch', {}, "Star flag '$' is not allowed in touch notes", { errpos: noteCommaIndex });
                     continue;
                 }
                 if (noteStr.includes('h')) {
-                    pushWarn("Star flag '$' is not allowed in hold notes, ", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.starInHold', {}, "Star flag '$' is not allowed in hold notes", { errpos: noteCommaIndex });
                     continue;
                 }
                 noteObj.isStar = true;
@@ -915,18 +1038,18 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                 if (!slideMatch && touchMatch) {
                     noteObj.isHanabi = true;
                     if (noteStr.replace(/f/, '').includes('f')) {
-                        pushWarn("Multiple Hanabi flags 'f' detected, ", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.multipleHanabi', {}, "Multiple Hanabi flags 'f' detected", { errpos: noteCommaIndex });
                         continue;
                     }
                 } else {
-                    pushWarn("Hanabi flag 'f' is not allowed in other notes!, ", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.hanabiNotAllowed', {}, "Hanabi flag 'f' is only allowed in touch notes", { errpos: noteCommaIndex });
                     continue;
                 }
             }
 
             if (noteStr.includes('h')) {
                 if (slideMatch) {
-                    pushWarn("Hold flag 'h' is not allowed in slide notes, ", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.holdInSlide', {}, "Hold flag 'h' is not allowed in slide notes", { errpos: noteCommaIndex });
                     continue;
                 }
                 noteObj.isHold = true;
@@ -935,7 +1058,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                 const match = noteStr.match(REGEX_SINGLE_BRACKET);
                 const residue = noteStr.replace(REGEX_SINGLE_BRACKET, '').replace(/h/, '');
                 if (residue.includes('h') || residue.includes('[') || residue.includes(']') || !(residue.match(/^\d$/) || touchMatch)) {
-                    pushWarn("Invalid format in hold note, ", { errpos: noteCommaIndex });
+                    pushWarning('decode.warning.invalidHoldFormat', { note: noteStr }, `Invalid format in hold note "${noteStr}"`, { errpos: noteCommaIndex });
                     if (noteObj.isBreak) {
                         breakCounts--;
                     } else if (touchMatch) {
@@ -951,7 +1074,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     const durationStr = match[1].trim();
                     const holdRes = parseHoldTime(durationStr, nowBpm);
                     if (holdRes.time < 0 || isNaN(holdRes.time) || !isFinite(holdRes.time)) {
-                        pushWarn(holdRes.error || "Invalid hold syntax in note, ", { errpos: noteCommaIndex });
+                        pushWarning(
+                            'decode.warning.invalidHoldDuration',
+                            { reason: holdRes.error || 'Invalid hold syntax' },
+                            holdRes.error || 'Invalid hold syntax in note',
+                            { errpos: noteCommaIndex },
+                            { reasonCode: holdRes.errorCode, reasonParams: holdRes.errorParams }
+                        );
                         if (noteObj.isBreak) {
                             breakCounts--;
                         } else if (touchMatch) {
@@ -977,15 +1106,15 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             }
 
             if (noteStr.includes('@') && !slideMatch) {
-                pushWarn("Star flag '@' is not allowed in other notes, ", { errpos: noteCommaIndex });
+                pushWarning('decode.warning.starFlagNotAllowed', { flag: '@' }, "Star flag '@' is not allowed in other notes", { errpos: noteCommaIndex });
                 continue;
             }
             if (noteStr.includes('!') && !slideMatch) {
-                pushWarn("Star flag '!' is not allowed in other notes, ", { errpos: noteCommaIndex });
+                pushWarning('decode.warning.starFlagNotAllowed', { flag: '!' }, "Star flag '!' is not allowed in other notes", { errpos: noteCommaIndex });
                 continue;
             }
             if (noteStr.includes('?') && !slideMatch) {
-                pushWarn("Star flag '?' is not allowed in other notes, ", { errpos: noteCommaIndex });
+                pushWarning('decode.warning.starFlagNotAllowed', { flag: '?' }, "Star flag '?' is not allowed in other notes", { errpos: noteCommaIndex });
                 continue;
             }
 
@@ -1017,20 +1146,20 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
                     const timeMatches = slidePart.match(REGEX_BRACKET_CONTENT);
                     if (!timeMatches) {
-                        pushWarn("Missing time format:", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.missingSlideTime', {}, 'Missing slide duration format', { errpos: noteCommaIndex });
                         continue;
                     }
 
                     const timeValues = timeMatches.map(m => m.slice(1, -1));
                     const residue = slidePart.replace(REGEX_BRACKET_CONTENT, '');
                     if (residue.includes('[') || residue.includes(']')) {
-                        pushWarn("Invalid time format or empty in slide note, ", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.invalidSlideTimeBrackets', {}, 'Invalid or empty time brackets in slide note', { errpos: noteCommaIndex });
                         continue;
                     }
 
                     const slidePartMatch = residue.match(REGEX_SLIDE_SYMBOL);
                     if (!slidePartMatch) {
-                        pushWarn("Missing slide type in slide note, ", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.missingSlideType', {}, 'Missing slide type in slide note', { errpos: noteCommaIndex });
                         continue;
                     }
                     noteObj.isStar = true;
@@ -1053,7 +1182,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     }
                     if (p[0].includes('?')) {
                         if (!noteObj.isStar) {
-                            pushWarn("Star flag '@' at here is not allowed, ", { errpos: noteCommaIndex });
+                            pushWarning('decode.warning.atFlagConflict', {}, "Star flag '@' at here is not allowed", { errpos: noteCommaIndex });
                             continue;
                         }
                         noHeadSlide = true;
@@ -1062,11 +1191,11 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     }
                     if (p[0].includes('!')) {
                         if (!noteObj.isStar) {
-                            pushWarn("Star flag '@' at here is not allowed, ", { errpos: noteCommaIndex });
+                            pushWarning('decode.warning.atFlagConflict', {}, "Star flag '@' at here is not allowed", { errpos: noteCommaIndex });
                             continue;
                         }
                         if (noHeadSlide) {
-                            pushWarn("Using '!' and '?' at the same time is contradictory, ", { errpos: noteCommaIndex });
+                            pushWarning('decode.warning.contradictoryHeadFlags', {}, "Using '!' and '?' at the same time is contradictory", { errpos: noteCommaIndex });
                         }
                         hideHeadSlide = true;
                         p[0] = p[0].replace(/!/g, '');
@@ -1078,14 +1207,14 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     if (isSlideBreak) {
                         for (let j = 0; j < p.length; j++) {
                             if (!p[j]) continue;
-                            if (p[j].startsWith('b')) pushWarn("Not recommand write break flag like this since it may cause confusion, please put break flag at the end of the slide part!! :", { errpos: noteCommaIndex });
+                            if (p[j].startsWith('b')) pushWarning('decode.warning.breakFlagPosition', {}, "Not recommended to write break flag 'b' here; place it at the end of the slide segment", { errpos: noteCommaIndex });
                             p[j] = p[j].replace(/b/g, '');
                         }
                     }
                     if (isSlideMine) {
                         for (let j = 0; j < p.length; j++) {
                             if (!p[j]) continue;
-                            if (p[j].startsWith('m')) pushWarn("Not recommand write mine flag like this since it may cause confusion, please put mine flag at the end of the slide part!! :", { errpos: noteCommaIndex });
+                            if (p[j].startsWith('m')) pushWarning('decode.warning.mineFlagPosition', {}, "Not recommended to write mine flag 'm' here; place it at the end of the slide segment", { errpos: noteCommaIndex });
                             p[j] = p[j].replace(/m/g, '');
                         }
                     }
@@ -1096,7 +1225,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     for (let j = 0; j < timeValues.length; j++) {
                         const slideRes = parseSlideTime(timeValues[j], nowBpm);
                         if (slideRes.time < 0 || isNaN(slideRes.time) || !isFinite(slideRes.time)) {
-                            pushWarn(slideRes.error || "Invalid time format in slide note, ", { errpos: noteCommaIndex });
+                            pushWarning(
+                                'decode.warning.invalidSlideDuration',
+                                { reason: slideRes.error || 'Invalid slide duration' },
+                                slideRes.error || 'Invalid time format in slide note',
+                                { errpos: noteCommaIndex },
+                                { reasonCode: slideRes.errorCode, reasonParams: slideRes.errorParams }
+                            );
                             timeError = true;
                             break;
                         }
@@ -1130,7 +1265,7 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
 
                         const res = getSlidePath(head, end, slideType, mid);
                         if (res.illegal) {
-                            pushWarn(`Illegal slide ${head}${slideType}${mid ?? ''}${end}, `, { errpos: noteCommaIndex });
+                            pushWarning('decode.warning.illegalSlidePath', { slide: `${head}${slideType}${mid ?? ''}${end}` }, `Illegal slide ${head}${slideType}${mid ?? ''}${end}`, { errpos: noteCommaIndex });
                         }
                         segments.push({
                             head, end, mid, type: slideType, path: res.path, len: res.path.totalLength, illegal: res.illegal, additional: res.additional
@@ -1138,12 +1273,12 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
                     }
 
                     if (segError) {
-                        pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.invalidSlidePositions', {}, 'Invalid slide positions', { errpos: noteCommaIndex });
                         continue;
                     }
 
                     if (segments.some(s => (s.mid && s.type !== 'V') || (s.type === 'V' && !s.mid))) {
-                        pushWarn("Invalid slide positions:", { errpos: noteCommaIndex });
+                        pushWarning('decode.warning.invalidSlidePositions', {}, 'Invalid slide positions', { errpos: noteCommaIndex });
                         continue;
                     }
 
@@ -1258,8 +1393,7 @@ function executeFullDecode(raw, splitParts, baseOffset, options) {
 
     const context = {
         baseOffset,
-        tags,
-        pushWarn
+        tags
     };
 
     for (let i = 0; i < splitParts.length; i++) {
@@ -1295,6 +1429,9 @@ function executeFullDecode(raw, splitParts, baseOffset, options) {
     if (currentState.nowTime > endTime) endTime = currentState.nowTime;
 
     if (options && options.debug) {
+        if (errs.length > 0) {
+            console.error("Decoding finished with errors:", errs);
+        }
         if (warns.length > 0) {
             console.warn("Decoding finished with warnings:", warns);
         }
@@ -1312,6 +1449,21 @@ break: ${breakCounts}`
         console.groupEnd();
     }
 
+    const allPositions = [];
+    const seenPos = new Set();
+    for (const p of errpos) {
+        if (!seenPos.has(p)) {
+            seenPos.add(p);
+            allPositions.push(p);
+        }
+    }
+    for (const p of warnpos) {
+        if (!seenPos.has(p)) {
+            seenPos.add(p);
+            allPositions.push(p);
+        }
+    }
+
     const result = {
         notes,
         endTime,
@@ -1327,8 +1479,13 @@ break: ${breakCounts}`
         },
         score: (tapCounts + touchCounts + holdCounts * 2 + slideCounts * 3 + breakCounts * 5) || 0,
         failed: false,
+        errors: errs,
+        errorItems: errItems,
+        errorPositions: errpos,
         warnings: warns,
-        errpositions: warnpos,
+        warningItems: warnItems,
+        warningPositions: warnpos,
+        errpositions: allPositions,
         indexToTime,
     };
 
@@ -1353,8 +1510,13 @@ export function simaiDecode(data = "", baseOffset = true, options = {}) {
     } else {
         _disableSyntaxCheck = !!(options && options.disableSyntaxCheck);
     }
+    errs = [];
+    errpos = [];
+    errItems = [];
     warns = [];
     warnpos = [];
+    warnItems = [];
+    _diagnosticKeys.clear();
 
     const raw = data
         .replace(REGEX_MULTILINE_COMMENT, "")
@@ -1376,6 +1538,15 @@ export function simaiDecode(data = "", baseOffset = true, options = {}) {
                 break: 0,
             },
             score: 0,
+            failed: false,
+            errors: [],
+            errorItems: [],
+            errorPositions: [],
+            warnings: [],
+            warningItems: [],
+            warningPositions: [],
+            errpositions: [],
+            indexToTime: [],
         };
     }
 
@@ -1389,11 +1560,22 @@ export function simaiDecode(data = "", baseOffset = true, options = {}) {
         return { ..._incrementalCache.result };
     }
 
-    const splitParts = splitChartByComma(raw);
-    if (raw.endsWith(',') || raw.endsWith('E')) {
+    const { parts: splitParts, unclosed } = splitChartByComma(raw);
+    const lastPart = splitParts[splitParts.length - 1];
+    if ((raw.endsWith(',') && lastPart === '') || (raw.endsWith('E') && lastPart === 'E')) {
         splitParts.pop();
     }
     _sp = splitParts;
+
+    for (const item of unclosed) {
+        if (item.type === 'paren') {
+            pushError('decode.error.unclosedBpmTag', {}, "Unclosed BPM tag '('", { errpos: item.commaIndex });
+        } else if (item.type === 'brace') {
+            pushError('decode.error.unclosedSplitTag', {}, "Unclosed split tag '{'", { errpos: item.commaIndex });
+        } else if (item.type === 'bracket') {
+            pushError('decode.error.unclosedBracket', {}, "Unclosed bracket '['", { errpos: item.commaIndex });
+        }
+    }
 
     return executeFullDecode(raw, splitParts, baseOffset, options);
 }

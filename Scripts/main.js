@@ -1416,10 +1416,26 @@ editMusicButton.addEventListener('click', () => {
 
 tapBpmButton.addEventListener('click', () => {
     openTapBpm({
+        audioManager,
+        settings,
+        getMusicDelay: () => musicDelay,
+        setMusicDelay: (val) => { musicDelay = val; },
+        getClockBpm: () => clockBpm,
+        getTimebase: () => ({
+            tb1: Number(timebaseButton?.querySelector('input[name="tb1"]')?.value) || 4,
+            tb2: Number(timebaseButton?.querySelector('input[name="tb2"]')?.value) || 4
+        }),
+        getDecodedTags: () => decodedTags,
+        getDataIndexToTime: () => dataIndexToTime,
+        findCommaCharIndex: (...args) => findCommaCharIndex(...args),
+        updateEditorAndSave: (content) => updateEditorAndSave(content),
+        offsetInput,
+        offsetInputDebounce,
         editorInput,
         applyHighlight,
         inputDebounce,
         setEditorCss,
+        draw,
     });
 });
 
@@ -1623,10 +1639,10 @@ function applyDecodeResult(result, simaiDataValue) {
     warningItems = syntaxCheckEnabled ? (result.warningItems || []) : [];
 
     updateDiagnosticBadge(errors.length, warnings.length);
-    if (syntaxCheckEnabled) {
+    /*if (syntaxCheckEnabled) {
         if (errors.length > 0) console.error('Decode dangerous:', errors);
         if (warnings.length > 0) console.warn('Decode warnings:', warnings);
-    }
+    }*/
     draw();
     // 立即以 Worker/同步解析出的最新 errorPositions / warningPositions 重新繪製編輯器紅/橘底線
     applyHighlight(editorInput.value, true);
@@ -1741,20 +1757,20 @@ warnEl.addEventListener('click', () => {
 
     const contentHTML =
         `<div class="diagnostic-popup">` +
-            `<div class="pm-tab-bar diagnostic-tabs" role="tablist">` +
-                `<button type="button" class="pm-tab-btn diagnostic-tab is-error${defaultTab === 'error' ? ' pm-tab-btn--active' : ''}" data-tab="error" role="tab" aria-selected="${defaultTab === 'error'}">` +
-                    `<span class="material-symbols-outlined errIcon" translate="no">dangerous</span>` +
-                    `<span>${errorsTabLabel}</span>` +
-                `</button>` +
-                `<button type="button" class="pm-tab-btn diagnostic-tab is-warning${defaultTab === 'warning' ? ' pm-tab-btn--active' : ''}" data-tab="warning" role="tab" aria-selected="${defaultTab === 'warning'}">` +
-                    `<span class="material-symbols-outlined warnIcon" translate="no">warning</span>` +
-                    `<span>${warningsTabLabel}</span>` +
-                `</button>` +
-            `</div>` +
-            `<div class="diagnostic-tab-panels">` +
-                `<div class="diagnostic-panel${defaultTab === 'error' ? ' active' : ''}" data-panel="error" role="tabpanel">${errorRowsHTML}</div>` +
-                `<div class="diagnostic-panel${defaultTab === 'warning' ? ' active' : ''}" data-panel="warning" role="tabpanel">${warningRowsHTML}</div>` +
-            `</div>` +
+        `<div class="pm-tab-bar diagnostic-tabs" role="tablist">` +
+        `<button type="button" class="pm-tab-btn diagnostic-tab is-error${defaultTab === 'error' ? ' pm-tab-btn--active' : ''}" data-tab="error" role="tab" aria-selected="${defaultTab === 'error'}">` +
+        `<span class="material-symbols-outlined errIcon" translate="no">dangerous</span>` +
+        `<span>${errorsTabLabel}</span>` +
+        `</button>` +
+        `<button type="button" class="pm-tab-btn diagnostic-tab is-warning${defaultTab === 'warning' ? ' pm-tab-btn--active' : ''}" data-tab="warning" role="tab" aria-selected="${defaultTab === 'warning'}">` +
+        `<span class="material-symbols-outlined warnIcon" translate="no">warning</span>` +
+        `<span>${warningsTabLabel}</span>` +
+        `</button>` +
+        `</div>` +
+        `<div class="diagnostic-tab-panels">` +
+        `<div class="diagnostic-panel${defaultTab === 'error' ? ' active' : ''}" data-panel="error" role="tabpanel">${errorRowsHTML}</div>` +
+        `<div class="diagnostic-panel${defaultTab === 'warning' ? ' active' : ''}" data-panel="warning" role="tabpanel">${warningRowsHTML}</div>` +
+        `</div>` +
         `</div>`;
 
     const popupCtx = popupWindow({
@@ -2727,6 +2743,7 @@ document.addEventListener('selectionchange', () => {
             });
         }
     }
+    updateUnfocusedSelectionHighlight();
 });
 
 editorInput.addEventListener('input', () => {
@@ -3728,7 +3745,8 @@ const updateVisualTime = (newTime) => {
     const clampedTime = Math.max(min, Math.min(max, newTime));
 
     playbackEngine.seekToRealTime(clampedTime);
-    if (settings.cursorFollow && !playbackEngine.isPlaying) {
+    const hasSelection = editorInput && editorInput.selectionStart !== editorInput.selectionEnd;
+    if (settings.cursorFollow && !playbackEngine.isPlaying && !hasSelection) {
         const point = getCharOffsetAtIndex(nowIndex);
         editorInput.selectionStart = point;
         editorInput.selectionEnd = point;
@@ -3839,6 +3857,10 @@ const currentNoteBgLayer = document.createElement('div');
 currentNoteBgLayer.className = 'current-note-bg-layer';
 currentNoteBgLayer.setAttribute('aria-hidden', 'true');
 const currentNotePillPool = [];
+const editorSelectionBgLayer = document.createElement('div');
+editorSelectionBgLayer.className = 'editor-selection-bg-layer';
+editorSelectionBgLayer.setAttribute('aria-hidden', 'true');
+const editorSelectionPillPool = [];
 const CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL = 50; // ms：限制背景高亮更新頻率，避免密集音符時造成幀率抖動
 const _sharedNoteDomRange = document.createRange();
 let _highlightTextIndex = [];
@@ -3850,6 +3872,7 @@ let _lastHighlightUpdateTime = 0;
 let _highlightThrottleTimer = null;
 let _editorAutoScrollRafId = null;
 let _editorAutoScrollTarget = null;
+let _lastUnfocusedSelKey = '';
 
 function cancelEditorAutoScroll() {
     if (_editorAutoScrollRafId !== null) {
@@ -3957,30 +3980,138 @@ function getTrimmedNoteRange(text, start, end) {
     return { start: s, end: e };
 }
 
+function hideHighlightPillPool(pool) {
+    for (let i = 0; i < pool.length; i++) {
+        const pill = pool[i];
+        if (pill._visible !== false) {
+            pill.style.display = 'none';
+            pill._visible = false;
+        }
+    }
+}
+
 function clearCurrentNoteHighlight() {
     if (_highlightThrottleTimer !== null) {
         clearTimeout(_highlightThrottleTimer);
         _highlightThrottleTimer = null;
     }
-    for (let i = 0; i < currentNotePillPool.length; i++) {
-        const pill = currentNotePillPool[i];
-        if (pill._visible !== false) {
-            pill.style.display = 'none';
-            pill._visible = false;
-        }
-    }
+    hideHighlightPillPool(currentNotePillPool);
     _lastHighlightedNoteIndex = -1;
 }
 
-function hideUnusedCurrentNotePills(fromIndex = 0) {
-    for (let i = fromIndex; i < currentNotePillPool.length; i++) {
-        const pill = currentNotePillPool[i];
+function hideUnusedHighlightPills(pool, fromIndex = 0) {
+    for (let i = fromIndex; i < pool.length; i++) {
+        const pill = pool[i];
         if (pill._visible !== false) {
             pill.style.display = 'none';
             pill._visible = false;
         }
     }
 }
+
+function renderHighlightBgPills(startOffset, endOffset, bgLayer, pillPool, pillClassName, padX = 2, shouldDrawPills = true) {
+    if (startOffset >= endOffset || _highlightTextIndex.length === 0) {
+        hideUnusedHighlightPills(pillPool, 0);
+        return null;
+    }
+
+    const startPos = findHighlightDomPos(startOffset, false);
+    const endPos = findHighlightDomPos(endOffset, true);
+    if (!startPos || !endPos) {
+        hideUnusedHighlightPills(pillPool, 0);
+        return null;
+    }
+
+    _sharedNoteDomRange.setStart(startPos.node, startPos.offset);
+    _sharedNoteDomRange.setEnd(endPos.node, endPos.offset);
+    const rawRects = _sharedNoteDomRange.getClientRects();
+
+    const mergedRects = [];
+    for (let i = 0; i < rawRects.length; i++) {
+        const r = rawRects[i];
+        if (r.width < 0.5 || r.height < 0.5) continue;
+        const prev = mergedRects[mergedRects.length - 1];
+        if (prev && Math.abs(r.top - prev.top) < 2 && Math.abs(r.bottom - prev.bottom) < 2 && r.left <= prev.right + 2) {
+            prev.right = Math.max(prev.right, r.right);
+            prev.top = Math.min(prev.top, r.top);
+            prev.bottom = Math.max(prev.bottom, r.bottom);
+            prev.width = prev.right - prev.left;
+            prev.height = prev.bottom - prev.top;
+        } else {
+            mergedRects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
+        }
+    }
+
+    const layerRect = highlightLayer.getBoundingClientRect();
+    const originX = layerRect.left + highlightLayer.clientLeft - highlightLayer.scrollLeft;
+    const originY = layerRect.top + highlightLayer.clientTop - highlightLayer.scrollTop;
+
+    if (shouldDrawPills) {
+        for (let i = 0; i < mergedRects.length; i++) {
+            let pill = pillPool[i];
+            if (!pill) {
+                pill = document.createElement('div');
+                pill.className = pillClassName;
+                pillPool.push(pill);
+                bgLayer.appendChild(pill);
+            }
+            const mr = mergedRects[i];
+            const x = Math.max(0, mr.left - originX - padX);
+            const y = Math.max(0, mr.top - originY);
+            const w = mr.width + padX * 2;
+            const h = mr.height;
+            if (pill._visible !== true) {
+                pill.style.display = 'block';
+                pill._visible = true;
+            }
+            const tf = `translate3d(${x}px, ${y}px, 0)`;
+            if (pill._tf !== tf) {
+                pill.style.transform = tf;
+                pill._tf = tf;
+            }
+            if (pill._w !== w) {
+                pill.style.width = `${w}px`;
+                pill._w = w;
+            }
+            if (pill._h !== h) {
+                pill.style.height = `${h}px`;
+                pill._h = h;
+            }
+        }
+        hideUnusedHighlightPills(pillPool, mergedRects.length);
+    } else {
+        hideUnusedHighlightPills(pillPool, 0);
+    }
+
+    return { mergedRects, originY };
+}
+
+function updateUnfocusedSelectionHighlight(force = false) {
+    const editorShown = editorContainer && editorContainer.style.display !== 'none' && !isVisualMode();
+    const isEditorFocused = document.activeElement === editorInput && (typeof document.hasFocus !== 'function' || document.hasFocus());
+    const selStart = editorInput?.selectionStart ?? 0;
+    const selEnd = editorInput?.selectionEnd ?? 0;
+    const shouldShow = Boolean(editorShown && !isEditorFocused && selStart < selEnd);
+
+    if (!shouldShow) {
+        if (_lastUnfocusedSelKey !== '') {
+            hideHighlightPillPool(editorSelectionPillPool);
+            _lastUnfocusedSelKey = '';
+        }
+        return;
+    }
+
+    const key = `${selStart}:${selEnd}:${_highlightTextIndex.length}:${editorInput.value.length}`;
+    if (!force && key === _lastUnfocusedSelKey) return;
+    _lastUnfocusedSelKey = key;
+
+    renderHighlightBgPills(selStart, selEnd, editorSelectionBgLayer, editorSelectionPillPool, 'editor-selection-highlight-pill', 1, true);
+}
+
+editorInput.addEventListener('focus', () => updateUnfocusedSelectionHighlight(true));
+editorInput.addEventListener('blur', () => updateUnfocusedSelectionHighlight(true));
+window.addEventListener('focus', () => updateUnfocusedSelectionHighlight(true));
+window.addEventListener('blur', () => updateUnfocusedSelectionHighlight(true));
 
 function updateCurrentNoteHighlight(force = false) {
     const highlightEnabled = settings.highlightCurrentNote !== false;
@@ -4034,80 +4165,18 @@ function updateCurrentNoteHighlight(force = false) {
 
     const rawRange = getNoteRangeAtIndex(nowIndex);
     const rangeOffsets = getTrimmedNoteRange(text, rawRange.start, rawRange.end);
-    if (rangeOffsets.start >= rangeOffsets.end || _highlightTextIndex.length === 0) {
-        hideUnusedCurrentNotePills(0);
-        return;
-    }
+    const result = renderHighlightBgPills(
+        rangeOffsets.start,
+        rangeOffsets.end,
+        currentNoteBgLayer,
+        currentNotePillPool,
+        'current-note-highlight-pill',
+        2,
+        highlightEnabled
+    );
+    if (!result) return;
 
-    const startPos = findHighlightDomPos(rangeOffsets.start, false);
-    const endPos = findHighlightDomPos(rangeOffsets.end, true);
-    if (!startPos || !endPos) {
-        hideUnusedCurrentNotePills(0);
-        return;
-    }
-
-    _sharedNoteDomRange.setStart(startPos.node, startPos.offset);
-    _sharedNoteDomRange.setEnd(endPos.node, endPos.offset);
-    const rawRects = _sharedNoteDomRange.getClientRects();
-
-    const mergedRects = [];
-    for (let i = 0; i < rawRects.length; i++) {
-        const r = rawRects[i];
-        if (r.width < 0.5 || r.height < 0.5) continue;
-        const prev = mergedRects[mergedRects.length - 1];
-        if (prev && Math.abs(r.top - prev.top) < 2 && Math.abs(r.bottom - prev.bottom) < 2 && r.left <= prev.right + 2) {
-            prev.right = Math.max(prev.right, r.right);
-            prev.top = Math.min(prev.top, r.top);
-            prev.bottom = Math.max(prev.bottom, r.bottom);
-            prev.width = prev.right - prev.left;
-            prev.height = prev.bottom - prev.top;
-        } else {
-            mergedRects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
-        }
-    }
-
-    const layerRect = highlightLayer.getBoundingClientRect();
-    const originX = layerRect.left + highlightLayer.clientLeft - highlightLayer.scrollLeft;
-    const originY = layerRect.top + highlightLayer.clientTop - highlightLayer.scrollTop;
-    const PAD_X = 2;
-
-    if (highlightEnabled) {
-        for (let i = 0; i < mergedRects.length; i++) {
-            let pill = currentNotePillPool[i];
-            if (!pill) {
-                pill = document.createElement('div');
-                pill.className = 'current-note-highlight-pill';
-                currentNotePillPool.push(pill);
-                currentNoteBgLayer.appendChild(pill);
-            }
-            const mr = mergedRects[i];
-            const x = Math.max(0, mr.left - originX - PAD_X);
-            const y = Math.max(0, mr.top - originY);
-            const w = mr.width + PAD_X * 2;
-            const h = mr.height;
-            if (pill._visible !== true) {
-                pill.style.display = 'block';
-                pill._visible = true;
-            }
-            const tf = `translate3d(${x}px, ${y}px, 0)`;
-            if (pill._tf !== tf) {
-                pill.style.transform = tf;
-                pill._tf = tf;
-            }
-            if (pill._w !== w) {
-                pill.style.width = `${w}px`;
-                pill._w = w;
-            }
-            if (pill._h !== h) {
-                pill.style.height = `${h}px`;
-                pill._h = h;
-            }
-        }
-        hideUnusedCurrentNotePills(mergedRects.length);
-    } else {
-        hideUnusedCurrentNotePills(0);
-    }
-
+    const { mergedRects, originY } = result;
     if (autoScrollEnabled && mergedRects.length > 0) {
         const firstRect = mergedRects[0];
         const noteTop = Math.max(0, firstRect.top - originY);
@@ -4146,8 +4215,9 @@ function renderHighlightNow(text) {
     _lastRenderedWarningKey = warningKey;
     highlightLayer.innerHTML = getHighlight(text, diagnosticRanges);
     rebuildHighlightTextIndex();
-    highlightLayer.prepend(currentNoteBgLayer);
+    highlightLayer.prepend(editorSelectionBgLayer, currentNoteBgLayer);
     updateCurrentNoteHighlight(true);
+    updateUnfocusedSelectionHighlight(true);
 }
 
 function applyHighlight(text, immediate = false) {
@@ -4578,6 +4648,7 @@ function resize(force = false) {
 
     draw();
     updateCurrentNoteHighlight(true);
+    updateUnfocusedSelectionHighlight(true);
     emitViewModeChanged();
 }
 
@@ -5109,9 +5180,9 @@ if (projectManagerButton) {
                 audioManager,
                 getMaidata: () => maidata,
                 setMaidata: (val) => {
-            maidata = val;
-            updateDifficultyIndicators();
-        },
+                    maidata = val;
+                    updateDifficultyIndicators();
+                },
                 maidataProcess,
                 setDataEmpty,
                 draw,

@@ -1406,6 +1406,26 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     will-change: transform;
 }
 
+#highlight-layer .editor-selection-bg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    z-index: -2;
+}
+
+#highlight-layer .editor-selection-highlight-pill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: rgba(46, 204, 113, 0.28);
+    border-radius: 3px;
+    pointer-events: none;
+    will-change: transform;
+}
+
 .utilityButton.expanded {
     width: 100%;
     height: 30px;

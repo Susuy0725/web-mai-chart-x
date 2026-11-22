@@ -1,4 +1,4 @@
-import { getSlideJudgeQueue } from './slidetables.js';
+import { getSlideJudgeQueue, getSlideStepState, getSlideBranchPath } from './slidetables.js';
 
 /**
  * 確保 note 的判定隊列 (judgeQueues) 已正確建立
@@ -46,12 +46,24 @@ export class SimulatedPlayController {
         this.slideQueue = [];
         this._slideAreasMap = new WeakMap();
         this._simulatTouchDuration = 0.06;
+        this._notesRef = null;
+        this._scanCursor = 0;
+        this._activeHolds = [];
+        this._activeHoldSet = new Set();
+        this._holdingTouchSet = new Set();
+        this._lastGlobalTime = -Infinity;
     }
 
     reset() {
         this.activeSensors.clear();
-        this.slideQueue = [];
+        this.slideQueue.length = 0;
         this._slideAreasMap = new WeakMap();
+        this._notesRef = null;
+        this._scanCursor = 0;
+        this._activeHolds.length = 0;
+        this._activeHoldSet.clear();
+        this._holdingTouchSet.clear();
+        this._lastGlobalTime = -Infinity;
     }
 
     getOrCreateSlideAreas(note, renderer) {
@@ -68,9 +80,42 @@ export class SimulatedPlayController {
         this.slideQueue.length = 0;
         if (!playing || timeControlSliding) return;
 
-        const normalPrefix = useButton ? 'K' : 'A';
+        if (this._notesRef !== notes || globalTime < this._lastGlobalTime - 0.05) {
+            this._notesRef = notes;
+            this._scanCursor = 0;
+            this._activeHolds.length = 0;
+            this._activeHoldSet.clear();
+        }
+        this._lastGlobalTime = globalTime;
 
-        for (let i = 0; i < notes.length; i++) {
+        const normalPrefix = useButton ? 'K' : 'A';
+        const touchDur = this._simulatTouchDuration;
+
+        // 1. 清理並彙整目前仍在長按期間的前置 Hold 狀態（O(activeHolds) 取代原本每音符掃全譜的 O(N^2)）
+        let holdingOuterMask = 0;
+        this._holdingTouchSet.clear();
+        for (let hIdx = this._activeHolds.length - 1; hIdx >= 0; hIdx--) {
+            const h = this._activeHolds[hIdx];
+            const hEnd = Math.max(h.holdDuration ?? 0, touchDur);
+            if (h.holdFinish || globalTime > h.time + hEnd + 0.1) {
+                this._activeHoldSet.delete(h);
+                this._activeHolds.splice(hIdx, 1);
+                continue;
+            }
+            if (h.triggered && !h.holdFinish && h.isHolding && globalTime < h.time + (h.holdDuration ?? 0)) {
+                if (h.type === 'touch') {
+                    this._holdingTouchSet.add(h.touchPos === 'C' ? 'C' : (h.touchPos + h.pos));
+                } else {
+                    holdingOuterMask |= (1 << h.pos);
+                }
+            }
+        }
+
+        // 先收錄掃描視窗內將要遇到的 Hold 長按狀態（包含已觸發或即將在本幀觸發後供同幀其他音符檢查）
+        let canAdvanceCursor = true;
+        const notesLen = notes.length;
+
+        for (let i = this._scanCursor; i < notesLen; i++) {
             const note = notes[i];
             const noteT = note.time - globalTime;
             const noteType = note.type;
@@ -79,59 +124,79 @@ export class SimulatedPlayController {
             if (noteT > 0.5) break;
 
             const isHoldNote = (note.isHold || noteType === 'hold' || (note.holdDuration !== undefined && note.holdDuration > 0));
+            const slideDelay = note.slideDelay ?? 0;
+            const slideDuration = note.slideDuration ?? 0;
+            const touchHoldEnd = (note.lastSlide || !note.nextSlide) ? 0.08 : 0.02;
+            const maxActiveSpan = isHoldNote
+                ? Math.max(note.holdDuration ?? 0, touchDur) + 0.1
+                : (noteType === 'slide' ? (slideDelay + slideDuration + touchHoldEnd + 0.1) : (touchDur + 0.1));
+
+            const isPastDone = (globalTime > note.time + maxActiveSpan) &&
+                (noteType === 'slide' ? (note.slideFinish || note.isMine || slideDuration <= 0) : (note.triggered || -noteT > touchDur));
+
+            if (canAdvanceCursor) {
+                if (isPastDone) {
+                    this._scanCursor = i + 1;
+                    continue;
+                }
+                if (isHoldNote && noteT < -0.5) {
+                    // 長按中的長條轉交 _activeHolds 管理，允許游標繼續越過大量短音符
+                    if (!this._activeHoldSet.has(note)) {
+                        this._activeHoldSet.add(note);
+                        this._activeHolds.push(note);
+                    }
+                    this._scanCursor = i + 1;
+                } else if (noteType === 'slide' && noteT < -0.5) {
+                    // 長 Slide 仍在滑行中時先處理本段，後續仍在滑動的留在下次檢查
+                    canAdvanceCursor = false;
+                } else {
+                    canAdvanceCursor = false;
+                }
+            }
 
             // 1. Tap / Star / 普通 Touch：在擊中時刻產生感應器輸入並觸發判定
             if (!isHoldNote && (noteType === 'tap' || noteType === 'touch')) {
                 const sensorId = (noteType === 'touch')
                     ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
                     : (normalPrefix + note.pos);
-                if (noteT <= 0 && -noteT <= this._simulatTouchDuration) {
+                if (noteT <= 0 && -noteT <= touchDur) {
                     this.activeSensors.add(sensorId);
-                }
 
-                // 檢查是否有同鍵位的 Hold 正在進行長按 (手指被佔用，未曾抬手)
-                // 例如 {8}1h[4:1],1, 在 1h 進行期間，手指一直在長按 1 號鍵，無法在不抬手的情況下點擊 Tap 1！
-                let isOccupiedByHolding = false;
-                for (let k = 0; k < notes.length; k++) {
-                    const other = notes[k];
-                    if (other === note || !other.triggered || other.holdFinish) continue;
-                    if (!other.isHolding) continue;
-                    if (noteType === 'touch') {
-                        const noteSensor = (note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos);
-                        const otherSensor = (other.touchPos === 'C') ? 'C' : (other.touchPos + other.pos);
-                        if (other.type === 'touch' && otherSensor === noteSensor) {
-                            isOccupiedByHolding = true;
-                            break;
-                        }
-                    } else {
-                        const otherIsHold = (other.type !== 'touch') && (other.holdDuration > 0 || other.isHold || other.type === 'hold');
-                        if (otherIsHold && other.pos === note.pos) {
-                            isOccupiedByHolding = true;
-                            break;
-                        }
-                    }
-                }
+                    if (!note.triggered && onHit) {
+                        const isOccupiedByHolding = (noteType === 'touch')
+                            ? this._holdingTouchSet.has(sensorId)
+                            : ((holdingOuterMask & (1 << note.pos)) !== 0);
 
-                if (!isOccupiedByHolding) {
-                    if (!note.triggered && noteT <= 0 && -noteT <= this._simulatTouchDuration && onHit) {
-                        onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
+                        if (!isOccupiedByHolding) {
+                            onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
+                        }
                     }
                 }
             }
 
             // 2. Hold & TouchHold：在到達時刻觸發判定，並在長按期間持續產生感應器輸入
-            // （短 Hold 如 1h、1h[1:0] 的 holdDuration 為 1e-4，保障至少 touchDuration / 0.15s 觸發與感應窗口）
             if (isHoldNote) {
                 const sensorId = (noteType === 'touch')
                     ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
                     : (normalPrefix + note.pos);
-                const holdEnd = Math.max(note.holdDuration, this._simulatTouchDuration); // safe margin
+                const holdEnd = Math.max(note.holdDuration ?? 0, touchDur);
 
                 if (noteT <= 0 && -noteT <= holdEnd) {
                     this.activeSensors.add(sensorId);
                 }
-                if (!note.triggered && noteT <= 0 && -noteT <= Math.max(note.holdDuration, this._simulatTouchDuration) && onHit) {
+                if (!note.triggered && noteT <= 0 && -noteT <= holdEnd && onHit) {
                     onHit(sensorId, forcePerfect ? 0 : -noteT + randomOffset);
+                }
+                if (note.triggered && !note.holdFinish && note.isHolding && globalTime < note.time + (note.holdDuration ?? 0)) {
+                    if (!this._activeHoldSet.has(note)) {
+                        this._activeHoldSet.add(note);
+                        this._activeHolds.push(note);
+                    }
+                    if (noteType === 'touch') {
+                        this._holdingTouchSet.add(sensorId);
+                    } else {
+                        holdingOuterMask |= (1 << note.pos);
+                    }
                 }
             }
 
@@ -166,54 +231,66 @@ export class SimulatedPlayController {
                     }
 
                     const queues = ensureSlideJudgeQueues(note, renderer);
+                    // 末段或獨立 slide 的最後感應區於基準判定時機 judgeTiming (= slideDuration * (1 - tableConst)) 按下，
+                    // 與玩家真實判定基準一致；連鎖前段則延伸至整段結尾平滑交接
+                    const isGroupPartEnd = note.lastSlide || !note.nextSlide;
                     const tableConst = note.tableConst ?? 0.18;
-                    // 終點到達時刻：對齊基準判定時間 judgeTiming = startTiming + slideDuration * (1 - tableConst)
-                    const arriveEndTime = Math.max(0.01, slideDuration * (1 - tableConst));
+                    const arriveEndTime = Math.max(0.001, isGroupPartEnd ? (slideDuration * (1 - tableConst)) : slideDuration);
                     // 連鎖最後一段或獨立 slide 在摸到終點後停留 0.08 秒，非最後一段在交接時只保留 0.02 秒
-                    const touchHoldEnd = (note.lastSlide || !note.nextSlide) ? 0.08 : 0.02;
+                    const touchHoldEnd = isGroupPartEnd ? 0.08 : 0.02;
 
                     // 記錄至當前活耀的 Slide 隊列
-                    if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
+                    if (slideT >= 0 && slideT <= arriveEndTime + touchHoldEnd) {
                         this.slideQueue.push(note);
                     }
 
-                    if (slideT >= 0 && slideT <= slideDuration + touchHoldEnd) {
+                    if (slideT >= 0 && slideT <= arriveEndTime + touchHoldEnd) {
                         const totalCount = note._totalAreasCount || 1;
                         const progress = Math.min(1, Math.max(0, slideT / arriveEndTime));
 
                         if (totalCount <= 1) {
-                            // 單一感應區 Slide
-                            for (let b = 0; b < queues.length; b++) {
-                                const q = queues[b];
-                                if (q.length > 0) {
-                                    const area = q[0];
-                                    if (area && area.areas) {
-                                        for (let s = 0; s < area.areas.length; s++) {
-                                            this.activeSensors.add(area.areas[s]);
-                                        }
-                                        if (!note._singleAreaTriggered && onHit) {
-                                            note._singleAreaTriggered = true;
+                            // 單一感應區 Slide：等待結束時刻才觸發最後一個（唯一）感應區
+                            if (progress >= 1.0) {
+                                for (let b = 0; b < queues.length; b++) {
+                                    const q = queues[b];
+                                    if (q.length > 0) {
+                                        const area = q[0];
+                                        if (area && area.areas) {
                                             for (let s = 0; s < area.areas.length; s++) {
-                                                onHit(area.areas[s]);
+                                                this.activeSensors.add(area.areas[s]);
+                                            }
+                                            if (!note._singleAreaTriggered && onHit) {
+                                                note._singleAreaTriggered = true;
+                                                for (let s = 0; s < area.areas.length; s++) {
+                                                    onHit(area.areas[s]);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         } else {
-                            // 多步驟 Slide：以平滑手指軌跡推進各感應區
-                            const floatIdx = progress * (totalCount - 1);
-                            const curIdx = Math.min(totalCount - 1, Math.floor(floatIdx));
+                            // 多步驟 Slide：依路徑幾何非線性映射推進各感應區（視覺勻速滑動，最後一區於 progress = 1.0 按下）
+                            const branchCount = queues.length;
+                            const repBranchIdx = (branchCount === 3) ? 1 : 0;
+                            const repQueue = queues[repBranchIdx];
+                            const repFullQ = (note._fullJudgeQueues && note._fullJudgeQueues[repBranchIdx])
+                                ? note._fullJudgeQueues[repBranchIdx]
+                                : (note._fullJudgeQueue || repQueue);
+                            const repPath = getSlideBranchPath(note, repBranchIdx, branchCount);
+                            const repState = getSlideStepState(repFullQ, repPath, progress);
 
                             // 當手指推進至新感應區時，觸發該感應區的剛劃入輸入事件 (真實影響同位置 Tap/Touch 判定)
-                            if (note._lastSimStepIdx !== curIdx) {
-                                note._lastSimStepIdx = curIdx;
+                            if (note._lastSimStepIdx !== repState.curIdx) {
+                                note._lastSimStepIdx = repState.curIdx;
                                 if (onHit) {
-                                    for (let b = 0; b < queues.length; b++) {
+                                    for (let b = 0; b < branchCount; b++) {
                                         const queue = queues[b];
                                         const fullQ = (note._fullJudgeQueues && note._fullJudgeQueues[b]) ? note._fullJudgeQueues[b] : (note._fullJudgeQueue || queue);
-                                        if (curIdx < fullQ.length) {
-                                            const stepArea = fullQ[curIdx];
+                                        const bPath = getSlideBranchPath(note, b, branchCount);
+                                        const bState = (b === repBranchIdx) ? repState : getSlideStepState(fullQ, bPath, progress);
+                                        if (bState.curIdx < fullQ.length) {
+                                            const stepArea = fullQ[bState.curIdx];
                                             if (stepArea && stepArea.areas) {
                                                 for (let s = 0; s < stepArea.areas.length; s++) {
                                                     onHit(stepArea.areas[s]);
@@ -224,7 +301,7 @@ export class SimulatedPlayController {
                                 }
                             }
 
-                            for (let b = 0; b < queues.length; b++) {
+                            for (let b = 0; b < branchCount; b++) {
                                 const queue = queues[b];
                                 // 若分支隊列已經被處理完 (清空)，直接忽略
                                 if (!queue || queue.length === 0) continue;
@@ -232,6 +309,10 @@ export class SimulatedPlayController {
                                 const fullQ = (note._fullJudgeQueues && note._fullJudgeQueues[b]) ? note._fullJudgeQueues[b] : (note._fullJudgeQueue || queue);
                                 const branchTotal = fullQ.length;
                                 const processedCount = branchTotal - queue.length;
+                                const bPath = getSlideBranchPath(note, b, branchCount);
+                                const { curIdx, frac } = (b === repBranchIdx)
+                                    ? repState
+                                    : getSlideStepState(fullQ, bPath, progress);
 
                                 // 1. 當前手指區域：若已在隊列中被處理 (curIdx < processedCount)，則忽略！
                                 if (curIdx >= processedCount && curIdx < branchTotal) {
@@ -243,8 +324,7 @@ export class SimulatedPlayController {
                                     }
                                 }
 
-                                // 2. 兩區交接：上一區若已被處理 (curIdx - 1 < processedCount)，則忽略！
-                                const frac = floatIdx - curIdx;
+                                // 2. 兩區交接：僅在非最後一區之前交疊，絕不在 progress < 1.0 時提前觸發最後一個感應區
                                 if (progress < 1.0 && curIdx > 0 && frac < 0.35) {
                                     if (curIdx - 1 >= processedCount) {
                                         const prevArea = fullQ[curIdx - 1];
@@ -254,7 +334,7 @@ export class SimulatedPlayController {
                                             }
                                         }
                                     }
-                                } else if (curIdx < branchTotal - 1 && frac > 0.65) {
+                                } else if (progress < 1.0 && curIdx < branchTotal - 2 && frac > 0.65) {
                                     if (curIdx + 1 >= processedCount) {
                                         const nextArea = fullQ[curIdx + 1];
                                         if (nextArea && nextArea.areas) {
@@ -265,7 +345,7 @@ export class SimulatedPlayController {
                                     }
                                 }
 
-                                // 3. 終點停留：終點若已被處理 (branchTotal - 1 < processedCount)，則忽略！
+                                // 3. 終點停留：僅於 Slide 結束時刻 (progress >= 1.0) 按下最後一個感應區
                                 if (progress >= 1.0) {
                                     if (branchTotal - 1 >= processedCount) {
                                         const lastArea = fullQ[branchTotal - 1];
@@ -280,8 +360,8 @@ export class SimulatedPlayController {
                         }
                     }
 
-                    // 若已超時仍未標記完成，強制清空隊列保證 main.js 結算
-                    if (slideT >= arriveEndTime + 0.05 && !note.slideFinish) {
+                    // 若已超過結束停留窗口仍未標記完成，強制清空隊列保證 main.js 結算
+                    if (slideT >= arriveEndTime + touchHoldEnd && !note.slideFinish) {
                         for (let b = 0; b < queues.length; b++) {
                             queues[b].length = 0;
                         }

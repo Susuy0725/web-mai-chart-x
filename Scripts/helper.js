@@ -45,6 +45,7 @@ const coreImageKeys = [
     'outline',
     'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc', 'SlideArc',
+    'EachLine1', 'EachLine2', 'EachLine3', 'EachLine4',
     'hold', 'hold_break', 'hold_each', 'hold_ex',
     'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
@@ -603,11 +604,21 @@ export function popupWindow({
 
     let closeBtn = null;
     if (!unclosable) {
-        backdrop.onclick = (e) => {
-            // 注意：onclick 屬性處理器若回傳 false 會呼叫 preventDefault，
-            // 導致彈窗內核取方塊等原生控制項無法切換，故此處不可回傳值
-            if (e.target === backdrop) closePopup();
-        };
+        let pointerDownOnBackdrop = false;
+        backdrop.addEventListener('pointerdown', (e) => {
+            pointerDownOnBackdrop = (e.target === backdrop);
+        });
+        backdrop.addEventListener('pointercancel', () => {
+            pointerDownOnBackdrop = false;
+        });
+        backdrop.addEventListener('click', (e) => {
+            // 必須從 backdrop 本身按下並於 backdrop 放開才關閉，避免彈窗內拖曳移出至背景時誤觸關閉
+            const startedOnBackdrop = pointerDownOnBackdrop;
+            pointerDownOnBackdrop = false;
+            if (startedOnBackdrop && e.target === backdrop) {
+                closePopup();
+            }
+        });
         closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'popup-close-btn';

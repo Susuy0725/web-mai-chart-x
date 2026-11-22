@@ -182,6 +182,8 @@
                         data-i18n="findReplace.replaceAll">全部取代</button>
                 </div>
             </div>
+            <canvas id="editor-highlight-canvas" aria-hidden="true"
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0;"></canvas>
             <div id="highlight-layer" class="editor-layer" inert aria-disabled="true" aria-hidden="true"
                 contenteditable="false"></div>
             <textarea id="editor-input" class="editor-layer" spellcheck="false" data-i18n="textarea.placeholder"

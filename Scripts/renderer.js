@@ -150,6 +150,8 @@ for (let y = -50; y <= 50; y += HANABI_GRID_STEP) {
     }
 }
 const HANABI_GRID_BUCKETS = [[], [], [], [], []];
+const HANABI_SECTOR_COLOR_IDX = new Int32Array(15);
+const HANABI_COLOR_GRADIENTS = new Array(5);
 
 // 確定性 PRNG 預生成煙霧、四角星與星塵表（確保時間軸拖曳/影片匯出幀一致）
 function createHanabiPrng(seed) {
@@ -534,6 +536,80 @@ export class SimaiRenderer {
         if (isBreak) return this.images["BreakArc"];
         if (isDouble) return this.images["EachArc"];
         return this.images[isStar ? "SlideArc" : "NormalArc"];
+    }
+
+    getEachLineImage(steps) {
+        if (steps < 1 || steps > 4 || !this.images) return null;
+        return this.images[`EachLine${steps}`] || null;
+    }
+
+    isNoteHiddenForEachGuide(s, noteT) {
+        return s.type === "hold" ? (-noteT > s.holdDuration) : (noteT <= 0);
+    }
+
+    /**
+     * 計算同一時刻多個外圈音符對應的 Each 輔助弧線 ({ startPos, steps })
+     * 參照 sdgb NoteBase.GetEachAngle 與 NoteGuide.Initialize：
+     * - steps 1~3 對應 EachLine1~3 (45°/90°/135° 順時針弧)
+     * - steps 4 對應 EachLine4 (180° 對位全環 360°)
+     */
+    _resolveEachLineSpec(groupNotes) {
+        if (!groupNotes || groupNotes.length < 2) return null;
+        let posMask = 0;
+        const uniquePos = [];
+        // buckets 為反序推入，從末端起算可保留原始譜面首音符作為 anchor
+        for (let i = groupNotes.length - 1; i >= 0; i--) {
+            const p = groupNotes[i].pos | 0;
+            if (p >= 1 && p <= 8 && !(posMask & (1 << p))) {
+                posMask |= (1 << p);
+                uniquePos.push(p);
+            }
+        }
+        if (uniquePos.length < 2) return null;
+
+        // 先找最小順時針包覆弧 (maxGap 最大補角)，讓 2 押與 <=180° 的多押一律完整相連且不因書寫順序斷裂
+        const sorted = uniquePos.slice().sort((a, b) => a - b);
+        let maxGap = -1;
+        let maxGapIdx = 0;
+        for (let i = 0; i < sorted.length; i++) {
+            const curr = sorted[i];
+            const next = sorted[(i + 1) % sorted.length];
+            const gap = (next - curr + 8) % 8;
+            if (gap > maxGap) {
+                maxGap = gap;
+                maxGapIdx = i;
+            }
+        }
+
+        const cwSteps = 8 - maxGap;
+        const cwStart = sorted[(maxGapIdx + 1) % sorted.length];
+        if (cwSteps >= 1 && cwSteps <= 3) {
+            return { startPos: cwStart, steps: cwSteps };
+        }
+        if (cwSteps === 4) {
+            return { startPos: 1, steps: 4 };
+        }
+
+        // 跨越超過 180° 的 3+ 押 (如 1/3/6、1/4/5)：參照 NoteBase.GetEachAngle 由首顆音符起算最大有號角距
+        const anchor = uniquePos[0];
+        let bestSignedSteps = 0;
+        for (let i = 1; i < uniquePos.length; i++) {
+            const delta = (uniquePos[i] - anchor + 8) % 8;
+            const signedSteps = (delta <= 4) ? delta : -(8 - delta);
+            if (Math.abs(signedSteps) > Math.abs(bestSignedSteps)) {
+                bestSignedSteps = signedSteps;
+            }
+        }
+        if (bestSignedSteps === 0) return null;
+        if (Math.abs(bestSignedSteps) === 4) {
+            return { startPos: 1, steps: 4 };
+        }
+        if (bestSignedSteps > 0) {
+            return { startPos: anchor, steps: bestSignedSteps };
+        }
+        const steps = -bestSignedSteps;
+        const startPos = ((anchor - 1 - steps + 8) % 8) + 1;
+        return { startPos, steps };
     }
 
     getTapImage(isMine, isBreak, isDouble) {
@@ -1130,16 +1206,18 @@ export class SimaiRenderer {
         const endPos = Number(eff.endPos || eff.startPos || 1);
         const slideType = String(eff.slideType || '');
         const raw = String(eff.rawContent || slideType);
-        const showCP = (this.settings.showBreakCriticalPerfect !== false) && (this.settings.showCriticalPerfect !== false);
+        const showCP = eff.isBreak
+            ? ((this.settings.showBreakCriticalPerfect !== false) && (this.settings.showCriticalPerfect !== false))
+            : (this.settings.showCriticalPerfect !== false);
 
         // 1. 判斷 Shape: 'curv', 'str', 'wifi'
-        // 參照 MajdataPlay: NoteHelper.GetSlideOKShapeFromSlideType
+        // 參照 SlideRoot.cs EndSlideType / MajdataPlay NoteHelper.GetSlideOKShapeFromSlideType
         let shape = 'str';
         const isWifi = !!(eff.isWifi || slideType === 'w');
         const isCurv = !isWifi && (
-            slideType === '^' || slideType === '<' || slideType === '>' ||
-            slideType.includes('circle') ||
-            raw.includes('^') || raw.includes('<') || raw.includes('>')
+            slideType
+                ? (slideType === '^' || slideType === '<' || slideType === '>' || slideType.includes('circle'))
+                : (raw.includes('^') || raw.includes('<') || raw.includes('>'))
         );
 
         if (isWifi) {
@@ -1160,11 +1238,11 @@ export class SimaiRenderer {
         let isJustR = false;
         if (isWifi) {
             isJustR = isUpperHalf(endPos);
-        } else if (slideType === '>' || raw.includes('>')) {
+        } else if (slideType === '>' || (!slideType && raw.includes('>'))) {
             isJustR = isUpperHalf(startPos);
-        } else if (slideType === '<' || raw.includes('<')) {
+        } else if (slideType === '<' || (!slideType && raw.includes('<'))) {
             isJustR = !isUpperHalf(startPos);
-        } else if (slideType === '^' || raw.includes('^')) {
+        } else if (slideType === '^' || (!slideType && raw.includes('^'))) {
             const diff = (endPos - startPos + 8) % 8;
             isJustR = (diff < 4);
         } else {
@@ -1309,20 +1387,21 @@ export class SimaiRenderer {
                     const slideFlip = (imgKey && (imgKey.includes('_l') || imgKey.includes('_d')));
                     const isCruvSlide = (imgKey && (imgKey.includes('curv')));
                     const strSlideOffset = this.getSlideOffset(eff, slideFlip, isCruvSlide);
+                    const slideDrawX = isSlide ? (!slideFlip * -judgeWidth + (slideFlip - 0.5) * strSlideOffset.x) : -judgeWidth / 2;
+                    const slideDrawY = -judgeHeight / 2 + isSlide * ((isCruvSlide ? -2.7 : 2) + strSlideOffset.y);
                     ctx.save();
                     ctx.rotate(isSlide ? Math.PI * (isWifiEff * 0.5 + slideFlip + isCruvSlide * (slideFlip ? 0.15 : -0.145)) : 0);
-                    ctx.drawImage(img,
-                        (isSlide ? (!slideFlip * -judgeWidth + (slideFlip - 0.5) * strSlideOffset.x) : -judgeWidth / 2),
-                        -judgeHeight / 2 + isSlide * ((isCruvSlide ? -2.7 : 2) + strSlideOffset.y),
-
-                        judgeWidth, judgeHeight);
+                    ctx.drawImage(img, slideDrawX, slideDrawY, judgeWidth, judgeHeight);
+                    if (isSlideJust && typeof this.drawSlideJustBreakOverlay === 'function') {
+                        this.drawSlideJustBreakOverlay(ctx, eff, img, slideDrawX, slideDrawY, judgeWidth, judgeHeight, elapsed);
+                    }
                     ctx.restore();
                 }
             }
 
             // 渲染 FAST / LATE 副標籤
-            // 注意：Slide 專屬 JUST 圖片 (如 just_curv_l_fast_gr) 本身已印有 FAST/LATE 字樣，若為 Slide JUST 則跳過副標籤繪製
-            const showFastLate = !isSlideJust && (this.settings.showFastLate !== false) && !!eff.subGrade;
+            // 注意：MISS 以及 Slide 專屬 JUST 圖片 (如 just_curv_l_fast_gr，本身已印有 FAST/LATE) 均不繪製副標籤
+            const showFastLate = !isSlideJust && (eff.grade !== 'MISS') && (this.settings.showFastLate !== false) && !!eff.subGrade;
             if (showFastLate) {
                 const subKey = eff.subGrade === 'FAST' ? 'fast' : 'late';
                 const subImg = (images && images[subKey]) ? images[subKey] : null;
@@ -1555,7 +1634,8 @@ export class SimaiRenderer {
             const p2 = Math.min(0.98, Math.max(p1, (innerStart + 10) / rayRadius));
             const p3 = Math.min(0.99, Math.max(p2, 0.76));
 
-            const colorGradients = RICH_HANABI_COLOR_DATA.map((c) => {
+            for (let ci = 0; ci < 5; ci++) {
+                const c = RICH_HANABI_COLOR_DATA[ci];
                 const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rayRadius);
                 grad.addColorStop(0, p1 > 0.01 ? c.transparent : c.baseInner);
                 if (p1 > 0.01) {
@@ -1564,8 +1644,8 @@ export class SimaiRenderer {
                 grad.addColorStop(p2, c.baseMid);
                 grad.addColorStop(p3, c.baseMid);
                 grad.addColorStop(1, c.transparent);
-                return grad;
-            });
+                HANABI_COLOR_GRADIENTS[ci] = grad;
+            }
 
             const slices = HANABI_SLICES;
             const tOffset = invt * 0.1;
@@ -1574,7 +1654,6 @@ export class SimaiRenderer {
             ctx.globalAlpha = rayVisibleAlpha * 0.92;
 
             const colorStep = Math.floor(noteT * 6.66);
-            const sectorColorIdx = new Int32Array(15);
 
             for (let sIdx = 0; sIdx < 15; sIdx++) {
                 const slice = sIdx * 2 + 1;
@@ -1583,10 +1662,10 @@ export class SimaiRenderer {
                 const a1 = centerAngle + halfSector;
                 const cIdx = (((sIdx - colorStep) % 5) + 5) % 5;
 
-                sectorColorIdx[sIdx] = cIdx;
+                HANABI_SECTOR_COLOR_IDX[sIdx] = cIdx;
 
                 ctx.beginPath();
-                ctx.fillStyle = colorGradients[cIdx];
+                ctx.fillStyle = HANABI_COLOR_GRADIENTS[cIdx];
                 ctx.moveTo(0, 0);
                 ctx.lineTo(Math.cos(a0) * rayRadius, Math.sin(a0) * rayRadius);
                 ctx.lineTo(Math.cos(a1) * rayRadius, Math.sin(a1) * rayRadius);
@@ -1631,7 +1710,7 @@ export class SimaiRenderer {
                     }
 
                     if (size > 0.05) {
-                        const cIdx = sectorColorIdx[sliceIdx >> 1];
+                        const cIdx = HANABI_SECTOR_COLOR_IDX[sliceIdx >> 1];
                         HANABI_GRID_BUCKETS[cIdx].push(dot.x, dot.y, size);
                     }
                 }
@@ -2793,6 +2872,50 @@ export class SimaiRenderer {
 
         const { a, b, c, d, e, f } = ctx.getTransform();
 
+        let eachTimeGroups = null;
+        if (this.settings.showEachLine !== false && notes.length > 1) {
+            eachTimeGroups = this._eachTimeGroups || (this._eachTimeGroups = new Map());
+            eachTimeGroups.clear();
+            for (let i = 0; i < notes.length; i++) {
+                const n = notes[i];
+                if (n.isMine) continue;
+                const nt = n.time - globalTime;
+                if (this.isNoteHiddenForEachGuide(n, nt)) continue;
+                const timeKey = Math.round(n.time * 1000);
+                let entry = eachTimeGroups.get(timeKey);
+                if (!entry) {
+                    entry = { notes: [n], drawn: false, spec: null, resolved: false };
+                    eachTimeGroups.set(timeKey, entry);
+                } else {
+                    entry.notes.push(n);
+                }
+            }
+        }
+
+        const drawGroupEachLineIfNeeded = (s, displayT, currentScale) => {
+            if (!eachTimeGroups || s.isMine) return;
+            const timeKey = Math.round(s.time * 1000);
+            const entry = eachTimeGroups.get(timeKey);
+            if (!entry || entry.drawn || entry.notes.length < 2) return;
+            entry.drawn = true;
+            if (!entry.resolved) {
+                entry.resolved = true;
+                entry.spec = this._resolveEachLineSpec(entry.notes);
+            }
+            const spec = entry.spec;
+            if (!spec) return;
+            const eachLineImg = this.getEachLineImage(spec.steps);
+            if (imgNotExists(eachLineImg)) return;
+
+            const rotAngle = (spec.steps === 4) ? 0 : ((spec.startPos - 1) * (Math.PI / 4));
+            if (rotAngle !== 0) ctx.rotate(rotAngle);
+            if (currentScale !== 1) ctx.globalAlpha = currentScale;
+            // EachLine1~4.png 為 980x980 紋理且圓環半徑約 479.5px，以 980/479.5 倍縮放對齊 innerCirleBase
+            this.drawImgAtcenter(eachLineImg, displayT * innerCirleBase * (980 / 479.5));
+            if (currentScale !== 1) ctx.globalAlpha = 1;
+            ctx.setTransform(a, b, c, d, e, f);
+        };
+
         for (let i = 0; i < notes.length; i++) {
             const s = notes[i];
             const isHold = s.type === "hold";
@@ -2821,7 +2944,8 @@ export class SimaiRenderer {
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
                 const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
 
-                // 1. 導引弧 (Arc)
+                // 1. 導引弧 (Arc & EachLine)
+                drawGroupEachLineIfNeeded(s, displayT, currentScale);
                 ctx.rotate(posInfo.rot);
                 if (currentScale !== 1) ctx.globalAlpha = currentScale;
                 this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
@@ -2876,7 +3000,8 @@ export class SimaiRenderer {
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
                 const size = baseSize * currentScale;
 
-                // 1. 導引弧 (Arc)
+                // 1. 導引弧 (Arc & EachLine)
+                drawGroupEachLineIfNeeded(s, displayT, currentScale);
                 ctx.rotate(posInfo.rot);
                 if (currentScale !== 1) ctx.globalAlpha = currentScale;
                 this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
@@ -3187,10 +3312,19 @@ export class SimaiRenderer {
         this.drawSlideStar(s);
     }
 
-    getSensorIdAtPoint(x, y, ignoreD = false) {
-        const roundX = (x * 10 | 0) * 0.1;
-        const roundY = (y * 10 | 0) * 0.1;
-        const cacheKey = ((roundX * 1000 + roundY) | 0) * (ignoreD ? -1 : 1);
+    getOuterSensorPrefix() {
+        return 'A';
+    }
+
+    shouldHideSlideArrowsBySensor() {
+        return this.settings.slideArrowHideBySensor !== false;
+    }
+
+    _resolveSensorIdAtPoint(x, y, ignoreD = false, outerPrefix = 'A') {
+        const ix = (x * 10) | 0;
+        const iy = (y * 10) | 0;
+        const isK = outerPrefix === 'K';
+        const cacheKey = ((ix + 4096) * 32768) + ((iy + 4096) * 4) + (ignoreD ? 2 : 0) + (isK ? 1 : 0);
         if (!this._sensorPointCache) this._sensorPointCache = new Map();
         if (this._sensorPointCache.has(cacheKey)) {
             return this._sensorPointCache.get(cacheKey);
@@ -3205,7 +3339,7 @@ export class SimaiRenderer {
             if (normAngle < 0) normAngle += Math.PI * 2;
             const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
             if (keyNum >= 1 && keyNum <= 8) {
-                const outerKeyId = 'A' + keyNum;
+                const outerKeyId = outerPrefix + keyNum;
                 if (this._sensorPointCache.size > 1000) this._sensorPointCache.clear();
                 this._sensorPointCache.set(cacheKey, outerKeyId);
                 return outerKeyId;
@@ -3245,11 +3379,32 @@ export class SimaiRenderer {
 
         let resultId = insideId || strokeId;
 
+        // 2. 若未落在內圈多邊形內，但半徑已靠近外圈（r >= innerCirleBase * 0.95），回退判定為外圈感應區
+        if (!resultId && r >= innerCirleBase * 0.95 && r <= innerCirleBase * 2.8) {
+            let normAngle = Math.atan2(y, x) + Math.PI / 2;
+            if (normAngle < 0) normAngle += Math.PI * 2;
+            const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
+            if (keyNum >= 1 && keyNum <= 8) {
+                resultId = (r >= innerCirleBase * 1.05) ? (outerPrefix + keyNum) : ('A' + keyNum);
+            }
+        }
+
         if (this._sensorPointCache.size > 1000) {
             this._sensorPointCache.clear();
         }
         this._sensorPointCache.set(cacheKey, resultId);
         return resultId;
+    }
+
+    getSensorIdAtPoint(x, y, ignoreD = false) {
+        return this._resolveSensorIdAtPoint(x, y, ignoreD, this.getOuterSensorPrefix());
+    }
+
+    /**
+     * 取得觸控螢幕感應區代號（一律將外圈回傳為 A1~A8，供 Slide 路徑與箭頭蒐集使用）
+     */
+    getTouchSensorIdAtPoint(x, y, ignoreD = true) {
+        return this._resolveSensorIdAtPoint(x, y, ignoreD, 'A');
     }
 
     ensurePathSensorMap(recorder) {
@@ -3263,7 +3418,7 @@ export class SimaiRenderer {
             const ratio = i / numSamples;
             const pt = recorder.getPointAt(ratio);
             const dist = ratio * totalLen;
-            const sensorId = this.getSensorIdAtPoint(pt.x, pt.y, true);
+            const sensorId = this.getTouchSensorIdAtPoint(pt.x, pt.y, true);
             samples[i] = { dist, sensorId };
         }
         recorder._sensorMap = samples;
@@ -3273,7 +3428,13 @@ export class SimaiRenderer {
     ensureArrowCache(recorder, typew, spacing = 4.36) {
         const key = typew ? '_wArrowCache' : '_stdArrowCache';
         const spacingKey = key + '_spacing';
-        if (recorder[key] && Math.abs((recorder[spacingKey] ?? -1) - spacing) < 1e-5) {
+        const hideBySensorKey = key + '_hideBySensor';
+        const hideBySensor = this.shouldHideSlideArrowsBySensor();
+        if (
+            recorder[key] &&
+            Math.abs((recorder[spacingKey] ?? -1) - spacing) < 1e-5 &&
+            recorder[hideBySensorKey] === hideBySensor
+        ) {
             return recorder[key];
         }
 
@@ -3300,7 +3461,7 @@ export class SimaiRenderer {
                 dh = 8.46;
             }
 
-            const sensorId = this.settings.slideArrowHideBySensor !== false ? this.getSensorIdAtPoint(pt.x, pt.y, true) : null;
+            const sensorId = hideBySensor ? this.getTouchSensorIdAtPoint(pt.x, pt.y, true) : null;
 
             arrows.push({
                 dist,
@@ -3318,6 +3479,7 @@ export class SimaiRenderer {
 
         recorder[key] = arrows;
         recorder[spacingKey] = spacing;
+        recorder[hideBySensorKey] = hideBySensor;
         return arrows;
     }
 
@@ -3330,13 +3492,15 @@ export class SimaiRenderer {
         const size = this.settings.noteBaseSize * 0.0909;
         const totalLen = recorder.totalLength;
         const starDist = starProgress * totalLen;
+        const hideBySensor = this.shouldHideSlideArrowsBySensor();
         let currentStarSensorId = null;
 
-        if (starProgress > 0 && this.settings.slideArrowHideBySensor !== false) {
+        if (starProgress > 0 && hideBySensor) {
             const pt = recorder.getPointAt(starProgress);
-            currentStarSensorId = this.getSensorIdAtPoint(pt.x, pt.y, true);
+            currentStarSensorId = this.getTouchSensorIdAtPoint(pt.x, pt.y, true);
         }
 
+        const opacity = isIllegal ? 1 : br;
         const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
         const isTinted = isIllegal;
 

@@ -45,6 +45,7 @@ const ASSETS = [
     './Scripts/modals/smoothBpmModal.js',
     './Scripts/modals/subdivisionModal.js',
     './Scripts/modals/touchGroupModal.js',
+    './Scripts/features/editorHighlightOverlay.js',
     './Scripts/features/formatter.js',
     './Scripts/features/subdivision.js',
     './Scripts/features/visualEditor.js',

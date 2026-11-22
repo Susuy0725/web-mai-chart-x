@@ -581,7 +581,7 @@ export function openTapBpm(options = {}) {
     auditionBtn.innerHTML = '<span class="material-symbols-outlined" translate="no">play_arrow</span>';
 
     auditionRow.append(stopBtn, auditionBtn);
-    formGrid.appendChild(auditionRow);
+    container.appendChild(auditionRow);
 
     container.appendChild(formGrid);
 

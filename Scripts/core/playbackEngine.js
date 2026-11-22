@@ -692,13 +692,13 @@ export class PlaybackEngine {
             }
 
             this.bgmUpdateTimer = (this.bgmUpdateTimer || 0) + dt;
-            this.opts.updateSlider?.(this.realTime);
 
             // 播放結束判定
+            var reachedPlaybackEnd = false;
             if (this.globalTime >= endTime) {
                 this._isPlaying = false;
                 this.globalTime = endTime;
-                this.opts.updateSlider?.(endTime, true);
+                reachedPlaybackEnd = true;
                 this.playStartTimestamp = null;
                 if (!this.keepRenderingWhilePause) {
                     this.cancelNextFrame();
@@ -711,7 +711,7 @@ export class PlaybackEngine {
             }
         }
 
-        // 渲染與幀調度
+        // 渲染與幀調度（先讀取與繪製畫布，再更新時間軸 DOM，避免同幀觸發強制同步 Layout）
         if (isPlaying || this.keepRenderingWhilePause) {
             let shouldDraw = isPlaying || this._dirty;
             if (!shouldDraw && this.keepRenderingWhilePause) {
@@ -726,8 +726,14 @@ export class PlaybackEngine {
                 this._dirty = false;
                 this.opts.draw?.(dt);
             }
+            if (isPlaying) {
+                this.opts.updateSlider?.(reachedPlaybackEnd ? endTime : this.realTime, reachedPlaybackEnd);
+            }
             this.requestNextFrame(this.update);
         } else {
+            if (isPlaying) {
+                this.opts.updateSlider?.(this.realTime);
+            }
             this.lastTimestamp = null;
         }
     }

@@ -244,6 +244,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     white-space: nowrap;
     pointer-events: none;
     z-index: 11;
+    contain: layout style;
 }
 
 #playControls #timeDisplayCapsule[data-position="left"] {
@@ -952,6 +953,16 @@ body.resizing-panels #canvasContainer canvas {
     pointer-events: none !important;
 }
 
+body.editor-pointer-active #panelSplitter {
+    pointer-events: none !important;
+}
+
+body.editor-pointer-active #panelSplitter .splitter-toolbar,
+#panelSplitter.suppress-toolbar:not(.toolbar-active):not(.dragging) .splitter-toolbar {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 #panelSplitter {
     position: absolute;
     top: var(--workspace-top);
@@ -1386,44 +1397,14 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     border-radius: 3px;
 }
 
-#highlight-layer .current-note-bg-layer {
+#editor-highlight-canvas {
     position: absolute;
     top: 0;
     left: 0;
-    width: 0;
-    height: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
-    z-index: -1;
-}
-
-#highlight-layer .current-note-highlight-pill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: color-mix(in srgb, var(--accent-color, #4499ee) 32%, transparent);
-    border-radius: 4px;
-    pointer-events: none;
-    will-change: transform;
-}
-
-#highlight-layer .editor-selection-bg-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 0;
-    height: 0;
-    pointer-events: none;
-    z-index: -2;
-}
-
-#highlight-layer .editor-selection-highlight-pill {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: rgba(46, 204, 113, 0.28);
-    border-radius: 3px;
-    pointer-events: none;
-    will-change: transform;
+    z-index: 0;
 }
 
 .utilityButton.expanded {

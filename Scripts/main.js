@@ -1,4 +1,5 @@
 import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags, openDivisionInputModal } from './features/visualEditor.js';
+import { EditorHighlightOverlay } from './features/editorHighlightOverlay.js';
 import { showFloatingMenu, hideFloatingMenu, showBoxFloatingMenu, hideBoxFloatingMenu, showTagFloatingMenu } from './features/visualFloatingMenu.js';
 import { openNoteDurationModal } from './modals/noteDurationModal.js';
 import { openSlideEditorModal } from './modals/slideEditorModal.js';
@@ -292,6 +293,7 @@ const splitterDragHandle = document.getElementById('splitterDragHandle');
 const splitterSwapBtn = document.getElementById('splitterSwapBtn');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
+const editorHighlightCanvas = document.getElementById('editor-highlight-canvas');
 const findReplaceBar = document.getElementById('findReplaceBar');
 const findInput = document.getElementById('findInput');
 const replaceInput = document.getElementById('replaceInput');
@@ -600,12 +602,20 @@ if (panelSplitter) {
         });
     }
 
-    panelSplitter.addEventListener('pointerenter', () => {
+    panelSplitter.addEventListener('pointerenter', (e) => {
+        if (document.body.classList.contains('editor-pointer-active') || (e.buttons !== 0 && !isDraggingSplitter)) {
+            return;
+        }
         updateSplitterToolbarDock();
+    });
+
+    panelSplitter.addEventListener('pointerleave', () => {
+        panelSplitter.classList.remove('suppress-toolbar');
     });
 
     panelSplitter.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
+        panelSplitter.classList.remove('suppress-toolbar');
         const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
         isDraggingSplitter = true;
         hasDraggedDistance = false;
@@ -718,6 +728,30 @@ if (panelSplitter) {
         if (!panelSplitter.contains(e.target)) {
             panelSplitter.classList.remove('toolbar-active');
         }
+        if (e.target === editorInput || editorContainer?.contains?.(e.target)) {
+            document.body.classList.add('editor-pointer-active');
+        }
+    });
+
+    const clearEditorPointerActive = (e) => {
+        if (!document.body.classList.contains('editor-pointer-active')) return;
+        document.body.classList.remove('editor-pointer-active');
+        if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+            const rect = panelSplitter.getBoundingClientRect();
+            if (
+                e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom
+            ) {
+                panelSplitter.classList.add('suppress-toolbar');
+            }
+        }
+    };
+
+    window.addEventListener('pointerup', clearEditorPointerActive);
+    window.addEventListener('pointercancel', clearEditorPointerActive);
+    window.addEventListener('blur', () => {
+        document.body.classList.remove('editor-pointer-active');
+        panelSplitter.classList.remove('suppress-toolbar');
     });
 
     window.addEventListener('resize', () => {
@@ -1339,8 +1373,12 @@ const formatCapsuleTime = (sec) => {
  * 更新播放控制器上方懸浮時間膠囊文字，僅於內容變化時寫入 DOM。
  * @param {number} time
  */
-const updateTimeCapsule = (time) => {
+let lastTimeCapsuleUpdateTime = 0;
+const updateTimeCapsule = (time, force = false) => {
     if (!timeDisplayCapsule || settings.timeDisplayCapsule === false) return;
+    const now = performance.now();
+    if (!force && now - lastTimeCapsuleUpdateTime < 33) return;
+    lastTimeCapsuleUpdateTime = now;
     const clampedCurrent = Math.max(cachedTimelineMin, Math.min(cachedTimelineMax, Number(time) || 0));
     const text = `${formatCapsuleTime(clampedCurrent)} / ${formatCapsuleTime(cachedTimelineMax)}`;
     if (text !== lastTimeCapsuleText) {
@@ -1363,7 +1401,7 @@ const syncTimelineProgress = (time) => {
 };
 
 const updateSlider = (time, force = false) => {
-    updateTimeCapsule(time);
+    updateTimeCapsule(time, force);
     if (!timeline || timeline.style.display === 'none') {
         return;
     }
@@ -2139,6 +2177,7 @@ function syncHighlightLayerScroll() {
     requestAnimationFrame(() => {
         highlightLayer.scrollTop = editorInput.scrollTop;
         highlightLayer.scrollLeft = editorInput.scrollLeft;
+        editorHighlightOverlay.render();
         _highlightSyncPending = false;
     });
 }
@@ -2171,7 +2210,12 @@ const setEditorCss = (visible = null) => {
     if (visible) {
         setElementDisplay(editorInput, editorVisible);
         setElementDisplay(highlightLayer, editorVisible);
+        setElementDisplay(editorHighlightCanvas, editorVisible);
         setElementDisplay(visualEditor, visualVisible);
+        if (editorVisible) {
+            editorHighlightOverlay.invalidateLayout();
+            editorHighlightOverlay.render();
+        }
         if (visualToolBarEl) {
             visualToolBarEl.style.display = visualVisible ? 'inline-flex' : 'none';
             if (!visualVisible && visualNotePaletteEl) {
@@ -3853,23 +3897,15 @@ let _pendingHighlightText = null;
 let _lastRenderedHighlightText = null;
 let _lastRenderedWarningKey = null;
 
-const currentNoteBgLayer = document.createElement('div');
-currentNoteBgLayer.className = 'current-note-bg-layer';
-currentNoteBgLayer.setAttribute('aria-hidden', 'true');
-const currentNotePillPool = [];
-const editorSelectionBgLayer = document.createElement('div');
-editorSelectionBgLayer.className = 'editor-selection-bg-layer';
-editorSelectionBgLayer.setAttribute('aria-hidden', 'true');
-const editorSelectionPillPool = [];
-const CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL = 50; // ms：限制背景高亮更新頻率，避免密集音符時造成幀率抖動
-const _sharedNoteDomRange = document.createRange();
-let _highlightTextIndex = [];
+const editorHighlightOverlay = new EditorHighlightOverlay({
+    canvas: editorHighlightCanvas,
+    highlightLayer,
+    getDPR,
+});
 let _lastHighlightedNoteIndex = -1;
 let _lastHighlightedText = null;
 let _lastHighlightedEnabled = null;
 let _lastAutoScrollEnabled = null;
-let _lastHighlightUpdateTime = 0;
-let _highlightThrottleTimer = null;
 let _editorAutoScrollRafId = null;
 let _editorAutoScrollTarget = null;
 let _lastUnfocusedSelKey = '';
@@ -3899,57 +3935,17 @@ function smoothScrollEditorTo(targetTop) {
         if (Math.abs(diff) <= 1.2) {
             editorInput.scrollTop = _editorAutoScrollTarget;
             highlightLayer.scrollTop = editorInput.scrollTop;
+            editorHighlightOverlay.render();
             _editorAutoScrollTarget = null;
             return;
         }
         const factor = Math.abs(diff) > editorInput.clientHeight ? 0.35 : 0.22;
         editorInput.scrollTop = cur + diff * factor;
         highlightLayer.scrollTop = editorInput.scrollTop;
+        editorHighlightOverlay.render();
         _editorAutoScrollRafId = requestAnimationFrame(step);
     };
     _editorAutoScrollRafId = requestAnimationFrame(step);
-}
-
-function rebuildHighlightTextIndex() {
-    _highlightTextIndex = [];
-    let acc = 0;
-    const walker = document.createTreeWalker(highlightLayer, NodeFilter.SHOW_TEXT);
-    let tNode;
-    while ((tNode = walker.nextNode())) {
-        const len = tNode.nodeValue.length;
-        if (len > 0) {
-            _highlightTextIndex.push({ node: tNode, start: acc, end: acc + len });
-            acc += len;
-        }
-    }
-}
-
-function findHighlightDomPos(offset, isEnd = false) {
-    const arr = _highlightTextIndex;
-    if (!arr || arr.length === 0) return null;
-    const clamped = Math.max(0, offset);
-    let lo = 0;
-    let hi = arr.length - 1;
-    while (lo <= hi) {
-        const mid = (lo + hi) >>> 1;
-        const entry = arr[mid];
-        const hit = isEnd
-            ? (clamped > entry.start && clamped <= entry.end)
-            : (clamped >= entry.start && clamped < entry.end);
-        if (hit) {
-            return { node: entry.node, offset: clamped - entry.start };
-        }
-        if (clamped < entry.start || (isEnd && clamped === entry.start)) {
-            hi = mid - 1;
-        } else {
-            lo = mid + 1;
-        }
-    }
-    if (!isEnd && clamped >= arr[arr.length - 1].end) {
-        const last = arr[arr.length - 1];
-        return { node: last.node, offset: last.node.nodeValue.length };
-    }
-    return { node: arr[0].node, offset: 0 };
 }
 
 function getTrimmedNoteRange(text, start, end) {
@@ -3980,110 +3976,9 @@ function getTrimmedNoteRange(text, start, end) {
     return { start: s, end: e };
 }
 
-function hideHighlightPillPool(pool) {
-    for (let i = 0; i < pool.length; i++) {
-        const pill = pool[i];
-        if (pill._visible !== false) {
-            pill.style.display = 'none';
-            pill._visible = false;
-        }
-    }
-}
-
 function clearCurrentNoteHighlight() {
-    if (_highlightThrottleTimer !== null) {
-        clearTimeout(_highlightThrottleTimer);
-        _highlightThrottleTimer = null;
-    }
-    hideHighlightPillPool(currentNotePillPool);
+    editorHighlightOverlay.clearCurrentNoteRects();
     _lastHighlightedNoteIndex = -1;
-}
-
-function hideUnusedHighlightPills(pool, fromIndex = 0) {
-    for (let i = fromIndex; i < pool.length; i++) {
-        const pill = pool[i];
-        if (pill._visible !== false) {
-            pill.style.display = 'none';
-            pill._visible = false;
-        }
-    }
-}
-
-function renderHighlightBgPills(startOffset, endOffset, bgLayer, pillPool, pillClassName, padX = 2, shouldDrawPills = true) {
-    if (startOffset >= endOffset || _highlightTextIndex.length === 0) {
-        hideUnusedHighlightPills(pillPool, 0);
-        return null;
-    }
-
-    const startPos = findHighlightDomPos(startOffset, false);
-    const endPos = findHighlightDomPos(endOffset, true);
-    if (!startPos || !endPos) {
-        hideUnusedHighlightPills(pillPool, 0);
-        return null;
-    }
-
-    _sharedNoteDomRange.setStart(startPos.node, startPos.offset);
-    _sharedNoteDomRange.setEnd(endPos.node, endPos.offset);
-    const rawRects = _sharedNoteDomRange.getClientRects();
-
-    const mergedRects = [];
-    for (let i = 0; i < rawRects.length; i++) {
-        const r = rawRects[i];
-        if (r.width < 0.5 || r.height < 0.5) continue;
-        const prev = mergedRects[mergedRects.length - 1];
-        if (prev && Math.abs(r.top - prev.top) < 2 && Math.abs(r.bottom - prev.bottom) < 2 && r.left <= prev.right + 2) {
-            prev.right = Math.max(prev.right, r.right);
-            prev.top = Math.min(prev.top, r.top);
-            prev.bottom = Math.max(prev.bottom, r.bottom);
-            prev.width = prev.right - prev.left;
-            prev.height = prev.bottom - prev.top;
-        } else {
-            mergedRects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
-        }
-    }
-
-    const layerRect = highlightLayer.getBoundingClientRect();
-    const originX = layerRect.left + highlightLayer.clientLeft - highlightLayer.scrollLeft;
-    const originY = layerRect.top + highlightLayer.clientTop - highlightLayer.scrollTop;
-
-    if (shouldDrawPills) {
-        for (let i = 0; i < mergedRects.length; i++) {
-            let pill = pillPool[i];
-            if (!pill) {
-                pill = document.createElement('div');
-                pill.className = pillClassName;
-                pillPool.push(pill);
-                bgLayer.appendChild(pill);
-            }
-            const mr = mergedRects[i];
-            const x = Math.max(0, mr.left - originX - padX);
-            const y = Math.max(0, mr.top - originY);
-            const w = mr.width + padX * 2;
-            const h = mr.height;
-            if (pill._visible !== true) {
-                pill.style.display = 'block';
-                pill._visible = true;
-            }
-            const tf = `translate3d(${x}px, ${y}px, 0)`;
-            if (pill._tf !== tf) {
-                pill.style.transform = tf;
-                pill._tf = tf;
-            }
-            if (pill._w !== w) {
-                pill.style.width = `${w}px`;
-                pill._w = w;
-            }
-            if (pill._h !== h) {
-                pill.style.height = `${h}px`;
-                pill._h = h;
-            }
-        }
-        hideUnusedHighlightPills(pillPool, mergedRects.length);
-    } else {
-        hideUnusedHighlightPills(pillPool, 0);
-    }
-
-    return { mergedRects, originY };
 }
 
 function updateUnfocusedSelectionHighlight(force = false) {
@@ -4095,17 +3990,18 @@ function updateUnfocusedSelectionHighlight(force = false) {
 
     if (!shouldShow) {
         if (_lastUnfocusedSelKey !== '') {
-            hideHighlightPillPool(editorSelectionPillPool);
+            editorHighlightOverlay.clearSelectionRects();
             _lastUnfocusedSelKey = '';
         }
         return;
     }
 
-    const key = `${selStart}:${selEnd}:${_highlightTextIndex.length}:${editorInput.value.length}`;
+    const key = `${selStart}:${selEnd}:${editorHighlightOverlay.textIndex.length}:${editorInput.value.length}`;
     if (!force && key === _lastUnfocusedSelKey) return;
     _lastUnfocusedSelKey = key;
 
-    renderHighlightBgPills(selStart, selEnd, editorSelectionBgLayer, editorSelectionPillPool, 'editor-selection-highlight-pill', 1, true);
+    const rects = editorHighlightOverlay.measureContentRects(selStart, selEnd, 1, false);
+    editorHighlightOverlay.setSelectionRects(rects);
 }
 
 editorInput.addEventListener('focus', () => updateUnfocusedSelectionHighlight(true));
@@ -4138,26 +4034,6 @@ function updateCurrentNoteHighlight(force = false) {
         return;
     }
 
-    if (!force) {
-        const nowPerf = performance.now();
-        const elapsed = nowPerf - _lastHighlightUpdateTime;
-        if (elapsed < CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL) {
-            if (_highlightThrottleTimer === null) {
-                _highlightThrottleTimer = setTimeout(() => {
-                    _highlightThrottleTimer = null;
-                    updateCurrentNoteHighlight(true);
-                }, Math.max(1, CURRENT_NOTE_HIGHLIGHT_MIN_INTERVAL - elapsed));
-            }
-            return;
-        }
-    }
-
-    if (_highlightThrottleTimer !== null) {
-        clearTimeout(_highlightThrottleTimer);
-        _highlightThrottleTimer = null;
-    }
-    _lastHighlightUpdateTime = performance.now();
-
     _lastHighlightedEnabled = highlightEnabled;
     _lastAutoScrollEnabled = autoScrollEnabled;
     _lastHighlightedNoteIndex = nowIndex;
@@ -4165,22 +4041,18 @@ function updateCurrentNoteHighlight(force = false) {
 
     const rawRange = getNoteRangeAtIndex(nowIndex);
     const rangeOffsets = getTrimmedNoteRange(text, rawRange.start, rawRange.end);
-    const result = renderHighlightBgPills(
-        rangeOffsets.start,
-        rangeOffsets.end,
-        currentNoteBgLayer,
-        currentNotePillPool,
-        'current-note-highlight-pill',
-        2,
-        highlightEnabled
-    );
-    if (!result) return;
+    const rects = editorHighlightOverlay.measureContentRects(rangeOffsets.start, rangeOffsets.end, 2, true);
 
-    const { mergedRects, originY } = result;
-    if (autoScrollEnabled && mergedRects.length > 0) {
-        const firstRect = mergedRects[0];
-        const noteTop = Math.max(0, firstRect.top - originY);
-        const noteBottom = noteTop + firstRect.height;
+    if (highlightEnabled) {
+        editorHighlightOverlay.setCurrentNoteRects(rects);
+    } else {
+        editorHighlightOverlay.clearCurrentNoteRects();
+    }
+
+    if (autoScrollEnabled && rects && rects.length > 0) {
+        const firstRect = rects[0];
+        const noteTop = firstRect.y;
+        const noteBottom = noteTop + firstRect.h;
         const viewTop = _editorAutoScrollTarget !== null ? _editorAutoScrollTarget : editorInput.scrollTop;
         const viewH = editorInput.clientHeight;
         if (viewH > 0) {
@@ -4214,8 +4086,7 @@ function renderHighlightNow(text) {
     _lastRenderedHighlightText = text;
     _lastRenderedWarningKey = warningKey;
     highlightLayer.innerHTML = getHighlight(text, diagnosticRanges);
-    rebuildHighlightTextIndex();
-    highlightLayer.prepend(editorSelectionBgLayer, currentNoteBgLayer);
+    editorHighlightOverlay.invalidateText();
     updateCurrentNoteHighlight(true);
     updateUnfocusedSelectionHighlight(true);
 }
@@ -4647,6 +4518,8 @@ function resize(force = false) {
     }
 
     draw();
+    editorHighlightOverlay.invalidateLayout();
+    editorHighlightOverlay.refreshAccentColor();
     updateCurrentNoteHighlight(true);
     updateUnfocusedSelectionHighlight(true);
     emitViewModeChanged();

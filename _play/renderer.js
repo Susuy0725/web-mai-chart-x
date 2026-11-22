@@ -209,8 +209,12 @@ export class SimaiRenderer extends BaseSimaiRenderer {
         if (eff.grade === 'MISS') {
             return `miss_${state}`;
         }
-        if (eff.grade === 'CRITICAL_PERFECT' || eff.grade === 'PERFECT') {
+        if (eff.grade === 'CRITICAL_PERFECT') {
             return showCP ? `just_${state}` : `just_${state}_p`;
+        }
+        if (eff.grade === 'PERFECT') {
+            // 參照 SlideJudge.cs L215-248：FastPerfect / LatePerfect 不顯示 Critical，一律使用 Perfect
+            return `just_${state}_p`;
         }
         if (eff.grade === 'GREAT') {
             return (eff.subGrade === 'FAST') ? `just_${state}_fast_gr` : `just_${state}_late_gr`;
@@ -219,6 +223,20 @@ export class SimaiRenderer extends BaseSimaiRenderer {
             return (eff.subGrade === 'FAST') ? `just_${state}_fast_gd` : `just_${state}_late_gd`;
         }
         return null;
+    }
+
+    drawSlideJustBreakOverlay(ctx, eff, img, drawX, drawY, judgeWidth, judgeHeight, elapsed) {
+        // 參照 SlideJudge.cs L250-286：Break Slide 於 Critical 判定時疊加 SpriteRenderAdd 脈動閃光
+        if (!eff.isBreak || eff.grade !== 'CRITICAL_PERFECT' || !img) return;
+        const frameCount = Math.floor(elapsed * 60);
+        const pulse = 0.5 + Math.sin(frameCount * Math.PI * 0.5) * 0.5;
+        const addAlpha = 0.25 * pulse;
+        if (addAlpha <= 0.005) return;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha *= addAlpha;
+        ctx.drawImage(img, drawX, drawY, judgeWidth, judgeHeight);
+        ctx.restore();
     }
 
     resolveJudgeTextImageKey(eff) {
@@ -290,6 +308,10 @@ export class SimaiRenderer extends BaseSimaiRenderer {
             this.queueHitEffect(s.pos, s.triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
         }
         return true;
+    }
+
+    isNoteHiddenForEachGuide(s) {
+        return s.type === 'hold' ? !!s.holdFinish : !!s.triggered;
     }
 
     getTouchHanabiTiming(s) {
@@ -415,78 +437,15 @@ export class SimaiRenderer extends BaseSimaiRenderer {
     }
 
     /**
-     * 遊玩模式感應區座標測試：外圈按鍵區域映射為 K1~K8（並含外緣回退判定）
+     * 遊玩模式外圈按鍵區域映射為 K1~K8（供手動點擊外鍵判定）；
+     * Slide 路徑感應區蒐集則透過基底 getTouchSensorIdAtPoint 一律維持 A1~A8。
      */
-    getSensorIdAtPoint(x, y, ignoreD = false) {
-        const roundX = (x * 10 | 0) * 0.1;
-        const roundY = (y * 10 | 0) * 0.1;
-        const cacheKey = ((roundX * 1000 + roundY) | 0) * (ignoreD ? -1 : 1);
-        if (!this._sensorPointCache) this._sensorPointCache = new Map();
-        if (this._sensorPointCache.has(cacheKey)) {
-            return this._sensorPointCache.get(cacheKey);
-        }
+    getOuterSensorPrefix() {
+        return 'K';
+    }
 
-        const r = Math.hypot(x, y);
-
-        if (r >= innerCirleBase * 1.05 && r <= innerCirleBase * 2.8) {
-            let normAngle = Math.atan2(y, x) + Math.PI / 2;
-            if (normAngle < 0) normAngle += Math.PI * 2;
-            const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
-            if (keyNum >= 1 && keyNum <= 8) {
-                const outerKeyId = 'K' + keyNum;
-                if (this._sensorPointCache.size > 1000) this._sensorPointCache.clear();
-                this._sensorPointCache.set(cacheKey, outerKeyId);
-                return outerKeyId;
-            }
-        }
-
-        if (!this._dummyCtx) {
-            const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : (typeof document !== 'undefined' ? document.createElement('canvas') : null);
-            this._dummyCtx = c ? c.getContext('2d') : null;
-        }
-        if (!this._dummyCtx) return null;
-        this._dummyCtx.setTransform(1, 0, 0, 1, 0, 0);
-
-        let insideId = null;
-        let strokeId = null;
-
-        for (let j = 0; j < touchPaths.length; j++) {
-            const shape = touchPaths[j];
-            if (ignoreD && shape.id.startsWith('D')) continue;
-
-            const isA = shape.id.startsWith('A');
-            this._dummyCtx.lineWidth = isA ? 15 : 3;
-
-            const isInside = this._dummyCtx.isPointInPath(shape.path, x, y);
-            if (isInside && !insideId) {
-                insideId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
-                break;
-            }
-
-            if (!strokeId) {
-                const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
-                if (isNearEdge) {
-                    strokeId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
-                }
-            }
-        }
-
-        let resultId = insideId || strokeId;
-
-        if (!resultId && r >= innerCirleBase * 0.95 && r <= innerCirleBase * 2.8) {
-            let normAngle = Math.atan2(y, x) + Math.PI / 2;
-            if (normAngle < 0) normAngle += Math.PI * 2;
-            const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
-            if (keyNum >= 1 && keyNum <= 8) {
-                resultId = (r >= innerCirleBase * 1.05) ? ('K' + keyNum) : ('A' + keyNum);
-            }
-        }
-
-        if (this._sensorPointCache.size > 1000) {
-            this._sensorPointCache.clear();
-        }
-        this._sensorPointCache.set(cacheKey, resultId);
-        return resultId;
+    shouldHideSlideArrowsBySensor() {
+        return false;
     }
 
     /**

@@ -121,7 +121,7 @@ example-extension.zip
 | `settings:override` | `EXTENSION_PERMISSIONS.SETTINGS_OVERRIDE` | 動態層疊覆寫應用程式原生設定 |
 | `assets:read` | `EXTENSION_PERMISSIONS.ASSETS_READ` | 讀取系統目前載入的圖片貼圖與音效素材鍵名清單 |
 | `assets:override` | `EXTENSION_PERMISSIONS.ASSETS_OVERRIDE` | 動態層疊覆寫圖片貼圖與判定打擊音效素材 |
-| `ui:toast` | `EXTENSION_PERMISSIONS.UI_TOAST` | 呼叫全域吐司提示訊息 |
+| `ui:toast` | `EXTENSION_PERMISSIONS.UI_TOAST` | 顯示通知 |
 | `ui:menu` | `EXTENSION_PERMISSIONS.UI_MENU` | 於頂欄拼圖選單註冊二級選單項目 |
 | `ui:popover` | `EXTENSION_PERMISSIONS.UI_POPOVER` | 開啟原生設定面板與存取隔離設定值 |
 | `ui:overlay` | `EXTENSION_PERMISSIONS.UI_OVERLAY` | 建立受控的浮動元件掛載容器 |
@@ -295,7 +295,7 @@ ctx.hasPermission(permissionString);
 - 狀態隔離：底層在執行每個圖層的 `draw` 前會自動呼叫 `ctx.save()`，並於繪製完成後的 `finally` 區塊呼叫 `ctx.restore()`，確保各擴充圖層的繪圖狀態、剪裁區域或座標變換矩陣不互相污染，亦不干擾核心渲染引擎。
 - 錯誤隔離：以 `try...catch` 包裹各圖層的 `draw` 呼叫。若圖層繪製時拋出例外，將於控制台記錄錯誤訊息，不會中斷主渲染迴圈或其他圖層的繪製作業。
 - 渲染耗時預算保護：若單一疊加圖層在非影片匯出渲染時連續 30 幀的單幀繪製時間超過 12 毫秒，註冊表會自動移除該疊加圖層並透過提示訊息通知使用者，避免持續拖慢主畫面幀率；影片匯出時的逐幀離線渲染不計入此熔斷限制。
-- 影片匯出控制：預設情況下 `includeInVideo` 為 `false`，影片匯出期間會自動跳過該圖層；若明確設為 `true`，系統會於影片匯出期間執行該圖層的 `draw` 並傳入 `isRenderingVideo: true`，供擴充程式依設定決定是否繪製。若同時提供 `prepareVideoFrame`，系統會於每幀同步繪製前 `await` 該非同步鉤子並套用 `try...catch` 例外隔離與單幀逾時保護；若單一圖層連續逾時達 10 幀，該次匯出將自動略過其前置等待以防卡死。
+- 影片匯出控制：預設情況下 `includeInVideo` 為 `false`，影片匯出期間會自動跳過該圖層；若明確設為 `true`，系統會於影片匯出期間執行該圖層的 `draw` 並傳入 `isRenderingVideo: true`，供擴充程式依設定決定是否繪製。若同時提供 `prepareVideoFrame`，系統會於每幀同步繪製前 `await` 該非同步鉤子並套用 `try...catch` 例外隔離與單幀逾時保護；若單一圖層連續逾時達 10 幀，該次匯出將自動略過該圖層的前置等待。
 
 #### `ctx.render.requestRedraw()`
 - 權限需求：`render:overlay`

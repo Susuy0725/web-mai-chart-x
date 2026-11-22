@@ -88,7 +88,7 @@ sequenceDiagram
 
 ### 關鍵判定：
 - **`isDatabaseEmpty`**：用來判斷是否需要跳出初次啟動導覽彈窗（`showWelcomeModal`）。若資料庫已有歷史專案，系統自動標記完成，不打擾既有使用者。
-- **`decodeWorkerManager`**：優先使用背景 Worker 解析譜面文字以防主線程卡死，若 Worker 失敗則自動降級至同步 `simaiDecode()` 執行。
+- **`decodeWorkerManager`**：優先在背景 Worker 解析譜面文字，避免解析作業長時間占用主執行緒，若 Worker 失敗則自動降級至同步 `simaiDecode()` 執行。
 
 ---
 

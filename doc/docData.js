@@ -6,11 +6,11 @@
 export const DOC_CORE_NOTICES = [
     {
         label: '信任模型',
-        text: '所有插件皆透過動態 ESM 載入並運行於瀏覽器主執行緒，無系統級沙盒隔離，可修改頁面 DOM 並讀取專案資料；`ctx` 屬於介面層級權限控管。'
+        text: '擴充程式以 ES 模組載入，在瀏覽器主執行緒執行，可以修改頁面 DOM 和讀取專案資料。`ctx` 的權限控制適用於主程式提供的 API。'
     },
     {
         label: 'Worker 模式未實作',
-        text: '`manifest.json` 雖允許 `runtime: "worker"` 通過格式驗證，但該模式屬於保留但未實作功能，啟用時會立即進入錯誤狀態並拒絕啟動。'
+        text: '將 `runtime` 設為 `worker` 可通過描述檔格式檢查，但啟用會失敗，狀態會設為 `error`。'
     },
     {
         label: '錄影逐幀離線渲染',
@@ -156,56 +156,47 @@ export const DOC_ITEMS = [
         id: 'guide-overview',
         category: 'guide',
         groupId: 'group-guide',
-       stability: 'stable',
+        stability: 'stable',
         title: '擴充程式系統架構概述',
         sidebarLabel: '系統架構概述',
         sidebarMono: false,
-        subtitle: 'Web mai Chart X 插件開發者 API 系統設計、主執行緒信任模型與權限控管原則。',
-        status: {
-            variant: 'free',
-            label: '核心概念',
-            permissions: ['免宣告額外權限'],
-            envs: ['Trusted 主執行緒模式', 'worker 模式未實作'],
-            apiVersion: 'API v1'
-        },
-        overview: [
-            '本手冊面向 Web mai Chart X 第三方插件開發者，僅涵蓋擴充程式 API、生命週期、離線錄影疊加與儲存庫協定，並非譜面寫譜教學。',
-            '外掛啟用時不會直接取得底層的 `appContext` 或原始資料庫參照，而是由主程式依據 `manifest.json` 宣告的權限清單組裝專屬的受限上下文物件 `ctx`。',
-            '就信任模型而言，現行所有擴充程式皆透過動態 ESM 載入並運行於瀏覽器主執行緒，沒有獨立的系統級安全沙盒，插件可修改頁面 DOM 並讀取當前專案資料。`ctx` 屬於官方介面層級的權限控管與誤操作防護，並非安全隔離邊界。'
-        ],
-        notes: [
-            '最小權限原則：擴充程式必須在描述檔案中明確宣告所需權限，未宣告的權限不會注入對應的官方介面與方法。',
-            '受限上下文控管：擴充程式應透過 `ctx` 提供的標準方法與主程式互動，避免直接操作底層未公開的內部狀態。',
-            '宣告式介面整合：頂欄選單與設定面板採用宣告式結構，由主程式統一渲染並自動套用原站深色毛玻璃視覺樣式。',
-            '自動生命週期追蹤：透過 `ctx` 註冊的指令、事件監聽器、疊加圖層、選單項目、浮動元件、設定與素材覆寫由主程式統一追蹤，停用或移除時自動回收。'
-        ],
-        callouts: [
+        subtitle: 'Web mai Chart X 在瀏覽器中載入擴充程式，並透過 `ctx` 提供編輯器 API。',
+        guideSections: [
             {
-                variant: 'warning',
-                title: '信任模型與 runtime: worker 未實作警告',
-                items: [
-                    '插件直接執行於主應用程式同源的瀏覽器主執行緒，具備完整的 DOM 操作權限，無沙盒隔離；請勿在不受信任環境執行未審核之第三方插件。',
-                    '`manifest.json` 的 `runtime` 欄位若設為 `worker`，雖可通過描述檔字串格式檢查，但 Worker 執行通道屬於「保留但未實作」狀態，系統尚未提供 Worker 沙盒，嘗試啟用時會立即拋出錯誤並將外掛標記為 `error` 狀態，請勿將其當成可用功能。'
+                id: 'sec-overview',
+                title: '執行模型',
+                paragraphs: [
+                    '主程式以 ES 模組載入擴充程式。擴充程式與編輯器在同一個頁面的主執行緒執行，可以修改頁面 DOM，也可以讀取目前的專案資料。請只啟用來源可信的擴充程式。'
+                ],
+                warning: {
+                    title: 'Worker 模式尚未支援',
+                    text: '在 `manifest.json` 將 `runtime` 設為 `worker` 可通過描述檔格式檢查，但啟用會失敗，擴充程式的狀態會設為 `error`。'
+                }
+            },
+            {
+                id: 'sec-permissions',
+                title: '權限與 ctx',
+                paragraphs: [
+                    '在 `manifest.json` 的 `permissions` 清單中宣告需要的權限。啟用時，主程式把受限上下文物件 `ctx` 傳給擴充程式的進入點。權限清單決定 `ctx` 提供哪些編輯器 API；擴充程式對頁面的存取仍遵循瀏覽器的同源規則。',
+                    '例如，擴充程式須宣告 `ui:toast` 才能呼叫 `ctx.ui.toast()` 顯示通知。頂欄選單與設定面板也透過各自的 API 宣告，由主程式統一繪製。'
                 ]
             }
         ],
-        examples: [
-            {
-                label: '最小可行擴充程式結構',
-                code: `export default function activate(ctx) {
-    if (ctx.hasPermission('ui:toast')) {
-        ctx.ui.toast({
-            content: '擴充程式已就緒',
-            type: 'success'
-        });
-    }
+        examplesTitle: '啟用與清理範例',
+        examplesIntro: '進入點支援同步與非同步函式。主程式會在停用或移除擴充程式時，回收透過 `ctx` 註冊的資源。自行建立的計時器則應在進入點回傳的清理函式中取消。以下範例延遲一秒顯示通知；若在這一秒內停用擴充程式，通知就會取消。',
+        examples: [{
+            label: 'index.js',
+            code: `export default function activate(ctx) {
+    if (!ctx.hasPermission('ui:toast')) return;
 
-    return () => {
-        // 釋放自行建立的計時器或外部事件監聽
-    };
+    const timer = setTimeout(() => {
+        ctx.ui.toast({ content: '擴充程式已啟用', type: 'success' });
+    }, 1000);
+
+    return () => clearTimeout(timer);
 }`
-            }
-        ],
+        }],
+        seeAlsoTitle: '延伸閱讀',
         summary: {
             namespace: '開發入門',
             permission: '無',
@@ -221,11 +212,11 @@ export const DOC_ITEMS = [
         category: 'guide',
         groupId: 'group-guide',
        stability: 'stable',
-        title: '最小可運作插件',
+        title: '建立第一個擴充程式',
         codeTitle: 'manifest.json + index.js',
-        sidebarLabel: '最小可運作插件',
+        sidebarLabel: '建立第一個擴充程式',
         sidebarMono: false,
-        subtitle: '彙整 manifest.json 全部 12 個欄位、兩種插件載入方式，並提供從零到可直接執行的完整端到端範例。',
+        subtitle: '建立描述檔與進入點，並用兩種載入方式測試第一個擴充程式。',
         status: {
             variant: 'free',
             label: '快速實作總覽',
@@ -234,7 +225,7 @@ export const DOC_ITEMS = [
             apiVersion: 'API v1'
         },
         overview: [
-            '一個可執行的 Web mai Chart X 插件至少需要 `manifest.json` 描述檔與進入點 JavaScript 模組兩份檔案，打包為 `.zip` 壓縮檔即可安裝啟用。',
+            '一個可執行的 Web mai Chart X 擴充程式至少需要 `manifest.json` 描述檔與進入點 JavaScript 模組兩份檔案，打包為 `.zip` 壓縮檔即可安裝啟用。',
             '支援兩種載入與安裝路徑：開發測試時可透過編輯器頂欄拼圖選單內的「管理擴充程式」直接匯入本機 `.zip` 檔；公開發布時則可託管符合 WERP 協定的靜態 `index.json` 與 `.zip` 套件，由擴充程式管理器的「擴充來源」分頁下載並經 SHA-256 校驗後安裝至 IndexedDB。'
         ],
         tables: [
@@ -243,21 +234,21 @@ export const DOC_ITEMS = [
                 columns: ['欄位名稱', '型別', '必填', '預設值', '驗證規則與說明'],
                 rows: [
                     ['`id`', 'string', '是', '無', '反向網域格式唯一識別碼，須符合 `/^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$/i`，例如 `com.example.hello-plugin`'],
-                    ['`name`', 'string', '是', '無', '插件顯示名稱，不可為空字串'],
-                    ['`version`', 'string', '是', '無', '插件版本字串，建議採用語意化版本格式如 `1.0.0`'],
+                    ['`name`', 'string', '是', '無', '擴充程式顯示名稱，不可為空字串'],
+                    ['`version`', 'string', '是', '無', '擴充程式版本字串，建議採用語意化版本格式如 `1.0.0`'],
                     ['`apiVersion`', 'number', '否', '`1`', '目標擴充 API 版本，須為正整數且不可高於系統現行版本 `1`'],
                     ['`description`', 'string', '否', '`""`', '顯示於管理視窗與權限確認框的簡要功能說明'],
                     ['`author`', 'string', '否', '`""`', '開發者或維護團隊名稱'],
-                    ['`entry`', 'string', '否', '`"index.js"`', '進入點 ESM 模組於壓縮包內的相對路徑'],
+                    ['`entry`', 'string', '否', '`"index.js"`', '進入點 ESM 模組於壓縮檔內的相對路徑'],
                     ['`permissions`', 'Array<string>', '否', '`[]`', '宣告所需官方權限識別碼陣列，出現任何不在 19 項白名單內的字串即拒絕載入'],
                     ['`runtime`', 'string', '否', '`"trusted"`', '執行環境宣告，僅支援 `trusted`；`worker` 字串雖可通過描述檔格式驗證，但屬於保留但未實作功能，啟用時會進入錯誤狀態'],
-                    ['`homepage`', 'string', '否', '`""`', '插件首頁或原始碼倉庫網址，非空時必須為 `https://` 協定'],
+                    ['`homepage`', 'string', '否', '`""`', '擴充程式首頁或原始碼倉庫網址，非空時必須為 `https://` 協定'],
                     ['`termsUrl`', 'string', '否', '`""`', '服務條款頁面網址，非空時必須為 `https://` 協定'],
                     ['`privacyUrl`', 'string', '否', '`""`', '隱私權政策頁面網址，非空時必須為 `https://` 協定']
                 ]
             },
             {
-                title: '兩種插件載入方式比較',
+                title: '兩種擴充程式載入方式比較',
                 columns: ['載入方式', '操作路徑', '適用情境', '驗證與儲存行為'],
                 rows: [
                     ['本機 ZIP 匯入', '頂欄拼圖選單 → 管理擴充程式 → 匯入擴充程式', '本機開發除錯與單機安裝', '解析 ZIP 後驗證 `manifest.json`、彈出權限授權視窗，確認後寫入 IndexedDB 並以 Blob URL 載入執行'],
@@ -271,7 +262,7 @@ export const DOC_ITEMS = [
                 title: '執行模式提醒',
                 items: [
                     '請省略 `runtime` 或明確設為 `"trusted"`。切勿依賴 `"worker"` 進行沙盒隔離，該模式目前僅保留欄位檢查而未實作執行通道。',
-                    '所有插件皆於瀏覽器主執行緒執行，可存取頁面 DOM 與專案資料，安裝前會向使用者展示所宣告的 `permissions` 與開發者連結。'
+                    '所有擴充程式皆於瀏覽器主執行緒執行，可存取頁面 DOM 與專案資料，安裝前會向使用者展示所宣告的 `permissions` 與開發者連結。'
                 ]
             }
         ],
@@ -280,7 +271,7 @@ export const DOC_ITEMS = [
                 label: '1. manifest.json',
                 code: `{
   "id": "com.example.minimal-stats",
-  "name": "最小譜面字數統計插件",
+  "name": "最小譜面字數統計擴充程式",
   "version": "1.0.0",
   "apiVersion": 1,
   "description": "於頂欄選單新增按鈕，點擊時讀取編輯器內容並顯示提示訊息。",
@@ -314,7 +305,7 @@ export const DOC_ITEMS = [
     });
 
     ctx.ui.toast({
-        content: \`[\${ctx.extensionId}] 插件已啟動\`,
+        content: \`[\${ctx.extensionId}] 擴充程式已啟動\`,
         type: 'success',
         timeout: 2000
     });
@@ -335,9 +326,9 @@ zip -r minimal-stats-1.0.0.zip manifest.json index.js`
             }
         ],
         notes: [
-            'ZIP 壓縮包支援兩種檔案階層：將 `manifest.json` 與 `index.js` 直接放在壓縮檔根目錄，或包在唯一一層子資料夾內。',
+            'ZIP 壓縮檔支援兩種檔案階層：將 `manifest.json` 與 `index.js` 直接放在壓縮檔根目錄，或包在唯一一層子資料夾內。',
             '進入點模組必須提供 `export default function activate(ctx)` 或具名匯出 `export function activate(ctx)`，缺少匯出函式時會拋出載入錯誤。',
-            '即使不手動呼叫 `offMenu()` 或 `offCommand()`，停用或卸載時系統仍會透過 `disposables` 自動回收官方介面註冊項；若插件有自行建立 `setInterval` 或全域事件監聽，則必須在回傳的清理函式中自行清除。'
+            '即使不手動呼叫 `offMenu()` 或 `offCommand()`，停用或卸載時系統仍會透過 `disposables` 自動回收官方介面註冊項；若擴充程式有自行建立 `setInterval` 或全域事件監聽，則必須在回傳的清理函式中自行清除。'
         ],
         summary: {
             namespace: '開發入門',
@@ -358,7 +349,7 @@ zip -r minimal-stats-1.0.0.zip manifest.json index.js`
         codeTitle: 'manifest.json',
         sidebarLabel: 'manifest.json 規格',
         sidebarMono: false,
-        subtitle: '定義擴充程式壓縮包檔案階層、必要描述欄位與相容性驗證規則。',
+        subtitle: '說明壓縮檔的目錄結構、描述檔必填欄位及相容性檢查。',
         status: {
             variant: 'free',
             label: '封裝規範',
@@ -367,8 +358,8 @@ zip -r minimal-stats-1.0.0.zip manifest.json index.js`
             apiVersion: 'API v1'
         },
         overview: [
-            '擴充程式以標準 ZIP 格式封裝，副檔名為 `.zip`。系統支援壓縮包根目錄直接存放檔案，或以單層根資料夾包裹兩種結構。',
-            '匯入壓縮包時，主程式會立即驗證 `id` 命名格式、`permissions` 白名單、`runtime` 值域、`apiVersion` 相容性以及 `https://` 連結欄位。'
+            '擴充程式以標準 ZIP 格式封裝，副檔名為 `.zip`。系統支援壓縮檔根目錄直接存放檔案，或以單層根資料夾包裹兩種結構。',
+            '匯入壓縮檔時，主程式會立即驗證 `id` 命名格式、`permissions` 白名單、`runtime` 值域、`apiVersion` 相容性以及 `https://` 連結欄位。'
         ],
         tables: [
             {
@@ -397,8 +388,8 @@ zip -r minimal-stats-1.0.0.zip manifest.json index.js`
         ],
         examples: [
             {
-                label: '壓縮包目錄階層範例',
-                code: `// 結構一：檔案位於壓縮包根目錄
+                label: '壓縮檔目錄階層範例',
+                code: `// 結構一：檔案位於壓縮檔根目錄
 my-extension.zip
 ├── manifest.json
 └── index.js
@@ -413,7 +404,7 @@ my-extension.zip
                 label: 'manifest.json 完整範例',
                 code: `{
   "id": "com.wmcx.test-video-blur-border",
-  "name": "外圍影片模糊測試插件",
+  "name": "外圍影片模糊測試擴充程式",
   "version": "1.0.0",
   "apiVersion": 1,
   "description": "讀取本機影片並於背景降解析度模糊後繪製於外圍區域。",
@@ -450,7 +441,7 @@ my-extension.zip
         codeTitle: 'EXTENSION_PERMISSIONS',
         sidebarLabel: '權限常數表',
         sidebarMono: false,
-        subtitle: '系統定義的 19 項合法權限識別碼、常數名稱與對應開放的上下文介面。',
+        subtitle: '查閱 19 項權限的識別碼、常數與對應的 API。',
         status: {
             variant: 'perm',
             label: '權限白名單',
@@ -480,7 +471,7 @@ my-extension.zip
                     ['`settings:override`', '`EXTENSION_PERMISSIONS.SETTINGS_OVERRIDE`', '動態層疊覆寫應用程式原生設定'],
                     ['`assets:read`', '`EXTENSION_PERMISSIONS.ASSETS_READ`', '讀取系統目前載入的圖片貼圖與音效素材鍵名清單'],
                     ['`assets:override`', '`EXTENSION_PERMISSIONS.ASSETS_OVERRIDE`', '動態層疊覆寫圖片貼圖與判定打擊音效素材'],
-                    ['`ui:toast`', '`EXTENSION_PERMISSIONS.UI_TOAST`', '呼叫全域吐司提示訊息'],
+                    ['`ui:toast`', '`EXTENSION_PERMISSIONS.UI_TOAST`', '呼叫全域通知'],
                     ['`ui:menu`', '`EXTENSION_PERMISSIONS.UI_MENU`', '於頂欄拼圖選單註冊二級選單項目'],
                     ['`ui:popover`', '`EXTENSION_PERMISSIONS.UI_POPOVER`', '開啟原生設定面板與存取隔離設定值'],
                     ['`ui:overlay`', '`EXTENSION_PERMISSIONS.UI_OVERLAY`', '建立受控的浮動元件掛載容器'],
@@ -508,7 +499,7 @@ my-extension.zip
         codeTitle: 'activate(ctx)',
         sidebarLabel: '生命週期與清理',
         sidebarMono: false,
-        subtitle: '擴充模組匯出規範、啟動崩潰防護、清理函式回傳與自動資源回收順序。',
+        subtitle: '說明進入點的匯出格式、啟動失敗時的處理方式，以及停用時的資源清理順序。',
         status: {
             variant: 'free',
             label: '生命週期規範',
@@ -524,7 +515,7 @@ my-extension.zip
             '自動回收範圍僅涵蓋透過 `ctx` 官方介面註冊的指令、事件監聽器、疊加圖層、逐幀影片解碼器、選單項目、浮動元件、多語系詞典、原生設定覆寫與素材覆寫。',
             '若擴充程式自行於 `window` 或 `document` 綁定事件、建立計時器或發起背景 Worker，必須於回傳的清理函式中主動釋放。',
             '啟動崩潰防護：啟動時透過 `sessionStorage` 鍵 `wmcx_ext_activating` 追蹤狀態，若發生嚴重崩潰導致異常重載，下次啟動會自動停用該擴充程式。',
-            '安全模式啟動參數：於編輯器網址列加上 `?safeMode=1` 或 `?safeMode=true` 時，系統僅登錄已安裝擴充而不自動啟動，便於排除問題外掛。'
+            '安全模式啟動參數：於編輯器網址列加上 `?safeMode=1` 或 `?safeMode=true` 時，系統僅登錄已安裝擴充而不自動啟動，便於排除問題擴充程式。'
         ],
         examples: [
             {
@@ -566,7 +557,7 @@ export function activate(ctx) {
         title: '安全性規範與介面隔離',
         sidebarLabel: '安全規範與隔離',
         sidebarMono: false,
-        subtitle: '開發者須遵守的安全開發規範、Shadow DOM 樣式隔離、命名空間防護與網路揭露分級。',
+        subtitle: '說明如何隔離樣式、避免名稱衝突，以及揭露擴充程式使用的網路服務。',
         status: {
             variant: 'caution',
             label: '安全開發要求',
@@ -575,16 +566,16 @@ export function activate(ctx) {
             apiVersion: 'API v1'
         },
         overview: [
-            '為維護整體應用程式的執行穩定與防止惡意程式碼注入，平台於官方介面強制套用命名空間隔離，同時要求擴充開發者遵循嚴格的前端安全開發規範。'
+            '主程式以擴充程式識別碼區分指令與翻譯鍵。開發者仍須處理外部輸入、限制網路存取，並清楚說明會傳送哪些資料。'
         ],
         callouts: [
             {
                 variant: 'danger',
-                title: '嚴格禁止事項',
+                title: '開發限制',
                 items: [
-                    '禁止動態程式碼評估：嚴禁使用 `eval()`、`new Function()` 或以字串形式執行動態腳本。',
-                    '禁止未跳脫 DOM 注入：嚴禁將外部資料、使用者輸入或未跳脫字串賦值予 `innerHTML`，文字渲染一律使用 `textContent`。',
-                    '禁止未經授權之資料外傳：不得側錄使用者譜面、本地儲存資料或帳號資訊。'
+                    '禁止使用 `eval()`、`new Function()` 或以字串形式執行動態腳本。',
+                    '不得將外部資料、使用者輸入或未跳脫字串指定給 `innerHTML`，文字渲染一律使用 `textContent`。',
+                    '不得擅自收集或傳送使用者譜面、本地儲存資料或帳號資訊。'
                 ]
             }
         ],
@@ -593,7 +584,7 @@ export function activate(ctx) {
             '指令與語系命名空間：所有註冊指令與翻譯鍵皆強制冠上 `ext.${extensionId}.` 前綴。',
             '儲存鍵邏輯隔離：擴充設定與資料分別存於 `wmcx_ext_settings_<id>` 與 `wmcx_ext_data_<id>`，不得跨擴充直接讀寫 `localStorage`。',
             '原型鏈污染防護：設定覆寫路徑嚴禁包含 `__proto__`、`constructor` 或 `prototype`。',
-            '外部網路與條款分級：純離線運作外掛不強制提供條款連結；若涉及外部連線、人工智慧介面傳送資料或輸入第三方金鑰，應於介面明確揭露並於 `manifest.json` 提供 `privacyUrl` 與 `termsUrl`。'
+            '外部網路與條款分級：純離線運作擴充程式不強制提供條款連結；若涉及外部連線、人工智慧介面傳送資料或輸入第三方金鑰，應於介面明確揭露並於 `manifest.json` 提供 `privacyUrl` 與 `termsUrl`。'
         ],
         examples: [
             {
@@ -641,7 +632,7 @@ shadow.append(style, box);`
         title: '打包測試與安裝步驟',
         sidebarLabel: '打包與安裝測試',
         sidebarMono: false,
-        subtitle: '參考內建範例建立外掛壓縮包，並於擴充程式管理器匯入測試。',
+        subtitle: '將範例封裝為壓縮檔，再從擴充程式管理器匯入並測試。',
         status: {
             variant: 'free',
             label: '實作流程',
@@ -666,7 +657,7 @@ shadow.append(style, box);`
         ],
         summary: {
             namespace: '測試與發布',
-            permission: '依外掛需求宣告',
+            permission: '依擴充程式需求宣告',
             constant: '無',
             async: '手動或自動化打包',
             runtime: '瀏覽器擴充管理器',
@@ -688,7 +679,7 @@ shadow.append(style, box);`
         sidebarLabel: 'ctx 總覽',
         sidebarMono: true,
         badge: '物件',
-        subtitle: '傳入擴充進入點函式的核心上下文物件，提供版本資訊、識別碼、權限查詢與各授權命名空間。',
+        subtitle: '主程式將 ctx 傳給進入點。擴充程式可用它查詢版本、識別碼和權限，並存取已授權的 API。',
         status: {
             variant: 'free',
             label: '預設注入',
@@ -697,17 +688,17 @@ shadow.append(style, box);`
             apiVersion: 'API v1'
         },
         overview: [
-            '不論擴充程式在 `manifest.json` 宣告何種權限，主程式調用 `activate(ctx)` 時必定會於 `ctx` 物件注入基礎屬性 `apiVersion`、`extensionId` 與查詢方法 `hasPermission()`。',
+            '不論擴充程式在 `manifest.json` 宣告何種權限，主程式呼叫 `activate(ctx)` 時必定會於 `ctx` 物件注入基礎屬性 `apiVersion`、`extensionId` 與查詢方法 `hasPermission()`。',
             '其餘子命名空間如 `ctx.editor`、`ctx.playback`、`ctx.render` 等，則僅於對應權限獲得授權時才建立並凍結注入，未獲授權者為 `undefined`。',
-            '重要信任模型說明：目前所有插件皆跑在瀏覽器主執行緒、無系統級沙盒隔離，可存取與修改頁面 DOM 並讀取當前專案資料。`ctx` 的凍結與權限過濾屬於介面層級的存取控管，而非安全沙盒。'
+            '重要信任模型說明：目前所有擴充程式皆跑在瀏覽器主執行緒、無系統級沙盒隔離，可存取與修改頁面 DOM 並讀取目前專案資料。`ctx` 的凍結與權限過濾屬於介面層級的存取控管，而非安全沙盒。'
         ],
         callouts: [
             {
                 variant: 'warning',
                 title: '主執行緒執行與 runtime: worker 未實作說明',
                 items: [
-                    '插件在主執行緒以動態 `import()` 執行，與主應用程式共享同源 DOM、IndexedDB 與全域環境；`Object.freeze(scoped)` 僅限制官方介面物件屬性，無法阻止直接存取瀏覽器全域物件。',
-                    '`manifest.json` 中的 `runtime: "worker"` 目前為保留但未實作欄位；設定為 `worker` 的外掛在啟用階段會被拒絕並標記為錯誤狀態，請勿將其視為可用功能。'
+                    '擴充程式在主執行緒以動態 `import()` 執行，與主應用程式共享同源 DOM、IndexedDB 與全域環境；`Object.freeze(scoped)` 僅限制官方介面物件屬性，無法阻止直接存取瀏覽器全域物件。',
+                    '`manifest.json` 中的 `runtime: "worker"` 目前為保留但未實作欄位；設定為 `worker` 的擴充程式在啟用階段會被拒絕並標記為錯誤狀態，請勿將其視為可用功能。'
                 ]
             }
         ],
@@ -717,8 +708,8 @@ shadow.append(style, box);`
                 columns: ['屬性或方法', '型別', '說明'],
                 rows: [
                     ['`ctx.apiVersion`', '`number`', '目前擴充系統 API 版本整數，現行固定為 `1`'],
-                    ['`ctx.extensionId`', '`string`', '當前擴充唯一識別碼，對應 `manifest.json` 的 `id` 欄位'],
-                    ['`ctx.hasPermission(perm)`', '`Function`', '檢查當前擴充是否已被授予指定權限字串，回傳布林值']
+                    ['`ctx.extensionId`', '`string`', '目前擴充唯一識別碼，對應 `manifest.json` 的 `id` 欄位'],
+                    ['`ctx.hasPermission(perm)`', '`Function`', '檢查目前擴充是否已被授予指定權限字串，回傳布林值']
                 ]
             }
         ],
@@ -759,7 +750,7 @@ shadow.append(style, box);`
         sidebarLabel: 'apiVersion',
         sidebarMono: true,
         badge: '唯讀屬性',
-        subtitle: '取得目前宿主環境提供的擴充 API 版本整數。',
+        subtitle: '讀取主程式提供的擴充 API 版本，回傳值為整數。',
         status: {
             variant: 'free',
             label: '免權限',
@@ -805,7 +796,7 @@ shadow.append(style, box);`
         sidebarLabel: 'extensionId',
         sidebarMono: true,
         badge: '唯讀屬性',
-        subtitle: '取得當前擴充程式在描述檔中宣告的唯一識別碼。',
+        subtitle: '讀取擴充程式在 manifest.json 宣告的識別碼。',
         status: {
             variant: 'free',
             label: '免權限',
@@ -849,7 +840,7 @@ shadow.append(style, box);`
         sidebarLabel: 'hasPermission()',
         sidebarMono: true,
         badge: '方法',
-        subtitle: '在執行期間確認當前擴充程式是否已被授予特定的權限識別碼。',
+        subtitle: '檢查目前的擴充程式是否具有指定權限。',
         status: {
             variant: 'free',
             label: '免權限',
@@ -858,7 +849,7 @@ shadow.append(style, box);`
             apiVersion: 'API v1'
         },
         overview: [
-            '依據使用者授權與 `manifest.json` 宣告內容，判定特定權限字串是否已啟用。適合用於實作可選功能的漸進式增強邏輯。'
+            '依據使用者授權與 `manifest.json` 宣告內容，判定特定權限字串是否已啟用。若某項功能需要額外權限，可先用此方法檢查，再決定是否啟用。'
         ],
         syntax: `ctx.hasPermission(permissionString)`,
         parameters: [
@@ -905,7 +896,7 @@ shadow.append(style, box);`
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '讀取或修改 simai 譜面文字編輯器內容、選取範圍與監聽輸入事件。',
+        subtitle: '讀寫 simai 譜面文字、查詢選取範圍，或監聽編輯器事件。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -949,7 +940,7 @@ shadow.append(style, box);`
         sidebarLabel: 'getText()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '讀取 simai 譜面編輯器目前的全部文字內容。',
+        subtitle: '讀取編輯器中的完整 simai 譜面文字。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -958,7 +949,7 @@ shadow.append(style, box);`
             apiVersion: 'API v1'
         },
         overview: [
-            '回傳目前開啟譜面難度的編輯器純文字內容。若編輯器元件尚未初始化就緒，則安全回傳空字串。'
+            '回傳目前開啟譜面難度的編輯器純文字內容。編輯器尚未初始化時，回傳空字串。'
         ],
         syntax: `ctx.editor.getText()`,
         returns: {
@@ -994,7 +985,7 @@ console.log({ lines, beats });`
         sidebarLabel: 'getSelection()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得目前游標起點索引、終點索引以及選取區文字片段。',
+        subtitle: '讀取選取範圍的起點、終點與選取文字。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1003,7 +994,7 @@ console.log({ lines, beats });`
             apiVersion: 'API v1'
         },
         overview: [
-            '用於查詢使用者在編輯器內反白的文字區間，或取得當前游標位置索引。當未反白文字時，`start` 與 `end` 相等且 `text` 為空字串。'
+            '用於查詢使用者在編輯器內反白的文字區間，或取得目前游標位置索引。當未反白文字時，`start` 與 `end` 相等且 `text` 為空字串。'
         ],
         syntax: `ctx.editor.getSelection()`,
         returns: {
@@ -1044,7 +1035,7 @@ if (selection.end > selection.start) {
         sidebarLabel: 'on()',
         sidebarMono: true,
         badge: '事件',
-        subtitle: '訂閱編輯器的輸入、按鍵、失焦或選取區變更事件，並於停用時自動解除綁定。',
+        subtitle: '監聽輸入、按鍵、失焦或選取範圍變更。停用擴充程式時會自動取消監聽。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1113,7 +1104,7 @@ const offKey = ctx.editor.on('keydown', (e) => {
         sidebarLabel: 'replaceSelection()',
         sidebarMono: true,
         badge: '寫入',
-        subtitle: '將目前反白選取區或指定起迄索引範圍置換為新的譜面字串。',
+        subtitle: '用新文字取代目前選取的內容，或取代指定索引範圍內的文字。',
         status: {
             variant: 'perm',
             label: '需要寫入權限',
@@ -1122,8 +1113,8 @@ const offKey = ctx.editor.on('keydown', (e) => {
             apiVersion: 'API v1'
         },
         overview: [
-            '透過編輯器邏輯控制流程安全寫入文字內容，確保游標位置與編輯器內部狀態同步更新。',
-            '省略 `start` 與 `end` 參數時，系統會自動取代使用者目前的選取區或於當前游標處插入文字。'
+            '透過編輯器寫入文字時，游標位置與編輯器狀態會一起更新。',
+            '省略 `start` 與 `end` 參數時，系統會自動取代使用者目前的選取區或於目前游標處插入文字。'
         ],
         syntax: `ctx.editor.replaceSelection(replacement, start, end)`,
         parameters: [
@@ -1185,7 +1176,7 @@ if (sel.text && !sel.text.includes('b')) {
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '讀取目前播放狀態、音軌總長度，並精確控制播放時間軸跳轉與相對微調。',
+        subtitle: '查詢播放狀態和音軌長度，或以絕對時間和相對秒數調整播放位置。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1202,10 +1193,10 @@ if (sel.text && !sel.text.includes('b')) {
                 title: 'ctx.playback 方法清單',
                 columns: ['方法', '所需權限', '說明'],
                 rows: [
-                    ['`getState()`', '`playback:read`', '讀取當前是否播放與即時時間軸秒數'],
+                    ['`getState()`', '`playback:read`', '讀取目前是否播放與即時時間軸秒數'],
                     ['`getDuration()`', '`playback:read`', '取得目前譜面或音軌總長度秒數'],
                     ['`seek(targetTime)`', '`playback:seek`', '跳轉時間軸至指定絕對秒數'],
-                    ['`nudge(deltaSeconds)`', '`playback:seek`', '以當前進度為基準進行相對秒數微調']
+                    ['`nudge(deltaSeconds)`', '`playback:seek`', '以目前進度為基準進行相對秒數微調']
                 ]
             }
         ],
@@ -1229,7 +1220,7 @@ if (sel.text && !sel.text.includes('b')) {
         sidebarLabel: 'getState()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得當前播放引擎的播放狀態、實際播放時間與全域基準時間。',
+        subtitle: '讀取播放狀態、實際播放時間與全域基準時間。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1252,7 +1243,7 @@ if (sel.text && !sel.text.includes('b')) {
         },
         examples: [
             {
-                label: '讀取當前播放秒數與狀態',
+                label: '讀取目前播放秒數與狀態',
                 code: `const { isPlaying, realTime, globalTime } = ctx.playback.getState();
 console.log({ isPlaying, realTime, globalTime });`
             }
@@ -1277,7 +1268,7 @@ console.log({ isPlaying, realTime, globalTime });`
         sidebarLabel: 'getDuration()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '回傳目前載入譜面或音軌的總長度秒數。',
+        subtitle: '讀取目前譜面或音軌的總長度，單位為秒。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1286,7 +1277,7 @@ console.log({ isPlaying, realTime, globalTime });`
             apiVersion: 'API v1'
         },
         overview: [
-            '回傳當前載入音訊或譜面時間軸的最大長度秒數，常用於計算時間軸百分比或安全跳轉邊界。'
+            '回傳目前載入音訊或譜面時間軸的最大長度秒數，常用於計算時間軸百分比或安全跳轉邊界。'
         ],
         syntax: `ctx.playback.getDuration()`,
         returns: {
@@ -1295,7 +1286,7 @@ console.log({ isPlaying, realTime, globalTime });`
         },
         examples: [
             {
-                label: '計算當前播放進度百分比',
+                label: '計算目前播放進度百分比',
                 code: `const duration = ctx.playback.getDuration();
 const { realTime } = ctx.playback.getState();
 const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
@@ -1321,7 +1312,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         sidebarLabel: 'seek()',
         sidebarMono: true,
         badge: '控制',
-        subtitle: '將播放進度與渲染畫面跳轉至指定的絕對秒數。',
+        subtitle: '將播放位置移至指定秒數，並同步更新畫面。',
         status: {
             variant: 'perm',
             label: '需要控制權限',
@@ -1371,7 +1362,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         sidebarLabel: 'nudge()',
         sidebarMono: true,
         badge: '控制',
-        subtitle: '以當前播放進度為基準，向前快轉或向後倒轉指定秒數。',
+        subtitle: '以目前的播放位置為起點，向前或向後移動指定秒數。',
         status: {
             variant: 'perm',
             label: '需要控制權限',
@@ -1380,7 +1371,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
             apiVersion: 'API v1'
         },
         overview: [
-            '正值向前推進，負值向後倒退。系統會自動加上目前進度並夾緊於合法時間區間內。'
+            '正值移向音軌結尾，負值移向開頭。調整後的位置限制在零秒到音軌總長度之間。'
         ],
         syntax: `ctx.playback.nudge(deltaSeconds)`,
         parameters: [
@@ -1425,7 +1416,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '讀取目前譜面已解析的唯讀凍結快照與專案封面圖片網址。',
+        subtitle: '讀取已解析譜面的唯讀快照，以及專案封面圖片的網址。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1435,14 +1426,14 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         },
         overview: [
             '宣告 `chart:read` 權限時注入此介面；未宣告時為 `undefined`。',
-            '所有透過 `ctx.chart.getSnapshot()` 取出的資料皆經過深層凍結與快取保護，防止外掛意外改寫主渲染器共用的音符陣列或標頭物件。'
+            '所有透過 `ctx.chart.getSnapshot()` 取出的資料皆經過深層凍結與快取保護，防止擴充程式意外改寫主渲染器共用的音符陣列或標頭物件。'
         ],
         tables: [
             {
                 title: 'ctx.chart 方法清單',
                 columns: ['方法', '所需權限', '說明'],
                 rows: [
-                    ['`getSnapshot()`', '`chart:read`', '讀取當前難度譜面解析結果的唯讀凍結快照'],
+                    ['`getSnapshot()`', '`chart:read`', '讀取目前難度譜面解析結果的唯讀凍結快照'],
                     ['`getCoverImageUrl()`', '`chart:read`', '唯讀取得目前專案封面圖片網址']
                 ]
             }
@@ -1467,7 +1458,7 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
         sidebarLabel: 'getSnapshot()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得當前難度已解析的音符清單、標籤、譜面中繼資料與時間長度。',
+        subtitle: '讀取目前難度的音符、標籤、譜面資料與總長度。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1484,16 +1475,16 @@ const progress = duration > 0 ? Math.min(100, (realTime / duration) * 100) : 0;`
             type: 'Object',
             description: '唯讀凍結的譜面資料快照。',
             fields: [
-                { name: 'difficulty', type: 'number', description: '當前選取的難度代號或索引' },
+                { name: 'difficulty', type: 'number', description: '目前選取的難度代號或索引' },
                 { name: 'maidata', type: 'Object', description: '譜面整體中繼資料，包含標題、作者與各難度文字' },
                 { name: 'duration', type: 'number', description: '時間軸總長度秒數' },
-                { name: 'notes', type: 'Array<Object>', description: '當前難度已解析的音符物件清單' },
+                { name: 'notes', type: 'Array<Object>', description: '目前難度已解析的音符物件清單' },
                 { name: 'tags', type: 'Array<Object>', description: '譜面已解析的標籤清單' }
             ]
         },
         examples: [
             {
-                label: '統計當前難度音符總數',
+                label: '統計目前難度音符總數',
                 code: `const snapshot = ctx.chart.getSnapshot();
 console.log('難度索引:', snapshot.difficulty, '音符數:', snapshot.notes.length);`
             }
@@ -1518,7 +1509,7 @@ console.log('難度索引:', snapshot.difficulty, '音符數:', snapshot.notes.l
         sidebarLabel: 'getCoverImageUrl()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '唯讀取得目前載入專案的背景或封面圖片網址。',
+        subtitle: '取得目前專案的背景或封面圖片網址。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1527,7 +1518,7 @@ console.log('難度索引:', snapshot.difficulty, '音符數:', snapshot.notes.l
             apiVersion: 'API v1'
         },
         overview: [
-            '提供外掛在自訂畫布圖層或資訊面板中顯示目前譜面封面圖片。若當前專案未設定封面圖片，則回傳 `null`。'
+            '提供擴充程式在自訂畫布圖層或資訊面板中顯示目前譜面封面圖片。若目前專案未設定封面圖片，則回傳 `null`。'
         ],
         syntax: `ctx.chart.getCoverImageUrl()`,
         returns: {
@@ -1568,7 +1559,7 @@ if (coverUrl) {
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '查詢編輯器目前的版面分割、全螢幕與輔助文字顯示狀態。',
+        subtitle: '查詢編輯器版面、全螢幕模式與輔助文字的顯示狀態。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1608,7 +1599,7 @@ if (coverUrl) {
         sidebarLabel: 'getMode()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得編輯器隱藏、全螢幕、直式版面與環繞輔助文字狀態。',
+        subtitle: '讀取編輯器是否隱藏，以及全螢幕、直式版面和環繞輔助文字的狀態。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1617,12 +1608,12 @@ if (coverUrl) {
             apiVersion: 'API v1'
         },
         overview: [
-            '協助浮動掛件或疊加圖層判斷目前的工作區排版狀態，例如在直式螢幕或隱藏編輯器全畫面預覽時自動調整版面配置。'
+            '協助浮動元件或疊加圖層判斷目前的工作區排版狀態，例如在直式螢幕或隱藏編輯器全畫面預覽時自動調整版面配置。'
         ],
         syntax: `ctx.view.getMode()`,
         returns: {
             type: 'Object',
-            description: '代表當前檢視模式的唯讀快照物件。',
+            description: '代表目前檢視模式的唯讀快照物件。',
             fields: [
                 { name: 'isEditorHidden', type: 'boolean', description: '編輯器文字面板是否處於隱藏狀態' },
                 { name: 'isFullscreen', type: 'boolean', description: '是否處於全螢幕模式' },
@@ -1663,7 +1654,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '於主畫布或視覺化編輯器畫布的多個分層階段插入自訂 Canvas 2D 繪圖邏輯，並支援逐幀離線影片匯出。',
+        subtitle: '在畫布指定階段加入自訂 Canvas 2D 繪圖，也可將圖層納入逐幀影片匯出。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1673,7 +1664,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         },
         overview: [
             '宣告 `render:overlay` 權限時注入此介面；未宣告時為 `undefined`。',
-            '系統內建嚴密的狀態防護、例外隔離與效能熔斷保護，確保擴充繪圖不會污染核心渲染狀態或導致主畫面永久卡頓。',
+            '主程式會保存並還原畫布狀態、捕捉繪圖錯誤，並監測各圖層的執行時間。',
             '錄影匯出採用固定幀率逐幀離線渲染，而非即時螢幕畫面擷取。在 `registerOverlay` 註冊 `target: "main"` 且啟用 `includeInVideo: true` 的圖層會納入匯出影片的每一幀渲染。'
         ],
         callouts: [
@@ -1700,7 +1691,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         ],
         notes: [
             '於離線影片渲染期間，`renderContext.isRenderingVideo` 為 `true`，`dt` 固定為 `1 / fps`，且系統會關閉 12 毫秒效能熔斷機制以免高解析度繪圖遭到中斷。',
-            '若需於每幀錄影繪製前非同步載入外部影片影格，請搭配 `prepareVideoFrame` 鉤子與 `createVideoFrameDecoder()`。'
+            '若需在每幀錄影繪製前非同步載入外部影片影格，請搭配 `prepareVideoFrame` 鉤子與 `createVideoFrameDecoder()`。'
         ],
         summary: {
             namespace: 'ctx.render',
@@ -1722,7 +1713,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         sidebarLabel: 'registerOverlay()',
         sidebarMono: true,
         badge: '渲染',
-        subtitle: '於主畫布、視覺化編輯器或底部預覽軌道指定階段註冊每幀自訂繪圖回呼，並可選擇納入影片匯出。',
+        subtitle: '在主畫布、視覺化編輯器或底部預覽軌道註冊繪圖回呼，並指定圖層是否納入影片匯出。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1746,7 +1737,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                         name: 'draw',
                         type: 'Function',
                         required: true,
-                        description: '每幀調用的同步繪圖回呼函式，接收 `renderContext` 物件。'
+                        description: '每幀呼叫的同步繪圖回呼函式，接收 `renderContext` 物件。'
                     },
                     {
                         name: 'target',
@@ -1836,15 +1827,15 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                     ['`ctx`', '`CanvasRenderingContext2D`', 'Canvas 2D 渲染上下文'],
                     ['`width`', '`number`', '目標畫布像素寬度'],
                     ['`height`', '`number`', '目標畫布像素高度'],
-                    ['`scale`', '`number`', '當前縮放倍率'],
+                    ['`scale`', '`number`', '目前縮放倍率'],
                     ['`scaleBase`', '`number`', '畫布基準縮放長度'],
                     ['`unitPx`', '`number`', '單位像素比例，於視覺化編輯器與底部預覽軌道為每秒像素倍率'],
                     ['`stageRect`', '`Object`', '主畫布置中的十六比九舞台安全區域 `{ x, y, width, height }`，唯讀'],
-                    ['`globalTime`', '`number`', '當前全域時間秒數，於底部預覽軌道對應畫布水平中心'],
-                    ['`isPlaying`', '`boolean`', '當前是否處於播放狀態'],
+                    ['`globalTime`', '`number`', '目前全域時間秒數，於底部預覽軌道對應畫布水平中心'],
+                    ['`isPlaying`', '`boolean`', '目前是否處於播放狀態'],
                     ['`isRenderingVideo`', '`boolean`', '是否處於影片匯出渲染期間，由主畫布提供'],
-                    ['`target`', '`string`', '當前繪圖目標畫布，為 `main`、`visual` 或 `preview`'],
-                    ['`phase`', '`string`', '當前繪圖階段名稱']
+                    ['`target`', '`string`', '目前繪圖目標畫布，為 `main`、`visual` 或 `preview`'],
+                    ['`phase`', '`string`', '目前繪圖階段名稱']
                 ]
             }
         ],
@@ -1853,9 +1844,9 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
                 variant: 'warning',
                 title: '離線逐幀錄影、計時規則與 Safari 及 iOS 限制',
                 items: [
-                    '錄影機制為固定幀率逐幀離線渲染而非即時擷取，不經由 `requestAnimationFrame` 驅動，也不依據 `Date.now()` 或 `performance.now()` 推進時間；插件畫面若需隨時間變化，必須完全根據 `rc.globalTime` 計算，否則匯出影片中的動畫將停滯或倍速錯亂。',
+                    '錄影機制為固定幀率逐幀離線渲染而非即時擷取，不經由 `requestAnimationFrame` 驅動，也不依據 `Date.now()` 或 `performance.now()` 推進時間；擴充程式畫面若需隨時間變化，必須完全根據 `rc.globalTime` 計算，否則匯出影片中的動畫將停滯或倍速錯亂。',
                     '非影片匯出渲染期間，若單一疊加圖層連續 30 幀的單幀繪製耗時超過 12 毫秒，系統會自動移除該圖層並以提示訊息通知使用者。請將模糊、影像解碼等重度運算預先在離屏畫布完成。',
-                    '影片匯出時的逐幀離線渲染不計入 12 毫秒熔斷限制；若提供的 `prepareVideoFrame` 連續逾時達 10 幀，該次匯出會略過前置等待以防卡死。',
+                    '影片匯出時的逐幀離線渲染不計入 12 毫秒熔斷限制；若提供的 `prepareVideoFrame` 連續逾時達 10 幀，該次匯出會略過該圖層的前置等待。',
                     'Safari 與 iOS 限制：錄影離屏畫布關閉透明通道且強制輸出尺寸為正偶數；部分 Safari 與 iOS WebKit 版本對 `rc.ctx.filter` 支援度不足，建議改用雙向混合、半透明遮罩或預先離屏處理取代 CSS 濾鏡字串，並控制離屏畫布解析度以避免超出 iOS 分頁記憶體上限。'
                 ]
             }
@@ -1908,7 +1899,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         sidebarLabel: 'requestRedraw()',
         sidebarMono: true,
         badge: '渲染',
-        subtitle: '主動發布畫布重繪事件，使靜止暫停中的互動畫布即時呈現最新的疊加圖層變化。',
+        subtitle: '要求畫布重繪，讓暫停播放時也能顯示更新後的圖層。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1917,7 +1908,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
             apiVersion: 'API v1'
         },
         overview: [
-            '當音軌處於暫停狀態而外掛內部狀態或設定變更時，可呼叫此方法觸發主渲染器與預覽畫布進行單次重繪。',
+            '當音軌處於暫停狀態而擴充程式內部狀態或設定變更時，可呼叫此方法觸發主渲染器與預覽畫布進行單次重繪。',
             '離線影片錄影採用逐幀控制迴圈繪製，不會監聽或響應 `requestRedraw()` 觸發的 `canvas:redraw` 事件。'
         ],
         syntax: `ctx.render.requestRedraw()`,
@@ -1955,7 +1946,7 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
         sidebarLabel: 'createVideoFrameDecoder()',
         sidebarMono: true,
         badge: '渲染',
-        subtitle: '建立受控的離線逐幀影片解碼器，封裝循序影格推進、循環對齊與自動資源釋放。',
+        subtitle: '為離線匯出建立影片解碼器，依時間取得影格，並處理循環播放與資源釋放。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -1964,8 +1955,8 @@ if (mode.isVerticalMode && mode.isEditorHidden) {
             apiVersion: 'API v1'
         },
         overview: [
-            '供需要將外部影片整合進離線錄影匯出的外掛使用，內部會自動維護循序影格迭代器推進、循環回繞與跳轉重建，避免直接以 `video.currentTime` 逐幀跳轉導致匯出緩慢。',
-            '若圖層僅使用 Canvas 畫筆繪製圖形或繪製靜態圖片，只需於 `registerOverlay` 設定 `includeInVideo: true` 並於 `draw` 依 `globalTime` 繪圖即可，無需呼叫此方法。'
+            '供需要將外部影片整合進離線錄影匯出的擴充程式使用，內部會自動維護循序影格迭代器推進、循環回繞與跳轉重建，避免直接以 `video.currentTime` 逐幀跳轉導致匯出緩慢。',
+            '若圖層僅使用 Canvas 畫筆繪製圖形或繪製靜態圖片，只需在 `registerOverlay` 設定 `includeInVideo: true` 並於 `draw` 依 `globalTime` 繪圖即可，無需呼叫此方法。'
         ],
         syntax: `const decoder = await ctx.render.createVideoFrameDecoder(source, options)`,
         parameters: [
@@ -2083,7 +2074,7 @@ ctx.render.registerOverlay({
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '於全域指令中心註冊具備擴充命名空間前綴的自訂指令。',
+        subtitle: '在全域指令中心註冊擴充程式專屬的指令。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2124,7 +2115,7 @@ ctx.render.registerOverlay({
         sidebarLabel: 'register()',
         sidebarMono: true,
         badge: '註冊',
-        subtitle: '向全域指令中心註冊具有擴充命名空間隔離的可執行指令。',
+        subtitle: '註冊指令及其執行函式。主程式會在指令名稱前加上擴充程式的命名空間。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2133,7 +2124,7 @@ ctx.render.registerOverlay({
             apiVersion: 'API v1'
         },
         overview: [
-            '系統會自動將傳入的本地指令名稱組合為 `ext.${extensionId}.${localCommandId}`，防止覆寫主程式核心指令或與其他外掛衝撞。'
+            '系統會自動將傳入的本地指令名稱組合為 `ext.${extensionId}.${localCommandId}`，避免覆寫主程式指令，或與其他擴充程式的指令同名。'
         ],
         syntax: `const unregister = ctx.commands.register(localCommandId, handler, meta = {})`,
         parameters: [
@@ -2169,7 +2160,7 @@ ctx.render.registerOverlay({
                 label: '註冊指令並綁定至頂欄選單',
                 code: `const offCmd = ctx.commands.register('openPanel', ({ anchorEl }) => {
     ctx.ui.openPopover({ title: '設定', schema: [], anchorEl });
-}, { title: '開啟外掛設定' });
+}, { title: '開啟擴充程式設定' });
 
 ctx.ui.registerMenuItem({
     id: 'settings',
@@ -2202,7 +2193,7 @@ ctx.ui.registerMenuItem({
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '訂閱應用程式事件匯流排中開放白名單的系統生命週期與狀態變更事件。',
+        subtitle: '監聽主程式開放的生命週期與狀態變更事件。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2242,7 +2233,7 @@ ctx.ui.registerMenuItem({
         sidebarLabel: 'on()',
         sidebarMono: true,
         badge: '事件',
-        subtitle: '訂閱專案載入、譜面解碼、播放切換或設定異動等白名單系統事件。',
+        subtitle: '訂閱指定的系統事件，例如專案載入、譜面解碼、播放狀態或設定變更。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2251,7 +2242,7 @@ ctx.ui.registerMenuItem({
             apiVersion: 'API v1'
         },
         overview: [
-            '僅允許訂閱開放白名單所列的系統事件。若嘗試訂閱未開放事件，控制台會輸出警告訊息並回傳空操作函式。'
+            '僅允許訂閱開放白名單所列的系統事件。訂閱未開放的事件時，主程式會在主控台顯示警告，並回傳不執行任何操作的函式。'
         ],
         syntax: `const off = ctx.events.on(eventName, callback)`,
         parameters: [
@@ -2265,7 +2256,7 @@ ctx.ui.registerMenuItem({
                 name: 'callback',
                 type: 'Function',
                 required: true,
-                description: '事件發布時執行的回呼函式，接收對應的事件酬載參數。'
+                description: '事件發布時執行的回呼函式，接收對應的事件事件資料參數。'
             }
         ],
         returns: {
@@ -2276,7 +2267,7 @@ ctx.ui.registerMenuItem({
             {
                 label: '監聽譜面重新解碼事件',
                 code: `const off = ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
-    console.log('當前難度音符總數:', difficulty, noteCount);
+    console.log('目前難度音符總數:', difficulty, noteCount);
 });`
             }
         ],
@@ -2304,7 +2295,7 @@ ctx.ui.registerMenuItem({
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '提供吐司提示、頂欄拼圖選單註冊、宣告式設定彈窗與受控浮動掛件容器。',
+        subtitle: '顯示通知、加入頂欄選單項目，或建立設定面板與浮動元件。',
         status: {
             variant: 'perm',
             label: '細粒度 UI 權限',
@@ -2313,19 +2304,19 @@ ctx.ui.registerMenuItem({
             apiVersion: 'API v1'
         },
         overview: [
-            '宣告 `ui:toast`、`ui:menu`、`ui:popover` 或 `ui:overlay` 任一權限時注入 `ctx.ui`。物件內僅會暴露已授權權限對應的方法。'
+            '宣告 `ui:toast`、`ui:menu`、`ui:popover` 或 `ui:overlay` 任一權限時注入 `ctx.ui`。物件只提供已授權的方法。'
         ],
         tables: [
             {
                 title: 'ctx.ui 方法與權限對照',
                 columns: ['方法', '所需權限', '說明'],
                 rows: [
-                    ['`toast(options)`', '`ui:toast`', '顯示全域吐司提示通知'],
+                    ['`toast(options)`', '`ui:toast`', '顯示全域通知'],
                     ['`registerMenuItem(item)`', '`ui:menu`', '於頂欄拼圖選單註冊二級選單項目'],
                     ['`openPopover(options)`', '`ui:popover`', '開啟宣告式設定彈窗'],
                     ['`closePopover()`', '`ui:popover`', '關閉目前開啟的擴充設定彈窗'],
                     ['`getSettings(schema)`', '`ui:popover`', '讀取並自動補全預設值的隔離設定物件'],
-                    ['`createFloatingWidget(options)`', '`ui:overlay`', '建立受控頁面浮動掛件容器']
+                    ['`createFloatingWidget(options)`', '`ui:overlay`', '建立受控頁面浮動元件容器']
                 ]
             }
         ],
@@ -2344,12 +2335,12 @@ ctx.ui.registerMenuItem({
         category: 'api',
         groupId: 'group-ctx-ui',
         stability: 'stable',
-        title: '顯示全域吐司通知',
+        title: '顯示全域通知',
         codeTitle: 'ctx.ui.toast()',
         sidebarLabel: 'toast()',
         sidebarMono: true,
         badge: '介面',
-        subtitle: '使用主程式既有的 SimpleToast 通知系統向使用者顯示簡短提示訊息。',
+        subtitle: '透過主程式的通知系統顯示簡短訊息。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2358,7 +2349,7 @@ ctx.ui.registerMenuItem({
             apiVersion: 'API v1'
         },
         overview: [
-            '於畫面左上方或目前彈窗適應位置顯示非侵入式的提示訊息列，支援傳入設定物件或純文字字串。',
+            '通知顯示於畫面左上方，開啟對話框時會調整顯示位置。可傳入純文字或通知設定物件。',
             '系統會自動在提示元素上標記 `dataset.extensionId`（及 `_extensionId`）供識別來源，並於擴充程式停用時自動關閉尚未消失的提示。'
         ],
         syntax: `const controller = ctx.ui.toast(options)`,
@@ -2383,7 +2374,7 @@ ctx.ui.registerMenuItem({
         },
         examples: [
             {
-                label: '顯示成功吐司並透過控制器原地更新與關閉',
+                label: '顯示成功通知並透過控制器更新或關閉通知',
                 code: `const toast = ctx.ui.toast({
     id: 'render-status',
     title: '自訂渲染',
@@ -2416,7 +2407,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         sidebarLabel: 'registerMenuItem()',
         sidebarMono: true,
         badge: '介面',
-        subtitle: '於頂欄拼圖選單的該擴充子選單中新增可點擊的功能項目。',
+        subtitle: '在頂欄的擴充程式子選單中加入可執行的項目。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2455,7 +2446,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
     label: '參數設定',
     onClick: ({ anchorEl }) => {
         ctx.ui.openPopover({
-            title: '插件設定',
+            title: '擴充程式設定',
             schema: SETTINGS_SCHEMA,
             anchorEl
         });
@@ -2483,7 +2474,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         sidebarLabel: 'openPopover()',
         sidebarMono: true,
         badge: '彈窗',
-        subtitle: '復用原站系統彈窗與模糊背景遮罩，自動依綱要陣列渲染設定表單並同步持久化儲存。',
+        subtitle: '依欄位定義開啟設定面板。主程式負責繪製表單與儲存設定。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2513,8 +2504,8 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
             type: 'Object',
             description: '彈窗控制物件。',
             fields: [
-                { name: 'close', type: 'Function', description: '立即關閉當前設定面板' },
-                { name: 'getValues', type: 'Function', description: '取得當前面板所有欄位數值的淺層拷貝物件' }
+                { name: 'close', type: 'Function', description: '立即關閉目前設定面板' },
+                { name: 'getValues', type: 'Function', description: '取得目前面板所有欄位數值的淺層拷貝物件' }
             ]
         },
         examples: [
@@ -2552,7 +2543,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         sidebarLabel: 'closePopover()',
         sidebarMono: true,
         badge: '彈窗',
-        subtitle: '若目前正開啟屬於當前擴充的設定面板，將其關閉並釋放背景遮罩。',
+        subtitle: '若目前顯示的是這個擴充程式的設定面板，關閉面板並移除背景遮罩。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2561,7 +2552,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
             apiVersion: 'API v1'
         },
         overview: [
-            '提供外掛以程式方式主動收合設定面板。若目前開啟的是其他擴充或主程式彈窗，則不會受影響。'
+            '用於關閉此擴充程式開啟的設定面板。若目前開啟的是其他擴充或主程式彈窗，則不會受影響。'
         ],
         syntax: `ctx.ui.closePopover()`,
         returns: {
@@ -2594,7 +2585,7 @@ toast?.update({ content: '已完成畫面重繪', type: 'info' });`
         sidebarLabel: 'getSettings()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '自該擴充專屬隔離儲存區讀取已儲存設定，並自動以綱要預設值補全缺漏欄位。',
+        subtitle: '讀取此擴充程式已儲存的設定，缺少的欄位使用綱要中的預設值。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2645,12 +2636,12 @@ const settings = ctx.ui.getSettings(SETTINGS_SCHEMA);`
         category: 'api',
         groupId: 'group-ctx-ui',
         stability: 'stable',
-        title: '建立浮動掛件容器',
+        title: '建立浮動元件容器',
         codeTitle: 'ctx.ui.createFloatingWidget()',
         sidebarLabel: 'createFloatingWidget()',
         sidebarMono: true,
         badge: '介面',
-        subtitle: '於頁面根層級掛載受控的浮動元件容器，並於擴充停用時自動清除。',
+        subtitle: '在頁面上建立浮動元件容器。停用擴充程式時，主程式會移除容器。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2660,7 +2651,7 @@ const settings = ctx.ui.getSettings(SETTINGS_SCHEMA);`
         },
         overview: [
             '建立帶有 `.extension-floating-widget` 樣式規則的 DOM 掛載容器。開啟系統彈窗時，此容器會處於 `.popup-backdrop` 模糊遮罩下方，不遮蔽系統操作視窗。',
-            '建議於回傳的 `element` 上掛載 Shadow DOM，確保外掛樣式與主站完全隔離。'
+            '建議於回傳的 `element` 上掛載 Shadow DOM，確保擴充程式樣式與主站完全隔離。'
         ],
         syntax: `const widget = ctx.ui.createFloatingWidget(options = {})`,
         parameters: [
@@ -2718,7 +2709,7 @@ shadow.appendChild(text);`
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '於系統分配的擴充專屬邏輯隔離鍵空間內讀寫與清理持久資料。',
+        subtitle: '在擴充程式專屬的儲存空間中讀取、寫入或刪除資料。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2728,7 +2719,7 @@ shadow.appendChild(text);`
         },
         overview: [
             '宣告 `storage` 權限時注入此介面；未宣告時為 `undefined`。',
-            '資料以擴充識別碼存放於 `localStorage` 的 `wmcx_ext_data_<id>` 欄位中，解除安裝擴充程式時系統會自動移除對應資料與設定。此為邏輯命名空間隔離，請勿儲存敏感密碼或明文機密。'
+            '資料依擴充程式識別碼存放於 `localStorage` 的 `wmcx_ext_data_<id>` 欄位中，解除安裝擴充程式時系統會自動移除對應資料與設定。此為邏輯命名空間隔離，請勿儲存敏感密碼或明文機密。'
         ],
         tables: [
             {
@@ -2738,7 +2729,7 @@ shadow.appendChild(text);`
                     ['`get(key, defaultValue)`', '`storage`', '讀取指定鍵的資料，不存在時回傳預設值'],
                     ['`set(key, value)`', '`storage`', '寫入可 JSON 序列化的資料至隔離空間'],
                     ['`remove(key)`', '`storage`', '移除指定鍵的資料'],
-                    ['`clear()`', '`storage`', '清空當前擴充在隔離儲存區內的所有資料'],
+                    ['`clear()`', '`storage`', '清空目前擴充在隔離儲存區內的所有資料'],
                     ['`keys()`', '`storage`', '取得目前所有已儲存鍵名陣列']
                 ]
             }
@@ -2763,7 +2754,7 @@ shadow.appendChild(text);`
         sidebarLabel: 'get()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '讀取指定鍵名的儲存資料，若鍵名不存在則回傳指定的預設值。',
+        subtitle: '讀取指定鍵的值。若鍵不存在，回傳呼叫時指定的預設值。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2772,7 +2763,7 @@ shadow.appendChild(text);`
             apiVersion: 'API v1'
         },
         overview: [
-            '自當前擴充的隔離資料區讀取並反序列化儲存數值。'
+            '從此擴充程式的儲存區讀取資料，將 JSON 還原為原來的值。'
         ],
         syntax: `ctx.storage.get(key, defaultValue = null)`,
         parameters: [
@@ -2809,7 +2800,7 @@ shadow.appendChild(text);`
         sidebarLabel: 'set()',
         sidebarMono: true,
         badge: '寫入',
-        subtitle: '將指定資料透過 JSON 序列化寫入當前擴充的隔離儲存區。',
+        subtitle: '將資料序列化為 JSON，寫入此擴充程式的儲存空間。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2855,7 +2846,7 @@ shadow.appendChild(text);`
         sidebarLabel: 'remove()',
         sidebarMono: true,
         badge: '寫入',
-        subtitle: '刪除擴充隔離儲存空間內的單一指定鍵值。',
+        subtitle: '從此擴充程式的儲存空間刪除指定鍵及其值。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2900,7 +2891,7 @@ shadow.appendChild(text);`
         sidebarLabel: 'clear()',
         sidebarMono: true,
         badge: '寫入',
-        subtitle: '一次清除當前擴充於隔離儲存空間內保存的所有鍵值資料。',
+        subtitle: '清除此擴充程式儲存的所有鍵與值。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2918,7 +2909,7 @@ shadow.appendChild(text);`
         },
         examples: [
             {
-                label: '重設所有插件內部狀態',
+                label: '重設所有擴充程式內部狀態',
                 code: `ctx.storage.clear();`
             }
         ],
@@ -2942,7 +2933,7 @@ shadow.appendChild(text);`
         sidebarLabel: 'keys()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得當前擴充在隔離儲存區中所有已建立的鍵名清單。',
+        subtitle: '列出此擴充程式已儲存的所有鍵名。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -2989,7 +2980,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '註冊擴充專屬多語系詞典並整合主程式語言熱切換機制。',
+        subtitle: '註冊擴充程式的翻譯，並依目前的介面語言查詢文字。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3007,7 +2998,7 @@ console.log('儲存鍵數目:', allKeys.length);`
                 columns: ['方法', '所需權限', '說明'],
                 rows: [
                     ['`registerTranslations(localeMap)`', '`i18n:register`', '註冊各語系翻譯字典至擴充命名空間'],
-                    ['`t(key, params)`', '`i18n:register`', '查詢當前語系的擴充翻譯字串']
+                    ['`t(key, params)`', '`i18n:register`', '查詢目前語系的擴充翻譯字串']
                 ]
             }
         ],
@@ -3031,7 +3022,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         sidebarLabel: 'registerTranslations()',
         sidebarMono: true,
         badge: '註冊',
-        subtitle: '為不同語言代碼註冊擴充專屬翻譯條目，擴充停用時自動卸載。',
+        subtitle: '按語言代碼註冊翻譯。停用擴充程式時，主程式會移除這些翻譯。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3090,7 +3081,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         sidebarLabel: 't()',
         sidebarMono: true,
         badge: '方法',
-        subtitle: '依據使用者目前選定的介面語言取得翻譯結果並支援參數插值替換。',
+        subtitle: '依目前的介面語言取得翻譯文字，並將參數代入字串。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3108,7 +3099,7 @@ console.log('儲存鍵數目:', allKeys.length);`
         ],
         returns: {
             type: 'string',
-            description: '當前語系的翻譯結果文字，找不到時回傳完整鍵名。'
+            description: '目前語系的翻譯結果文字，找不到時回傳完整鍵名。'
         },
         examples: [
             {
@@ -3141,7 +3132,7 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '以非破壞性堆疊方式讀取或層疊覆寫主編輯器與渲染器的原生設定項目。',
+        subtitle: '讀取編輯器和渲染器的設定，或暫時覆寫設定值。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3151,12 +3142,12 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         },
         overview: [
             '宣告 `settings:read` 或 `settings:override` 權限時注入此介面；未宣告時為 `undefined`。',
-            '外掛進行的所有設定覆寫僅於執行期記憶體中層疊生效，絕對不會寫入使用者儲存於本機的持久化基準設定。'
+            '擴充程式進行的所有設定覆寫僅於執行期記憶體中層疊生效，不會寫入使用者儲存於本機的持久化基準設定。'
         ],
         notes: [
-            '執行期層疊堆疊：多個外掛覆寫同一設定項時依啟用順序堆疊，後啟用者優先；上層外掛釋放或停用時自動回退至次層覆寫或原始基準值。',
-            '持久化隔離保護：使用者於原生設定彈窗儲存設定時，系統會自動濾除所有外掛覆寫，僅保存純淨的使用者基準設定。',
-            '即時連動與重繪：覆寫生效或還原時會自動發布 `settings:changed` 事件且酬載附帶 `isExtensionOverride: true`，並觸發畫布重繪。',
+            '執行期層疊堆疊：多個擴充程式覆寫同一設定項時依啟用順序堆疊，後啟用者優先；上層擴充程式釋放或停用時自動回退至次層覆寫或原始基準值。',
+            '持久化隔離保護：使用者於原生設定彈窗儲存設定時，系統會自動濾除所有擴充程式覆寫，僅保存使用者的基準設定。',
+            '即時連動與重繪：覆寫生效或還原時會自動發布 `settings:changed` 事件且事件資料附帶 `isExtensionOverride: true`，並觸發畫布重繪。',
             '原型鏈安全檢查：嚴格禁止傳入包含 `__proto__`、`constructor` 或 `prototype` 之設定路徑。'
         ],
         tables: [
@@ -3192,7 +3183,7 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         sidebarLabel: 'get()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '讀取指定設定路徑的目前生效數值，若為物件則回傳深層凍結唯讀複本。',
+        subtitle: '讀取指定路徑目前生效的設定值。若值為物件，回傳深層凍結的唯讀複本。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3238,7 +3229,7 @@ ctx.ui.toast({ content: msg, type: 'info' });`
         sidebarLabel: 'getAll()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得當前應用程式所有生效設定的深層凍結唯讀快照物件。',
+        subtitle: '取得目前所有生效設定的唯讀快照，包含巢狀物件。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3281,7 +3272,7 @@ console.log(allSettings);`
         sidebarLabel: 'override()',
         sidebarMono: true,
         badge: '覆寫',
-        subtitle: '於記憶體覆寫堆疊推入指定設定鍵的暫時覆寫值，並即時重繪畫面。',
+        subtitle: '暫時覆寫一項設定。主程式將覆寫值加入記憶體中的堆疊，並更新畫面。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3331,7 +3322,7 @@ revertNoBorder();`
         sidebarLabel: 'overrideMany()',
         sidebarMono: true,
         badge: '覆寫',
-        subtitle: '一次套用多組原生設定鍵值覆寫，具備失敗時自動全部回復的原子性保護。',
+        subtitle: '一次覆寫多項設定。若其中一項失敗，會撤銷這批變更。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3379,7 +3370,7 @@ revertNoBorder();`
         sidebarLabel: 'clearOverrides()',
         sidebarMono: true,
         badge: '覆寫',
-        subtitle: '立即撤銷當前擴充程式註冊的所有原生設定覆寫並重繪畫布。',
+        subtitle: '撤銷此擴充程式的所有設定覆寫，並重繪畫布。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3425,7 +3416,7 @@ revertNoBorder();`
         sidebarLabel: '總覽',
         sidebarMono: false,
         badge: '命名空間',
-        subtitle: '查詢與非破壞性動態置換遊戲內的圖片貼圖資源以及打擊判定音效緩衝。',
+        subtitle: '查詢可用的圖片與音效，並在執行期間替換指定素材。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3439,7 +3430,7 @@ revertNoBorder();`
         ],
         notes: [
             '支援豐富來源格式：圖片支援 `HTMLImageElement`、`HTMLCanvasElement`、`ImageBitmap`、`Blob`、圖片網址或 Base64 字串；音效支援 `AudioBuffer`、`ArrayBuffer`、`ArrayBufferView`、`Blob`、音訊網址或 Data URL 字串。',
-            '切換外觀自動重套用：當使用者在設定中切換 Skin 重新載入整套原生素材時，系統會更新底層基準並自動重新套用已啟用的外掛圖片覆寫。',
+            '切換外觀自動重套用：當使用者在設定中切換 Skin 重新載入整套原生素材時，系統會更新底層基準並自動重新套用已啟用的擴充程式圖片覆寫。',
             '自動清理資源：擴充停用時系統自動還原原始素材、釋放系統建立的二進位物件網址，並取消尚未完成的非同步載入或解碼作業。'
         ],
         tables: [
@@ -3477,7 +3468,7 @@ revertNoBorder();`
         sidebarLabel: 'listImageKeys()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得目前圖片資源字典內所有可供覆寫的貼圖鍵名清單。',
+        subtitle: '列出可供覆寫的圖片素材鍵名。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3520,7 +3511,7 @@ console.log('貼圖清單:', imageKeys);`
         sidebarLabel: 'listSoundKeys()',
         sidebarMono: true,
         badge: '唯讀',
-        subtitle: '取得目前音訊管理器中註冊的所有打擊與判定音效鍵名清單。',
+        subtitle: '列出已註冊的打擊與判定音效鍵名。',
         status: {
             variant: 'perm',
             label: '需要權限',
@@ -3563,7 +3554,7 @@ console.log('音效清單:', soundKeys);`
         sidebarLabel: 'overrideImage()',
         sidebarMono: true,
         badge: '非同步',
-        subtitle: '非同步載入並將自訂圖片推入貼圖覆寫堆疊，立即同步至所有畫布渲染器。',
+        subtitle: '非同步載入圖片，將它加入指定素材的覆寫堆疊，並更新畫布。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3619,7 +3610,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         sidebarLabel: 'overrideImages()',
         sidebarMono: true,
         badge: '非同步',
-        subtitle: '非同步批次載入並替換多張圖片貼圖，具備任一失敗時自動回復機制。',
+        subtitle: '一次載入並覆寫多張圖片。若其中一項失敗，會撤銷這批變更。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3667,7 +3658,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         sidebarLabel: 'overrideSound()',
         sidebarMono: true,
         badge: '非同步',
-        subtitle: '非同步解碼音訊來源為 AudioBuffer 並層疊替換指定打擊音效。',
+        subtitle: '非同步將音訊來源解碼為 AudioBuffer，再覆寫指定音效。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3713,7 +3704,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         sidebarLabel: 'overrideSounds()',
         sidebarMono: true,
         badge: '非同步',
-        subtitle: '非同步批次解碼並替換多組音訊緩衝，具備失敗自動回復保護。',
+        subtitle: '一次解碼並覆寫多組音效。若其中一項失敗，會撤銷這批變更。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3761,7 +3752,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         sidebarLabel: 'clearOverrides()',
         sidebarMono: true,
         badge: '覆寫',
-        subtitle: '立即撤銷當前擴充建立的全部圖片貼圖與打擊音效覆寫，並釋放暫存物件網址。',
+        subtitle: '撤銷此擴充程式的圖片與音效覆寫，並釋放暫存的物件網址。',
         status: {
             variant: 'perm',
             label: '需要覆寫權限',
@@ -3806,7 +3797,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         codeTitle: 'Lifecycle & Events',
         sidebarLabel: '生命週期與事件總表',
         sidebarMono: false,
-        subtitle: '完整說明擴充程式載入、註冊、啟用、停用與卸載的執行順序，以及系統可訂閱事件的觸發時機與參數規格。',
+        subtitle: '查閱從載入到移除的執行順序，以及各事件的觸發時機與參數。',
         status: {
             variant: 'perm',
             label: '生命週期與事件',
@@ -3816,14 +3807,14 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         },
         overview: [
             'Web mai Chart X 由 `extensionLoader.js` 負責套件封裝解析與持久化，並由 `extensionManager.js` 負責狀態機、權限上下文建構與資源回收。',
-            '所有透過官方 `ctx` 介面建立的訂閱與註冊項都會登錄於該次啟用世代的 `disposables` 清單；當插件停用、更新重載或遭遇初始化例外時，系統會逆序自動回收資源。'
+            '所有透過官方 `ctx` 介面建立的訂閱與註冊項都會登錄於該次啟用世代的 `disposables` 清單；當擴充程式停用、更新重載或遭遇初始化例外時，系統會逆序自動回收資源。'
         ],
         tables: [
             {
                 title: '擴充程式載入、啟用與卸載順序',
                 columns: ['階段', '執行動作與狀態轉換', '說明與對應系統行為'],
                 rows: [
-                    ['1. 啟動安全檢查', '讀取 `wmcx_ext_activating` 與 `?safeMode` 參數', '若上次啟動期間發生未攔截崩潰導致重載，自動將該插件標記停用；網址含 `?safeMode=1` 或 `true` 時僅載入登錄而不自動啟用'],
+                    ['1. 啟動安全檢查', '讀取 `wmcx_ext_activating` 與 `?safeMode` 參數', '若上次啟動期間發生未攔截崩潰導致重載，自動將該擴充程式標記停用；網址含 `?safeMode=1` 或 `true` 時僅載入登錄而不自動啟用'],
                     ['2. 解析與驗證', '`parseExtensionZip()` → `validateExtensionManifest()`', '檢查 `.zip` 結構、`manifest.json` 欄位格式、19 項權限白名單與 `https://` 連結'],
                     ['3. 匯入與註冊', '產生 `blob:` 網址 → 動態 `import()` → `extensionManager.register()`', '識別 `default` 或 `activate` 工廠函式；狀態設為 `registered` 或 `inactive`，發布內部事件 `extension:registered`'],
                     ['4. 建構與啟用', '`extensionManager.activate()` → `_createScopedContext()` → `factory(ctx)`', '先檢查 `runtime === "worker"`，若為 worker 直接標記 `error` 並停止；否則遞增 `activationGen`、凍結組裝 `ctx`、呼叫 `activate(ctx)` 並收集回傳的清理函式或 `dispose()` 物件，發布 `extension:activated`'],
@@ -3833,7 +3824,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
             },
             {
                 title: '系統白名單事件觸發時機與參數總表',
-                columns: ['事件名稱', '觸發時機', '酬載型別與參數欄位'],
+                columns: ['事件名稱', '觸發時機', '事件資料型別與參數欄位'],
                 rows: [
                     ['`app:ready`', '主程式初始化與擴充選單掛載完成後觸發一次', '無參數'],
                     ['`project:loaded`', '建立新專案、切換專案或匯入譜面資料完成後觸發', '無參數'],
@@ -3852,8 +3843,8 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
                 variant: 'info',
                 title: '事件退訂與自行建立資源的清理邊界',
                 items: [
-                    '透過 `ctx.events.on` 與 `ctx.editor.on` 建立的監聽器會自動註冊至 `disposables`，插件停用時即自動退訂。',
-                    '若插件自行建立 `setInterval`、`setTimeout`、DOM 全域監聽或外部連線，必須於 `activate(ctx)` 回傳清理函式 `() => { ... }` 或 `{ dispose() { ... } }` 手動清除。'
+                    '透過 `ctx.events.on` 與 `ctx.editor.on` 建立的監聽器會自動註冊至 `disposables`，擴充程式停用時即自動退訂。',
+                    '若擴充程式自行建立 `setInterval`、`setTimeout`、DOM 全域監聽或外部連線，必須於 `activate(ctx)` 回傳清理函式 `() => { ... }` 或 `{ dispose() { ... } }` 手動清除。'
                 ]
             }
         ],
@@ -3890,7 +3881,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
             }
         ],
         notes: [
-            '若 `activate(ctx)` 回傳 Promise 且在等待解析期間插件已被停用，系統會在 Promise 解析後檢查 `activationGen`，立即執行其回傳的清理函式以避免資源洩漏。',
+            '若 `activate(ctx)` 回傳 Promise 且在等待解析期間擴充程式已被停用，系統會在 Promise 解析後檢查 `activationGen`，立即執行其回傳的清理函式以避免資源洩漏。',
             '非同步 `activate(ctx)` 若在執行途中拋出例外，系統會自動關閉設定面板、執行已登錄的 `disposables` 並將狀態切換為 `error`。',
             '編輯器輸入、按鍵與選取區事件不屬於全域 `ctx.events`，須透過 `ctx.editor.on` 訂閱，並宣告 `editor:read` 權限。'
         ],
@@ -3913,7 +3904,7 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         codeTitle: 'SUBSCRIBABLE_EVENTS',
         sidebarLabel: '可訂閱事件清單',
         sidebarMono: false,
-        subtitle: '透過 ctx.events.on 訂閱系統事件匯流排的 9 項白名單事件名稱、觸發時機與酬載結構。',
+        subtitle: '查閱 ctx.events.on 支援的 9 個事件、各事件的觸發時機與傳入資料。',
         status: {
             variant: 'perm',
             label: '需要事件權限',
@@ -3926,13 +3917,13 @@ const revert = await ctx.assets.overrideImage('tap', canvas);`
         ],
         tables: [
             {
-                title: '系統白名單事件與酬載規格',
+                title: '系統白名單事件與事件資料規格',
                 columns: ['事件名稱', '觸發時機', '回呼傳入參數說明'],
                 rows: [
                     ['`app:ready`', '應用程式核心模組與介面元件初始化完成', '無傳入參數'],
                     ['`project:loaded`', '建立、開啟新專案或匯入譜面資料完成', '無傳入參數'],
                     ['`maidata:changed`', '譜面資料或解析後結構發生實質變更', '傳入最新譜面資料物件'],
-                    ['`chart:decoded`', '譜面完成解碼或重新解析，例如切換難度或編輯譜面', '`{ difficulty, noteCount }`，包含當前難度索引與已解析音符數量'],
+                    ['`chart:decoded`', '譜面完成解碼或重新解析，例如切換難度或編輯譜面', '`{ difficulty, noteCount }`，包含目前難度索引與已解析音符數量'],
                     ['`view:mode-changed`', '隱藏編輯器、全螢幕、直橫版面切換、專案載入或輔助文字設定異動', '`{ isEditorHidden, isFullscreen, isVerticalMode, showAuxiliaryText }`'],
                     ['`playback:state-changed`', '播放引擎切換播放或暫停狀態', '`{ isPlaying }` 布林狀態物件'],
                     ['`playback:seek`', '使用者或程式主動調整時間軸進度', '`{ time }`，代表目標秒數'],
@@ -3972,16 +3963,16 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         codeTitle: 'SETTINGS_SCHEMA',
         sidebarLabel: '設定面板與 Schema',
         sidebarMono: false,
-        subtitle: '使用宣告式欄位綱要自動生成系統彈窗表單，並享有隔離持久化與一鍵重設機制。',
+        subtitle: '定義設定面板的欄位、預設值與型別。主程式會建立表單，並為各擴充程式分別儲存設定。',
         status: {
             variant: 'perm',
             label: '需要面板權限',
             permissions: ['ui:popover'],
-            envs: ['5 種支援欄位型別', '一鍵重設預設值'],
+            envs: ['5 種支援欄位型別', '還原預設值'],
             apiVersion: 'API v1'
         },
         overview: [
-            '設定面板透過 `ctx.ui.openPopover` 復用主程式 `popupWindow` 與 `.popup-backdrop` 模糊遮罩，支援點擊外部遮罩或按下 Escape 鍵關閉，且開啟時會自動覆蓋 `.extension-floating-widget` 避免元件交錯干擾。',
+            '設定面板透過 `ctx.ui.openPopover` 沿用主程式 `popupWindow` 與 `.popup-backdrop` 模糊遮罩，支援點擊外部遮罩或按下 Escape 鍵關閉，且開啟時會自動覆蓋 `.extension-floating-widget` 避免元件交錯干擾。',
             '每位擴充程式的設定數值以 `wmcx_ext_settings_${extensionId}` 鍵名儲存於 `localStorage`，若環境無法存取則自動降級為記憶體快取。'
         ],
         tables: [
@@ -3999,7 +3990,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         ],
         notes: [
             '面板底部預設提供「重設為預設值」按鈕，點擊後自動還原所有欄位為 `default` 並觸發 `onChange` 與同步持久化。',
-            '密碼欄位的資料儲存於本機 `localStorage` 仍為純文字格式，若外掛向使用者收集第三方服務金鑰，應於 `notice` 明確說明保存方式。'
+            '密碼欄位的資料儲存於本機 `localStorage` 仍為純文字格式，若擴充程式向使用者收集第三方服務金鑰，應於 `notice` 明確說明保存方式。'
         ],
         examples: [
             {
@@ -4071,7 +4062,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         codeTitle: 'WERP v1.0',
         sidebarLabel: '協定架構與安全',
         sidebarMono: false,
-        subtitle: 'Web mai Chart X 去中心化靜態擴充程式儲存庫協定的核心設計與傳輸安全限制。',
+        subtitle: '說明 WERP 靜態儲存庫如何提供擴充程式，以及索引與套件下載的安全限制。',
         status: {
             variant: 'free',
             label: '協定規格',
@@ -4119,7 +4110,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         codeTitle: 'index.json',
         sidebarLabel: '索引規格與錯誤碼',
         sidebarMono: false,
-        subtitle: '儲存庫根節點欄位、套件項目結構、語意化版本規範與客戶端標準錯誤碼。',
+        subtitle: '查閱儲存庫索引與套件的欄位、版本格式及用戶端錯誤碼。',
         status: {
             variant: 'free',
             label: 'Schema 規格',
@@ -4128,7 +4119,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
             apiVersion: 'WERP v1.0'
         },
         overview: [
-            '儲存庫根目錄索引必須為有效的 UTF-8 JSON 物件。客戶端遇到不支援的 `schemaVersion` 時必須立即終止解析並回報版本不相容。'
+            '儲存庫根目錄索引必須為有效的 UTF-8 JSON 物件。用戶端遇到不支援的 `schemaVersion` 時必須立即終止解析並回報版本不相容。'
         ],
         tables: [
             {
@@ -4155,7 +4146,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
                 ]
             },
             {
-                title: '客戶端標準錯誤碼',
+                title: '用戶端標準錯誤碼',
                 columns: ['錯誤碼', '說明'],
                 rows: [
                     ['`REGISTRY_FETCH_FAILED`', '無法取得遠端索引檔案'],
@@ -4167,7 +4158,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
                     ['`EXTENSION_DOWNLOAD_FAILED`', 'ZIP 套件檔案下載失敗'],
                     ['`EXTENSION_HASH_MISMATCH`', '計算所得 SHA-256 與索引宣告不一致'],
                     ['`EXTENSION_INVALID_PACKAGE`', '套件 ZIP 或 manifest 格式無效'],
-                    ['`EXTENSION_INCOMPATIBLE`', '套件 API 版本與當前客戶端不相容'],
+                    ['`EXTENSION_INCOMPATIBLE`', '套件 API 版本與目前用戶端不相容'],
                     ['`EXTENSION_PERMISSION_DENIED`', '使用者拒絕授權安裝所需權限']
                 ]
             }
@@ -4211,7 +4202,7 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         title: '來源管理、安裝程序與部署',
         sidebarLabel: '安裝流程與部署指南',
         sidebarMono: false,
-        subtitle: '擴充程式管理器的擴充來源分頁行為、安全更新比對與靜態託管部署方法。',
+        subtitle: '說明如何部署靜態儲存庫，以及管理器如何新增來源、安裝套件與檢查更新。',
         status: {
             variant: 'free',
             label: '操作與部署',
@@ -4224,8 +4215,8 @@ ctx.events.on('chart:decoded', ({ difficulty, noteCount }) => {
         ],
         notes: [
             '完整安裝程序：選擇擴充程式、解析同源網址、下載 ZIP、驗證 SHA-256、檢驗 ZIP 結構與 `manifest.json`、檢查相容性、開啟權限清單由使用者確認授權，最後保存至本機 IndexedDB。',
-            '更新與異常偵測：若同來源版本高於本機版本，提示一鍵升級；若版本號相同但 SHA-256 不同，系統將標記為套件內容異動而非一般升級。',
-            '移除來源不卸載插件：移除已加入的來源網址時，不會自動解除安裝先前自該來源安裝的擴充程式，僅停止後續檢查更新。',
+            '更新與異常偵測：若同來源版本高於本機版本，提示可更新的版本；若版本號相同但 SHA-256 不同，系統將標記為套件內容異動而非一般升級。',
+            '移除來源不卸載擴充程式：移除已加入的來源網址時，不會自動解除安裝先前自該來源安裝的擴充程式，僅停止後續檢查更新。',
             '伺服器 CORS 設定：使用自架靜態伺服器託管時，必須包含 `Access-Control-Allow-Origin: *` 回應標頭。'
         ],
         examples: [
@@ -4261,7 +4252,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         codeTitle: 'AppContext & EventBus',
         sidebarLabel: '生命週期與事件匯流排',
         sidebarMono: false,
-        subtitle: '主程式啟動流程、AppContext 單例服務容器與 EventBus 發布訂閱架構概述。',
+        subtitle: '說明主程式的啟動順序，以及 AppContext 如何提供服務、EventBus 如何傳遞事件。',
         status: {
             variant: 'free',
             label: '內部架構參考',
@@ -4313,7 +4304,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         title: '專案模組與目錄職責手冊',
         sidebarLabel: '模組職責索引',
         sidebarMono: false,
-        subtitle: '核心基礎設施、功能外掛、彈窗組件、雲端服務與多語系引擎的檔案分佈索引。',
+        subtitle: '依目錄查找核心模組、編輯功能、對話框、雲端服務與語言模組。',
         status: {
             variant: 'free',
             label: '程式碼索引',
@@ -4322,7 +4313,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
             apiVersion: 'Core'
         },
         overview: [
-            '專案邏輯主要切分為四大目錄與獨立的多語系系統，各自維護清晰單一的職責邊界。'
+            '下表依目錄列出主要模組、檔案位置與用途。'
         ],
         tables: [
             {
@@ -4345,7 +4336,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
                 columns: ['目錄或檔案', '職責說明'],
                 rows: [
                     ['`Scripts/features/extensionMenu.js`', '頂欄拼圖擴充選單渲染與浮動元件建立'],
-                    ['`Scripts/features/extensionPopover.js`', '復用 `popupWindow` 的擴充宣告式設定面板與隔離儲存'],
+                    ['`Scripts/features/extensionPopover.js`', '沿用 `popupWindow` 的擴充宣告式設定面板與隔離儲存'],
                     ['`Scripts/features/visualEditor.js`', '視覺化音符編輯器畫布互動與捲動控制'],
                     ['`Scripts/features/videoRender.js`', '結合音訊與畫布逐幀錄製匯出譜面預覽影片'],
                     ['`Scripts/modals/extensionManagerModal.js`', '擴充程式管理視窗，包含已安裝與擴充來源分頁'],
@@ -4373,10 +4364,10 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         codeTitle: 'SimaiRenderer & AudioManager',
         sidebarLabel: '渲染與音訊引擎',
         sidebarMono: false,
-        subtitle: 'Canvas 雙畫布渲染管線、離屏快取陷阱以及 Web Audio 判定音效分流音量控制。',
+        subtitle: '說明雙畫布的繪製順序、離屏快取，以及 Web Audio 如何分別控制各類判定音效的音量。',
         status: {
             variant: 'caution',
-            label: '效能與陷阱須知',
+            label: '效能注意事項',
             permissions: ['核心維護參考'],
             envs: ['HTML5 Canvas 2D', 'Web Audio API'],
             apiVersion: 'Core'
@@ -4387,7 +4378,7 @@ sha256sum Extensions/bouncing-pet-1.0.0.zip`
         callouts: [
             {
                 variant: 'warning',
-                title: '核心開發避坑要點',
+                title: '核心開發注意事項',
                 items: [
                     'Slide spacing 快取同步：更動 `notebasesize` 或外觀設定時，必須清除或更新 Slide 線段快取，否則箭頭間距不會反映新尺寸。',
                     '離屏音訊波形快取：`SimaiPreviewRenderer` 的 PCM 波形振幅採用離屏畫布快取，初次載入音訊時繪製一次，切勿在每幀 60fps 渲染迴圈重複解算波形。',

@@ -77,7 +77,7 @@ flowchart LR
 
 ---
 
-## ⚠️ Agent 避坑與關鍵約定 (Crucial Gotchas & Rules)
+## ⚠️ 開發注意事項與專案約定 (Crucial Gotchas & Rules)
 
 在修改程式碼時，請務必遵循以下專案特定約定，以防破壞現有功能：
 

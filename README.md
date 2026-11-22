@@ -10,20 +10,20 @@
 
 ### 🚀 專案網站
 
-[點我前往 Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
+[開啟 Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
 
 ### 🔧 功能介紹
-在完善一般編輯器應有的功能的同時，還加入了更加人性化的操作及便捷的功能：
+
 
 - **直接讀取壓縮檔**：無需解壓即可匯入專案。
-- **專案管理器**：輕鬆管理多個譜面專案。
-- **譜面影片錄製**：方便匯出與分享你的譜面成果。
+- **專案管理器**：管理多個譜面專案。
+- **譜面影片錄製**：將譜面預覽匯出為影片。
 - **進階譜面支援**：支援地雷音符 `m` 及變速指令 `<HS*N>`。
 - **擴充程式與來源管理**：支援自訂擴充套件與透過 WERP 協定從第三方儲存庫探索、驗證與安裝擴充程式。
 
 ### ✏️ 更新日誌
 
-[點我查看更新日誌](./CHANGELOG.md)
+[查看更新日誌](./CHANGELOG.md)
 
 ### 🌐 Discord 伺服器
 
@@ -34,9 +34,9 @@ https://discord.gg/vX7XcG7bMy
 本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
 - 音符圖案、音訊素材資源與判定機制來自 [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha)、[LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView)、[TeamMajdata/MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
 
-### 📚 擴充功能開發者手冊
+### 📚 擴充程式開發者手冊
 
-[點我前往 WMCX 擴充功能開發者手冊](https://susuy0725.github.io/web-mai-chart-x/doc/)
+[WMCX 擴充程式開發者手冊](https://susuy0725.github.io/web-mai-chart-x/doc/)
 
 
 ### 📖 授權條款
@@ -50,20 +50,18 @@ https://discord.gg/vX7XcG7bMy
 An Easy-to-Use web-based maimai chart tool.
 
 ### 🚀 Project website
-[Click me to visit Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
+[Open Web mai Chart X](https://susuy0725.github.io/web-mai-chart-x/)
 
 ### 🔧 Features
 
-While perfecting the functions that a general editor should have, we also added more user-friendly operations and convenient features:
-
 - **Load compressed zip files**: Import projects directly without extracting.
-- **Project manager**: Easily manage multiple chart projects.
-- **Chart video export**: Conveniently export and share your chart previews.
+- **Project manager**: Manage multiple chart projects.
+- **Chart video export**: Export chart previews as videos.
 - **Advanced chart support**: Supports Mine notes `m` and High Speed command `<HS*N>`.
 - **Extension & Source Management**: Supports custom extensions and exploring, validating, and installing extensions from third-party repositories via the WERP protocol.
 
 ### ✏️ Changelog
-[Click me to visit Changelog](./CHANGELOG.md) 
+[View the changelog](./CHANGELOG.md)
 
 ### 🌐 Discord Server
 
@@ -74,9 +72,9 @@ https://discord.gg/vX7XcG7bMy
 Special thanks to the open-source community for providing the assets:
 - Skin, media resources and judgement logic are derived from [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha), [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView), [TeamMajdata/MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).
 
-### 📚 Extension Pack Develop Mannual
+### 📚 Extension Developer Guide
 
-[Click me to visit Web mai Chart X Extension Pack Develop Mannual](https://susuy0725.github.io/web-mai-chart-x/doc/)
+[Web mai Chart X Extension Developer Guide](https://susuy0725.github.io/web-mai-chart-x/doc/)
 
 ### 📖 License
 

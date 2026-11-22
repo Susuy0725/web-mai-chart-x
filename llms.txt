@@ -1,23 +1,23 @@
-# Web mai Chart X 插件開發者手冊
+# Web mai Chart X 擴充程式開發者手冊
 
-> 本網站為 Web mai Chart X 擴充程式開發者 API 參考文件，內容僅涵蓋第三方插件開發介面、生命週期、權限模型、事件匯流排、離線影片錄製渲染與 WERP 儲存庫協定，並非譜面寫譜教學。
+> 查閱 Web mai Chart X 擴充程式的 API、生命週期、權限、事件、影片匯出與 WERP 儲存庫協定。
 
 ## 重要平台特性與限制
 
-- **執行環境與信任模型**：所有擴充程式皆透過動態 ESM 載入並運行於瀏覽器主執行緒，目前沒有獨立的系統級隔離沙盒，插件可存取並修改頁面 DOM 與讀取專案資料。`ctx` 受限上下文屬於 API 層級的權限控管。
-- **Worker 執行模式狀態**：`manifest.json` 的 `runtime` 欄位接受 `'worker'` 字串通過格式驗證，但該模式屬於保留但未實作功能；嘗試啟用 `runtime: 'worker'` 的插件會立即進入錯誤狀態並拒絕啟動。
+- **執行環境與信任模型**：所有擴充程式皆透過動態 ESM 載入並運行於瀏覽器主執行緒，目前沒有獨立的系統級隔離沙盒，擴充程式可存取並修改頁面 DOM 與讀取專案資料。`ctx` 受限上下文屬於 API 層級的權限控管。
+- **Worker 執行模式狀態**：`manifest.json` 的 `runtime` 欄位接受 `'worker'` 字串通過格式驗證，但該模式屬於保留但未實作功能；嘗試啟用 `runtime: 'worker'` 的擴充程式會立即進入錯誤狀態並拒絕啟動。
 - **影片錄製渲染模式**：譜面影片匯出採用固定幀率逐幀離線渲染，而非即時螢幕擷取。透過 `ctx.render.registerOverlay` 且設定 `includeInVideo: true` 的圖層會納入影片輸出；繪製動畫必須完全依據 `renderContext.globalTime` 計算，不得依賴 `requestAnimationFrame`、`Date.now()` 或 `performance.now()`。
 
 ## 完整文件入口
 
 - [完整 AI 手冊索引](https://susuy0725.github.io/web-mai-chart-x/doc/llms.txt): 依 API 分類整理全部 73 篇詞條的摘要與 Markdown 連結
-- [單檔完整手冊全文](https://susuy0725.github.io/web-mai-chart-x/doc/llms-full.txt): 彙整所有插件 API 規格、參數表與範例的單一完整 Markdown 文件
+- [單檔完整手冊全文](https://susuy0725.github.io/web-mai-chart-x/doc/llms-full.txt): 彙整所有擴充程式 API 規格、參數表與範例的單一完整 Markdown 文件
 - [手冊網站首頁](https://susuy0725.github.io/web-mai-chart-x/doc/): 人類與瀏覽器閱讀的靜態多頁開發者文件入口
 
 ## 開發入門與核心規範
 
 - [擴充程式系統架構概述](https://susuy0725.github.io/web-mai-chart-x/doc/md/guide-overview.md): 擴充系統設計目標、受限上下文機制與主執行緒信任模型
-- [最小可運作插件](https://susuy0725.github.io/web-mai-chart-x/doc/md/guide-minimal-plugin.md): `manifest.json` 全部欄位規格、本機與 WERP 載入方式及完整端到端範例
+- [建立第一個擴充程式](https://susuy0725.github.io/web-mai-chart-x/doc/md/guide-minimal-plugin.md): `manifest.json` 全部欄位規格、本機與 WERP 載入方式及完整端到端範例
 - [擴充包與描述檔規格](https://susuy0725.github.io/web-mai-chart-x/doc/md/guide-manifest.md): ZIP 封裝結構、識別碼驗證規則與 `runtime` 保留欄位說明
 - [權限常數對照表](https://susuy0725.github.io/web-mai-chart-x/doc/md/guide-permissions.md): 系統白名單定義的 19 項權限識別碼與對應授權介面
 - [生命週期與事件總表](https://susuy0725.github.io/web-mai-chart-x/doc/md/guide-lifecycle-events.md): 載入、註冊、啟用、停用、卸載順序與 9 項可訂閱系統事件完整對照
@@ -42,7 +42,7 @@
 
 - [指令註冊介面](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.commands.md): 於全域指令中心註冊具備 `ext.<id>.` 前綴的自訂指令
 - [事件訂閱介面](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.events.md): 訂閱應用程式事件匯流排白名單事件
-- [系統介面擴充](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.ui.md): 吐司通知、頂欄擴充選單、宣告式設定面板與浮動元件容器
+- [系統介面擴充](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.ui.md): 通知、頂欄擴充選單、宣告式設定面板與浮動元件容器
 - [隔離儲存介面](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.storage.md): 依擴充識別碼邏輯隔離的 `localStorage` 鍵值儲存操作
 - [多語系介面](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.i18n.md): 註冊具命名空間前綴的多語系詞典與翻譯查詢
 - [原生設定存取與覆寫](https://susuy0725.github.io/web-mai-chart-x/doc/md/ctx.settings.md): 唯讀設定快照查詢與可自動還原的層疊覆寫

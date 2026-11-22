@@ -219,9 +219,8 @@ function renderItemMarkdown(item, headingLevel = 1) {
     }
     lines.push('');
 
-    // 1. 一句話用途
-    lines.push(`${h2} 一句話用途`);
-    lines.push('');
+    // 1. 用途
+    if (!item.guideSections) lines.push(`${h2} 用途`, '');
     if (item.subtitle) {
         lines.push(item.subtitle);
         lines.push('');
@@ -233,9 +232,17 @@ function renderItemMarkdown(item, headingLevel = 1) {
         }
     }
 
-    // 2. 完整型別簽名
+    for (const section of item.guideSections || []) {
+        lines.push(`${h2} ${section.title}`, '');
+        for (const paragraph of section.paragraphs) lines.push(paragraph, '');
+        if (section.warning) {
+            lines.push(`${h3} ${section.warning.title}`, '', section.warning.text, '');
+        }
+    }
+
+    // 2. 語法
     if (item.syntax) {
-        lines.push(`${h2} 完整型別簽名`);
+        lines.push(`${h2} 語法`);
         lines.push('');
         lines.push(formatCodeFence(item.syntax, 'js'));
         lines.push('');
@@ -299,7 +306,7 @@ function renderItemMarkdown(item, headingLevel = 1) {
     }
 
     // 5. 呼叫時機與生命週期
-    if (item.summary || (Array.isArray(item.callouts) && item.callouts.length > 0)) {
+    if (!item.guideSections && (item.summary || item.callouts?.length)) {
         lines.push(`${h2} 呼叫時機與生命週期`);
         lines.push('');
         if (item.summary) {
@@ -330,10 +337,11 @@ function renderItemMarkdown(item, headingLevel = 1) {
         }
     }
 
-    // 6. 完整可複製的最小範例
+    // 6. 範例
     if (Array.isArray(item.examples) && item.examples.length > 0) {
-        lines.push(`${h2} 完整可複製的最小範例`);
+        lines.push(`${h2} ${item.examplesTitle || '範例'}`);
         lines.push('');
+        if (item.examplesIntro) lines.push(item.examplesIntro, '');
         for (const ex of item.examples) {
             if (ex.label) {
                 lines.push(`${h3} ${ex.label}`);
@@ -344,10 +352,10 @@ function renderItemMarkdown(item, headingLevel = 1) {
         }
     }
 
-    // 7. 相關詞條連結
+    // 7. 延伸閱讀
     const validRefs = (item.seeAlso || []).map((id) => ITEM_MAP.get(id)).filter(Boolean);
     if (validRefs.length > 0) {
-        lines.push(`${h2} 相關詞條連結`);
+        lines.push(`${h2} ${item.seeAlsoTitle || '延伸閱讀'}`);
         lines.push('');
         for (const ref of validRefs) {
             const label = ref.codeTitle ? `${ref.codeTitle} - ${ref.title}` : ref.title;
@@ -450,11 +458,18 @@ function renderItemHtml(item, itemIndex) {
 
     const sectionsHtml = [];
 
-    // 1. 一句話用途
-    {
+    if (item.guideSections) {
+        for (const section of item.guideSections) {
+            const paragraphs = section.paragraphs.map(text => `<p>${renderInlineCodeHtml(text)}</p>`).join('');
+            const warning = section.warning
+                ? `<aside class="doc-callout is-warning"><h3 class="doc-callout-title">${escapeHtml(section.warning.title)}</h3><p>${renderInlineCodeHtml(section.warning.text)}</p></aside>`
+                : '';
+            sectionsHtml.push(addSection(section.id, section.title, `<div class="doc-prose">${paragraphs}</div>${warning}`));
+        }
+    } else {
         const parts = [];
         const proseLines = [];
-        if (item.subtitle) {
+        if (!item.overview?.length && item.subtitle) {
             proseLines.push(`<p>${renderInlineCodeHtml(item.subtitle)}</p>`);
         }
         if (Array.isArray(item.overview)) {
@@ -466,14 +481,14 @@ function renderItemHtml(item, itemIndex) {
             parts.push(`<div class="doc-prose">${proseLines.join('')}</div>`);
         }
         if (parts.length > 0) {
-            sectionsHtml.push(addSection('sec-overview', '一句話用途', parts.join('\n')));
+            sectionsHtml.push(addSection('sec-overview', '用途', parts.join('\n')));
         }
     }
 
-    // 2. 完整型別簽名
+    // 2. 語法
     if (item.syntax) {
         const block = renderCodeBlockHtml(item.syntax, '型別與呼叫簽名', ++codeBlockCounter);
-        sectionsHtml.push(addSection('sec-syntax', '完整型別簽名', block));
+        sectionsHtml.push(addSection('sec-syntax', '語法', block));
     }
 
     // 3. 參數表
@@ -516,7 +531,7 @@ function renderItemHtml(item, itemIndex) {
     }
 
     // 5. 呼叫時機與生命週期
-    if (item.summary || (Array.isArray(item.callouts) && item.callouts.length > 0)) {
+    if (!item.guideSections && (item.summary || item.callouts?.length)) {
         const inner = [];
         if (item.summary) {
             const rows = [
@@ -545,22 +560,23 @@ function renderItemHtml(item, itemIndex) {
         sectionsHtml.push(addSection('sec-lifecycle', '呼叫時機與生命週期', inner.join('\n')));
     }
 
-    // 6. 完整可複製的最小範例
+    // 6. 範例
     if (Array.isArray(item.examples) && item.examples.length > 0) {
         const blocks = item.examples
             .map((ex) => renderCodeBlockHtml(ex.code, ex.label || '範例程式碼', ++codeBlockCounter))
             .join('\n');
-        sectionsHtml.push(addSection('sec-examples', '完整可複製的最小範例', blocks));
+        const intro = item.examplesIntro ? `<div class="doc-prose"><p>${renderInlineCodeHtml(item.examplesIntro)}</p></div>` : '';
+        sectionsHtml.push(addSection('sec-examples', item.examplesTitle || '範例', intro + blocks));
     }
 
-    // 7. 相關詞條連結
+    // 7. 延伸閱讀
     const validRefs = (item.seeAlso || []).map((id) => ITEM_MAP.get(id)).filter(Boolean);
     if (validRefs.length > 0) {
         const linksLi = validRefs.map((ref) => {
             const label = ref.codeTitle || ref.title;
             return `<li><a class="doc-seealso-link" href="./${escapeHtml(ref.id)}.html"><span>${escapeHtml(label)}</span></a></li>`;
         }).join('');
-        sectionsHtml.push(addSection('sec-see-also', '相關詞條連結', `<ul class="doc-seealso-list" role="list">${linksLi}</ul>`));
+        sectionsHtml.push(addSection('sec-see-also', item.seeAlsoTitle || '延伸閱讀', `<ul class="doc-seealso-list" role="list">${linksLi}</ul>`));
     }
 
     // 8. 注意事項
@@ -628,22 +644,6 @@ function renderItemHtml(item, itemIndex) {
         }
     }
 
-    // 狀態與權限橫幅
-    let statusHtml = '';
-    if (item.status) {
-        const variant = item.status.variant || 'free';
-        const iconMap = { free: 'verified_user', perm: 'shield', caution: 'warning' };
-        const permsHtml = (item.status.permissions || []).map((p) => `<code class="doc-perm-chip">${escapeHtml(p)}</code>`).join('');
-        const envsHtml = (item.status.envs || []).map((e) => `<span class="doc-env-badge is-supported">${escapeHtml(e)}</span>`).join('');
-        const verHtml = `<span class="doc-env-badge">${escapeHtml(apiVersion)}</span>`;
-        statusHtml = [
-            `<div class="doc-status-banner is-${escapeHtml(variant)}">`,
-            `  <div class="doc-status-left"><span class="material-symbols-outlined doc-status-icon" aria-hidden="true">${iconMap[variant] || 'shield'}</span><span class="doc-status-label">${escapeHtml(item.status.label || 'API 狀態')}</span>${permsHtml}</div>`,
-            `  <div class="doc-status-right">${envsHtml}${verHtml}</div>`,
-            '</div>'
-        ].join('');
-    }
-
     // 上一篇 / 下一篇
     const prevItem = itemIndex > 0 ? DOC_ITEMS[itemIndex - 1] : null;
     const nextItem = itemIndex < DOC_ITEMS.length - 1 ? DOC_ITEMS[itemIndex + 1] : null;
@@ -674,7 +674,7 @@ function renderItemHtml(item, itemIndex) {
         url: `${DOC_BASE_URL}/${item.id}.html`,
         isPartOf: {
             '@type': 'WebSite',
-            name: 'Web mai Chart X 插件開發者手冊',
+            name: 'Web mai Chart X 擴充程式開發者手冊',
             url: `${DOC_BASE_URL}/`
         }
     }).replace(/</g, '\\u003c');
@@ -682,8 +682,8 @@ function renderItemHtml(item, itemIndex) {
     // <head> 最前面同步執行的舊版 #id 轉址腳本（與 doc/index.html 共用 doc-ids.js 白名單）
     const hashRedirectScript = `<script src="./doc-ids.js"></script>\n    <script>(function(){var h=window.location.hash||'';if(h.length<2)return;var id;try{id=decodeURIComponent(h.slice(1));}catch(_){return;}if(!id||id.indexOf('sec-')===0||id===${JSON.stringify(item.id)})return;var valid=window.__DOC_IDS__;if(Array.isArray(valid)&&valid.indexOf(id)!==-1){window.location.replace('./'+encodeURIComponent(id)+'.html');}})();</script>`;
 
-    const pageTitle = `${item.codeTitle || item.title} - Web mai Chart X 插件開發者手冊`;
-    const metaDesc = item.subtitle || 'Web mai Chart X 插件開發者 API 參考文件';
+    const pageTitle = `${item.codeTitle || item.title} - Web mai Chart X 擴充程式開發者手冊`;
+    const metaDesc = item.subtitle || 'Web mai Chart X 擴充程式開發者 API 參考文件';
 
     return `<!DOCTYPE html>
 <html lang="zh-Hant">
@@ -734,24 +734,11 @@ function renderItemHtml(item, itemIndex) {
                 <kbd class="doc-search-kbd" aria-hidden="true">/</kbd>
                 <div id="globalSearchResults" class="doc-search-results" role="listbox" aria-label="搜尋結果" hidden></div>
             </search>
-
-            <a href="../index.html" class="doc-action-link">
-                <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
-                <span class="doc-action-text">返回編輯器</span>
-            </a>
         </div>
     </header>
 
     <div class="doc-breadcrumb-bar" id="docBreadcrumbBar">
         <nav id="breadcrumbNav" class="doc-breadcrumb" aria-label="目前位置">${crumbs.join('')}</nav>
-        <div class="doc-breadcrumb-meta">
-            <span class="doc-meta-pill">${escapeHtml(apiVersion)}</span>
-            <a href="./llms.txt" class="doc-meta-link"><span>llms.txt</span></a>
-            <a href="../_play/" target="_blank" rel="noopener noreferrer" class="doc-meta-link">
-                <span>遊玩模式</span>
-                <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
-            </a>
-        </div>
     </div>
 
     <div class="doc-backdrop" id="sidebarBackdrop" hidden></div>
@@ -779,6 +766,11 @@ function renderItemHtml(item, itemIndex) {
         <main class="doc-main" id="docMain">
             <article id="docArticle" class="doc-article">
                 <header class="doc-article-header">
+                    <h1 class="doc-article-title" id="docMainHeading" tabindex="-1">
+                        ${item.codeTitle ? `<code class="doc-title-code">${escapeHtml(item.codeTitle)}</code>` : ''}
+                        <span>${escapeHtml(item.title)}</span>
+                    </h1>
+                    ${item.subtitle ? `<p class="doc-article-subtitle">${renderInlineCodeHtml(item.subtitle)}</p>` : ''}
                     <div class="doc-article-eyebrow">
                         ${cat ? `<span class="doc-eyebrow-tag">${escapeHtml(cat.label)}</span>` : ''}
                         ${item.badge ? `<span class="doc-eyebrow-tag">${escapeHtml(item.badge)}</span>` : ''}
@@ -792,14 +784,8 @@ function renderItemHtml(item, itemIndex) {
                             </button>
                         </div>
                     </div>
-                    <h1 class="doc-article-title" id="docMainHeading" tabindex="-1">
-                        ${item.codeTitle ? `<code class="doc-title-code">${escapeHtml(item.codeTitle)}</code>` : ''}
-                        <span>${escapeHtml(item.title)}</span>
-                    </h1>
-                    ${item.subtitle ? `<p class="doc-article-subtitle">${renderInlineCodeHtml(item.subtitle)}</p>` : ''}
                 </header>
 
-                ${statusHtml}
                 ${sectionsHtml.join('\n')}
                 ${pagerHtml}
             </article>
@@ -831,9 +817,9 @@ function buildDocLlmsTxt() {
         (n) => `- **${n.label}**：${n.text}`
     );
     const lines = [
-        '# Web mai Chart X 插件開發者手冊',
+        '# Web mai Chart X 擴充程式開發者手冊',
         '',
-        '> 本手冊僅面向 Web mai Chart X 第三方插件開發者，提供完整插件 API 參考、生命週期、權限清單、離線錄影渲染與 WERP 儲存庫協定，並非譜面寫譜教學。',
+        '> 查閱 Web mai Chart X 擴充程式的 API、權限、生命週期、逐幀影片匯出與 WERP 儲存庫協定。',
         '',
         '## 核心提醒',
         '',
@@ -841,14 +827,14 @@ function buildDocLlmsTxt() {
         '',
         '## 全域檔案端點',
         '',
-        `- [單檔完整手冊全文](${DOC_BASE_URL}/llms-full.txt): 一次讀取全部 ${DOC_ITEMS.length} 篇插件 API 與規範文件`,
+        `- [單檔完整手冊全文](${DOC_BASE_URL}/llms-full.txt): 一次讀取全部 ${DOC_ITEMS.length} 篇擴充程式 API 與規範文件`,
         `- [手冊網頁首頁](${DOC_BASE_URL}/): 靜態多頁開發者手冊網站入口`,
         `- [網站地圖](${DOC_BASE_URL}/sitemap.xml): 全部 ${DOC_ITEMS.length} 個靜態詞條網址清單`,
         ''
     ];
 
     const sectionMapping = [
-        { title: '開發入門與插件封裝', groupIds: ['group-guide'] },
+        { title: '開發入門與擴充程式封裝', groupIds: ['group-guide'] },
         { title: '核心物件 ctx', groupIds: ['group-ctx-base'] },
         { title: '專案資料與編輯器介面', groupIds: ['group-ctx-editor', 'group-ctx-chart', 'group-ctx-view'] },
         { title: '播放與時間軸控制', groupIds: ['group-ctx-playback'] },
@@ -906,7 +892,7 @@ function buildDocLlmsTxt() {
  */
 function buildLlmsFullTxt() {
     const lines = [
-        '# Web mai Chart X 插件開發者手冊完整版',
+        '# Web mai Chart X 擴充程式開發者手冊完整版',
         '',
         `> 官方手冊首頁: ${DOC_BASE_URL}/`,
         `> AI 索引檔案: ${DOC_BASE_URL}/llms.txt`,
@@ -951,7 +937,7 @@ function buildSearchIndexJson() {
             stability,
             apiVersion,
             permissions: item.status?.permissions || [],
-            keywords: (item.overview || []).join(' '),
+            keywords: (item.guideSections?.flatMap(section => section.paragraphs) || item.overview || []).join(' '),
             url: `./${item.id}.html`,
             mdUrl: `./md/${item.id}.md`
         };

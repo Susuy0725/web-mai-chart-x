@@ -439,6 +439,11 @@ export async function openRecordVideoModal({
 
     let videoSeekTimer = null;
     const updateVideoTime = (time) => {
+        const curSettings = typeof getSettings === 'function' ? getSettings() : settings;
+        if (curSettings.enableVideo === false) {
+            clearTimeout(videoSeekTimer);
+            return;
+        }
         if (editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1) {
             clearTimeout(videoSeekTimer);
             videoSeekTimer = setTimeout(() => {
@@ -557,9 +562,12 @@ export async function openRecordVideoModal({
         };
 
         let bgDrawn = false;
-        if (editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.videoWidth > 0) {
+        const videoEnabled = curSettings.enableVideo !== false;
+        if (videoEnabled && editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.videoWidth > 0) {
             try {
-                previewCtx.filter = `brightness(${finalBgBrightness})`;
+                if (finalBgBrightness > 1.0) {
+                    previewCtx.filter = `brightness(${finalBgBrightness})`;
+                }
                 const vw = editorBackgroundVideo.videoWidth || boxW;
                 const vh = editorBackgroundVideo.videoHeight || boxH;
                 drawContain(vw, vh, (sx, sy, sw, sh, dx, dy, dw, dh) => {
@@ -567,19 +575,32 @@ export async function openRecordVideoModal({
                 });
                 previewCtx.filter = 'none';
                 bgDrawn = true;
-            } catch (e) { }
+            } catch (e) {
+                previewCtx.filter = 'none';
+            }
         }
 
         if (!bgDrawn && editorBackgroundImage && editorBackgroundImage.src && editorBackgroundImage.complete) {
             try {
-                previewCtx.filter = `brightness(${finalBgBrightness})`;
+                if (finalBgBrightness > 1.0) {
+                    previewCtx.filter = `brightness(${finalBgBrightness})`;
+                }
                 const iw = editorBackgroundImage.naturalWidth || editorBackgroundImage.width || boxW;
                 const ih = editorBackgroundImage.naturalHeight || editorBackgroundImage.height || boxH;
                 drawContain(iw, ih, (sx, sy, sw, sh, dx, dy, dw, dh) => {
                     previewCtx.drawImage(editorBackgroundImage, sx, sy, sw || iw, sh || ih, dx, dy, dw, dh);
                 });
                 previewCtx.filter = 'none';
-            } catch (e) { }
+                bgDrawn = true;
+            } catch (e) {
+                previewCtx.filter = 'none';
+            }
+        }
+
+        // 使用單層 Alpha 遮罩取代 ctx.filter 調暗，確保 iOS Safari 等不支援 Canvas filter 的瀏覽器預覽一致
+        if (bgDrawn && finalBgBrightness < 1.0) {
+            previewCtx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, 1 - finalBgBrightness))})`;
+            previewCtx.fillRect(0, 0, pWidth, pHeight);
         }
 
         previewCtx.restore();
@@ -600,7 +621,7 @@ export async function openRecordVideoModal({
             timeControlSliding: true,
             readyBeat: false,
             playedClock: [],
-            settings,
+            settings: curSettings,
             visualHeight: 0,
             notes,
             decodedTags: [],
@@ -621,7 +642,7 @@ export async function openRecordVideoModal({
             globalTime: globalT,
             buckets,
             dt: 1 / 60,
-            showSensor: settings.showSensor,
+            showSensor: curSettings.showSensor,
             showSensorText: false,
             playCombo,
             playScore,

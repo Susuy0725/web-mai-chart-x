@@ -181,34 +181,25 @@ export async function openChangelogModal() {
     const container = document.createElement('div');
     container.className = 'changelog-modal';
 
-    const toolbar = document.createElement('div');
-    toolbar.className = 'changelog-toolbar';
-
-    const githubBtn = document.createElement('a');
-    githubBtn.className = 'changelog-github-btn';
-    githubBtn.href = CHANGELOG_GITHUB_URL;
-    githubBtn.target = '_blank';
-    githubBtn.rel = 'noopener noreferrer';
-    const githubText = t('popup.changelog.viewOnGithub') || '在 GitHub 瀏覽';
-    githubBtn.innerHTML = `
-        <img src="assets/GitHub_Invertocat_White.svg" alt="GitHub" class="changelog-github-icon" draggable="false" />
-        <span>${escapeHtml(githubText)}</span>
-        <span class="material-symbols-outlined changelog-ext-icon" translate="no">open_in_new</span>
-    `;
-    toolbar.appendChild(githubBtn);
-
     const markdownBody = document.createElement('div');
     markdownBody.className = 'changelog-markdown';
     markdownBody.innerHTML = renderSimpleMarkdown(markdown);
 
-    container.append(toolbar, markdownBody);
+    container.append(markdownBody);
 
     popupWindow({
         title: t('popup.changelog.title') || '變更日誌',
         customContent: container,
         width: 580,
         height: '80%',
-        buttons: [],
+        buttons: [
+            {
+                text: t('popup.changelog.viewOnGithub') || '在 GitHub 瀏覽',
+                onClick: () => {
+                    window.open(CHANGELOG_GITHUB_URL, '_blank', 'noopener,noreferrer');
+                }
+            }
+        ],
         onOpen: (ctx) => {
             // 確保內容自頂部開始顯示，避免滾動偏移
             markdownBody.scrollTop = 0;

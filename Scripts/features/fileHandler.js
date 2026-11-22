@@ -119,7 +119,6 @@ export async function handleFolderInput(files, ctx) {
                 if (editorBackgroundVideo) {
                     editorBackgroundVideo.src = URL.createObjectURL(file);
                     editorBackgroundVideo.style.display = 'none';
-                    editorBackgroundVideo.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
                 }
                 projSet('background_video', file).catch((error) => {
                     console.error('儲存背景圖到 IndexedDB 失敗:', error);

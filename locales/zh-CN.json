@@ -957,7 +957,7 @@
         "<b>缩放倍率</b>：<span class=\"code-highlight\">Ctrl</span> + 鼠标滚轮 缩放编辑器/预览轴流速。",
         "<b>快速面板</b>：在设置打开后按<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> 并将鼠标移向欲运行的功能，再放开<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>。"
       ],
-      "customizeShortcutsBtn": "自定义快捷键...",
+      "customizeShortcutsBtn": "自订快速键设定",
       "shortcutScopeVisual": "仅轨道编辑模式"
     },
     "about": {

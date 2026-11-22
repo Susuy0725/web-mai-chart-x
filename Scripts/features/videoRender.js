@@ -406,7 +406,7 @@ export async function videoRender(audioManager, canvas, renderer, {
         output.addVideoTrack(videoSource, { frameRate: fps });
 
         let exportVideoReady = false;
-        if (editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.videoWidth > 0) {
+        if (settings.enableVideo !== false && editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.videoWidth > 0) {
             try {
                 const { Input, UrlSource, BlobSource, CanvasSink, ALL_FORMATS } = window.Mediabunny;
                 if (Input && CanvasSink) {
@@ -525,7 +525,7 @@ export async function videoRender(audioManager, canvas, renderer, {
                         const shouldPlayEndSound =
                             (note.type === "slide" && note.lastSlide && note.isBreak) ||
                             note.isHanabi ||
-                            (note.holdDuration !== undefined && note.type !== "tap");
+                            (note.holdDuration !== undefined && note.type !== "tap" && settings.playHoldEnd !== false);
                         if (shouldPlayEndSound) {
                             const evsEnd = audioManager.getSfxEventsForNote(note, endT);
                             for (const ev of evsEnd) {
@@ -951,6 +951,9 @@ export async function videoRender(audioManager, canvas, renderer, {
                 };
 
                 let drawBGDone = false;
+                if (finalBgBrightness > 1.0) {
+                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (_) { }
+                }
                 if (canvasIterator && exportVideoReady) {
                     try {
                         while (true) {
@@ -1005,12 +1008,14 @@ export async function videoRender(audioManager, canvas, renderer, {
                     drawBGDone = true;
                 }
 
+                if (finalBgBrightness > 1.0) {
+                    offCtx.filter = 'none';
+                }
+
                 // 高速背景調暗：利用快速單層 Alpha 混合覆蓋取代極耗顯存/CPU的 Canvas 2D ctx.filter 濾鏡處理
                 if (drawBGDone && finalBgBrightness < 1.0) {
                     offCtx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, 1 - finalBgBrightness))})`;
                     offCtx.fillRect(0, 0, off.width, off.height);
-                } else if (drawBGDone && finalBgBrightness > 1.0) {
-                    try { offCtx.filter = `brightness(${finalBgBrightness})`; } catch (_) { }
                 }
 
                 /*if (!settings.hideOutline && outlineImage) {

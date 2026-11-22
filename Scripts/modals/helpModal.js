@@ -34,24 +34,6 @@ export function openHelpModal(type = 'basic') {
     const container = document.createElement('div');
     container.className = 'help-dialog-content';
 
-    let helpPopupCtx = null;
-
-    const toolbar = document.createElement('div');
-    toolbar.className = 'help-shortcuts-toolbar';
-    const customizeBtn = document.createElement('button');
-    customizeBtn.type = 'button';
-    customizeBtn.className = 'help-customize-kb-btn';
-    customizeBtn.innerHTML = `<span class="material-symbols-outlined" translate="no" style="font-size:16px;">keyboard</span>`;
-    const btnText = document.createElement('span');
-    btnText.textContent = t('popup.help.customizeShortcutsBtn');
-    customizeBtn.appendChild(btnText);
-    customizeBtn.addEventListener('click', () => {
-        helpPopupCtx?.close();
-        openSettingsModal({ initialTab: 'keybindings' });
-    });
-    toolbar.appendChild(customizeBtn);
-    container.appendChild(toolbar);
-
     KEYBINDING_CATEGORIES.forEach((cat) => {
         const defs = KEYBINDING_DEFINITIONS.filter((def) => {
             if (def.category !== cat) return false;
@@ -103,11 +85,19 @@ export function openHelpModal(type = 'basic') {
         container.appendChild(extraUl);
     }
 
-    helpPopupCtx = popupWindow({
+    popupWindow({
         title,
         customContent: container,
         width: 480,
         height: "80%",
-        buttons: []
+        buttons: [
+            {
+                text: t('popup.help.customizeShortcutsBtn'),
+                onClick: (pwCtx) => {
+                    pwCtx.close();
+                    openSettingsModal({ initialTab: 'keybindings' });
+                }
+            }
+        ]
     });
 }

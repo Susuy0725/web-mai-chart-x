@@ -957,7 +957,7 @@
         "<b>縮放倍率</b>：<span class=\"code-highlight\">Ctrl</span> + 滑鼠滾輪 縮放編輯器/預覽軸流速。",
         "<b>快速面板</b>：在設定開啟後按<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> 並將滑鼠移向欲執行的功能，再放開<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>。"
       ],
-      "customizeShortcutsBtn": "自訂快速鍵...",
+      "customizeShortcutsBtn": "自訂快速鍵設定",
       "shortcutScopeVisual": "僅軌道編輯模式"
     },
     "about": {

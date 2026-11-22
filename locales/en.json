@@ -957,7 +957,7 @@
         "<b>Scale Rate</b>: <span class=\"code-highlight\">Ctrl</span> + Mouse Wheel to zoom timeline flow velocity.",
         "<b>Quick Panel</b>: After enabling in settings, hold <span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span>, move cursor to target action, and release."
       ],
-      "customizeShortcutsBtn": "Customize Shortcuts...",
+      "customizeShortcutsBtn": "Customization",
       "shortcutScopeVisual": "Visual mode only"
     },
     "about": {

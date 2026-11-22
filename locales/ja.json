@@ -957,7 +957,7 @@
         "<b>スクロール速度変更</b>: <span class=\"code-highlight\">Ctrl</span> + マウスホイールでタイムラインの流速をズームします。",
         "<b>クイック パネル</b>: 設定を開いた後、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を押して、実行したい機能にマウスを移動し、<span class=\"code-highlight\">Ctrl</span><span class=\"code-highlight\">Shift</span> を放します。"
       ],
-      "customizeShortcutsBtn": "ショートカットをカスタマイズ...",
+      "customizeShortcutsBtn": "カスタムショートカットキー設定",
       "shortcutScopeVisual": "トラック編集モードのみ"
     },
     "about": {

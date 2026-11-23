@@ -34,7 +34,7 @@ https://discord.gg/vX7XcG7bMy
 本專案使用的素材資源得益於開源社群的無私分享，特此致謝：
 - 音符圖案、音訊素材資源與判定機制來自 [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha)、[LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView)、[TeamMajdata/MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) 與 [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX)。
 
-### 示範擴充程式
+### 📝示範擴充程式&擴充程式開發手冊
 
 [前往示範擴充程式倉庫](https://github.com/seanangle666/WMCX-Demo-Extensions#readme)
 
@@ -72,7 +72,7 @@ https://discord.gg/vX7XcG7bMy
 Special thanks to the open-source community for providing the assets:
 - Skin, media resources and judgement logic are derived from [Jian04/MajdataViewAlpha](https://github.com/Jian04/MajdataViewAlpha), [LingFeng-bbben/MajdataView](https://github.com/LingFeng-bbben/MajdataView), [TeamMajdata/MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) and [re-poem/MajdataViewX](https://github.com/re-poem/MajdataViewX).
 
-### Example extensions
+### 📝Demo Extensions & Extension Develop manual
 
 [Browse Demo Extensions Repo on GitHub](https://github.com/seanangle666/WMCX-Demo-Extensions#readme)
 

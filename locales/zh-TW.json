@@ -329,7 +329,8 @@
     "swUpdateAvailableDesc": "正在背景準備 Web mai Chart X 新版本資源，是否查看更新進度？",
     "swDelay": "延遲",
     "swUpdate": "更新",
-    "swPreparing": "準備下載新版本資源..."
+    "swPreparing": "準備下載新版本資源...",
+    "swApplyUpdate": "點擊以套用更新"
   },
   "quickPanel": {
     "middle": "取消",

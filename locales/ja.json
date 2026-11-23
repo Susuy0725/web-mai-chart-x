@@ -329,7 +329,8 @@
     "swUpdateAvailableDesc": "Web mai Chart X の新バージョンをバックグラウンドで準備中です。更新状況を表示しますか？",
     "swDelay": "後で",
     "swUpdate": "更新",
-    "swPreparing": "リソースのダウンロードを準備中..."
+    "swPreparing": "リソースのダウンロードを準備中...",
+    "swApplyUpdate": "クリックして更新を適用"
   },
   "quickPanel": {
     "middle": "キャンセル",

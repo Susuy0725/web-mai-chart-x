@@ -329,7 +329,8 @@
     "swUpdateAvailableDesc": "A new version of Web mai Chart X is being prepared in the background. View update progress?",
     "swDelay": "Later",
     "swUpdate": "Update",
-    "swPreparing": "Preparing to download assets..."
+    "swPreparing": "Preparing to download assets...",
+    "swApplyUpdate": "Click to apply update"
   },
   "quickPanel": {
     "middle": "Cancel",

@@ -329,7 +329,8 @@
     "swUpdateAvailableDesc": "백그라운드에서 Web mai Chart X의 새 버전을 준비하고 있습니다. 업데이트 진행 상황을 볼까요?",
     "swDelay": "나중에",
     "swUpdate": "업데이트",
-    "swPreparing": "리소스 다운로드 준비 중..."
+    "swPreparing": "리소스 다운로드 준비 중...",
+    "swApplyUpdate": "클릭하여 업데이트 적용"
   },
   "quickPanel": {
     "middle": "취소",

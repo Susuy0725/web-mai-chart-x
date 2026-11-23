@@ -663,6 +663,56 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     line-height: 1;
 }
 
+#utilityContainer .sw-update-capsule {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 12px 0 10px;
+    border-radius: 9999px;
+    background: var(--accent-color);
+    color: #ffffff;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.25);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: 20;
+    transition: filter 150ms ease, transform 120ms ease;
+}
+
+#utilityContainer .sw-update-capsule[hidden] {
+    display: none;
+}
+
+#utilityContainer.expanded .sw-update-capsule {
+    top: 7px;
+    left: 58px;
+}
+
+#utilityContainer .sw-update-capsule:hover {
+    filter: brightness(1.1);
+}
+
+#utilityContainer .sw-update-capsule:active {
+    transform: scale(0.96);
+}
+
+#utilityContainer .sw-update-capsule:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+#utilityContainer .sw-update-capsule-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
 #utilityContainer .warnbtn {
     visibility: hidden;
     position: inherit;

@@ -1,177 +1,58 @@
-import { t } from '../i18n.js';
-import { simpleToast } from '../helper.js';
-
-let isUpdating = false;
-let latestProgressData = null;
 let hasCompletedPrompt = false;
+let isCapsuleBound = false;
 
-function deferSwUpdate() {
-    sessionStorage.setItem('sw_update_deferred', 'true');
-    isUpdating = false;
+function getSwUpdateCapsule() {
+    return document.getElementById('swUpdateCapsule');
 }
 
-export function promptSwUpdate({ onConfirm, onDelay } = {}) {
-    if (sessionStorage.getItem('sw_update_deferred') === 'true') {
-        return null;
-    }
+function bindSwUpdateCapsule() {
+    if (isCapsuleBound) return;
+    const capsule = getSwUpdateCapsule();
+    if (!capsule) return;
 
-    return simpleToast({
-        id: 'sw-update-toast',
-        type: 'info',
-        title: t('toast.swUpdateAvailableTitle') || '發現新版本',
-        content: t('toast.swUpdateAvailableDesc') || '正在背景準備新版本資源，是否查看更新進度？',
-        timeout: 0,
-        closable: true,
-        onClose: () => {
-            deferSwUpdate();
-            if (typeof onDelay === 'function') onDelay();
-        },
-        buttons: [
-            {
-                text: t('toast.swDelay') || '延遲',
-                primary: false,
-                onClick: () => {
-                    deferSwUpdate();
-                    if (typeof onDelay === 'function') onDelay();
-                }
-            },
-            {
-                text: t('toast.swUpdate') || '更新',
-                primary: true,
-                onClick: () => {
-                    isUpdating = true;
-                    if (typeof onConfirm === 'function') {
-                        onConfirm();
-                    } else if (latestProgressData?.completed) {
-                        showSwUpdateComplete();
-                    } else {
-                        const progress = latestProgressData?.progress || 0;
-                        const loaded = latestProgressData?.loaded || 0;
-                        const total = latestProgressData?.total || 0;
-                        const file = latestProgressData?.file || '';
-                        showSwUpdateProgress({ loaded, total, progress, file });
-                    }
-                    return false; // 保持 Toast 開啟以展示下載進度
-                }
-            }
-        ]
+    const applyUpdate = () => {
+        window.location.reload();
+    };
+
+    capsule.addEventListener('click', applyUpdate);
+    capsule.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            applyUpdate();
+        }
     });
+
+    isCapsuleBound = true;
 }
 
-export function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' } = {}) {
-    if (sessionStorage.getItem('sw_update_deferred') === 'true') return;
-
-    latestProgressData = { loaded, total, progress, file, completed: false };
-
-    // 若使用者尚未點擊「更新」，先提示使用者決定更新
-    if (!isUpdating) {
-        promptSwUpdate();
-        return;
-    }
-
-    simpleToast({
-        id: 'sw-update-toast',
-        type: 'info',
-        title: t('toast.swUpdating') || '正在下載離線更新...',
-        content: `${progress}%`,
-        detail: `${file ? file.replace('./', '') : ''} (${loaded} / ${total})`,
-        progress,
-        timeout: 0,
-        closable: true,
-        onClose: () => {
-            deferSwUpdate();
-        },
-        buttons: []
-    });
+export function showSwUpdateProgress() {
+    // 背景靜默下載更新，不顯示進度條彈窗
 }
 
 export function showSwUpdateComplete({ fromEvent = false } = {}) {
-    if (sessionStorage.getItem('sw_update_deferred') === 'true') return;
     if (fromEvent && hasCompletedPrompt) return;
-
-    latestProgressData = { ...(latestProgressData || {}), progress: 100, completed: true };
     hasCompletedPrompt = true;
 
-    if (!isUpdating) {
-        promptSwUpdate();
-        return;
+    bindSwUpdateCapsule();
+    const capsule = getSwUpdateCapsule();
+    if (capsule) {
+        capsule.hidden = false;
     }
-
-    simpleToast({
-        id: 'sw-update-toast',
-        type: 'success',
-        title: t('toast.swUpdated') || '版本更新已就緒！',
-        content: t('toast.swUpdateDetail') || '快取已更新，請重新整理以套用最新版本',
-        detail: '',
-        progress: 100,
-        timeout: 0,
-        closable: true,
-        onClose: () => {
-            deferSwUpdate();
-        },
-        buttons: [
-            {
-                text: t('toast.swDismiss') || '稍後',
-                primary: false,
-                onClick: () => {
-                    deferSwUpdate();
-                }
-            },
-            {
-                text: t('toast.swReloadNow') || '立即重新整理',
-                primary: true,
-                onClick: () => {
-                    window.location.reload();
-                }
-            }
-        ]
-    });
 }
 
 window.showSwUpdateProgress = showSwUpdateProgress;
 window.showSwUpdateComplete = showSwUpdateComplete;
-window.promptSwUpdate = promptSwUpdate;
 
 export function mockSwUpdateFlow() {
-    sessionStorage.removeItem('sw_update_deferred');
-    isUpdating = false;
-    latestProgressData = null;
     hasCompletedPrompt = false;
-
-    let progress = 0;
-    const total = 50;
-
-    promptSwUpdate({
-        onDelay: () => {
-            console.log('[MockSW] 使用者選擇延遲更新，下次重新整理時生效。');
-        },
-        onConfirm: () => {
-            console.log('[MockSW] 使用者決定更新，開始模擬下載流程...');
-            showSwUpdateProgress({ loaded: 0, total, progress: 0, file: './Scripts/main.js' });
-
-            const timer = setInterval(() => {
-                progress += 10;
-                const loaded = Math.round((progress / 100) * total);
-                showSwUpdateProgress({
-                    loaded,
-                    total,
-                    progress: Math.min(100, progress),
-                    file: `./Scripts/chunk-${progress}.js`
-                });
-
-                if (progress >= 100) {
-                    clearInterval(timer);
-                    setTimeout(() => {
-                        showSwUpdateComplete();
-                    }, 400);
-                }
-            }, 250);
-        }
-    });
+    showSwUpdateComplete();
+    console.log('[MockSW] 已顯示套用更新膠囊，點擊即可重新整理。');
 }
 window.mockSwUpdateFlow = mockSwUpdateFlow;
 
 export function initServiceWorker() {
+    bindSwUpdateCapsule();
+
     const isRelease = self.location.hostname === 'susuy0725.github.io';
 
     if (!isRelease) {
@@ -198,12 +79,10 @@ export function initServiceWorker() {
             const data = event.data;
             if (!data) return;
 
-            // 首次載入時由 SW 背景靜默快取，不彈出更新進度與就緒提示
+            // 首次載入時由 SW 背景靜默快取，不顯示更新膠囊
             if (!hasExistingController || data.isUpdate === false) return;
 
-            if (data.type === 'SW_UPDATE_START' || data.type === 'SW_UPDATE_PROGRESS') {
-                showSwUpdateProgress(data);
-            } else if (data.type === 'SW_UPDATE_COMPLETE') {
+            if (data.type === 'SW_UPDATE_COMPLETE') {
                 showSwUpdateComplete({ fromEvent: true });
             }
         });
@@ -211,6 +90,10 @@ export function initServiceWorker() {
         navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
             .then((reg) => {
                 console.log('Service worker registered:', reg);
+
+                if (reg.waiting && hasExistingController) {
+                    showSwUpdateComplete({ fromEvent: true });
+                }
 
                 reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;

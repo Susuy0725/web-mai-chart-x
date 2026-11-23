@@ -18,7 +18,6 @@
 - 下載彈窗標題調整為「下載譜面資料」，將下載壓縮檔按鈕移至彈窗內容最上方並移除發光與邊線，自訂檔案名稱選項移至最下方。
 - 最佳化煙火特效記憶體配置與渲染播放循環，並於編輯器拖曳時避免誤觸分割線工具列。
 - 調整感應區座標查詢與 Slide 箭頭隱藏判定邏輯，並於獨立遊玩模式區分 Slide 完美與爆裂完美貼圖及脈動閃光效果。
-- 更新靜態文件生成器與擴充程式開發手冊，支援教學章節詞條並統一「擴充程式」用語。
 - 更改更新套用的使用體驗
 
 ### Fixed
@@ -85,7 +84,7 @@
 
 ### Added
 - 新增播放控制器上方「懸浮時間膠囊」顯示功能與設定開關，可即時顯示目前播放時間與總時長，並配合底部控制列收合狀態自動隱藏。
-- 強化擴充 API `ctx.ui.toast`：支援回傳 Toast 控制器物件，提供自訂 `id` 自動隔離前綴與原地更新、來源識別標記，以及擴充程式停用時自動關閉殘留提示的機制，並同步更新 `docs/EXTENSIONS.md`。
+- 強化擴充 API `ctx.ui.toast`：支援回傳 Toast 控制器物件，提供自訂 `id` 自動隔離前綴與原地更新、來源識別標記，以及擴充程式停用時自動關閉殘留提示的機制。
 
 ### Changed
 - 將設定介面中多項否定語意選項統一改為正向語意，涵蓋顯示判定線、顯示邊框遮罩、啟用背景影片、暫停時顯示背景、播放 Hold 結尾音效、啟用語法檢查與啟用預覽波形，並自動遷移舊版設定鍵及同步更新遊玩模式與五國語系翻譯。
@@ -123,11 +122,9 @@
 - **擴充疊加圖層階段 API**：`ctx.render.registerOverlay` 的 `phase` 參數擴充支援細粒度渲染階段。主畫布 `main` 支援 `afterClear`、`beforeNotes`、`afterSensors`、`afterMiddleDisplay`、`afterNoteObjects`、`afterEffects`、`afterBorder`、`afterNotes`；視覺化編輯器 `visual` 支援 `beforeNotes`、`afterNoteObjects`、`afterNotes`。
 - **離線影片匯出前置準備 API**：`ctx.render.registerOverlay` 新增 `prepareVideoFrame` 非同步回呼與 `prepareTimeoutMs` 設定項，預設 3000 毫秒、允許範圍 100 至 30000 毫秒，於主畫布匯出每幀繪製前傳入 `{ globalTime, frameIndex, frameCount, dt, width, height, signal }`，支援 `AbortSignal` 中斷控制與連續逾時保護。
 - **受控逐幀影片解碼器 API**：於 `render:overlay` 權限下新增 `ctx.render.createVideoFrameDecoder(source, options)`，接受 `Blob`、`File` 與網址字串來源，回傳 `{ duration, getFrameAt, dispose }` 介面供離線匯出循序取幀，並於擴充停用時自動回收資源。
-- **開發者文件網站**：新增 `doc/` 互動式開發者文件網站，提供指南閱讀與全文搜尋功能。
 
 ### Changed
 - **渲染管線與影片匯出整合**：調整 `SimaiRenderer`、`SimaiVisualEditor` 與 `videoRender`，依多階段順序執行疊加圖層並於逐幀匯出期間串接 `renderOverlayRegistry.prepareVideoFrames` 與中斷訊號。
-- **開發文件同步**：更新 `docs/EXTENSIONS.md`、`docs/MODULES.md`、`docs/RENDERER_AND_AUDIO.md` 與 `doc/docData.js`，補齊擴充疊加階段、離線前置鉤子與影片解碼器 API 規格。
 
 ## [2026.11.16 (3)]
 
@@ -137,14 +134,13 @@
 - 新增來源追蹤與完整性驗證機制，安裝或更新前進行同源 HTTPS 相對路徑檢查、SHA-256 雜湊校驗與權限審查確認。
 
 ### Changed
-- 補齊 sw.js 離線快取清單，更新 5 國語系翻譯檔，並將 docs/werp.md 擴充為開發者手冊，同步更新 docs/EXTENSIONS.md 與 README.md。
+- 補齊 sw.js 離線快取清單，更新 5 國語系翻譯檔。
 
 ## [2026.11.16 (2)]
 
 ### Added
 - **新增擴充功能**：新增擴充程式系統，支援匯入第三方擴充程式。
 - 新增擴充程式管理員彈窗、工作列擴充選單與浮動彈出視窗，支援啟用與停用切換、解除安裝、權限檢視及原生宣告式設定面板。
-- 新增擴充程式開發手冊（`docs/EXTENSIONS.md`）並於 `README.md` 加入導航連結。
 - 補齊擴充程式系統相關的繁體中文、簡體中文、英文、日文與韓文多語系翻譯，並將新核心與 UI 模組納入離線快取預載清單。
 
 ### Changed

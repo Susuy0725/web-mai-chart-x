@@ -33,9 +33,6 @@ jobs:
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           sed -i "s/__CACHE_VERSION__/$SHORT_SHA/g" sw.js
 
-      - name: Build Developer Docs & LLM Artifacts
-        run: node .github/scripts/build-docs.mjs
-
       - name: Minify Static Files
         run: |
           # 1. 遞迴壓縮所有 JS（排除 sw.js、已是 .min.js 的檔案與版本庫）
@@ -46,8 +43,8 @@ jobs:
             ! -path "*/node_modules/*" \
             -exec npx esbuild {} --minify --allow-overwrite --outfile={} \;
 
-          # 2. 壓縮 Styles、_play 與 doc 目錄下的 CSS
-          find Styles _play doc -type f -name "*.css" -exec npx clean-css-cli -o {} {} \;
+          # 2. 壓縮 Styles 與 _play 目錄下的 CSS
+          find Styles _play -type f -name "*.css" -exec npx clean-css-cli -o {} {} \;
 
           # 3. 壓縮根目錄與次級目錄下的 HTML（去除空白、註解）
           find . -maxdepth 2 -name "*.html" ! -path "*/.*" \

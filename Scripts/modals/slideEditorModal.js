@@ -1184,7 +1184,6 @@ export function openSlideEditorModal({ note, rawPart = '', renderer, settings = 
 
         const effectiveSettings = {
             ...(renderer?.settings || settings || {}),
-            chartRotation: 'none',
             showJudge: false,
             showCriticalPerfect: false
         };

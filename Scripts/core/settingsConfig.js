@@ -87,12 +87,12 @@ export const defaultSettings = {
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
     editorAutocomplete: true, // 編輯器語法自動補全選單
-    chartRotation: 'none', // 譜面預覽旋轉/反轉: 'none' | 'flipV' | 'flipH' | 'rotate180'
     enableSyntaxCheck: true, // 啟用語法檢查
     cursorFollow: true, // 游標跟隨
     highlightCurrentNote: true, // 根據進度高亮目前音符
     editorAutoScroll: true, // 播放時編輯器自動捲動
     globalTimeline: true, // 全局時間軸
+    showMiniPreview: true, // 顯示預覽時間軸
     timeDisplayCapsule: true, // 懸浮時間膠囊
     timeDisplayCapsulePosition: 'center', // 懸浮時間膠囊位置: 'left' | 'center' | 'right'
     drawHitEffect: true,
@@ -286,6 +286,9 @@ export const settingsConfig = [
             },
             {
                 id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
+            },
+            {
+                id: 'showMiniPreview', type: 'checkbox', label: 'settings.items.showMiniPreview', def: defaultSettings.showMiniPreview ?? true
             },
             {
                 id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule

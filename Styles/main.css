@@ -225,12 +225,37 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     box-shadow: 0px -1px 4px #00000040;
 }
 
-#playControls #timeDisplayCapsule {
+#playControls #playCapsulesContainer {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
-    padding: 5px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 11;
+}
+
+#playControls #playCapsulesContainer[data-position="left"] {
+    left: 10px;
+    right: auto;
+    transform: none;
+}
+
+#playControls #playCapsulesContainer[data-position="right"] {
+    left: auto;
+    right: 10px;
+    transform: none;
+}
+
+#playControls .time-display-capsule,
+#playControls .speed-display-capsule {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    padding: 0 14px;
     border-radius: 9999px;
     background: var(--main-color);
     border: none;
@@ -238,25 +263,21 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     color: rgba(255, 255, 255, 0.9);
     font-family: 'mono', 'Consolas', monospace;
     font-size: 12px;
-    line-height: 1.4;
+    line-height: 1;
     letter-spacing: 0.03em;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     pointer-events: none;
-    z-index: 11;
     contain: layout style;
 }
 
-#playControls #timeDisplayCapsule[data-position="left"] {
-    left: 10px;
-    right: auto;
-    transform: none;
+#playControls .speed-display-capsule {
+    transition: background-color 150ms ease, color 150ms ease;
 }
 
-#playControls #timeDisplayCapsule[data-position="right"] {
-    left: auto;
-    right: 10px;
-    transform: none;
+#playControls .speed-display-capsule.is-modified {
+    background: var(--accent-color);
+    color: #ffffff;
 }
 
 #playControls #timeControl {
@@ -397,6 +418,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 }
 
 #playControls .controlsContainer {
+    position: relative;
     display: flex;
     gap: 20px;
     align-items: center;
@@ -417,6 +439,79 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     justify-content: center;
     overflow: hidden;
     box-sizing: border-box;
+}
+
+.controlsContainer .controlButton[data-buttonAction="hide"] {
+    position: absolute;
+    left: 8px;
+}
+
+.controlsContainer .controlSpeedAnchor {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.controlsContainer .controlButton[data-buttonAction="speed"].is-active::after {
+    background: #ffffff22;
+}
+
+.speed-popover {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    height: 42px;
+    box-sizing: border-box;
+    background: var(--main-color);
+    border: none;
+    border-radius: 7px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 120;
+    transform: translateX(-50%) translateY(4px) scale(0.92);
+    transition:
+        opacity 0.16s ease,
+        transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.speed-popover.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.speed-popover-input {
+    width: 56px;
+    height: 32px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.95);
+    font-family: 'mono', 'Consolas', monospace;
+    font-size: 12.5px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.speed-popover-input:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.24);
+}
+
+.speed-popover-input:focus {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--accent-color);
 }
 
 .controlsContainer .controlButton::after {
@@ -1484,7 +1579,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     display: none;
 }
 
-.utilityButton:hover {
+.utilityButton:not(:has(input, select)):hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
 

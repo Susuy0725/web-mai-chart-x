@@ -72,12 +72,7 @@
     "extensions": "拡張機能",
     "manageExtensions": "拡張機能を管理",
     "fullscreen": "全画面表示",
-    "exitFullscreen": "全画面表示を終了",
-    "chartRotation": "譜面回転",
-    "chartRotationNone": "なし",
-    "chartRotationFlipV": "上下反転",
-    "chartRotationFlipH": "左右反転",
-    "chartRotation180": "180度回転"
+    "exitFullscreen": "全画面表示を終了"
   },
   "extensions": {
     "title": "拡張機能管理",
@@ -408,7 +403,8 @@
       "inputDebounceTime": "エディタ更新レート (ms)",
       "showUI": "FPSインターフェースを表示",
       "autoPauseOnScroll": "スクロール時に自動一時停止",
-      "globalTimeline": "全体のタイムラインを表示",
+      "globalTimeline": "再生プログレスバーを表示する",
+      "showMiniPreview": "プレビュータイムラインを表示",
       "timeDisplayCapsule": "フローティング時間カプセルを表示",
       "enableQuickPanel": "クイックパネルを有効にする",
       "simplayUseButton": "Simplay で外枠ボタンを使用",
@@ -926,7 +922,7 @@
       "invalidInput": "すべての入力欄に有効な数値を入力してください"
     },
     "download": {
-      "title": "譜面パッケージをダウンロード",
+      "title": "譜面データをダウンロード",
       "fileName": "ファイル名",
       "customFileName": "ファイル名をカスタム",
       "placeholder": "ファイル名を入力",

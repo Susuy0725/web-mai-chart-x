@@ -503,9 +503,10 @@ export function initFileHandlers(ctx) {
                 || 'simai_package';
 
             const container = document.createElement('div');
+            let popupCtrl = null;
 
             const customNameRow = document.createElement('label');
-            customNameRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:12.5px;color:var(--popup-text-sub, #ccc);cursor:pointer;user-select:none;';
+            customNameRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;margin-bottom:0;font-size:12.5px;color:var(--popup-text-sub, #ccc);cursor:pointer;user-select:none;';
             const customNameText = document.createElement('span');
             customNameText.textContent = t('popup.download.customFileName');
             const customNameCheckbox = document.createElement('input');
@@ -514,11 +515,10 @@ export function initFileHandlers(ctx) {
             customNameCheckbox.className = 'popup-setting-checkbox';
             customNameCheckbox.checked = false;
             customNameRow.append(customNameText, customNameCheckbox);
-            container.appendChild(customNameRow);
 
             const nameFieldWrap = document.createElement('div');
             nameFieldWrap.className = 'download-custom-name-field';
-            nameFieldWrap.style.display = 'none';
+            nameFieldWrap.style.cssText = 'display:none;margin-top:10px;';
 
             const textEl = document.createElement('label');
             textEl.textContent = t('popup.download.fileName');
@@ -529,9 +529,8 @@ export function initFileHandlers(ctx) {
             nameInput.className = 'popup-setting-input';
             nameInput.placeholder = t('popup.download.placeholder');
             nameInput.value = defaultName;
-            nameInput.style.cssText = "width:100%;max-width:100%;height:34px;margin-bottom:12px;";
+            nameInput.style.cssText = "width:100%;max-width:100%;height:34px;margin-bottom:0;";
             nameFieldWrap.appendChild(nameInput);
-            container.appendChild(nameFieldWrap);
 
             customNameCheckbox.addEventListener('change', () => {
                 const enabled = customNameCheckbox.checked;
@@ -557,16 +556,17 @@ export function initFileHandlers(ctx) {
             };
 
             const DOWNLOAD_ICON_PATHS = {
+                zip: 'M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-2 6h-2v2h2v2h-2v2h-2v-2h2v-2h-2v-2h2v-2h-2V8h2v2h2v2z',
                 maidata: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
                 music: 'M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z',
                 image: 'M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z',
                 video: 'M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z',
             };
 
-            const createInlineDownloadBtn = (iconKey, label, disabled, onClick) => {
+            const createInlineDownloadBtn = (iconKey, label, disabled, onClick, variant = 'secondary') => {
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className = 'popup-btn popup-btn-secondary';
+                btn.className = `popup-btn popup-btn-${variant}`;
                 btn.disabled = Boolean(disabled);
                 btn.style.cssText = 'width:100%;justify-content:center;padding:8px 12px;font-size:13px;';
 
@@ -593,6 +593,52 @@ export function initFileHandlers(ctx) {
             const actionsList = document.createElement('div');
             actionsList.className = 'download-inline-actions';
             actionsList.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:2px;';
+
+            actionsList.appendChild(createInlineDownloadBtn(
+                'zip',
+                t('popup.download.packZip'),
+                false,
+                async (e) => {
+                    const btn = e.currentTarget;
+                    btn.disabled = true;
+                    try {
+                        popupCtrl?.setProgress(5);
+                        await ensureJSZip();
+                        popupCtrl?.setProgress(10);
+                        const zip = new window.JSZip();
+                        const fileName = sanitize(getFinalName());
+                        const curMaidata = getMaidata();
+
+                        zip.file("maidata.txt", typeof getSimaiDataString === 'function' ? getSimaiDataString(curMaidata) : "");
+
+                        const backgroundImage = getBackgroundImage();
+                        if (backgroundImage) {
+                            zip.file(`bg.${getFileExt(backgroundImage, 'png')}`, backgroundImage);
+                        }
+
+                        try {
+                            const bgmAsset = await resolveBgmAsset(audioManager);
+                            if (bgmAsset) {
+                                zip.file(`track.${bgmAsset.ext}`, bgmAsset.blob);
+                            }
+                        } catch (err) { console.error("BGM 下載失敗", err); }
+
+                        const backgroundVideo = getBackgroundVideo();
+                        if (backgroundVideo) {
+                            zip.file(`pv.${getFileExt(backgroundVideo, 'mp4')}`, backgroundVideo);
+                        }
+
+                        popupCtrl?.setProgress(40);
+                        const content = await zip.generateAsync({ type: "blob" }, (m) => popupCtrl?.setProgress(40 + m.percent * 0.6));
+
+                        triggerBlobDownload(content, `${fileName}.zip`);
+                        popupCtrl?.close();
+                    } finally {
+                        btn.disabled = false;
+                    }
+                },
+                'primary popup-btn-flat'
+            ));
 
             actionsList.appendChild(createInlineDownloadBtn(
                 'maidata',
@@ -649,49 +695,12 @@ export function initFileHandlers(ctx) {
                 }
             ));
 
-            container.appendChild(actionsList);
+            container.append(actionsList, customNameRow, nameFieldWrap);
 
-            popupWindow({
+            popupCtrl = popupWindow({
                 title: t('popup.download.title'),
                 customContent: container,
-                buttons: [
-                    {
-                        text: t('popup.download.packZip'),
-                        onClick: async (pCtx) => {
-                            pCtx.setProgress(5);
-                            await ensureJSZip();
-                            pCtx.setProgress(10);
-                            const zip = new window.JSZip();
-                            const fileName = sanitize(getFinalName());
-                            const curMaidata = getMaidata();
-
-                            zip.file("maidata.txt", typeof getSimaiDataString === 'function' ? getSimaiDataString(curMaidata) : "");
-
-                            const backgroundImage = getBackgroundImage();
-                            if (backgroundImage) {
-                                zip.file(`bg.${getFileExt(backgroundImage, 'png')}`, backgroundImage);
-                            }
-
-                            try {
-                                const bgmAsset = await resolveBgmAsset(audioManager);
-                                if (bgmAsset) {
-                                    zip.file(`track.${bgmAsset.ext}`, bgmAsset.blob);
-                                }
-                            } catch (e) { console.error("BGM 下載失敗", e); }
-
-                            const backgroundVideo = getBackgroundVideo();
-                            if (backgroundVideo) {
-                                zip.file(`pv.${getFileExt(backgroundVideo, 'mp4')}`, backgroundVideo);
-                            }
-
-                            pCtx.setProgress(40);
-                            const content = await zip.generateAsync({ type: "blob" }, (m) => pCtx.setProgress(40 + m.percent * 0.6));
-
-                            triggerBlobDownload(content, `${fileName}.zip`);
-                            pCtx.close();
-                        }
-                    }
-                ]
+                buttons: []
             });
         });
     }

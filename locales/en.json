@@ -72,12 +72,7 @@
     "extensions": "Extensions",
     "manageExtensions": "Manage Extensions",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit Fullscreen",
-    "chartRotation": "Chart Rotation",
-    "chartRotationNone": "None",
-    "chartRotationFlipV": "Flip Vertical",
-    "chartRotationFlipH": "Flip Horizontal",
-    "chartRotation180": "Rotate 180°"
+    "exitFullscreen": "Exit Fullscreen"
   },
   "extensions": {
     "title": "Extension Manager",
@@ -408,7 +403,8 @@
       "inputDebounceTime": "Editor Refresh Rate (ms)",
       "showUI": "Show FPS Interface",
       "autoPauseOnScroll": "Auto Pause on Scroll",
-      "globalTimeline": "Show Global Timeline",
+      "globalTimeline": "Show playback progress",
+      "showMiniPreview": "Show Preview Timeline",
       "timeDisplayCapsule": "Show Floating Time Capsule",
       "enableQuickPanel": "Enable Quick Panel",
       "simplayUseButton": "Simplay Use Buttons",
@@ -926,7 +922,7 @@
       "invalidInput": "Please ensure all inputs are valid numbers"
     },
     "download": {
-      "title": "Download Chart Package",
+      "title": "Download Chart Data",
       "fileName": "File Name",
       "customFileName": "Custom File Name",
       "placeholder": "Enter file name",

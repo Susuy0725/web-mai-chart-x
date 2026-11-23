@@ -4,11 +4,7 @@ import {
     noteRefPos,
     visualNoteRefPos,
     touchRefPos,
-    transformButtonPos,
-    transformTouchPos,
-    transformSlideType,
 } from './core/chartGeometry.js';
-import { getSlidePath } from './decode.js';
 import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
 import { getSpectrogramChunkTiles } from './core/audioSpectrogram.js';
 import {
@@ -1989,8 +1985,7 @@ export class SimaiRenderer {
 
         if (!this.images) return;
 
-        const renderBuckets = this._resolveRotatedBuckets(buckets);
-        this.currentTouchNotes = renderBuckets.touch || [];
+        this.currentTouchNotes = buckets.touch || [];
         // 重置 zoneCounts，避免每幀分配新物件
         this._zoneCounts.fill(0);
         for (let idx = 0; idx < this.currentTouchNotes.length; idx++) {
@@ -2070,18 +2065,18 @@ export class SimaiRenderer {
         runOverlay('afterMiddleDisplay');
 
         if (this.shouldDrawHanabiEffects()) {
-            const touchBucket = renderBuckets.touch;
+            const touchBucket = buckets.touch;
             for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
             this.drawHanabiEffects();
         }
-        const slideBucket = renderBuckets.slide;
+        const slideBucket = buckets.slide;
         for (let i = 0; i < slideBucket.length; i++) this.drawSlideTrack(slideBucket[i]);
         for (let i = 0; i < slideBucket.length; i++) this.drawSlideStar(slideBucket[i]);
 
-        if (renderBuckets.tapnhold && renderBuckets.tapnhold.length > 0) {
-            this.drawTapAndHoldList(renderBuckets.tapnhold);
+        if (buckets.tapnhold && buckets.tapnhold.length > 0) {
+            this.drawTapAndHoldList(buckets.tapnhold);
         }
-        const touchBucket = renderBuckets.touch;
+        const touchBucket = buckets.touch;
         for (let i = 0; i < touchBucket.length; i++) this.drawTouch(touchBucket[i]);
         runOverlay('afterNoteObjects');
 
@@ -2745,13 +2740,11 @@ export class SimaiRenderer {
         const dimPx = Math.min(wPx, hPx);
         const p = dimPx / scaleBase * scale;
 
-        const chartRotation = this.settings?.chartRotation || 'none';
         const params = this._sensorCacheParams || {};
         if (
             this._sensorShapeCache &&
             params.dim === dimPx &&
-            params.scale === scale &&
-            params.chartRotation === chartRotation
+            params.scale === scale
         ) {
             return; // 快取仍有效
         }
@@ -2824,8 +2817,7 @@ export class SimaiRenderer {
                 }
                 for (let i = 0; i < positions.length; i++) {
                     const pos = positions[i];
-                    const labelIndex = transformTouchPos(type, i + 1, chartRotation);
-                    tctx.fillText(`${type}${labelIndex}`, pos.x, pos.y);
+                    tctx.fillText(`${type}${i + 1}`, pos.x, pos.y);
                 }
             });
             tctx.fillText('C', 0, 0);
@@ -2833,94 +2825,13 @@ export class SimaiRenderer {
 
             this._sensorShapeCache = shapes;
             this._sensorTextCache = texts;
-            this._sensorCacheParams = { dim: dimPx, scale, chartRotation };
+            this._sensorCacheParams = { dim: dimPx, scale };
         } catch (e) {
             console.error('建立傳感器靜態快取失敗:', e);
             this._sensorShapeCache = null;
             this._sensorTextCache = null;
             this._sensorCacheParams = { dim: 0, scale };
         }
-    }
-
-    /**
-     * 依據 chartRotation 設定轉換單一音符物件的幾何座標與路徑（以 WeakMap 快取，不修改原始物件）。
-     * @param {Object} note
-     * @param {string} mode - 'none' | 'flipV' | 'flipH' | 'rotate180'
-     * @returns {Object}
-     */
-    _transformNoteForRotation(note, mode) {
-        if (!note || typeof note !== 'object' || !mode || mode === 'none') {
-            return note;
-        }
-        if (!this._rotationNoteCache) {
-            this._rotationNoteCache = new Map();
-        }
-        let modeCache = this._rotationNoteCache.get(mode);
-        if (!modeCache) {
-            modeCache = new WeakMap();
-            this._rotationNoteCache.set(mode, modeCache);
-        }
-        const cached = modeCache.get(note);
-        if (cached) return cached;
-
-        const clone = { ...note };
-        if (note.touchPos) {
-            clone.pos = transformTouchPos(note.touchPos, note.pos, mode);
-        } else if (note.type === 'slide') {
-            const newPos = transformButtonPos(note.pos, mode);
-            const newEnd = note.slideEnd != null ? transformButtonPos(note.slideEnd, mode) : note.slideEnd;
-            const newMid = note.slideMid != null ? transformButtonPos(note.slideMid, mode) : note.slideMid;
-            const newType = transformSlideType(note.slideType, mode);
-            clone.pos = newPos;
-            if (newEnd !== undefined) clone.slideEnd = newEnd;
-            if (newMid !== undefined) clone.slideMid = newMid;
-            clone.slideType = newType;
-            if (newPos != null && newEnd != null && newType) {
-                const res = getSlidePath(newPos, newEnd, newType, newMid);
-                if (res && res.path) {
-                    clone.path = res.path;
-                    if (typeof res.path.endTangent === 'function') {
-                        clone.endTangent = res.path.endTangent();
-                    }
-                    if (res.additional && Object.keys(res.additional).length > 0) {
-                        clone.wPaths = res.additional;
-                    } else if (note.wPaths) {
-                        clone.wPaths = {};
-                    }
-                }
-            }
-        } else if (note.pos != null) {
-            clone.pos = transformButtonPos(note.pos, mode);
-        }
-
-        modeCache.set(note, clone);
-        return clone;
-    }
-
-    /**
-     * 依據設定將 drawFrame 的 buckets 轉換為旋轉/反轉後的可繪製集合，原 buckets 保持不變。
-     * @param {Object} buckets
-     * @returns {Object}
-     */
-    _resolveRotatedBuckets(buckets) {
-        const mode = this.settings?.chartRotation || 'none';
-        if (!buckets || mode === 'none') {
-            return buckets;
-        }
-        const mapList = (list) => {
-            if (!Array.isArray(list) || list.length === 0) return list;
-            const out = new Array(list.length);
-            for (let i = 0; i < list.length; i++) {
-                out[i] = this._transformNoteForRotation(list[i], mode);
-            }
-            return out;
-        };
-        return {
-            ...buckets,
-            tapnhold: mapList(buckets.tapnhold),
-            slide: mapList(buckets.slide),
-            touch: mapList(buckets.touch),
-        };
     }
 
     drawSensors(showSensor, showSensorText, activeSensors = null) {

@@ -1709,6 +1709,12 @@
     box-shadow: 0 4px 12px var(--popup-accent-glow);
 }
 
+.popup-btn-primary.popup-btn-flat,
+.popup-btn-primary.popup-btn-flat:hover:not(:disabled) {
+    border: none;
+    box-shadow: none;
+}
+
 .popup-btn-secondary {
     background: var(--popup-surface);
     border-color: var(--popup-border);

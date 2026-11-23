@@ -310,10 +310,6 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
         });
     }
 
-    if (ctx.playbackSpeedInput && settings.playbackSpeed !== undefined) {
-        ctx.playbackSpeedInput.value = settings.playbackSpeed;
-    }
-
     // 效果修飾屬性於初始化時重設為預設值 'none'，避免重新整理後殘留地雷或 Break 造成誤放
     settings.visualSelectedModifier = 'none';
 
@@ -347,9 +343,6 @@ async function setupEditorUIAndData(ctx, settings, step) {
 
     if (typeof ctx.setDisplayModeUI === 'function') {
         ctx.setDisplayModeUI(settings.displayMode ?? 'simai');
-    }
-    if (typeof ctx.setChartRotationUI === 'function') {
-        ctx.setChartRotationUI(settings.chartRotation ?? 'none');
     }
     if (typeof ctx.setVisualToolUI === 'function') {
         ctx.setVisualToolUI(settings.visualToolMode ?? 'edit');

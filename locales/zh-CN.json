@@ -50,7 +50,7 @@
     "formatSelectionDone": "已完成选区格式化",
     "formatDocumentNoChange": "文档格式已是最佳状态",
     "offset": "偏移",
-    "changeDifficulty": "难度切换",
+    "changeDifficulty": "难度",
     "playbackSpeed": "播放速度",
     "displayMode": "编辑模式",
     "displayModeSimai": "Simai",
@@ -72,12 +72,7 @@
     "extensions": "扩展程序",
     "manageExtensions": "管理插件",
     "fullscreen": "全屏",
-    "exitFullscreen": "退出全屏",
-    "chartRotation": "谱面旋转",
-    "chartRotationNone": "无",
-    "chartRotationFlipV": "上下反转",
-    "chartRotationFlipH": "左右反转",
-    "chartRotation180": "180度旋转"
+    "exitFullscreen": "退出全屏"
   },
   "extensions": {
     "title": "扩展程序管理",
@@ -408,7 +403,8 @@
       "inputDebounceTime": "编辑器刷新时间 (ms)",
       "showUI": "显示FPS接口",
       "autoPauseOnScroll": "滚动时自动暂停",
-      "globalTimeline": "显示全域时间轴",
+      "globalTimeline": "显示播放进度条",
+      "showMiniPreview": "显示预览时间轴",
       "timeDisplayCapsule": "显示悬浮时间胶囊",
       "enableQuickPanel": "激活快速面板",
       "simplayUseButton": "Simplay 使用外框",
@@ -926,7 +922,7 @@
       "invalidInput": "请确保所有输入都是有效的数字"
     },
     "download": {
-      "title": "下载谱面套件",
+      "title": "下载谱面资料",
       "fileName": "文件名称",
       "customFileName": "自定义文件名称",
       "placeholder": "输入文件名称",

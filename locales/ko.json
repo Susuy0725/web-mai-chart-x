@@ -72,12 +72,7 @@
     "extensions": "확장 프로그램",
     "manageExtensions": "확장 프로그램 관리",
     "fullscreen": "전체 화면",
-    "exitFullscreen": "전체 화면 종료",
-    "chartRotation": "채보 회전",
-    "chartRotationNone": "없음",
-    "chartRotationFlipV": "상하 반전",
-    "chartRotationFlipH": "좌우 반전",
-    "chartRotation180": "180도 회전"
+    "exitFullscreen": "전체 화면 종료"
   },
   "extensions": {
     "title": "확장 프로그램 관리",
@@ -409,6 +404,7 @@
       "showUI": "FPS UI 표시",
       "autoPauseOnScroll": "스크롤 시 자동 일시정지",
       "globalTimeline": "전체 타임라인 표시",
+      "showMiniPreview": "미리보기 타임라인 표시",
       "timeDisplayCapsule": "플로팅 시간 캡슐 표시",
       "enableQuickPanel": "빠른 패널 활성화",
       "simplayUseButton": "Simplay 외곽 버튼 사용",
@@ -926,7 +922,7 @@
       "invalidInput": "모든 입력값이 유효한 숫자인지 확인해 주세요"
     },
     "download": {
-      "title": "채보 패키지 다운로드",
+      "title": "채보 데이터 다운로드",
       "fileName": "파일 이름",
       "customFileName": "사용자 지정 파일 이름",
       "placeholder": "파일 이름 입력",

@@ -168,8 +168,15 @@ if (typeof document !== 'undefined' && document.fonts) {
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
 const timeline = document.getElementById('timeControl');
+const playCapsulesContainer = document.getElementById('playCapsulesContainer');
 const timeDisplayCapsule = document.getElementById('timeDisplayCapsule');
-const keyboardButton = getButton("keyboard", "control");
+const speedDisplayCapsule = document.getElementById('speedDisplayCapsule');
+const speedControlButton = getButton("speed", "control");
+const speedPopover = document.getElementById('speedPopover');
+const speedPopoverMinus = document.getElementById('speedPopoverMinus');
+const speedPopoverAdd = document.getElementById('speedPopoverAdd');
+const speedPopoverReset = document.getElementById('speedPopoverReset');
+const speedPopoverInput = document.getElementById('speedPopoverInput');
 const playButton = getButton("play/pause", "control");
 const hideButton = getButton("hide", "control");
 const stopButton = getButton("stop", "control");
@@ -226,11 +233,6 @@ const setDisplayModeUI = (mode) => {
     if (displayModeSelect) displayModeSelect.value = mode;
     updateGridDivisionVisibility();
 };
-const chartRotationBtn = document.querySelector('.utilityButton[data-buttonAction="chartRotation"]');
-const chartRotationSelect = chartRotationBtn ? chartRotationBtn.querySelector('select[name="chartRotation"]') : null;
-const setChartRotationUI = (mode) => {
-    if (chartRotationSelect) chartRotationSelect.value = mode || 'none';
-};
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
 const downloadButton = getButton("download", "utility");
@@ -270,8 +272,6 @@ if (editorBackgroundVideo) {
 }
 const tapBpmButton = getButton("tapBpm", "utility");
 const manageResourcesButton = getButton("manageResources", "utility");
-const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
-const playbackReset = getButton("playbackSpeed", "utility");
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
 const helpBasicButton = getButton("helpBasic", "utility");
@@ -820,14 +820,6 @@ if (displayModeSelect) {
         saveSettingsDebounce();
         setEditorCss(editorContainer.dataset.hidden !== 'true');
         draw();
-    });
-}
-
-if (chartRotationSelect) {
-    chartRotationSelect.addEventListener('change', (e) => {
-        const val = e.target.value || 'none';
-        appContext.setSetting('chartRotation', val);
-        saveSettingsDebounce();
     });
 }
 
@@ -1399,6 +1391,23 @@ const updateTimeCapsule = (time, force = false) => {
         lastTimeCapsuleText = text;
         timeDisplayCapsule.textContent = text;
     }
+};
+
+/**
+ * 更新播放控制器上方懸浮倍率膠囊文字。
+ * @param {number} speed
+ */
+let lastSpeedCapsuleText = '';
+const updateSpeedCapsule = (speed) => {
+    if (!speedDisplayCapsule) return;
+    const numericSpeed = Number(speed);
+    const validSpeed = Number.isFinite(numericSpeed) && numericSpeed > 0 ? numericSpeed : 1;
+    const text = `${validSpeed.toFixed(2)}x`;
+    if (text !== lastSpeedCapsuleText) {
+        lastSpeedCapsuleText = text;
+        speedDisplayCapsule.textContent = text;
+    }
+    speedDisplayCapsule.classList.toggle('is-modified', text !== '1.00x');
 };
 
 let isTimelineDragging = false;
@@ -2146,30 +2155,16 @@ function resizePreviewCanvas(force = false) {
     return previewRender.resize(previewContainer.clientWidth, previewContainer.clientHeight, dpr, force);
 }
 
-playbackSpeedInput.addEventListener('change', () => {
-    const speed = parseFloat(playbackSpeedInput.value);
-    if (isNaN(speed) || speed <= 0) {
-        simpleToast({ content: '請輸入有效的播放速度', type: 'warning', timeout: 1800 });
-        playbackSpeedInput.value = 1;
-        return;
-    }
-    setPlaybackSpeed(speed);
-    simpleToast({ content: `已設定播放速度：${speed}x`, type: 'success', timeout: 1800 });
-});
-
-playbackReset.addEventListener('click', (e) => {
-    if (e.target === playbackSpeedInput) return;
-    setPlaybackSpeed(1);
-    simpleToast({ content: '重置播放速度', type: 'success', timeout: 1800 });
-});
-
 function setPlaybackSpeed(speed) {
     typeof speed === 'string' && (speed = parseFloat(speed));
     speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
     const playing = playButton.dataset.playing === 'true';
 
     settings.playbackSpeed = speed;
-    playbackSpeedInput.value = speed.toFixed(2);
+    if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
+        speedPopoverInput.value = `${speed.toFixed(2)}x`;
+    }
+    updateSpeedCapsule(speed);
 
     audioManager.setPlaybackRate(speed);
     if (playing) {
@@ -2201,16 +2196,33 @@ const setEditorCss = (visible = null) => {
     syncHighlightLayerScroll();
 
     timeline.style.display = settings.globalTimeline ? 'block' : 'none';
-    if (timeDisplayCapsule) {
+    if (playCapsulesContainer) {
         const pos = settings.timeDisplayCapsulePosition;
-        timeDisplayCapsule.dataset.position = (pos === 'left' || pos === 'right') ? pos : 'center';
+        playCapsulesContainer.dataset.position = (pos === 'left' || pos === 'right') ? pos : 'center';
         const showCapsule = hideButton.dataset.hidden !== 'true' && settings.timeDisplayCapsule !== false;
-        timeDisplayCapsule.style.display = showCapsule ? '' : 'none';
+        playCapsulesContainer.style.display = showCapsule ? '' : 'none';
         if (showCapsule) {
             updateTimeCapsule(playbackEngine?.realTime ?? realTime);
+            updateSpeedCapsule(settings.playbackSpeed);
         }
     }
-    if (visible === null) return;
+    if (visible === null) {
+        if (hideButton.dataset.hidden !== 'true') {
+            const shouldHidePreview = isVisualMode() || settings.showMiniPreview === false;
+            const prevDisplay = previewContainer.style.display;
+            const targetDisplay = shouldHidePreview ? 'none' : 'block';
+            const rootComputed = window.getComputedStyle(document.documentElement);
+            const targetHeight = shouldHidePreview
+                ? rootComputed.getPropertyValue('--const-collapsed-playControls-height')
+                : rootComputed.getPropertyValue('--const-max-playControls-height');
+            previewContainer.style.display = targetDisplay;
+            document.documentElement.style.setProperty('--playControls-height', targetHeight);
+            if (prevDisplay !== targetDisplay) {
+                resize();
+            }
+        }
+        return;
+    }
 
     const visualMode = isVisualMode();
     const editorVisible = visible && !visualMode;
@@ -4269,9 +4281,93 @@ if (connectMajdataViewButton) {
     });
 }
 
-keyboardButton.addEventListener('click', () => {
-    editorInput.focus();
-});
+const formatSpeedPopoverValue = (speed) => {
+    const numericSpeed = Number(speed);
+    const validSpeed = Number.isFinite(numericSpeed) && numericSpeed > 0 ? numericSpeed : 1;
+    return `${validSpeed.toFixed(2)}x`;
+};
+
+const setSpeedPopoverOpen = (open) => {
+    if (!speedPopover || !speedControlButton) return;
+    const isOpen = Boolean(open);
+    speedPopover.classList.toggle('is-open', isOpen);
+    speedControlButton.classList.toggle('is-active', isOpen);
+    speedControlButton.setAttribute('aria-expanded', String(isOpen));
+    speedPopover.setAttribute('aria-hidden', String(!isOpen));
+    if (isOpen && speedPopoverInput) {
+        speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+    }
+};
+
+if (speedControlButton && speedPopover) {
+    speedControlButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSpeedPopoverOpen(!speedPopover.classList.contains('is-open'));
+    });
+
+    speedPopover.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    speedPopoverMinus?.addEventListener('click', () => {
+        const sp = Math.max(0.25, (Number(settings.playbackSpeed) || 1) - 0.25);
+        setPlaybackSpeed(sp);
+    });
+
+    speedPopoverAdd?.addEventListener('click', () => {
+        const sp = Math.min(2.0, (Number(settings.playbackSpeed) || 1) + 0.25);
+        setPlaybackSpeed(sp);
+    });
+
+    speedPopoverReset?.addEventListener('click', () => {
+        setPlaybackSpeed(1);
+        simpleToast({ content: t('toast.resetPlaybackSpeed'), type: 'success', timeout: 1800 });
+    });
+
+    if (speedPopoverInput) {
+        speedPopoverInput.addEventListener('focus', () => {
+            speedPopoverInput.select();
+        });
+
+        speedPopoverInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                speedPopoverInput.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+                speedPopoverInput.blur();
+                setSpeedPopoverOpen(false);
+            }
+        });
+
+        speedPopoverInput.addEventListener('change', () => {
+            const raw = speedPopoverInput.value.trim().replace(/x$/i, '');
+            const speed = parseFloat(raw);
+            if (isNaN(speed) || speed <= 0) {
+                simpleToast({ content: t('toast.invalidPlaybackSpeed'), type: 'warning', timeout: 1800 });
+                speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+                return;
+            }
+            setPlaybackSpeed(speed);
+            speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+            simpleToast({ content: t('toast.setPlaybackSpeed', { speed: settings.playbackSpeed }), type: 'success', timeout: 1800 });
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!speedPopover.classList.contains('is-open')) return;
+        if (!speedPopover.contains(e.target) && !speedControlButton.contains(e.target)) {
+            setSpeedPopoverOpen(false);
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && speedPopover.classList.contains('is-open')) {
+            setSpeedPopoverOpen(false);
+        }
+    });
+}
 
 function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const c = window.getComputedStyle(document.documentElement);
@@ -4282,27 +4378,29 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const maxPlayControlsHeight = c.getPropertyValue('--const-max-playControls-height');
     const collapsedPlayControlsHeight = c.getPropertyValue('--const-collapsed-playControls-height');
     if (!isHidden) {
+        setSpeedPopoverOpen(false);
         timeline.style.display = 'none';
         mc.style.display = 'none';
         pc.style.display = 'none';
-        if (timeDisplayCapsule) timeDisplayCapsule.style.display = 'none';
+        if (playCapsulesContainer) playCapsulesContainer.style.display = 'none';
         hideButton.dataset.hidden = 'true';
         d.setProperty('--playControls-height', '0px');
         showPlayControlsBtn.style.display = 'flex';
     } else {
         showPlayControlsBtn.style.display = 'none';
-        if (timeDisplayCapsule) {
+        if (playCapsulesContainer) {
             const showCapsule = settings.timeDisplayCapsule !== false;
-            timeDisplayCapsule.style.display = showCapsule ? '' : 'none';
+            playCapsulesContainer.style.display = showCapsule ? '' : 'none';
             if (showCapsule) {
                 updateTimeCapsule(playbackEngine?.realTime ?? realTime);
+                updateSpeedCapsule(settings.playbackSpeed);
             }
         }
         hideButton.dataset.hidden = 'false';
         timeline.style.display = settings.globalTimeline ? 'block' : 'none';
         mc.style.display = 'block';
         pc.style.display = 'flex';
-        if (visualVisible) {
+        if (visualVisible || settings.showMiniPreview === false) {
             previewContainer.style.display = 'none';
             d.setProperty('--playControls-height', collapsedPlayControlsHeight);
         } else {
@@ -4610,18 +4708,6 @@ recordVideoButton.addEventListener('click', () => {
 });
 
 window.addEventListener('resize', resize);
-
-getButton("playbackSpeedAdd", "utility").addEventListener("click", () => {
-    let sp = settings.playbackSpeed + 0.25;
-    if (sp >= 2.0) sp = 2.0;
-    setPlaybackSpeed(sp);
-});
-
-getButton("playbackSpeedMinus", "utility").addEventListener("click", () => {
-    let sp = settings.playbackSpeed - 0.25;
-    if (sp <= 0.25) sp = 0.25;
-    setPlaybackSpeed(sp);
-});
 
 const KEYBINDING_HANDLERS = {
     'playback.toggle': () => playButton?.click(),
@@ -5130,18 +5216,18 @@ async function _init() {
             appContext.settings = val;
             if (val && val.skin) currentSkin = val.skin;
             if (val && val.syntaxColors) applySyntaxColors(val.syntaxColors);
-            setChartRotationUI(val?.chartRotation ?? 'none');
+            if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
+                speedPopoverInput.value = formatSpeedPopoverValue(val?.playbackSpeed);
+            }
             syncVisualSubMenus();
         },
         syncVisualSubMenus,
-        playbackSpeedInput,
         applyAudioSettings,
         loadProjectData,
         majdataWs,
         applySplitRatio,
         snapHideCanvas,
         setDisplayModeUI,
-        setChartRotationUI,
         setVisualToolUI,
         visualToolModeSelect,
         setGridDivisionUI,
@@ -5515,14 +5601,8 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         'enablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
         'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed',
-        'noteBaseSize', 'middleDistance', 'chartRotation'
+        'noteBaseSize', 'middleDistance'
     ];
-    if (key === 'chartRotation') {
-        setChartRotationUI(value);
-        renderer?.clearJudgeEffects();
-        renderer?.clearHitEffects();
-        renderer?.invalidateCaches();
-    }
     if (redrawKeys.includes(key)) {
         draw();
     }

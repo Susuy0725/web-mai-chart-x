@@ -502,6 +502,80 @@ export function getSimaiDataString(maidata) {
         .map(([key, value]) => `${key}=${value}`)
         .join("\n&");
 }
+const _popupHistoryStack = [];
+let _popupHistorySeq = 0;
+let _pushedPopupDepth = 0;
+let _ignoringPopupPopstateCount = 0;
+let _popupReconcileQueued = false;
+let _popupPopstateBound = false;
+
+function ensurePopupPopstateListener() {
+    if (_popupPopstateBound || typeof window === 'undefined') return;
+    _popupPopstateBound = true;
+
+    window.addEventListener('popstate', (e) => {
+        const stateDepth = Math.max(0, Number(e.state?.wmcPopupDepth || 0));
+
+        if (_ignoringPopupPopstateCount > 0) {
+            _ignoringPopupPopstateCount--;
+            _pushedPopupDepth = stateDepth;
+            if (_popupHistoryStack.length > _pushedPopupDepth) {
+                schedulePopupHistoryReconcile();
+            }
+            return;
+        }
+
+        if (_popupHistoryStack.length === 0) {
+            _pushedPopupDepth = stateDepth;
+            return;
+        }
+
+        _pushedPopupDepth = Math.min(_pushedPopupDepth, stateDepth);
+        while (_popupHistoryStack.length > _pushedPopupDepth) {
+            const topEntry = _popupHistoryStack.pop();
+            if (topEntry && typeof topEntry.closeFromBack === 'function') {
+                topEntry.closeFromBack();
+            }
+        }
+    });
+}
+
+function schedulePopupHistoryReconcile() {
+    if (_popupReconcileQueued || typeof window === 'undefined' || !window.history) return;
+    _popupReconcileQueued = true;
+
+    queueMicrotask(() => {
+        _popupReconcileQueued = false;
+        const desiredDepth = _popupHistoryStack.length;
+
+        if (desiredDepth > _pushedPopupDepth) {
+            while (_pushedPopupDepth < desiredDepth) {
+                _pushedPopupDepth++;
+                const entry = _popupHistoryStack[_pushedPopupDepth - 1];
+                const baseState = (window.history.state && typeof window.history.state === 'object') ? window.history.state : {};
+                window.history.pushState(
+                    { ...baseState, wmcPopupId: entry.id, wmcPopupDepth: _pushedPopupDepth },
+                    ''
+                );
+            }
+        } else if (desiredDepth === _pushedPopupDepth && desiredDepth > 0) {
+            const topEntry = _popupHistoryStack[desiredDepth - 1];
+            if (window.history.state?.wmcPopupId !== topEntry.id) {
+                const baseState = (window.history.state && typeof window.history.state === 'object') ? window.history.state : {};
+                window.history.replaceState(
+                    { ...baseState, wmcPopupId: topEntry.id, wmcPopupDepth: desiredDepth },
+                    ''
+                );
+            }
+        } else if (desiredDepth < _pushedPopupDepth) {
+            const delta = _pushedPopupDepth - desiredDepth;
+            _pushedPopupDepth = desiredDepth;
+            _ignoringPopupPopstateCount += 1;
+            window.history.go(-delta);
+        }
+    });
+}
+
 /**
  * popupWindow
  *
@@ -669,11 +743,33 @@ export function popupWindow({
 
     let closed = false;
     const isMobileBreakpoint = () => window.innerWidth <= 440;
+    const historyEntry = (!unclosable && typeof window !== 'undefined' && window.history)
+        ? { id: ++_popupHistorySeq, closeFromBack: () => closePopupInternal(true) }
+        : null;
 
-    const closePopup = () => {
+    if (historyEntry) {
+        ensurePopupPopstateListener();
+        _popupHistoryStack.push(historyEntry);
+        schedulePopupHistoryReconcile();
+    }
+
+    const closePopup = () => closePopupInternal(false);
+
+    const closePopupInternal = (fromHistoryBack = false) => {
         if (closed) return;
         closed = true;
         ctx.isClosed = true;
+
+        if (historyEntry) {
+            const idx = _popupHistoryStack.indexOf(historyEntry);
+            if (idx !== -1) {
+                _popupHistoryStack.splice(idx, 1);
+            }
+            if (!fromHistoryBack) {
+                schedulePopupHistoryReconcile();
+            }
+        }
+
         backdrop.style.pointerEvents = 'none';
         backdrop.style.opacity = '0';
 

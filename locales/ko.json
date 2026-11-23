@@ -72,7 +72,12 @@
     "extensions": "확장 프로그램",
     "manageExtensions": "확장 프로그램 관리",
     "fullscreen": "전체 화면",
-    "exitFullscreen": "전체 화면 종료"
+    "exitFullscreen": "전체 화면 종료",
+    "chartRotation": "채보 회전",
+    "chartRotationNone": "없음",
+    "chartRotationFlipV": "상하 반전",
+    "chartRotationFlipH": "좌우 반전",
+    "chartRotation180": "180도 회전"
   },
   "extensions": {
     "title": "확장 프로그램 관리",
@@ -397,6 +402,7 @@
       "playHoldEnd": "Hold 종료 효과음 재생",
       "readyBeat": "준비 박자 재생",
       "autocomplete": "편집기 괄호 자동 완성",
+      "editorAutocomplete": "편집기 구문 자동 완성 메뉴",
       "enableSyntaxCheck": "구문 검사 활성화",
       "maxSlideCount": "화면에 표시할 최대 슬라이드 별 개수",
       "inputDebounceTime": "편집기 새로고침 시간 (ms)",
@@ -922,9 +928,13 @@
     "download": {
       "title": "채보 패키지 다운로드",
       "fileName": "파일 이름",
+      "customFileName": "사용자 지정 파일 이름",
       "placeholder": "파일 이름 입력",
-      "downloadMaidata": "Maidata 다운로드",
-      "packZip": "ZIP으로 패키징"
+      "downloadMaidata": "채보 파일 다운로드",
+      "downloadMusic": "음악 다운로드",
+      "downloadImage": "커버 이미지 다운로드",
+      "downloadVideo": "배경 영상 다운로드",
+      "packZip": "압축 파일 다운로드"
     },
     "loadConfirm": {
       "titleZip": "압축 파일 읽기",

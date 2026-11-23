@@ -644,6 +644,7 @@ export function openTouchGroupModal({
 
         const effectiveSettings = {
             ...(renderer?.settings || settings || {}),
+            chartRotation: 'none',
             showJudge: false,
             showCriticalPerfect: false
         };

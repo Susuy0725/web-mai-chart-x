@@ -72,7 +72,12 @@
     "extensions": "扩展程序",
     "manageExtensions": "管理插件",
     "fullscreen": "全屏",
-    "exitFullscreen": "退出全屏"
+    "exitFullscreen": "退出全屏",
+    "chartRotation": "谱面旋转",
+    "chartRotationNone": "无",
+    "chartRotationFlipV": "上下反转",
+    "chartRotationFlipH": "左右反转",
+    "chartRotation180": "180度旋转"
   },
   "extensions": {
     "title": "扩展程序管理",
@@ -397,6 +402,7 @@
       "playHoldEnd": "播放 Hold 结尾音效",
       "readyBeat": "播放预备拍",
       "autocomplete": "编辑器自动补齐括号",
+      "editorAutocomplete": "编辑器语法自动补全菜单",
       "enableSyntaxCheck": "启用语法检查",
       "maxSlideCount": "屏幕上最大滑星显示数量",
       "inputDebounceTime": "编辑器刷新时间 (ms)",
@@ -922,9 +928,13 @@
     "download": {
       "title": "下载谱面套件",
       "fileName": "文件名称",
+      "customFileName": "自定义文件名称",
       "placeholder": "输入文件名称",
-      "downloadMaidata": "下载 Maidata",
-      "packZip": "打包 ZIP"
+      "downloadMaidata": "下载谱面文件",
+      "downloadMusic": "下载音乐",
+      "downloadImage": "下载封面图",
+      "downloadVideo": "下载背景视频",
+      "packZip": "下载压缩包"
     },
     "loadConfirm": {
       "titleZip": "读取压缩包",

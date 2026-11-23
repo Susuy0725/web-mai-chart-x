@@ -573,7 +573,7 @@ export function openSettingsModal(options = {}) {
     const categoryTabIds = [];
     let currentTabIndex = 0;
 
-    let stopKeybindingRecording = () => {};
+    let stopKeybindingRecording = () => { };
 
     const switchTab = (index) => {
         stopKeybindingRecording();
@@ -1402,7 +1402,7 @@ export function openSettingsModal(options = {}) {
                 });
                 toolbarRow.appendChild(resetBtn);
 
-                const previewSample = '|| Simai\n(180){8}1,2b,3x,4m,\n1h[4:1],A1f,C,\n5-8[8:1],6<A1>7[4:1],';
+                const previewSample = '|| Hello WMCX!\n(180){8}1,2b,3x,4m,\nCh[4:1]f,5^6[8:1]/7,\n,<HS*1>8,,1`2,,3`4,,\n5`6-8[1:1]*-1[1:1],';
                 const codeBlock = document.createElement('pre');
                 codeBlock.className = 'popup-setting-codeblock';
                 const codeEl = document.createElement('code');

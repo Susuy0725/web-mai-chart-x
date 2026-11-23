@@ -2,6 +2,36 @@ import { ensureJSZip, popupWindow, simpleToast, getSimaiDataString, parseMaidata
 import { t } from '../i18n.js';
 import { projectCreate, projectUpdateName, projectTouch, idbGetProject, idbSetProject } from '../indexDB.js';
 
+function getFileExt(fileOrName, fallbackExt) {
+    const raw = typeof fileOrName === 'string' ? fileOrName.split('?')[0] : fileOrName?.name;
+    const dotIdx = raw ? raw.lastIndexOf('.') : -1;
+    return dotIdx > 0 && dotIdx < raw.length - 1 ? raw.slice(dotIdx + 1) : fallbackExt;
+}
+
+function triggerBlobDownload(blob, downloadName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = downloadName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function resolveBgmAsset(audioManager) {
+    if (!audioManager || !audioManager.haveBGM()) return null;
+    const bgm = audioManager.bgmFile;
+    const ext = getFileExt(bgm, 'mp3');
+    if (bgm instanceof Blob) {
+        return { blob: bgm, ext };
+    }
+    if (typeof bgm === 'string') {
+        const resp = await fetch(bgm);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return { blob: await resp.blob(), ext };
+    }
+    return null;
+}
+
 /**
  * 處理資料夾/多檔案或 Zip 解壓後的檔案清單
  * @param {FileList|Array|Object} files 
@@ -473,44 +503,158 @@ export function initFileHandlers(ctx) {
                 || 'simai_package';
 
             const container = document.createElement('div');
+
+            const customNameRow = document.createElement('label');
+            customNameRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:12.5px;color:var(--popup-text-sub, #ccc);cursor:pointer;user-select:none;';
+            const customNameText = document.createElement('span');
+            customNameText.textContent = t('popup.download.customFileName');
+            const customNameCheckbox = document.createElement('input');
+            customNameCheckbox.type = 'checkbox';
+            customNameCheckbox.name = 'customFileName';
+            customNameCheckbox.className = 'popup-setting-checkbox';
+            customNameCheckbox.checked = false;
+            customNameRow.append(customNameText, customNameCheckbox);
+            container.appendChild(customNameRow);
+
+            const nameFieldWrap = document.createElement('div');
+            nameFieldWrap.className = 'download-custom-name-field';
+            nameFieldWrap.style.display = 'none';
+
             const textEl = document.createElement('label');
             textEl.textContent = t('popup.download.fileName');
             textEl.style.cssText = "display:block;margin-bottom:5px;font-size:12px;color: lightgray;";
-            container.appendChild(textEl);
+            nameFieldWrap.appendChild(textEl);
             const nameInput = document.createElement('input');
             nameInput.type = 'text';
+            nameInput.className = 'popup-setting-input';
             nameInput.placeholder = t('popup.download.placeholder');
             nameInput.value = defaultName;
-            nameInput.style.cssText = "width:calc(100% - 20px);padding:8px;font-size:12px;margin-bottom:10px;background:#151515;color:white;border:1px solid #444;border-radius:4px;";
+            nameInput.style.cssText = "width:100%;max-width:100%;height:34px;margin-bottom:12px;";
+            nameFieldWrap.appendChild(nameInput);
+            container.appendChild(nameFieldWrap);
 
-            setTimeout(() => nameInput.select(), 100);
-            container.appendChild(nameInput);
+            customNameCheckbox.addEventListener('change', () => {
+                const enabled = customNameCheckbox.checked;
+                nameFieldWrap.style.display = enabled ? 'block' : 'none';
+                if (enabled) {
+                    setTimeout(() => nameInput.select(), 0);
+                }
+            });
 
             const getFinalName = () => {
+                if (!customNameCheckbox.checked) {
+                    return defaultName;
+                }
                 const val = nameInput.value.trim();
                 return val || getBaseName(audioManager.bgmFile) || 'simai_package';
             };
 
             const sanitize = (name) => name.replace(/[\\/:*?"<>|]/g, '_');
 
+            const resolveSingleFileName = (defaultBase, ext) => {
+                const base = customNameCheckbox.checked ? sanitize(getFinalName()) : defaultBase;
+                return `${base}.${ext}`;
+            };
+
+            const DOWNLOAD_ICON_PATHS = {
+                maidata: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
+                music: 'M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z',
+                image: 'M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z',
+                video: 'M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z',
+            };
+
+            const createInlineDownloadBtn = (iconKey, label, disabled, onClick) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'popup-btn popup-btn-secondary';
+                btn.disabled = Boolean(disabled);
+                btn.style.cssText = 'width:100%;justify-content:center;padding:8px 12px;font-size:13px;';
+
+                const svgNS = 'http://www.w3.org/2000/svg';
+                const svg = document.createElementNS(svgNS, 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('width', '16');
+                svg.setAttribute('height', '16');
+                svg.setAttribute('fill', 'currentColor');
+                svg.setAttribute('aria-hidden', 'true');
+                svg.style.flexShrink = '0';
+                const path = document.createElementNS(svgNS, 'path');
+                path.setAttribute('d', DOWNLOAD_ICON_PATHS[iconKey]);
+                svg.appendChild(path);
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = label;
+
+                btn.append(svg, textSpan);
+                btn.addEventListener('click', onClick);
+                return btn;
+            };
+
+            const actionsList = document.createElement('div');
+            actionsList.className = 'download-inline-actions';
+            actionsList.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:2px;';
+
+            actionsList.appendChild(createInlineDownloadBtn(
+                'maidata',
+                t('popup.download.downloadMaidata'),
+                false,
+                () => {
+                    const curMaidata = getMaidata();
+                    const content = typeof getSimaiDataString === 'function' ? getSimaiDataString(curMaidata) : "";
+                    const blob = new Blob([content], { type: 'text/plain' });
+                    triggerBlobDownload(blob, resolveSingleFileName('maidata', 'txt'));
+                }
+            ));
+
+            actionsList.appendChild(createInlineDownloadBtn(
+                'music',
+                t('popup.download.downloadMusic'),
+                !audioManager?.haveBGM?.(),
+                async (e) => {
+                    const btn = e.currentTarget;
+                    btn.disabled = true;
+                    try {
+                        const asset = await resolveBgmAsset(audioManager);
+                        if (!asset) return;
+                        triggerBlobDownload(asset.blob, resolveSingleFileName('track', asset.ext));
+                    } catch (err) {
+                        console.error('BGM 下載失敗', err);
+                    } finally {
+                        btn.disabled = !audioManager?.haveBGM?.();
+                    }
+                }
+            ));
+
+            const hasBgImage = Boolean(getBackgroundImage?.());
+            actionsList.appendChild(createInlineDownloadBtn(
+                'image',
+                t('popup.download.downloadImage'),
+                !hasBgImage,
+                () => {
+                    const backgroundImage = getBackgroundImage?.();
+                    if (!(backgroundImage instanceof Blob)) return;
+                    triggerBlobDownload(backgroundImage, resolveSingleFileName('bg', getFileExt(backgroundImage, 'png')));
+                }
+            ));
+
+            const hasBgVideo = Boolean(getBackgroundVideo?.());
+            actionsList.appendChild(createInlineDownloadBtn(
+                'video',
+                t('popup.download.downloadVideo'),
+                !hasBgVideo,
+                () => {
+                    const backgroundVideo = getBackgroundVideo?.();
+                    if (!(backgroundVideo instanceof Blob)) return;
+                    triggerBlobDownload(backgroundVideo, resolveSingleFileName('pv', getFileExt(backgroundVideo, 'mp4')));
+                }
+            ));
+
+            container.appendChild(actionsList);
+
             popupWindow({
                 title: t('popup.download.title'),
                 customContent: container,
                 buttons: [
-                    {
-                        text: t('popup.download.downloadMaidata'),
-                        onClick: () => {
-                            const curMaidata = getMaidata();
-                            const content = typeof getSimaiDataString === 'function' ? getSimaiDataString(curMaidata) : "";
-                            const blob = new Blob([content], { type: 'text/plain' });
-                            const fileName = sanitize(getFinalName());
-
-                            const a = document.createElement('a');
-                            a.href = URL.createObjectURL(blob);
-                            a.download = `${fileName}.txt`;
-                            a.click();
-                        }
-                    },
                     {
                         text: t('popup.download.packZip'),
                         onClick: async (pCtx) => {
@@ -525,40 +669,28 @@ export function initFileHandlers(ctx) {
 
                             const backgroundImage = getBackgroundImage();
                             if (backgroundImage) {
-                                const bgExt = backgroundImage.name?.split('.').pop() || 'png';
-                                zip.file(`bg.${bgExt}`, backgroundImage);
+                                zip.file(`bg.${getFileExt(backgroundImage, 'png')}`, backgroundImage);
                             }
 
-                            if (audioManager.haveBGM()) {
-                                const bgm = audioManager.bgmFile;
-                                const bgmExt = bgm.name?.split('.').pop() || 'mp3';
-                                if (bgm instanceof Blob) {
-                                    zip.file(`track.${bgmExt}`, bgm);
-                                } else if (typeof bgm === 'string') {
-                                    try {
-                                        const resp = await fetch(bgm);
-                                        zip.file(`track.${bgmExt}`, await resp.blob());
-                                    } catch (e) { console.error("BGM 下載失敗", e); }
+                            try {
+                                const bgmAsset = await resolveBgmAsset(audioManager);
+                                if (bgmAsset) {
+                                    zip.file(`track.${bgmAsset.ext}`, bgmAsset.blob);
                                 }
-                            }
+                            } catch (e) { console.error("BGM 下載失敗", e); }
 
                             const backgroundVideo = getBackgroundVideo();
                             if (backgroundVideo) {
-                                const videoExt = backgroundVideo.name?.split('.').pop() || 'mp4';
-                                zip.file(`pv.${videoExt}`, backgroundVideo);
+                                zip.file(`pv.${getFileExt(backgroundVideo, 'mp4')}`, backgroundVideo);
                             }
 
                             pCtx.setProgress(40);
                             const content = await zip.generateAsync({ type: "blob" }, (m) => pCtx.setProgress(40 + m.percent * 0.6));
 
-                            const a = document.createElement('a');
-                            a.href = URL.createObjectURL(content);
-                            a.download = `${fileName}.zip`;
-                            a.click();
+                            triggerBlobDownload(content, `${fileName}.zip`);
                             pCtx.close();
                         }
-                    },
-                    { text: t('popup.cancel'), hideOnClick: true }
+                    }
                 ]
             });
         });
@@ -590,29 +722,21 @@ export async function buildProjectZip(ctx, onProgress) {
 
     const backgroundImage = typeof getBackgroundImage === 'function' ? getBackgroundImage() : ctx.backgroundImage;
     if (backgroundImage) {
-        const bgExt = backgroundImage.name?.split('.').pop() || 'png';
-        zip.file(`bg.${bgExt}`, backgroundImage);
+        zip.file(`bg.${getFileExt(backgroundImage, 'png')}`, backgroundImage);
     }
 
-    if (audioManager && audioManager.haveBGM()) {
-        const bgm = audioManager.bgmFile;
-        const bgmExt = bgm?.name?.split('.').pop() || 'mp3';
-        if (bgm instanceof Blob) {
-            zip.file(`track.${bgmExt}`, bgm);
-        } else if (typeof bgm === 'string') {
-            try {
-                const resp = await fetch(bgm);
-                zip.file(`track.${bgmExt}`, await resp.blob());
-            } catch (e) {
-                console.error("[buildProjectZip] 音樂檔案讀取失敗:", e);
-            }
+    try {
+        const bgmAsset = await resolveBgmAsset(audioManager);
+        if (bgmAsset) {
+            zip.file(`track.${bgmAsset.ext}`, bgmAsset.blob);
         }
+    } catch (e) {
+        console.error("[buildProjectZip] 音樂檔案讀取失敗:", e);
     }
 
     const backgroundVideo = typeof getBackgroundVideo === 'function' ? getBackgroundVideo() : ctx.backgroundVideo;
     if (backgroundVideo) {
-        const videoExt = backgroundVideo.name?.split('.').pop() || 'mp4';
-        zip.file(`pv.${videoExt}`, backgroundVideo);
+        zip.file(`pv.${getFileExt(backgroundVideo, 'mp4')}`, backgroundVideo);
     }
 
     return await zip.generateAsync({ type: "blob" }, onProgress);

@@ -4,7 +4,11 @@ import {
     noteRefPos,
     visualNoteRefPos,
     touchRefPos,
+    transformButtonPos,
+    transformTouchPos,
+    transformSlideType,
 } from './core/chartGeometry.js';
+import { getSlidePath } from './decode.js';
 import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
 import { getSpectrogramChunkTiles } from './core/audioSpectrogram.js';
 import {
@@ -308,21 +312,26 @@ const calcPiecewiseSpeed = (x) => {
     return x * 1.7;
 };
 
-function getJudgeRgba(judge, alpha = 1) {
-    let colorHex = JUDGE_COLORS.PERFECT;
+function resolveJudgeColorHex(judge, defaultHex = JUDGE_COLORS.PERFECT) {
+    let colorHex = defaultHex;
     if (judge) {
         if (typeof judge === 'object' && judge.grade) {
             judge = judge.grade;
         }
         if (typeof judge === 'string') {
             const upper = judge.toUpperCase();
-            if (upper.includes('PERFECT')) colorHex = JUDGE_COLORS.PERFECT;
+            if (upper.includes('PERFECT')) colorHex = defaultHex;
             else if (upper.includes('GREAT')) colorHex = JUDGE_COLORS.GREAT;
             else if (upper.includes('GOOD')) colorHex = JUDGE_COLORS.GOOD;
             else if (JUDGE_COLORS[upper]) colorHex = JUDGE_COLORS[upper];
             else if (judge.startsWith('#')) colorHex = judge;
         }
     }
+    return colorHex;
+}
+
+function getJudgeRgba(judge, alpha = 1) {
+    const colorHex = resolveJudgeColorHex(judge, JUDGE_COLORS.PERFECT);
     const rgb = hexToRgb(colorHex);
     const safeAlpha = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
     return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${safeAlpha})`;
@@ -1518,19 +1527,47 @@ export class SimaiRenderer {
         if (!Number.isFinite(noteT)) return;
 
         const img = this.images.HoldEffect;
-        if (!img || -noteT < 0.15) return; // 150 ms
+        if (!img || imgNotExists(img) || -noteT < 0.15) return; // 150 ms
 
-        const nb = this.settings.noteBaseSize;
+        const elapsed = -noteT - 0.15;
+        // 每 4 拍（約 266.7ms）發射 3 道波紋並留白 1 拍，對應實機三連光環脈衝節奏
+        const stepDuration = 1 / 15;
+        const waveDuration = 0.22;
+        const latestSlot = Math.floor(elapsed / stepDuration);
+        const earliestSlot = Math.max(0, Math.floor((elapsed - waveDuration) / stepDuration));
 
-        const titimg = this.getMemoizedTintedImage(img, 0.5, "#fffb00");
+        const nb = this.settings.noteBaseSize || 11;
+        const minSize = nb * 0.85;
+        const maxSize = nb * 2.90;
+        const colorHex = resolveJudgeColorHex(judge, '#fffb00');
+        const titimg = this.getMemoizedTintedImage(img, 0.7, colorHex);
+        if (!titimg) return;
+
+        const safeX = Number.isFinite(x) ? x : 0;
+        const safeY = Number.isFinite(y) ? y : 0;
 
         const ctx = this.ctx;
         ctx.save();
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.translate(x, y);
+        if (!isBatch) {
+            ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
+        }
+        ctx.translate(safeX, safeY);
 
-        // 在旋轉後的局部坐標系中直接繪製，完全無需內部重複 save / restore / translate
-        this.drawImgAtcenter(titimg, nb, 0, 0);
+        for (let slot = earliestSlot; slot <= latestSlot; slot++) {
+            if ((slot & 3) === 3) continue;
+
+            const u = (elapsed - slot * stepDuration) / waveDuration;
+            if (u <= 0 || u >= 1) continue;
+
+            const fadeIn = u < 0.22 ? (u / 0.22) : 1;
+            const fadeOut = u < 0.22 ? 1 : (1 - Math.pow((u - 0.22) / 0.78, 1.15));
+            const alpha = 0.95 * fadeIn * fadeOut;
+            if (alpha <= 0.01) continue;
+
+            const drawSize = minSize + (maxSize - minSize) * u;
+            ctx.globalAlpha = alpha;
+            this.drawImgAtcenter(titimg, drawSize, 0, 0);
+        }
 
         ctx.restore();
     }
@@ -1952,7 +1989,8 @@ export class SimaiRenderer {
 
         if (!this.images) return;
 
-        this.currentTouchNotes = buckets.touch || [];
+        const renderBuckets = this._resolveRotatedBuckets(buckets);
+        this.currentTouchNotes = renderBuckets.touch || [];
         // 重置 zoneCounts，避免每幀分配新物件
         this._zoneCounts.fill(0);
         for (let idx = 0; idx < this.currentTouchNotes.length; idx++) {
@@ -2032,18 +2070,18 @@ export class SimaiRenderer {
         runOverlay('afterMiddleDisplay');
 
         if (this.shouldDrawHanabiEffects()) {
-            const touchBucket = buckets.touch;
+            const touchBucket = renderBuckets.touch;
             for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
             this.drawHanabiEffects();
         }
-        const slideBucket = buckets.slide;
+        const slideBucket = renderBuckets.slide;
         for (let i = 0; i < slideBucket.length; i++) this.drawSlideTrack(slideBucket[i]);
         for (let i = 0; i < slideBucket.length; i++) this.drawSlideStar(slideBucket[i]);
 
-        if (buckets.tapnhold && buckets.tapnhold.length > 0) {
-            this.drawTapAndHoldList(buckets.tapnhold);
+        if (renderBuckets.tapnhold && renderBuckets.tapnhold.length > 0) {
+            this.drawTapAndHoldList(renderBuckets.tapnhold);
         }
-        const touchBucket = buckets.touch;
+        const touchBucket = renderBuckets.touch;
         for (let i = 0; i < touchBucket.length; i++) this.drawTouch(touchBucket[i]);
         runOverlay('afterNoteObjects');
 
@@ -2707,8 +2745,14 @@ export class SimaiRenderer {
         const dimPx = Math.min(wPx, hPx);
         const p = dimPx / scaleBase * scale;
 
+        const chartRotation = this.settings?.chartRotation || 'none';
         const params = this._sensorCacheParams || {};
-        if (this._sensorShapeCache && params.dim === dimPx && params.scale === scale) {
+        if (
+            this._sensorShapeCache &&
+            params.dim === dimPx &&
+            params.scale === scale &&
+            params.chartRotation === chartRotation
+        ) {
             return; // 快取仍有效
         }
 
@@ -2780,7 +2824,8 @@ export class SimaiRenderer {
                 }
                 for (let i = 0; i < positions.length; i++) {
                     const pos = positions[i];
-                    tctx.fillText(`${type}${i + 1}`, pos.x, pos.y);
+                    const labelIndex = transformTouchPos(type, i + 1, chartRotation);
+                    tctx.fillText(`${type}${labelIndex}`, pos.x, pos.y);
                 }
             });
             tctx.fillText('C', 0, 0);
@@ -2788,13 +2833,94 @@ export class SimaiRenderer {
 
             this._sensorShapeCache = shapes;
             this._sensorTextCache = texts;
-            this._sensorCacheParams = { dim: dimPx, scale };
+            this._sensorCacheParams = { dim: dimPx, scale, chartRotation };
         } catch (e) {
             console.error('建立傳感器靜態快取失敗:', e);
             this._sensorShapeCache = null;
             this._sensorTextCache = null;
             this._sensorCacheParams = { dim: 0, scale };
         }
+    }
+
+    /**
+     * 依據 chartRotation 設定轉換單一音符物件的幾何座標與路徑（以 WeakMap 快取，不修改原始物件）。
+     * @param {Object} note
+     * @param {string} mode - 'none' | 'flipV' | 'flipH' | 'rotate180'
+     * @returns {Object}
+     */
+    _transformNoteForRotation(note, mode) {
+        if (!note || typeof note !== 'object' || !mode || mode === 'none') {
+            return note;
+        }
+        if (!this._rotationNoteCache) {
+            this._rotationNoteCache = new Map();
+        }
+        let modeCache = this._rotationNoteCache.get(mode);
+        if (!modeCache) {
+            modeCache = new WeakMap();
+            this._rotationNoteCache.set(mode, modeCache);
+        }
+        const cached = modeCache.get(note);
+        if (cached) return cached;
+
+        const clone = { ...note };
+        if (note.touchPos) {
+            clone.pos = transformTouchPos(note.touchPos, note.pos, mode);
+        } else if (note.type === 'slide') {
+            const newPos = transformButtonPos(note.pos, mode);
+            const newEnd = note.slideEnd != null ? transformButtonPos(note.slideEnd, mode) : note.slideEnd;
+            const newMid = note.slideMid != null ? transformButtonPos(note.slideMid, mode) : note.slideMid;
+            const newType = transformSlideType(note.slideType, mode);
+            clone.pos = newPos;
+            if (newEnd !== undefined) clone.slideEnd = newEnd;
+            if (newMid !== undefined) clone.slideMid = newMid;
+            clone.slideType = newType;
+            if (newPos != null && newEnd != null && newType) {
+                const res = getSlidePath(newPos, newEnd, newType, newMid);
+                if (res && res.path) {
+                    clone.path = res.path;
+                    if (typeof res.path.endTangent === 'function') {
+                        clone.endTangent = res.path.endTangent();
+                    }
+                    if (res.additional && Object.keys(res.additional).length > 0) {
+                        clone.wPaths = res.additional;
+                    } else if (note.wPaths) {
+                        clone.wPaths = {};
+                    }
+                }
+            }
+        } else if (note.pos != null) {
+            clone.pos = transformButtonPos(note.pos, mode);
+        }
+
+        modeCache.set(note, clone);
+        return clone;
+    }
+
+    /**
+     * 依據設定將 drawFrame 的 buckets 轉換為旋轉/反轉後的可繪製集合，原 buckets 保持不變。
+     * @param {Object} buckets
+     * @returns {Object}
+     */
+    _resolveRotatedBuckets(buckets) {
+        const mode = this.settings?.chartRotation || 'none';
+        if (!buckets || mode === 'none') {
+            return buckets;
+        }
+        const mapList = (list) => {
+            if (!Array.isArray(list) || list.length === 0) return list;
+            const out = new Array(list.length);
+            for (let i = 0; i < list.length; i++) {
+                out[i] = this._transformNoteForRotation(list[i], mode);
+            }
+            return out;
+        };
+        return {
+            ...buckets,
+            tapnhold: mapList(buckets.tapnhold),
+            slide: mapList(buckets.slide),
+            touch: mapList(buckets.touch),
+        };
     }
 
     drawSensors(showSensor, showSensorText, activeSensors = null) {
@@ -3164,9 +3290,9 @@ export class SimaiRenderer {
             this.ctx.restore();
 
             if (this.shouldDrawHitEffects()) {
-                if (this.shouldQueueTouchHoldHeadHitEffect(s, noteT)) {
+                /*if (this.shouldQueueTouchHoldHeadHitEffect(s, noteT)) {
                     this.queueHitEffect(null, noteT, s.judgeResult || s, posInfo.x, posInfo.y);
-                }
+                }*/
                 if (isOn) this.queueHoldEffect(null, noteT, holdJudge, posInfo.x, posInfo.y);
             }
             return;

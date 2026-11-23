@@ -172,3 +172,106 @@ export const visualNoteRefPos = Array.from({ length: 9 }, (_, i) => {
 export function isObject(val) {
     return val !== null && typeof val === 'object';
 }
+
+export const CHART_ROTATION_MODES = Object.freeze(['none', 'flipV', 'flipH', 'rotate180']);
+
+const DE_FLIP_V_MAP = Object.freeze({ 1: 5, 2: 4, 3: 3, 4: 2, 5: 1, 6: 8, 7: 7, 8: 6 });
+const DE_FLIP_H_MAP = Object.freeze({ 1: 1, 2: 8, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2 });
+
+/**
+ * 依據譜面旋轉/反轉模式轉換按鍵與外圈感應器 (Tap / Hold / Star / A / B) 位置 (1~8)。
+ * @param {number|string} pos - 原始位置 (1~8)
+ * @param {string} mode - 'none' | 'flipV' | 'flipH' | 'rotate180'
+ * @returns {number}
+ */
+export function transformButtonPos(pos, mode) {
+    const n = Number(pos);
+    if (!Number.isInteger(n) || n < 1 || n > 8 || !mode || mode === 'none') {
+        return n;
+    }
+    if (mode === 'flipV') {
+        return ((12 - n) % 8) + 1;
+    }
+    if (mode === 'flipH') {
+        return ((8 - n) % 8) + 1;
+    }
+    if (mode === 'rotate180') {
+        return ((n + 3) % 8) + 1;
+    }
+    return n;
+}
+
+/**
+ * 依據譜面旋轉/反轉模式轉換 D / E 感應器位置 (1~8，其中 D1/E1 位於正上方)。
+ * @param {number|string} pos - 原始位置 (1~8)
+ * @param {string} mode - 'none' | 'flipV' | 'flipH' | 'rotate180'
+ * @returns {number}
+ */
+export function transformDEPos(pos, mode) {
+    const n = Number(pos);
+    if (!Number.isInteger(n) || n < 1 || n > 8 || !mode || mode === 'none') {
+        return n;
+    }
+    if (mode === 'flipV') {
+        return DE_FLIP_V_MAP[n] ?? n;
+    }
+    if (mode === 'flipH') {
+        return DE_FLIP_H_MAP[n] ?? n;
+    }
+    if (mode === 'rotate180') {
+        return ((n + 3) % 8) + 1;
+    }
+    return n;
+}
+
+/**
+ * 依據觸控區域與位置轉換 Touch / Sensor 編號。
+ * @param {string} touchPos - 'A' | 'B' | 'C' | 'D' | 'E'
+ * @param {number|string} pos - 原始位置 (1~8，C 區固定為 1)
+ * @param {string} mode - 'none' | 'flipV' | 'flipH' | 'rotate180'
+ * @returns {number}
+ */
+export function transformTouchPos(touchPos, pos, mode) {
+    if (touchPos === 'C') return 1;
+    if (touchPos === 'D' || touchPos === 'E') {
+        return transformDEPos(pos, mode);
+    }
+    return transformButtonPos(pos, mode);
+}
+
+const SLIDE_SWAP_PQ_SZ = Object.freeze({
+    p: 'q',
+    q: 'p',
+    pp: 'qq',
+    qq: 'pp',
+    s: 'z',
+    z: 's',
+});
+
+const SLIDE_SWAP_LR = Object.freeze({
+    '<': '>',
+    '>': '<',
+});
+
+/**
+ * 依據譜面旋轉/反轉模式轉換 Slide 類型。
+ * - flipV: p<->q, pp<->qq, s<->z（< / > 因依起點判斷順逆時針故不交換）
+ * - flipH: p<->q, pp<->qq, s<->z, < <-> >
+ * - rotate180: < <-> >（p/q/pp/qq/s/z 旋轉 180° 後對稱不變）
+ * @param {string} slideType
+ * @param {string} mode - 'none' | 'flipV' | 'flipH' | 'rotate180'
+ * @returns {string}
+ */
+export function transformSlideType(slideType, mode) {
+    if (!slideType || !mode || mode === 'none') return slideType;
+    if (mode === 'flipV') {
+        return SLIDE_SWAP_PQ_SZ[slideType] ?? slideType;
+    }
+    if (mode === 'flipH') {
+        return SLIDE_SWAP_PQ_SZ[slideType] ?? SLIDE_SWAP_LR[slideType] ?? slideType;
+    }
+    if (mode === 'rotate180') {
+        return SLIDE_SWAP_LR[slideType] ?? slideType;
+    }
+    return slideType;
+}

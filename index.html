@@ -621,6 +621,16 @@
                         <input type="number" step="1" value="4" name="tb1" aria-label="拍號分子">/ <input type="number"
                             step="1" value="4" name="tb2" aria-label="拍號分母">
                     </div>
+                    <div class="utilitySeparator"></div>
+                    <div class="utilityButton noFixedsize" data-buttonAction="chartRotation" data-i18n="menu.chartRotation">
+                        譜面旋轉
+                        <select name="chartRotation" aria-label="譜面旋轉">
+                            <option value="none" data-i18n="menu.chartRotationNone">無</option>
+                            <option value="flipV" data-i18n="menu.chartRotationFlipV">上下反轉</option>
+                            <option value="flipH" data-i18n="menu.chartRotationFlipH">左右反轉</option>
+                            <option value="rotate180" data-i18n="menu.chartRotation180">180度旋轉</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div id="showUtilityBtn" class="utility-expand-btn" role="button" tabindex="0" style="display: none;"

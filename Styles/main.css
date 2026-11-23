@@ -2370,6 +2370,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 /* 全域統一滾動條樣式 */
 .utilityDropdown-content,
 #extensionsMenuList,
+.editor-autocomplete-list,
 .utilitySubmenu,
 .editor-layer,
 .visual-sub-palette,
@@ -2398,6 +2399,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
     .utilityDropdown-content,
     #extensionsMenuList,
+    .editor-autocomplete-list,
     .utilitySubmenu,
     .editor-layer,
     .visual-sub-palette,
@@ -2423,6 +2425,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
     .utilityDropdown-content::-webkit-scrollbar,
     #extensionsMenuList::-webkit-scrollbar,
+    .editor-autocomplete-list::-webkit-scrollbar,
     .utilitySubmenu::-webkit-scrollbar,
     .editor-layer::-webkit-scrollbar,
     .visual-sub-palette::-webkit-scrollbar,
@@ -2449,6 +2452,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
     .utilityDropdown-content::-webkit-scrollbar-track,
     #extensionsMenuList::-webkit-scrollbar-track,
+    .editor-autocomplete-list::-webkit-scrollbar-track,
     .utilitySubmenu::-webkit-scrollbar-track,
     .editor-layer::-webkit-scrollbar-track,
     .visual-sub-palette::-webkit-scrollbar-track,
@@ -2475,6 +2479,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
     .utilityDropdown-content::-webkit-scrollbar-thumb,
     #extensionsMenuList::-webkit-scrollbar-thumb,
+    .editor-autocomplete-list::-webkit-scrollbar-thumb,
     .utilitySubmenu::-webkit-scrollbar-thumb,
     .editor-layer::-webkit-scrollbar-thumb,
     .visual-sub-palette::-webkit-scrollbar-thumb,
@@ -2503,6 +2508,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
     .utilityDropdown-content::-webkit-scrollbar-thumb:hover,
     #extensionsMenuList::-webkit-scrollbar-thumb:hover,
+    .editor-autocomplete-list::-webkit-scrollbar-thumb:hover,
     .utilitySubmenu::-webkit-scrollbar-thumb:hover,
     .editor-layer::-webkit-scrollbar-thumb:hover,
     .visual-sub-palette::-webkit-scrollbar-thumb:hover,
@@ -3226,4 +3232,69 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
         padding-right: 0;
         padding-bottom: 8px;
     }
+}
+
+/* --- 編輯器語法自動補全浮動選單 (比照 utilityDropdown-content) --- */
+.utilityDropdown-content.editor-autocomplete-dropdown {
+    min-width: 148px;
+    max-width: 240px;
+    max-height: 272px;
+    overflow: hidden;
+    z-index: 1150;
+}
+
+.editor-autocomplete-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+}
+
+.utilityDropdown-content .utilityButton.editor-autocomplete-item {
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    padding: 0 32px 0 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.utilityDropdown-content .utilityButton.editor-autocomplete-item.active {
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+}
+
+.editor-autocomplete-settings-btn {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.editor-autocomplete-settings-btn:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+}
+
+.editor-autocomplete-settings-btn .material-symbols-outlined {
+    font-size: 16px;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }

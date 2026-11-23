@@ -86,6 +86,8 @@ export const defaultSettings = {
     syntaxColors: { ...defaultSyntaxColors },
     autoPauseOnScroll: true, // 滾動時自動暫停
     autocomplete: true, // 編輯器自動補齊括號
+    editorAutocomplete: true, // 編輯器語法自動補全選單
+    chartRotation: 'none', // 譜面預覽旋轉/反轉: 'none' | 'flipV' | 'flipH' | 'rotate180'
     enableSyntaxCheck: true, // 啟用語法檢查
     cursorFollow: true, // 游標跟隨
     highlightCurrentNote: true, // 根據進度高亮目前音符
@@ -431,11 +433,15 @@ export const settingsConfig = [
         ]
     },
     {
+        id: 'operation',
         label: 'settings.tabs.operation',
         items: [
             { type: 'header', label: 'settings.sections.editorAssist' },
             {
                 id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
+            },
+            {
+                id: 'editorAutocomplete', type: 'checkbox', label: 'settings.items.editorAutocomplete', def: defaultSettings.editorAutocomplete ?? true
             },
             {
                 id: 'enableSyntaxCheck', type: 'checkbox', label: 'settings.items.enableSyntaxCheck', def: defaultSettings.enableSyntaxCheck ?? true

@@ -72,7 +72,12 @@
     "extensions": "擴充程式",
     "manageExtensions": "管理擴充程式",
     "fullscreen": "全螢幕",
-    "exitFullscreen": "退出全螢幕"
+    "exitFullscreen": "退出全螢幕",
+    "chartRotation": "譜面旋轉",
+    "chartRotationNone": "無",
+    "chartRotationFlipV": "上下反轉",
+    "chartRotationFlipH": "左右反轉",
+    "chartRotation180": "180度旋轉"
   },
   "extensions": {
     "title": "擴充程式管理",
@@ -397,6 +402,7 @@
       "playHoldEnd": "播放 Hold 結尾音效",
       "readyBeat": "播放預備拍",
       "autocomplete": "編輯器自動補齊括號",
+      "editorAutocomplete": "編輯器語法自動補全選單",
       "enableSyntaxCheck": "啟用語法檢查",
       "maxSlideCount": "螢幕上最大滑星顯示數量",
       "inputDebounceTime": "編輯器刷新時間 (ms)",
@@ -922,9 +928,13 @@
     "download": {
       "title": "下載譜面套件",
       "fileName": "檔案名稱",
+      "customFileName": "自訂檔案名稱",
       "placeholder": "輸入檔案名稱",
-      "downloadMaidata": "下載 Maidata",
-      "packZip": "打包 ZIP"
+      "downloadMaidata": "下載譜面文件",
+      "downloadMusic": "下載音樂",
+      "downloadImage": "下載封面圖",
+      "downloadVideo": "下載背景影片",
+      "packZip": "下載壓縮檔"
     },
     "loadConfirm": {
       "titleZip": "讀取壓縮檔",

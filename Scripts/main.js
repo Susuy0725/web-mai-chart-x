@@ -61,6 +61,7 @@ import { openProjectManager } from './modals/projectManager.js';
 import { checkAndHandleDriveOpenWith } from './services/driveOpenWith.js';
 import { openRecordVideoModal } from './modals/recordVideoModal.js';
 import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
+import { initEditorAutocomplete } from './features/editorAutocomplete.js';
 import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
 import { showWelcomeModal } from './modals/welcomeModal.js';
 import { showLegalUpdateModal } from './modals/legalUpdateModal.js';
@@ -224,6 +225,11 @@ const displayModeSelect = displayModeBtn ? displayModeBtn.querySelector('select[
 const setDisplayModeUI = (mode) => {
     if (displayModeSelect) displayModeSelect.value = mode;
     updateGridDivisionVisibility();
+};
+const chartRotationBtn = document.querySelector('.utilityButton[data-buttonAction="chartRotation"]');
+const chartRotationSelect = chartRotationBtn ? chartRotationBtn.querySelector('select[name="chartRotation"]') : null;
+const setChartRotationUI = (mode) => {
+    if (chartRotationSelect) chartRotationSelect.value = mode || 'none';
 };
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
@@ -814,6 +820,14 @@ if (displayModeSelect) {
         saveSettingsDebounce();
         setEditorCss(editorContainer.dataset.hidden !== 'true');
         draw();
+    });
+}
+
+if (chartRotationSelect) {
+    chartRotationSelect.addEventListener('change', (e) => {
+        const val = e.target.value || 'none';
+        appContext.setSetting('chartRotation', val);
+        saveSettingsDebounce();
     });
 }
 
@@ -2961,6 +2975,7 @@ changeDifficulty.addEventListener('change', (e) => {
     const newContent = maidata['inote_' + nowDifficulty] ?? "";
     editorInput.value = newContent;
     applyHighlight(editorInput.value);
+    editorAutocomplete?.close(false);
 
     // 載入新難度的歷史（若有）並同步 lastEditorValue
     loadHistoryForDifficulty(nowDifficulty);
@@ -3833,6 +3848,7 @@ const closingChars = new Set(Object.values(pairs));
 
 // 🔴 新增一個全域防重疊鎖
 let isBracketProcessing = false;
+let editorAutocomplete = null;
 
 // 括號補齊／跳過
 editorInput.addEventListener('beforeinput', (e) => {
@@ -3866,6 +3882,7 @@ editorInput.addEventListener('beforeinput', (e) => {
             // 3. 觸發業務邏輯更新
             if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
             if (typeof inputDebounce === 'function') inputDebounce();
+            editorAutocomplete?.refresh();
 
             // 🔴 釋放防護鎖
             isBracketProcessing = false;
@@ -3874,6 +3891,7 @@ editorInput.addEventListener('beforeinput', (e) => {
     } else if (closingChars.has(char) && start === end && value[start] === char) { // 閉括號：跳過
         e.preventDefault();
         editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+        editorAutocomplete?.refresh();
     }
 });
 
@@ -3889,6 +3907,7 @@ editorInput.addEventListener('keydown', (e) => {
 
         if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
         if (typeof inputDebounce === 'function') inputDebounce();
+        editorAutocomplete?.refresh();
     }
 });
 
@@ -3901,6 +3920,20 @@ const editorHighlightOverlay = new EditorHighlightOverlay({
     canvas: editorHighlightCanvas,
     highlightLayer,
     getDPR,
+});
+
+editorAutocomplete = initEditorAutocomplete({
+    editorInput,
+    editorContainer,
+    highlightLayer,
+    editorHighlightOverlay,
+    getSettings: () => settings,
+    getMaidata: () => maidata,
+    isVisualMode,
+    applyHighlight,
+    inputDebounce,
+    recordEditorHistory,
+    openSettings: () => openSettingsModal({ initialTab: 'operation' }),
 });
 let _lastHighlightedNoteIndex = -1;
 let _lastHighlightedText = null;
@@ -5097,6 +5130,7 @@ async function _init() {
             appContext.settings = val;
             if (val && val.skin) currentSkin = val.skin;
             if (val && val.syntaxColors) applySyntaxColors(val.syntaxColors);
+            setChartRotationUI(val?.chartRotation ?? 'none');
             syncVisualSubMenus();
         },
         syncVisualSubMenus,
@@ -5107,6 +5141,7 @@ async function _init() {
         applySplitRatio,
         snapHideCanvas,
         setDisplayModeUI,
+        setChartRotationUI,
         setVisualToolUI,
         visualToolModeSelect,
         setGridDivisionUI,
@@ -5480,8 +5515,14 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         'enablePreviewWaveform', 'rotateStars', 'pinkStars',
         'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
         'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed',
-        'noteBaseSize', 'middleDistance'
+        'noteBaseSize', 'middleDistance', 'chartRotation'
     ];
+    if (key === 'chartRotation') {
+        setChartRotationUI(value);
+        renderer?.clearJudgeEffects();
+        renderer?.clearHitEffects();
+        renderer?.invalidateCaches();
+    }
     if (redrawKeys.includes(key)) {
         draw();
     }

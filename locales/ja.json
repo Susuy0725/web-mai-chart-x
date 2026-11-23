@@ -72,7 +72,12 @@
     "extensions": "拡張機能",
     "manageExtensions": "拡張機能を管理",
     "fullscreen": "全画面表示",
-    "exitFullscreen": "全画面表示を終了"
+    "exitFullscreen": "全画面表示を終了",
+    "chartRotation": "譜面回転",
+    "chartRotationNone": "なし",
+    "chartRotationFlipV": "上下反転",
+    "chartRotationFlipH": "左右反転",
+    "chartRotation180": "180度回転"
   },
   "extensions": {
     "title": "拡張機能管理",
@@ -397,6 +402,7 @@
       "playHoldEnd": "Hold終端の効果音を再生",
       "readyBeat": "予備拍を再生",
       "autocomplete": "エディタの括弧自動補完",
+      "editorAutocomplete": "エディタの構文オートコンプリート",
       "enableSyntaxCheck": "構文チェックを有効化",
       "maxSlideCount": "画面内の最大Slide数",
       "inputDebounceTime": "エディタ更新レート (ms)",
@@ -922,9 +928,13 @@
     "download": {
       "title": "譜面パッケージをダウンロード",
       "fileName": "ファイル名",
+      "customFileName": "ファイル名をカスタム",
       "placeholder": "ファイル名を入力",
-      "downloadMaidata": "maidataをダウンロード",
-      "packZip": "ZIPにまとめる"
+      "downloadMaidata": "譜面ファイルをダウンロード",
+      "downloadMusic": "音楽をダウンロード",
+      "downloadImage": "ジャケットをダウンロード",
+      "downloadVideo": "背景動画をダウンロード",
+      "packZip": "アーカイブをダウンロード"
     },
     "loadConfirm": {
       "titleZip": "ZIPファイルを読み込む",

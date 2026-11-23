@@ -55,6 +55,7 @@ const ASSETS = [
     './Scripts/features/extensionMenu.js',
     './Scripts/features/extensionPopover.js',
     './Scripts/features/findReplace.js',
+    './Scripts/features/editorAutocomplete.js',
     './Scripts/features/noteModifier.js',
     './Scripts/features/quickPanel.js',
     './Scripts/features/secondaryWindow.js',

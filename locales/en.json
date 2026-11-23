@@ -72,7 +72,12 @@
     "extensions": "Extensions",
     "manageExtensions": "Manage Extensions",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "chartRotation": "Chart Rotation",
+    "chartRotationNone": "None",
+    "chartRotationFlipV": "Flip Vertical",
+    "chartRotationFlipH": "Flip Horizontal",
+    "chartRotation180": "Rotate 180°"
   },
   "extensions": {
     "title": "Extension Manager",
@@ -397,6 +402,7 @@
       "playHoldEnd": "Play Hold end SFX",
       "readyBeat": "Play Prep Beats",
       "autocomplete": "Editor Bracket Autocomplete",
+      "editorAutocomplete": "Editor Syntax Autocomplete",
       "enableSyntaxCheck": "Enable Syntax Check",
       "maxSlideCount": "Max Onscreen Slides",
       "inputDebounceTime": "Editor Refresh Rate (ms)",
@@ -922,9 +928,13 @@
     "download": {
       "title": "Download Chart Package",
       "fileName": "File Name",
+      "customFileName": "Custom File Name",
       "placeholder": "Enter file name",
-      "downloadMaidata": "Download Maidata",
-      "packZip": "Pack ZIP"
+      "downloadMaidata": "Download Chart File",
+      "downloadMusic": "Download Music",
+      "downloadImage": "Download Cover",
+      "downloadVideo": "Download Video",
+      "packZip": "Download Archive"
     },
     "loadConfirm": {
       "titleZip": "Load ZIP File",

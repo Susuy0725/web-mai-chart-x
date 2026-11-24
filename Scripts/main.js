@@ -42,6 +42,7 @@ import {
     getButton, disableNavigationGestures, debounce, throttle,
     getHighlight, parseMaidata, popupWindow, loadAllImages,
     simpleToast,
+    formatCapsuleTime,
     clamp,
     defaultSyntaxColors,
     applySyntaxColors,
@@ -1362,18 +1363,6 @@ const setEndtime = (e) => {
 };
 
 let lastTimeCapsuleText = '';
-
-/**
- * 將秒數格式化為分:秒.百分秒，供時間顯示膠囊使用。
- * @param {number} sec
- * @returns {string}
- */
-const formatCapsuleTime = (sec) => {
-    const s = Math.max(0, Number.isFinite(sec) ? sec : 0);
-    const m = Math.floor(s / 60);
-    const rem = (s % 60).toFixed(2).padStart(5, '0');
-    return `${String(m).padStart(2, '0')}:${rem}`;
-};
 
 /**
  * 更新播放控制器上方懸浮時間膠囊文字，僅於內容變化時寫入 DOM。

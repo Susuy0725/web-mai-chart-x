@@ -1,6 +1,6 @@
 import { ensureJSZip, popupWindow, simpleToast, getSimaiDataString, parseMaidata } from '../helper.js';
 import { t } from '../i18n.js';
-import { projectCreate, projectUpdateName, projectTouch, idbGetProject, idbSetProject } from '../indexDB.js';
+import { projectCreate, projectUpdateName, idbGetProject, storeImportedProject } from '../indexDB.js';
 
 function getFileExt(fileOrName, fallbackExt) {
     const raw = typeof fileOrName === 'string' ? fileOrName.split('?')[0] : fileOrName?.name;
@@ -167,6 +167,7 @@ export async function handleFolderInput(files, ctx) {
  * @returns {boolean}
  */
 export function checkMaidataContext(ctx) {
+    if (ctx?.getBackgroundImage?.() || ctx?.getBackgroundVideo?.()) return true;
     if (ctx?.audioManager?.haveBGM && ctx.audioManager.haveBGM()) return true;
     const maidata = typeof ctx?.getMaidata === 'function' ? ctx.getMaidata() : null;
     if (maidata) {
@@ -179,177 +180,86 @@ export function checkMaidataContext(ctx) {
     return false;
 }
 
-/**
- * 觸發匯入資料夾流程（支援覆蓋既有或建立新專案）
- * @param {Object} ctx
- * @param {Object} [options]
- * @param {Function} [options.onComplete]
- */
-export function triggerImportFolder(ctx, { onComplete } = {}) {
-    const {
-        setCurrentProjectId,
-        getCurrentProjectId,
-        setDataEmpty,
-        getEndTime,
-        setEndtime,
-        draw,
-        getMaidata
-    } = ctx;
+async function importSelectedFiles(ctx, files, name, mode, onComplete) {
+    const targetId = mode === 'new' ? null : ctx.getCurrentProjectId();
+    if (ctx.importProjectFiles) {
+        try {
+            await ctx.importProjectFiles(files, name, targetId);
+        } catch (error) {
+            simpleToast({ content: error.message || t('popup.drive.operationFailed'), type: 'error' });
+            return;
+        }
+    } else {
+        const projectId = targetId || await projectCreate(t('popup.projectManager.untitled'));
+        if (!targetId) {
+            ctx.setCurrentProjectId(projectId);
+            localStorage.setItem('simai_lastProjectId', projectId);
+        }
+        ctx.setDataEmpty();
+        await handleFolderInput(files, ctx);
+        ctx.setEndtime(ctx.getEndTime());
+        ctx.resize();
+        ctx.draw();
+        const title = ctx.getMaidata()?.title?.trim() || name;
+        await projectUpdateName(projectId, title);
+    }
+    simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
+    onComplete?.();
+}
 
-    const executeImport = (mode) => {
+function chooseProjectImport(ctx, titleKey, pickFiles) {
+    if (!checkMaidataContext(ctx)) {
+        pickFiles('overwrite');
+        return;
+    }
+    popupWindow({
+        title: t(titleKey),
+        content: t('popup.loadConfirm.content'),
+        buttons: [
+            { text: t('popup.loadConfirm.overwrite'), onClick: (popup) => { popup.close(); pickFiles('overwrite'); } },
+            { text: t('popup.loadConfirm.newProject'), onClick: (popup) => { popup.close(); pickFiles('new'); } },
+            { text: t('popup.cancel'), hideOnClick: true },
+        ],
+    });
+}
+
+export function triggerImportFolder(ctx, { onComplete } = {}) {
+    chooseProjectImport(ctx, 'popup.loadConfirm.titleFolder', (mode) => {
         const input = document.createElement('input');
         input.type = 'file';
         input.webkitdirectory = true;
         input.setAttribute('directory', '');
         input.multiple = true;
-        input.onchange = async (event) => {
-            const files = event.target.files;
-            if (!files || files.length === 0) {
-                console.warn("未選擇任何檔案");
-                return;
-            }
-
-            if (mode === 'new') {
-                const newId = await projectCreate(t('popup.projectManager.untitled'));
-                setCurrentProjectId(newId);
-                localStorage.setItem('simai_lastProjectId', newId);
-                console.log(`[Project] 已建立新專案: ${newId}`);
-            }
-
-            setDataEmpty();
-            await handleFolderInput(files, ctx);
-            setEndtime(getEndTime());
-            draw();
-
-            const maidata = getMaidata();
-            const curId = getCurrentProjectId();
-            let folderName = '';
-            if (files[0]?.webkitRelativePath) {
-                folderName = files[0].webkitRelativePath.split('/')[0] || '';
-            }
-            const targetTitle = (maidata?.title && maidata.title.trim()) || folderName.trim() || t('popup.projectManager.untitled');
-            if (curId) {
-                await projectUpdateName(curId, targetTitle).catch(() => { });
-            }
-            simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-            if (typeof onComplete === 'function') {
-                onComplete();
-            }
+        input.onchange = async () => {
+            if (!input.files.length) return;
+            const name = input.files[0].webkitRelativePath?.split('/')[0]?.trim() || t('popup.projectManager.untitled');
+            await importSelectedFiles(ctx, input.files, name, mode, onComplete);
         };
         input.click();
-    };
-
-    if (checkMaidataContext(ctx)) {
-        popupWindow({
-            title: t('popup.loadConfirm.titleFolder'),
-            content: t('popup.loadConfirm.content'),
-            buttons: [
-                {
-                    text: t('popup.loadConfirm.overwrite'),
-                    onClick: (pCtx) => {
-                        pCtx.close();
-                        executeImport('overwrite');
-                    }
-                },
-                {
-                    text: t('popup.loadConfirm.newProject'),
-                    onClick: (pCtx) => {
-                        pCtx.close();
-                        executeImport('new');
-                    }
-                },
-                { text: t('popup.cancel'), hideOnClick: true }
-            ]
-        });
-    } else {
-        executeImport('overwrite');
-    }
+    });
 }
 
-/**
- * 觸發匯入壓縮檔流程（支援覆蓋既有或建立新專案）
- * @param {Object} ctx
- * @param {Object} [options]
- * @param {Function} [options.onComplete]
- */
 export function triggerImportZip(ctx, { onComplete } = {}) {
-    const {
-        setCurrentProjectId,
-        getCurrentProjectId,
-        setDataEmpty,
-        getEndTime,
-        setEndtime,
-        draw,
-        resize,
-        getMaidata
-    } = ctx;
-
-    const executeImport = (mode) => {
+    chooseProjectImport(ctx, 'popup.loadConfirm.titleZip', (mode) => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.zip';
-        input.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                await ensureJSZip();
-                const reader = new FileReader();
-                reader.onload = async (re) => {
-                    if (mode === 'new') {
-                        const newId = await projectCreate(t('popup.projectManager.untitled'));
-                        setCurrentProjectId(newId);
-                        localStorage.setItem('simai_lastProjectId', newId);
-                        console.log(`[Project] 已建立新專案: ${newId}`);
-                    }
-                    setDataEmpty();
-                    window.JSZip.loadAsync(file).then(async (zip) => {
-                        await handleFolderInput(zip.files, ctx);
-                        setEndtime(getEndTime());
-                        draw();
-                        const maidata = getMaidata();
-                        const curId = getCurrentProjectId();
-                        const zipName = file.name ? file.name.replace(/\.(wmcx\.)?zip$/i, '').trim() : '';
-                        const targetTitle = (maidata?.title && maidata.title.trim()) || zipName || t('popup.projectManager.untitled');
-                        if (curId) {
-                            await projectUpdateName(curId, targetTitle).catch(() => { });
-                        }
-                        simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-                        if (typeof onComplete === 'function') {
-                            onComplete();
-                        }
-                    });
-                    resize();
-                };
-                reader.readAsArrayBuffer(file);
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (!file) return;
+            let zip;
+            try {
+                const JSZip = await ensureJSZip();
+                zip = await JSZip.loadAsync(file);
+            } catch (err) {
+                simpleToast({ content: t('popup.maintenance.parseZipError', { error: err.message }), type: 'error' });
+                return;
             }
+            const name = file.name.replace(/\.(wmcx\.)?zip$/i, '').trim() || t('popup.projectManager.untitled');
+            await importSelectedFiles(ctx, zip.files, name, mode, onComplete);
         };
         input.click();
-    };
-
-    if (checkMaidataContext(ctx)) {
-        popupWindow({
-            title: t('popup.loadConfirm.titleZip'),
-            content: t('popup.loadConfirm.content'),
-            buttons: [
-                {
-                    text: t('popup.loadConfirm.overwrite'),
-                    onClick: (pCtx) => {
-                        pCtx.close();
-                        executeImport('overwrite');
-                    }
-                },
-                {
-                    text: t('popup.loadConfirm.newProject'),
-                    onClick: (pCtx) => {
-                        pCtx.close();
-                        executeImport('new');
-                    }
-                },
-                { text: t('popup.cancel'), hideOnClick: true }
-            ]
-        });
-    } else {
-        executeImport('overwrite');
-    }
+    });
 }
 
 /**
@@ -820,84 +730,48 @@ export async function saveProjectZipToIDB(zipBlob, defaultName = '未命名專�
     await ensureJSZip();
     const zip = await window.JSZip.loadAsync(zipBlob);
 
-    let projectName = defaultName.replace(/\.wmcx\.zip$/i, '').trim() || '未命名專案';
-    let finalProjectId = targetProjectId;
+    return saveProjectFilesToIDB(zip.files, defaultName.replace(/\.wmcx\.zip$/i, ''), targetProjectId);
+}
 
-    if (!finalProjectId) {
-        finalProjectId = await projectCreate(projectName);
-    } else {
-        await projectTouch(finalProjectId).catch(() => { });
-    }
-
-    let parsedMaidata = null;
-    let bgmBlob = null;
-    let bgImageBlob = null;
-    let bgVideoBlob = null;
-
-    for (const relativePath in zip.files) {
-        if (!Object.prototype.hasOwnProperty.call(zip.files, relativePath)) continue;
-        const entry = zip.files[relativePath];
+// Local folders supply Files, while JSZip supplies entries with asynchronous readers.
+export async function saveProjectFilesToIDB(files, defaultName, targetProjectId = null, { replaceMissing = false } = {}) {
+    let projectName = defaultName.trim() || t('popup.projectManager.untitled');
+    const assets = {};
+    const entries = files instanceof FileList ? Array.from(files) : Object.values(files);
+    for (const entry of entries) {
         if (entry.dir) continue;
+        const name = entry.name.replace(/\\/g, '/').split('/').pop().toLowerCase();
+        const ext = name.split('.').pop();
+        if (name.startsWith('maidata.')) {
+            const text = entry instanceof Blob ? await entry.text() : await entry.async('string');
+            assets.maidata = parseMaidata(text);
+            assets.now_difficulty = 5;
+            projectName = assets.maidata.title?.trim() || projectName;
+            continue;
+        }
 
-        const baseName = relativePath.replace(/\\/g, '/').split('/').pop();
-        const lowerName = baseName.toLowerCase();
-        const ext = (baseName.split('.').pop() || '').toLowerCase();
-
-        const isVideo = ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
-        const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
-
-        if (lowerName.startsWith('maidata.')) {
-            try {
-                const text = await entry.async('string');
-                parsedMaidata = parseMaidata(text);
-                if (parsedMaidata?.title && parsedMaidata.title.trim()) {
-                    projectName = parsedMaidata.title.trim();
-                    await projectUpdateName(finalProjectId, projectName).catch(() => { });
-                }
-            } catch (e) {
-                console.warn('[saveProjectZipToIDB] 解析 maidata.txt 失敗:', e);
-            }
-        } else if (lowerName.startsWith('track.')) {
-            try {
-                bgmBlob = await entry.async('blob');
-            } catch (e) {
-                console.warn('[saveProjectZipToIDB] 讀取音訊檔失敗:', e);
-            }
-        } else if (lowerName.startsWith('bg.')) {
-            if (isImage) {
-                try {
-                    bgImageBlob = await entry.async('blob');
-                } catch (_) { }
-            } else if (isVideo) {
-                try {
-                    bgVideoBlob = await entry.async('blob');
-                } catch (_) { }
-            }
-        } else if (lowerName.startsWith('pv.')) {
-            if (isVideo) {
-                try {
-                    bgVideoBlob = await entry.async('blob');
-                } catch (_) { }
-            }
+        let key;
+        if (name.startsWith('track.')) {
+            key = 'resource_bgm';
+        } else if ((name.startsWith('pv.') || name.startsWith('bg.')) &&
+            (entry.type?.startsWith('video/') || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext))) {
+            key = 'background_video';
+        } else if (name.startsWith('bg.') &&
+            (entry.type?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext))) {
+            key = 'background_image';
+        }
+        if (key) {
+            assets[key] = entry instanceof Blob ? entry : new File([await entry.async('blob')], name);
         }
     }
 
-    const savePromises = [];
-    if (parsedMaidata) {
-        savePromises.push(idbSetProject(finalProjectId, 'maidata', parsedMaidata));
-        savePromises.push(idbSetProject(finalProjectId, 'now_difficulty', 5));
+    if (Object.keys(assets).length === 0) throw new Error(t('popup.projectManager.noProjectFiles'));
+    if (replaceMissing) {
+        for (const key of ['maidata', 'now_difficulty', 'resource_bgm', 'background_image', 'background_video']) {
+            assets[key] ??= null;
+        }
     }
-    if (bgmBlob) {
-        savePromises.push(idbSetProject(finalProjectId, 'resource_bgm', bgmBlob));
-    }
-    if (bgImageBlob) {
-        savePromises.push(idbSetProject(finalProjectId, 'background_image', bgImageBlob));
-    }
-    if (bgVideoBlob) {
-        savePromises.push(idbSetProject(finalProjectId, 'background_video', bgVideoBlob));
-    }
-
-    await Promise.all(savePromises);
-
-    return { projectId: finalProjectId, projectName };
+    const renameExisting = replaceMissing || Boolean(assets.maidata?.title?.trim());
+    const projectId = await storeImportedProject(targetProjectId, projectName, assets, renameExisting);
+    return { projectId, projectName };
 }

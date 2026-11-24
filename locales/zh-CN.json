@@ -266,6 +266,9 @@
     "placeholder": "在此输入谱面数据..."
   },
   "toast": {
+    "playDefaultsRestored": "游玩设置已恢复为默认值。",
+    "slideDebugOpened": "已打开滑轨判定调试面板。",
+    "slideDebugClosed": "已关闭滑轨判定调试面板。",
     "loadingAssetsWait": "素材加载中，请稍候...",
     "needBgm": "请先导入音乐",
     "cropSuccess": "音频已自播放头裁剪",
@@ -355,6 +358,7 @@
       "keybindings": "快捷键"
     },
     "sections": {
+      "playAndTouch": "游玩模式与触控",
       "speedAndNotes": "流速与音符",
       "language": "语言",
       "appearanceAndNotes": "外观与音符",
@@ -408,7 +412,15 @@
       "showMiniPreview": "显示预览时间轴",
       "timeDisplayCapsule": "显示悬浮时间胶囊",
       "enableQuickPanel": "激活快速面板",
-      "simplayUseButton": "Simplay 使用外框",
+      "simplayPerfect": "模拟输入使用完美判定",
+      "simplayUseButton": "模拟输入使用外圈按键",
+      "randomOffset": "模拟输入的最大时间偏移（秒）",
+      "fatFinger": "扩大触控判定范围",
+      "fatFingerRadius": "触控判定半径",
+      "slideIllegalRed": "以红色标记异常滑轨",
+      "minimumBrightness": "最低亮度",
+      "sensorHighlight": "高亮显示已触发的感应区",
+      "slideDebug": "显示滑轨判定调试面板（Ctrl+D）",
       "lang": "语言 / Language",
       "langAuto": "跟随系统",
       "drawHitEffect": "渲染击打特效",
@@ -465,8 +477,8 @@
       "scoreMinus": "分数(101%-)"
     },
     "autoPlayOpts": {
-      "computer": "Autoplay (电脑)",
-      "simulate": "Autoplay (模拟)",
+      "computer": "自动游玩（电脑判定）",
+      "simulate": "自动游玩（模拟输入）",
       "off": "手动游玩"
     },
     "invertWheelOpts": {
@@ -512,6 +524,8 @@
       "comma": "拍子分隔逗号"
     },
     "sfxVolumeOpts": {
+      "judge_great": "GREAT 判定音",
+      "judge_good": "GOOD 判定音",
       "clock": "倒数节拍音",
       "answer": "正解音",
       "judge": "一般判定音",
@@ -527,6 +541,8 @@
     }
   },
   "popup": {
+    "restorePlayDefaults": "恢复默认值",
+    "confirmRestorePlayDefaults": "要将游玩设置恢复为默认值吗？",
     "save": "保存",
     "apply": "应用",
     "cancel": "取消",
@@ -762,6 +778,7 @@
       "customLabel": "自订参数"
     },
     "projectManager": {
+      "noProjectFiles": "所选文件中没有谱面或影音素材。",
       "title": "项目总管",
       "untitled": "未命名项目",
       "searchPlaceholder": "搜索项目名称...",

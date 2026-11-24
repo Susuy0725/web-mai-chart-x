@@ -22,6 +22,7 @@
 }
 
 .pm-tab-btn {
+    font-family: inherit;
     background: transparent;
     border: none;
     border-radius: var(--popup-radius-sm, 4px);
@@ -217,6 +218,7 @@
 
 .drive-signout-btn,
 .drive-refresh-btn {
+    font-family: inherit;
     /*background: transparent;
     border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
     color: var(--popup-text-sub, #bbb);

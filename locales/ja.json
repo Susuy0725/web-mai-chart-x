@@ -266,6 +266,9 @@
     "placeholder": "ここに譜面データを入力してください..."
   },
   "toast": {
+    "playDefaultsRestored": "プレイ設定を初期値に戻しました。",
+    "slideDebugOpened": "スライド判定のデバッグパネルを開きました。",
+    "slideDebugClosed": "スライド判定のデバッグパネルを閉じました。",
     "loadingAssetsWait": "素材を読み込み中、しばらくお待ちください...",
     "needBgm": "先に楽曲を読み込んでください",
     "cropSuccess": "再生ヘッドより前の音声を切り取りました",
@@ -355,6 +358,7 @@
       "keybindings": "キー設定"
     },
     "sections": {
+      "playAndTouch": "プレイモードとタッチ入力",
       "speedAndNotes": "スピード・ノーツ",
       "language": "言語",
       "appearanceAndNotes": "外観・ノーツ",
@@ -408,7 +412,15 @@
       "showMiniPreview": "プレビュータイムラインを表示",
       "timeDisplayCapsule": "フローティング時間カプセルを表示",
       "enableQuickPanel": "クイックパネルを有効にする",
-      "simplayUseButton": "Simplay で外枠ボタンを使用",
+      "simplayPerfect": "模擬入力を判定時刻に合わせる",
+      "simplayUseButton": "模擬入力に外周ボタンを使用する",
+      "randomOffset": "模擬入力の最大時間差（秒）",
+      "fatFinger": "タッチ判定範囲を広げる",
+      "fatFingerRadius": "タッチ判定の半径",
+      "slideIllegalRed": "無効なスライド軌道を赤色で表示する",
+      "minimumBrightness": "最低輝度",
+      "sensorHighlight": "反応中のセンサーを強調表示する",
+      "slideDebug": "スライド判定のデバッグパネルを表示する（Ctrl+D）",
       "lang": "言語",
       "langAuto": "システム設定",
       "lowRes": "低解像度モード",
@@ -465,9 +477,9 @@
       "scoreMinus": "達成率(101%-)"
     },
     "autoPlayOpts": {
-      "computer": "Autoplay (PC)",
-      "simulate": "Autoplay (シミュレーション)",
-      "off": "マニュアル"
+      "computer": "オートプレイ（自動判定）",
+      "simulate": "オートプレイ（模擬入力）",
+      "off": "手動プレイ"
     },
     "invertWheelOpts": {
       "none": "デフォルト",
@@ -512,6 +524,8 @@
       "comma": "拍区切りカンマ"
     },
     "sfxVolumeOpts": {
+      "judge_great": "GREAT 判定音",
+      "judge_good": "GOOD 判定音",
       "clock": "カウントダウン音",
       "answer": "アンサー音",
       "judge": "通常判定音",
@@ -527,6 +541,8 @@
     }
   },
   "popup": {
+    "restorePlayDefaults": "初期値に戻す",
+    "confirmRestorePlayDefaults": "プレイ設定を初期値に戻しますか？",
     "save": "保存",
     "apply": "適用",
     "cancel": "キャンセル",
@@ -762,6 +778,7 @@
       "customLabel": "カスタムパラメータ"
     },
     "projectManager": {
+      "noProjectFiles": "選択したファイルに譜面やメディア素材がありません。",
       "title": "プロジェクトマネージャー",
       "untitled": "無題のプロジェクト",
       "searchPlaceholder": "プロジェクト名を検索...",

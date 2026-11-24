@@ -1,8 +1,9 @@
 :root {
-    --playControls-height-max: 100px;
+    --playControls-height-max: calc(90px + env(safe-area-inset-bottom));
     --playControls-height: var(--playControls-height-max);
-    --timeline-color: #c22;
-    --timeline-color-background: #111;
+    --main-color: #131313;
+    --timeline-color: rgb(212, 49, 57);
+    --timeline-color-background: #222;
     --accent-color: #4499ee;
 }
 
@@ -20,7 +21,7 @@
 
 @font-face {
     font-family: 'title';
-    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
+    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('opentype');
     font-display: swap;
 }
 
@@ -55,6 +56,7 @@ select {
 
 body {
     background-color: #222;
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
 #canvasContainer {
@@ -109,211 +111,92 @@ body {
     -webkit-user-select: none;
 }
 
-
 #playControls {
-    user-select: none;
-    -webkit-user-select: none;
-    position: absolute;
-    width: 100%;
-    height: var(--playControls-height);
-    bottom: 0;
-    left: 0;
     z-index: 10;
-    background: var(--top-utility-bg);
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: center;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-sizing: border-box;
 }
 
-#playControls #timeControl {
-    appearance: none;
-    -webkit-appearance: none;
-    width: calc(100% - 16px);
-    height: 10px;
-    background: var(--timeline-color-background);
-    margin: 10px 8px;
-    margin-bottom: 12px;
-    border-radius: 7px;
-    border: none;
-    outline: none;
-    transition: background 0.3s ease;
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 32;
 }
 
-#timeControl:hover::-webkit-slider-thumb {
-    scale: 1.3;
+#playControls button.controlButton {
+    border: 0;
+    background: transparent;
 }
 
-#timeControl::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: var(--timeline-color);
-    border-radius: 10px;
-    cursor: pointer;
-    scale: 1;
-    transition: scale 200ms ease;
-}
-
-#timeControl::-moz-range-thumb {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 8px;
-    height: 15px;
-    background: #962d2d;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
-    border-radius: 10px;
-    cursor: pointer;
-}
-
-#playControls #miniPreviewContainer {
+#playControls .play-difficulty {
     position: relative;
-    width: 100%;
-    height: 60px;
 }
 
-#playControls #showPlayControlsBtn {
-    background-color: #222;
-    overflow: hidden;
-    width: 50px;
-    height: 50px;
+.play-difficulty select {
     position: absolute;
-    margin: 16px;
-    bottom: 0;
-    right: 0;
-    color: white;
-    display: flex;
-    align-content: center;
-    text-align: center;
-    cursor: pointer;
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
-    border-radius: 25px;
-    transition: background-color 100ms ease;
-}
-
-#playControls #showPlayControlsBtn:hover {
-    background-color: #333;
-}
-
-#playControls #playControlContainer {
-    position: relative;
+    inset: 0;
     width: 100%;
-    height: 80px;
-    top: 8px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    height: 100%;
+    opacity: 0;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.play-difficulty:focus-within {
+    outline: 2px solid var(--accent-color);
+}
+
+.play-difficulty:has(select:disabled) {
+    opacity: 0.4;
 }
 
 #playControls .controlsContainer {
-    display: flex;
-    gap: clamp(8px, 1.8vw, 18px);
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 12px;
-    transition: transform 200ms ease;
-    max-width: 100%;
-    padding: 0 10px;
-    box-sizing: border-box;
+    gap: clamp(4px, calc(5vw - 18px), 20px);
+}
+
+#playControls.hide {
+    padding: 0;
+}
+
+#playControls.hide #playControlContainer,
+#playControls.hide #playCapsulesContainer,
+#playControls #playCapsulesContainer[hidden],
+#playControls:not(.hide) #showPlayControlsBtn {
+    display: none;
+}
+
+#playControls #showPlayControlsBtn {
+    left: max(8px, env(safe-area-inset-left));
+    bottom: env(safe-area-inset-bottom);
+}
+
+#playControls :focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
+}
+
+@media (max-width: 560px) {
+    :root {
+        --playControls-height-max: calc(132px + env(safe-area-inset-bottom));
+    }
+
+    #playControls #playControlContainer {
+        height: auto;
+    }
+
+    #playControls .controlsContainer {
+        display: grid;
+        grid-template-columns: repeat(4, 40px);
+        gap: 2px clamp(4px, 2vw, 12px);
+        margin: 0;
+    }
+
+    #playControls .controlButton[data-buttonAction="hide"] {
+        left: max(8px, env(safe-area-inset-left));
+        top: 0;
+    }
 }
 
 .popup-backdrop {
     z-index: 999;
-}
-
-#playControls.hide #playControlContainer {
-    display: none;
-}
-
-#playControls #showPlayControlsBtn {
-    display: none;
-}
-
-#playControls.hide #showPlayControlsBtn {
-    display: block;
-}
-
-.controlsContainer .controlButton {
-    display: flex;
-    width: 40px;
-    height: 40px;
-    padding: 5px;
-    border-radius: 5px;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    box-sizing: border-box;
-}
-
-.controlsContainer .controlButton::before {
-    content: '';
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    z-index: 0;
-    pointer-events: none;
-    border-radius: 20px;
-    transition: background-color 150ms ease, border-radius 200ms ease;
-}
-
-.controlsContainer .controlButton:hover::before {
-    background-color: #ffffff20;
-    border-radius: 5px;
-}
-
-.controlsContainer .controlButton:active::before {
-    background-color: #ffffff60;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton {
-    width: auto;
-    min-width: 66px;
-    padding: 2px 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    position: relative;
-    user-select: none;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton::before {
-    width: 100%;
-    height: 100%;
-    border-radius: 5px;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton input {
-    width: 38px;
-    background: transparent;
-    border: none;
-    color: #fff;
-    font-size: 13px;
-    font-weight: bold;
-    font-family: inherit;
-    text-align: right;
-    outline: none;
-    appearance: textfield;
-    -moz-appearance: textfield;
-    padding: 0;
-    margin: 0;
-    cursor: text;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton input::-webkit-outer-spin-button,
-.controlsContainer .controlButton.playbackSpeedButton input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton .speedUnit {
-    font-size: 12px;
-    color: #bbb;
-    user-select: none;
-    font-weight: bold;
 }
 
 /* ============================================================

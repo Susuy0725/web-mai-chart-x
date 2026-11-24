@@ -266,6 +266,9 @@
     "placeholder": "여기에 채보 데이터를 입력하세요..."
   },
   "toast": {
+    "playDefaultsRestored": "플레이 설정을 기본값으로 복원했습니다.",
+    "slideDebugOpened": "슬라이드 판정 디버그 패널을 열었습니다.",
+    "slideDebugClosed": "슬라이드 판정 디버그 패널을 닫았습니다.",
     "loadingAssetsWait": "소재 로딩 중, 잠시만 기다려주세요...",
     "needBgm": "먼저 음악을 가져와 주세요",
     "cropSuccess": "재생 위치 이전의 오디오를 잘랐습니다",
@@ -355,6 +358,7 @@
       "keybindings": "단축키"
     },
     "sections": {
+      "playAndTouch": "플레이 모드 및 터치 입력",
       "speedAndNotes": "속도 및 노트",
       "language": "언어",
       "appearanceAndNotes": "외관 및 노트",
@@ -408,7 +412,15 @@
       "showMiniPreview": "미리보기 타임라인 표시",
       "timeDisplayCapsule": "플로팅 시간 캡슐 표시",
       "enableQuickPanel": "빠른 패널 활성화",
-      "simplayUseButton": "Simplay 외곽 버튼 사용",
+      "simplayPerfect": "모의 입력에 정확한 판정 타이밍 적용",
+      "simplayUseButton": "모의 입력에 외곽 버튼 사용",
+      "randomOffset": "모의 입력의 최대 시간 편차(초)",
+      "fatFinger": "터치 판정 영역 확대",
+      "fatFingerRadius": "터치 판정 반경",
+      "slideIllegalRed": "유효하지 않은 슬라이드 경로를 빨간색으로 표시",
+      "minimumBrightness": "최저 밝기",
+      "sensorHighlight": "입력이 감지된 센서 강조",
+      "slideDebug": "슬라이드 판정 디버그 패널 표시(Ctrl+D)",
       "lang": "언어 / Language",
       "langAuto": "시스템 설정 따르기",
       "drawHitEffect": "타격 효과 렌더링",
@@ -465,8 +477,8 @@
       "scoreMinus": "점수(101%-)"
     },
     "autoPlayOpts": {
-      "computer": "Autoplay (컴퓨터)",
-      "simulate": "Autoplay (시뮬레이션)",
+      "computer": "자동 플레이(컴퓨터 판정)",
+      "simulate": "자동 플레이(모의 입력)",
       "off": "수동 플레이"
     },
     "invertWheelOpts": {
@@ -512,6 +524,8 @@
       "comma": "박자 구분 쉼표"
     },
     "sfxVolumeOpts": {
+      "judge_great": "GREAT 판정음",
+      "judge_good": "GOOD 판정음",
       "clock": "카운트다운 비트음",
       "answer": "정답음",
       "judge": "일반 판정음",
@@ -527,6 +541,8 @@
     }
   },
   "popup": {
+    "restorePlayDefaults": "기본값 복원",
+    "confirmRestorePlayDefaults": "플레이 설정을 기본값으로 복원할까요?",
     "save": "저장",
     "apply": "적용",
     "cancel": "취소",
@@ -762,6 +778,7 @@
       "customLabel": "맞춤 매개변수"
     },
     "projectManager": {
+      "noProjectFiles": "선택한 파일에 채보나 미디어 파일이 없습니다.",
       "title": "프로젝트 관리자",
       "untitled": "제목 없는 프로젝트",
       "searchPlaceholder": "프로젝트 이름 검색...",

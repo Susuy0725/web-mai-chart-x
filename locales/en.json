@@ -266,6 +266,9 @@
     "placeholder": "Enter chart data here..."
   },
   "toast": {
+    "playDefaultsRestored": "Play settings restored to their defaults.",
+    "slideDebugOpened": "Slide judgement debugger opened.",
+    "slideDebugClosed": "Slide judgement debugger closed.",
     "loadingAssetsWait": "Loading assets, please wait...",
     "needBgm": "Please load music first",
     "cropSuccess": "Audio cropped from playhead",
@@ -355,6 +358,7 @@
       "keybindings": "Shortcuts"
     },
     "sections": {
+      "playAndTouch": "Play mode and touch input",
       "speedAndNotes": "Speed & Notes",
       "language": "Language",
       "appearanceAndNotes": "Appearance & Notes",
@@ -408,7 +412,15 @@
       "showMiniPreview": "Show Preview Timeline",
       "timeDisplayCapsule": "Show Floating Time Capsule",
       "enableQuickPanel": "Enable Quick Panel",
-      "simplayUseButton": "Simplay Use Buttons",
+      "simplayPerfect": "Use perfect timing for simulated input",
+      "simplayUseButton": "Use outer buttons for simulated input",
+      "randomOffset": "Maximum simulated timing offset (seconds)",
+      "fatFinger": "Expand the touch detection area",
+      "fatFingerRadius": "Touch detection radius",
+      "slideIllegalRed": "Highlight invalid slide paths in red",
+      "minimumBrightness": "Minimum brightness",
+      "sensorHighlight": "Highlight active sensors",
+      "slideDebug": "Show the slide judgement debugger (Ctrl+D)",
       "lang": "Language",
       "langAuto": "Follow system",
       "drawHitEffect": "Render Hit Effects",
@@ -465,9 +477,9 @@
       "scoreMinus": "Score (101%-)"
     },
     "autoPlayOpts": {
-      "computer": "Autoplay (Computer)",
-      "simulate": "Autoplay (Simulation)",
-      "off": "Manual Play"
+      "computer": "Autoplay (computer judgement)",
+      "simulate": "Autoplay (simulated input)",
+      "off": "Manual play"
     },
     "invertWheelOpts": {
       "none": "Default",
@@ -512,6 +524,8 @@
       "comma": "Beat Comma"
     },
     "sfxVolumeOpts": {
+      "judge_great": "GREAT judgement sound",
+      "judge_good": "GOOD judgement sound",
       "clock": "Countdown Beat",
       "answer": "Answer Sound",
       "judge": "Normal Judgment Sound",
@@ -527,6 +541,8 @@
     }
   },
   "popup": {
+    "restorePlayDefaults": "Restore defaults",
+    "confirmRestorePlayDefaults": "Restore the default play settings?",
     "save": "Save",
     "apply": "Apply",
     "cancel": "Cancel",
@@ -762,6 +778,7 @@
       "customLabel": "Custom parameters"
     },
     "projectManager": {
+      "noProjectFiles": "No chart or media files were found in the selected files.",
       "title": "Project Manager",
       "untitled": "Untitled Project",
       "searchPlaceholder": "Search project name...",

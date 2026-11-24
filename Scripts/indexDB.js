@@ -203,6 +203,38 @@ export async function projectCreate(name = '未命名專案') {
     return id;
 }
 
+// Commit the imported assets and their project-list entry together.
+export async function storeImportedProject(targetId, name, assets, renameExisting) {
+    const db = await openDB();
+    const projectId = targetId || generateProjectId();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        tx.oncomplete = () => resolve(projectId);
+        tx.onabort = () => reject(tx.error || new Error('Project import aborted'));
+        const request = store.get(PROJECT_LIST_KEY);
+        request.onsuccess = () => {
+            const list = request.result || [];
+            const now = Date.now();
+            if (targetId) {
+                const project = list.find(item => item.id === targetId);
+                if (!project) {
+                    tx.abort();
+                    return;
+                }
+                project.updatedAt = now;
+                if (renameExisting) project.name = name;
+            } else {
+                list.push({ id: projectId, name, createdAt: now, updatedAt: now });
+            }
+            store.put(list, PROJECT_LIST_KEY);
+            for (const [key, value] of Object.entries(assets)) {
+                store.put(value, projKey(projectId, key));
+            }
+        };
+    });
+}
+
 /**
  * 刪除專案（清除其所有 key 與 metadata）
  * @param {string} projectId

@@ -1,9 +1,12 @@
-import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from '../Scripts/indexDB.js';
+import { idbGet, idbSet, idbGetProject, idbSetProject, projectList, migrateFromLegacy } from '../Scripts/indexDB.js';
+import { saveProjectFilesToIDB } from '../Scripts/features/fileHandler.js';
+import { createSettingSectionTitle, createSettingRow, createSettingRangeInput, createSettingCheckbox, createSettingDropdown } from '../Scripts/modals/settingControls.js';
+import { openProjectManager } from '../Scripts/modals/projectManager.js';
 import { SimaiRenderer } from './renderer.js';
 import { simaiDecode } from '../Scripts/decode.js';
 import { cullSlideBucket } from '../Scripts/core/simaiLogicControler.js';
-import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, clamp, imgNotExists } from '../Scripts/helper.js';
-import { t, getCurrentLang, setLang } from '../Scripts/i18n.js';
+import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, formatCapsuleTime, clamp, imgNotExists } from '../Scripts/helper.js';
+import { t, getAvailableLanguages, getLangSetting, onLanguageChange, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue, getSlideStepState, getSlideBranchPath } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
@@ -48,6 +51,11 @@ const defaultSettings = {
     splitRatio: 0.5, // 左右面板分割比例
     slideIllegalRed: false,
     showUI: false,
+    showUIPosition: 'top-left',
+    timeDisplayCapsule: true,
+    timeDisplayCapsulePosition: 'center',
+    drawHanabiEffect: true,
+    richHanabi: false,
     simplayPerfect: true,
     simplayUseButton: true,
     randomOffset: 0,
@@ -657,14 +665,25 @@ const autoPlayBtn = getControlButton("autoPlay");
 const hideBtn = getControlButton("hide");
 const hideShowBtn = document.getElementById("showPlayControlsBtn");
 const projectBtn = getControlButton("openProject");
-const folderBtn = getControlButton("openFolder");
+const difficultySelect = document.getElementById("playDifficulty");
 const settingsBtn = getControlButton("settings");
 const fullscreenBtn = getControlButton("fullscreen");
 
-const playbackSpeedInput = document.getElementById("playbackSpeedInput");
-const playbackSpeedBtn = getControlButton("playbackSpeed");
-const playbackSpeedMinusBtn = getControlButton("playbackSpeedMinus");
-const playbackSpeedAddBtn = getControlButton("playbackSpeedAdd");
+const speedControlButton = getControlButton("speed");
+const speedPopover = document.getElementById("speedPopover");
+const playbackSpeedInput = document.getElementById("speedPopoverInput");
+const playbackSpeedBtn = document.getElementById("speedPopoverReset");
+const playbackSpeedMinusBtn = document.getElementById("speedPopoverMinus");
+const playbackSpeedAddBtn = document.getElementById("speedPopoverAdd");
+const playCapsules = document.getElementById("playCapsulesContainer");
+const timeDisplayCapsule = document.getElementById("timeDisplayCapsule");
+const speedDisplayCapsule = document.getElementById("speedDisplayCapsule");
+function updatePlayCapsules() {
+    playCapsules.hidden = settings.timeDisplayCapsule === false;
+    const position = settings.timeDisplayCapsulePosition;
+    playCapsules.dataset.position = position === 'left' || position === 'right' ? position : 'center';
+}
+updatePlayCapsules();
 const slideDebugBtn = getControlButton("slideDebug");
 
 const gameBackgroundImage = document.getElementById("backgroundImage");
@@ -713,18 +732,9 @@ function updateAutoPlayUI() {
     if (!autoPlayBtn) return;
     const mode = getAutoPlayMode();
     autoPlayBtn.dataset.autoplay = mode;
-    if (autoPlayBtn.children[0]) {
-        if (mode === 'computer') {
-            autoPlayBtn.children[0].innerText = "computer";
-            autoPlayBtn.title = t('settings.autoPlayOpts.computer') || "Autoplay (電腦)";
-        } else if (mode === 'simulate') {
-            autoPlayBtn.children[0].innerText = "smart_toy";
-            autoPlayBtn.title = t('settings.autoPlayOpts.simulate') || "Autoplay (模擬)";
-        } else {
-            autoPlayBtn.children[0].innerText = "touch_app";
-            autoPlayBtn.title = t('settings.autoPlayOpts.off') || "手動遊玩";
-        }
-    }
+    const icons = { computer: 'computer', simulate: 'smart_toy', off: 'touch_app' };
+    autoPlayBtn.children[0].textContent = icons[mode];
+    autoPlayBtn.title = t(`settings.autoPlayOpts.${mode}`);
 }
 
 if (autoPlayBtn) {
@@ -746,12 +756,10 @@ if (autoPlayBtn) {
         updateAutoPlayUI();
         idbSet('simai_settings', JSON.stringify(settings));
 
-        const label = nextMode === 'computer'
-            ? (t('settings.autoPlayOpts.computer') || 'Autoplay (電腦)')
-            : (nextMode === 'simulate' ? (t('settings.autoPlayOpts.simulate') || 'Autoplay (模擬)') : (t('settings.autoPlayOpts.off') || '手動遊玩'));
-        simpleToast({ content: label, type: 'info', timeout: 1000 });
+        simpleToast({ content: t(`settings.autoPlayOpts.${nextMode}`), type: 'info', timeout: 1000 });
     });
 }
+onLanguageChange(updateAutoPlayUI);
 updateAutoPlayUI();
 
 // 手動遊玩輸入與鍵盤/觸控對應 (Manual Play Controls)
@@ -811,7 +819,7 @@ window.addEventListener('keydown', (e) => {
                 const nextState = toggleSlideDebug();
                 settings.slideDebug = nextState;
                 idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-                simpleToast({ content: `Slide Debug 視圖：${nextState ? '開啟' : '關閉'}`, type: 'info', timeout: 1200 });
+                simpleToast({ content: t(nextState ? 'toast.slideDebugOpened' : 'toast.slideDebugClosed'), type: 'info', timeout: 1200 });
                 return;
             }
         }
@@ -1603,27 +1611,44 @@ if (restartBtn) {
     restartBtn.addEventListener("click", restart);
 }
 
-if (playbackSpeedInput) {
-    playbackSpeedInput.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
-    playbackSpeedInput.addEventListener('change', () => {
-        const speed = parseFloat(playbackSpeedInput.value);
-        if (isNaN(speed) || speed <= 0) {
-            simpleToast({ content: t('toast.invalidPlaybackSpeed'), type: 'warning', timeout: 1800 });
-            playbackSpeedInput.value = (settings.playbackSpeed || 1).toFixed(2);
-            return;
-        }
-        setPlaybackSpeed(speed);
-        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: speed.toFixed(2) }), type: 'success', timeout: 1800 });
-    });
-    playbackSpeedInput.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') {
-            playbackSpeedInput.blur();
-        }
-    });
+function setSpeedPopoverOpen(open) {
+    speedControlButton.setAttribute('aria-expanded', String(open));
+    speedControlButton.classList.toggle('is-active', open);
+    speedPopover.classList.toggle('is-open', open);
+    speedPopover.inert = !open;
+    speedPopover.setAttribute('aria-hidden', String(!open));
 }
+
+speedControlButton.addEventListener('click', () => setSpeedPopoverOpen(speedPopover.inert));
+document.addEventListener('pointerdown', (event) => {
+    if (!speedPopover.inert && !speedControlButton.parentElement.contains(event.target)) {
+        setSpeedPopoverOpen(false);
+    }
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !speedPopover.inert) {
+        if (document.activeElement === playbackSpeedInput) {
+            playbackSpeedInput.value = speedDisplayCapsule.textContent;
+        }
+        speedControlButton.focus();
+        setSpeedPopoverOpen(false);
+    }
+});
+
+playbackSpeedInput.addEventListener('focus', () => playbackSpeedInput.select());
+playbackSpeedInput.addEventListener('change', () => {
+    const speed = Number(playbackSpeedInput.value.trim().replace(/x$/i, ''));
+    if (!Number.isFinite(speed) || speed <= 0) {
+        simpleToast({ content: t('toast.invalidPlaybackSpeed'), type: 'warning', timeout: 1800 });
+        playbackSpeedInput.value = speedDisplayCapsule.textContent;
+        return;
+    }
+    setPlaybackSpeed(speed);
+    simpleToast({ content: t('toast.setPlaybackSpeed', { speed: settings.playbackSpeed.toFixed(2) }), type: 'success', timeout: 1800 });
+});
+playbackSpeedInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') speedControlButton.focus();
+});
 
 if (playbackSpeedBtn) {
     playbackSpeedBtn.addEventListener('click', () => {
@@ -1656,7 +1681,7 @@ if (slideDebugBtn) {
         const nextState = toggleSlideDebug();
         settings.slideDebug = nextState;
         idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-        simpleToast({ content: `Slide Debug 視圖：${nextState ? '開啟' : '關閉'}`, type: 'info', timeout: 1200 });
+        simpleToast({ content: t(nextState ? 'toast.slideDebugOpened' : 'toast.slideDebugClosed'), type: 'info', timeout: 1200 });
     });
 }
 
@@ -1671,7 +1696,12 @@ if (hideShowBtn) {
 if (projectBtn) {
     projectBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openProjectManager();
+        openProjectManager({
+            getCurrentProjectId: () => currentProjectId,
+            loadProject,
+            getFileHandlerCtx,
+            images,
+        });
     });
 }
 
@@ -1722,40 +1752,14 @@ if (fullscreenBtn) {
     document.addEventListener('msfullscreenchange', updateFullscreenIcon);
 }
 
-if (folderBtn) {
-    folderBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-
-        const input = document.createElement('input');
-        input.type = "file";
-        input.webkitdirectory = true;
-        input.directory = true;
-        input.multiple = true;
-
-        input.style.display = "none";
-        document.body.appendChild(input);
-
-        input.onchange = async (e) => {
-            const files = e.target.files;
-            document.body.removeChild(input);
-
-            if (!files || files.length === 0) {
-                console.warn("未選擇任何檔案");
-                return;
-            }
-
-            try {
-                setDataEmpty();
-                await handleFolderInput(files);
-                update();
-            } catch (err) {
-                console.error("處理資料夾檔案時發生錯誤：", err);
-            }
-        };
-
-        input.click();
-    });
-}
+difficultySelect.addEventListener('change', () => {
+    restart();
+    selectedDifficulty = Number(difficultySelect.value);
+    getResult();
+    updateTimeControlUI();
+    draw();
+    if (currentProjectId) idbSetProject(currentProjectId, 'now_difficulty', selectedDifficulty);
+});
 
 update();
 
@@ -1772,6 +1776,7 @@ function maidataProcess(e) {
             return val;
         })();
     }
+    updateDifficultyOptions();
     getResult();
 }
 
@@ -1779,6 +1784,7 @@ function setDataEmpty() {
     pause();
     restart();
     rawdata = null;
+    updateDifficultyOptions();
     datas = null;
     playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
     playCombo = 0;
@@ -1802,95 +1808,6 @@ function setDataEmpty() {
     }
 
     updateTimeControlUI();
-}
-
-async function handleFolderInput(files) {
-    // Normalize input into an array of File-like objects (supports FileList, Array, or JSZip.files mapping)
-    const entries = [];
-    if (files && typeof files.length === 'number' && typeof files.item === 'function') {
-        for (let i = 0; i < files.length; i++) {
-            const f = files.item(i);
-            if (f) entries.push(f);
-        }
-    } else if (Array.isArray(files)) {
-        for (let i = 0; i < files.length; i++) if (files[i]) entries.push(files[i]);
-    } else if (files && typeof files === 'object') {
-        // Assume JSZip.files mapping
-        for (const name in files) {
-            if (!Object.prototype.hasOwnProperty.call(files, name)) continue;
-            const zf = files[name];
-            if (zf.dir) continue; // skip directories
-            if (typeof zf.async === 'function') {
-                try {
-                    const blob = await zf.async('blob');
-                    const baseName = name.replace(/\\/g, '/').split('/').pop();
-                    entries.push(new File([blob], baseName, { type: blob.type || '' }));
-                } catch (e) {
-                    console.warn('從 zip 讀取檔案失敗', name, e);
-                }
-            }
-        }
-    } else {
-        console.warn('handleFolderInput：未知的 files 參數型別', files);
-        return;
-    }
-
-    for (let i = 0; i < entries.length; i++) {
-        const file = entries[i];
-        const baseName = (file.name || '').replace(/.*[\\/]/, '');
-        const lowerName = baseName.toLowerCase();
-        const ext = (baseName.split('.').pop() || '').toLowerCase();
-
-        // Fallback to extension check when file.type is missing (common for zip blobs)
-        const isVideo = ((file.type || '').startsWith('video/')) || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'ogg'].includes(ext);
-        const isImage = ((file.type || '').startsWith('image/')) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext);
-
-        if (lowerName.startsWith('track.')) {
-            // 音樂檔
-            const url = URL.createObjectURL(file);
-            await audioManager.setBackgroundMusic(url, file);
-        }
-        if (lowerName.startsWith('maidata.')) {
-            // 譜面檔
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                maidataProcess(e.target.result);
-                resize();
-            };
-            reader.readAsText(file);
-        }
-        if (lowerName.startsWith('bg.')) {
-            /*if (isVideo) {
-                // 可能為命名錯誤
-                // 背景影片
-                backgroundVideo = file;
-                editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                editorBackgroundVideo.style.display = 'none';
-                editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-                projSet('background_video', file).catch((error) => {
-                    console.error('儲存背景圖到 IndexedDB 失敗:', error);
-                });
-                continue;
-            }*/
-            if (isImage) {
-                // 背景圖
-                backgroundImage = file;
-                gameBackgroundImage.src = URL.createObjectURL(backgroundImage);
-                gameBackgroundImage.style.display = 'block';
-                continue;
-            }
-        }
-        if (lowerName.startsWith('pv.')) {
-            if (isVideo) {
-                // 背景影片
-                backgroundVideo = file;
-                gameBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-                gameBackgroundVideo.style.display = 'none';
-                continue;
-            }
-        }
-    }
-    tryUpdateBackgroundBrightness();
 }
 
 function tryUpdateBackgroundBrightness() {
@@ -1919,8 +1836,7 @@ function getResult() {
         renderer.clearJudgeEffects();
         renderer.clearHitEffects();
     }
-    const chartData = (rawdata && rawdata["inote_" + selectedDifficulty]) ||
-        (rawdata && [7, 6, 5, 4, 3, 2, 1].map(d => rawdata["inote_" + d]).find(Boolean)) || "";
+    const chartData = rawdata?.[`inote_${selectedDifficulty}`] || "";
     datas = simaiDecode(chartData, 0);
     if (datas) {
         linkChainSlides(datas.notes);
@@ -1944,7 +1860,11 @@ function updateTimeControlUI() {
     const ratio = Math.max(0, Math.min(1, totalTime > 0 ? (realTime / totalTime) : 0));
     const thumbWidth = 16;
     const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-    timeControl.style.background = `linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) ${stopPos}, var(--timeline-color-background, #222) ${stopPos}, var(--timeline-color-background, #222) 100%)`;
+    timeControl.style.setProperty('--timeline-progress', stopPos);
+    if (!hidden && !playCapsules.hidden) {
+        const text = `${formatCapsuleTime(Math.min(realTime, totalTime))} / ${formatCapsuleTime(totalTime)}`;
+        if (timeDisplayCapsule.textContent !== text) timeDisplayCapsule.textContent = text;
+    }
 }
 
 const videoSeekDebounce = debounce((time) => {
@@ -2169,9 +2089,10 @@ function setPlaybackSpeed(speed) {
     speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
 
     settings.playbackSpeed = speed;
-    if (playbackSpeedInput) {
-        playbackSpeedInput.value = speed.toFixed(2);
-    }
+    const label = `${speed.toFixed(2)}x`;
+    playbackSpeedInput.value = label;
+    speedDisplayCapsule.textContent = label;
+    speedDisplayCapsule.classList.toggle('is-modified', label !== '1.00x');
 
     audioManager.setPlaybackRate(speed);
     if (playing) {
@@ -2197,7 +2118,9 @@ function toggleHide() {
         hideBtn.classList.remove("hide");
         hidden = false;
         _cssroot.style.setProperty('--playControls-height', 'var(--playControls-height-max)');
+        updateTimeControlUI();
     } else {
+        setSpeedPopoverOpen(false);
         _pc.classList.add("hide");
         hideBtn.classList.add("hide");
         hidden = true;
@@ -3651,28 +3574,26 @@ function draw() {
 // 專案管理與專案載入 (Project Manager & Load Project)
 // ============================================================
 
-let currentProjectId = localStorage.getItem('simai_lastProjectId') || null;
+let currentProjectId = null;
 
-const DIFFICULTY_NAMES = {
-    1: 'Easy',
-    2: 'Basic',
-    3: 'Advanced',
-    4: 'Expert',
-    5: 'Master',
-    6: 'Re:Master',
-    7: '宴'
-};
-const DIFFICULTY_COLORS = {
-    1: '#43a047',
-    2: '#1e88e5',
-    3: '#fb8c00',
-    4: '#e53935',
-    5: '#8e24aa',
-    6: '#e0e0e0',
-    7: '#d81b60'
-};
+const difficultyNames = ['EASY', 'BASIC', 'ADVANCED', 'EXPERT', 'MASTER', 'Re:MASTER', '宴'];
 
-async function loadProject(projectId, targetDifficulty = null) {
+function updateDifficultyOptions() {
+    difficultySelect.replaceChildren();
+    for (let difficulty = difficultyNames.length; difficulty > 0; difficulty--) {
+        if (!rawdata?.[`inote_${difficulty}`]?.trim()) continue;
+        const name = difficultyNames[difficulty - 1];
+        const level = rawdata[`lv_${difficulty}`];
+        difficultySelect.add(new Option(level ? `${name} · ${level}` : name, String(difficulty)));
+    }
+    difficultySelect.disabled = difficultySelect.options.length === 0;
+    if (difficultySelect.disabled) return;
+    difficultySelect.value = String(selectedDifficulty);
+    if (difficultySelect.selectedIndex < 0) difficultySelect.selectedIndex = 0;
+    selectedDifficulty = Number(difficultySelect.value);
+}
+
+async function loadProject(projectId) {
     if (!projectId) return null;
 
     setDataEmpty();
@@ -3695,14 +3616,8 @@ async function loadProject(projectId, targetDifficulty = null) {
             idbGetProject(projectId, 'background_video')
         ]);
 
-        if (targetDifficulty !== null && targetDifficulty !== undefined) {
-            selectedDifficulty = parseInt(targetDifficulty) || 5;
-        } else if (savedDifficulty) {
-            selectedDifficulty = parseInt(savedDifficulty) || 5;
-        } else {
-            selectedDifficulty = 5;
-        }
-
+        if (currentProjectId !== projectId) return null;
+        selectedDifficulty = Number(savedDifficulty) || 5;
         if (savedMaiData) {
             maidataProcess(savedMaiData);
         }
@@ -3741,240 +3656,19 @@ async function loadProject(projectId, targetDifficulty = null) {
     }
 }
 
-async function openProjectManager() {
-    const setStyle = (el, styles) => Object.assign(el.style, styles);
-
-    const buildList = async (container) => {
-        container.innerHTML = '';
-        let list = await projectList();
-
-        if (list.length === 0) {
-            const migratedId = await migrateFromLegacy();
-            if (migratedId) {
-                list = await projectList();
-            }
-        }
-
-        if (list.length === 0) {
-            container.innerHTML = '<div style="color: #888; text-align: center; padding: 24px;">尚無任何專案</div>';
-            return;
-        }
-
-        // 按更新時間排序（最近的在上）
-        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-        for (const proj of list) {
-            const isCurrent = proj.id === currentProjectId;
-            const row = document.createElement('div');
-            setStyle(row, {
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px 12px',
-                background: isCurrent ? 'rgba(74, 144, 226, 0.15)' : '#262626',
-                border: isCurrent ? '1px solid #4a90e2' : '1px solid #383838',
-                borderRadius: '8px',
-                marginBottom: '8px',
-                gap: '8px',
-                transition: 'all 0.15s ease',
-            });
-
-            // 上半部：名稱 + 狀態 + 操作按鈕
-            const topRow = document.createElement('div');
-            setStyle(topRow, {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '8px'
-            });
-
-            // 左側：名稱與標籤
-            const infoDiv = document.createElement('div');
-            setStyle(infoDiv, { flex: '1', minWidth: '0', overflow: 'hidden' });
-
-            const titleContainer = document.createElement('div');
-            setStyle(titleContainer, { display: 'flex', alignItems: 'center', gap: '6px' });
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = proj.name || '未命名專案';
-            setStyle(nameSpan, {
-                fontWeight: '600',
-                fontSize: '14px',
-                color: isCurrent ? '#6ba4f8' : '#eee',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-            });
-            titleContainer.appendChild(nameSpan);
-
-            if (isCurrent) {
-                const currentBadge = document.createElement('span');
-                currentBadge.textContent = '使用中';
-                setStyle(currentBadge, {
-                    fontSize: '10px',
-                    color: '#fff',
-                    background: '#2b6cb0',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    fontWeight: 'bold',
-                    flexShrink: '0'
-                });
-                titleContainer.appendChild(currentBadge);
-            }
-
-            const timeSpan = document.createElement('span');
-            const d = new Date(proj.updatedAt || proj.createdAt);
-            timeSpan.textContent = `最後更新：${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-            setStyle(timeSpan, { fontSize: '11px', color: '#888', display: 'block', marginTop: '2px' });
-
-            infoDiv.appendChild(titleContainer);
-            infoDiv.appendChild(timeSpan);
-
-            // 右側按鈕組
-            const btnGroup = document.createElement('div');
-            setStyle(btnGroup, { display: 'flex', gap: '6px', flexShrink: '0' });
-
-            const makeBtn = (text, onClick, bgColor = '#3a3a3a') => {
-                const btn = document.createElement('button');
-                btn.textContent = text;
-                setStyle(btn, {
-                    background: bgColor,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '5px 10px',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'opacity 0.15s ease'
-                });
-                btn.addEventListener('mouseenter', () => btn.style.opacity = '0.8');
-                btn.addEventListener('mouseleave', () => btn.style.opacity = '1');
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    onClick();
-                };
-                return btn;
-            };
-
-            const openBtn = makeBtn(isCurrent ? '重新載入' : '開啟', async () => {
-                await loadProject(proj.id);
-                simpleToast({ content: `已載入專案：${proj?.name || '未命名'}`, type: 'success', timeout: 1500 });
-                buildList(container);
-            }, isCurrent ? '#2d5a88' : '#2e7d32');
-            btnGroup.appendChild(openBtn);
-
-            btnGroup.appendChild(makeBtn('重新命名', async () => {
-                const newName = prompt('請輸入新的專案名稱：', proj.name || '');
-                if (newName !== null && newName.trim() !== '') {
-                    await projectRename(proj.id, newName.trim());
-                    buildList(container);
-                    simpleToast({ content: '專案名稱已更新', type: 'info', timeout: 1200 });
-                }
-            }));
-
-            btnGroup.appendChild(makeBtn('刪除', async () => {
-                if (isCurrent) {
-                    alert('無法刪除目前正在播放的專案。\n請先切換到其他專案後再刪除。');
-                    return;
-                }
-                if (!confirm(`確定要刪除專案「${proj.name || '未命名'}」嗎？\n此操作無法復原！`)) return;
-                await projectDelete(proj.id);
-                buildList(container);
-                simpleToast({ content: '已刪除專案', type: 'success', timeout: 1200 });
-            }, '#c62828'));
-
-            topRow.appendChild(infoDiv);
-            topRow.appendChild(btnGroup);
-            row.appendChild(topRow);
-
-            // 下半部：難度選擇標籤 (若有 maidata)
-            const diffRow = document.createElement('div');
-            setStyle(diffRow, {
-                display: 'flex',
-                gap: '6px',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                marginTop: '2px'
-            });
-
-            idbGetProject(proj.id, 'maidata').then(projMaiData => {
-                if (!projMaiData) return;
-                const mData = typeof projMaiData === 'string' ? parseMaidata(projMaiData) : projMaiData;
-                const availableDiffs = [1, 2, 3, 4, 5, 6, 7].filter(d => !!mData[`inote_${d}`]);
-                if (availableDiffs.length === 0) return;
-
-                const diffTitle = document.createElement('span');
-                diffTitle.textContent = '難度：';
-                setStyle(diffTitle, { fontSize: '11px', color: '#999' });
-                diffRow.appendChild(diffTitle);
-
-                availableDiffs.forEach(diffNum => {
-                    const diffBtn = document.createElement('button');
-                    const isSelectedDiff = isCurrent && selectedDifficulty === diffNum;
-                    diffBtn.textContent = `${DIFFICULTY_NAMES[diffNum] || diffNum}`;
-                    setStyle(diffBtn, {
-                        fontSize: '10px',
-                        padding: '2px 8px',
-                        borderRadius: '3px',
-                        border: isSelectedDiff ? '1px solid #fff' : '1px solid transparent',
-                        background: DIFFICULTY_COLORS[diffNum] || '#555',
-                        color: diffNum === 6 ? '#000' : '#fff',
-                        cursor: 'pointer',
-                        fontWeight: isSelectedDiff ? 'bold' : 'normal',
-                        opacity: isSelectedDiff ? '1' : '0.85'
-                    });
-                    diffBtn.title = `點擊切換為此難度播放`;
-                    diffBtn.onclick = async (e) => {
-                        e.stopPropagation();
-                        await loadProject(proj.id, diffNum);
-                        simpleToast({ content: `已切換難度至：${DIFFICULTY_NAMES[diffNum]}`, type: 'success', timeout: 1200 });
-                        buildList(container);
-                    };
-                    diffRow.appendChild(diffBtn);
-                });
-            });
-
-            row.appendChild(diffRow);
-            container.appendChild(row);
-        }
+function getFileHandlerCtx() {
+    return {
+        audioManager,
+        getMaidata: () => rawdata,
+        getBackgroundImage: () => backgroundImage,
+        getBackgroundVideo: () => backgroundVideo,
+        getCurrentProjectId: () => currentProjectId,
+        importProjectFiles: async (files, name, targetId) => {
+            const previousId = currentProjectId;
+            const { projectId } = await saveProjectFilesToIDB(files, name, targetId, { replaceMissing: true });
+            if (currentProjectId === previousId) await loadProject(projectId);
+        },
     };
-
-    const container = document.createElement('div');
-    setStyle(container, {
-        maxHeight: '400px',
-        overflowY: 'auto',
-        scrollbarWidth: 'thin',
-        scrollbarColor: '#555 transparent',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px'
-    });
-
-    buildList(container);
-
-    popupWindow({
-        title: "專案總管",
-        customContent: container,
-        width: 520,
-        maxWidth: 620,
-        buttons: [
-            {
-                text: "新建空白專案",
-                onClick: async () => {
-                    const name = prompt('請輸入專案名稱：', '未命名專案');
-                    if (name === null) return;
-                    const newId = await projectCreate(name.trim() || '未命名專案');
-                    await loadProject(newId);
-                    simpleToast({ content: `已建立並切換至專案：${name.trim() || '未命名專案'}`, type: 'success', timeout: 1500 });
-                    buildList(container);
-                }
-            },
-            {
-                text: "關閉",
-                hideOnClick: true,
-            }
-        ]
-    });
 }
 
 // ============================================================
@@ -4026,164 +3720,6 @@ function openSettings() {
         return section;
     };
 
-    const createRow = (labelText, element) => {
-        const row = document.createElement('div');
-        row.className = 'popup-setting-row';
-
-        // 1. Checkbox
-        if (element.type === 'checkbox') {
-            const wrapper = document.createElement('label');
-            wrapper.className = 'popup-setting-wrapper';
-            const text = document.createElement('span');
-            text.textContent = labelText;
-            text.className = 'popup-setting-text';
-            wrapper.appendChild(text);
-            wrapper.appendChild(element);
-            row.appendChild(wrapper);
-            return row;
-        }
-
-        // 2. Range
-        if (element.type === 'range') {
-            const wrapper = document.createElement('label');
-            wrapper.className = 'popup-setting-wrapper';
-            const text = document.createElement('span');
-            text.textContent = labelText;
-            text.className = 'popup-setting-text';
-
-            element.style.width = '140px';
-            element.style.flexShrink = '0';
-            wrapper.appendChild(text);
-            wrapper.appendChild(element);
-            row.appendChild(wrapper);
-            return row;
-        }
-
-        // 3. Object (子屬性折疊選單)
-        if (element.dataset && element.dataset.type === 'object-container') {
-            row.className = 'popup-setting-row popup-setting-row-object';
-
-            const header = document.createElement('div');
-            header.className = 'popup-setting-object-header';
-            header.innerHTML = `<span>${labelText}</span><span class="popup-setting-arrow-icon">▼</span>`;
-
-            const subBody = element;
-            subBody.className = 'popup-setting-subbody';
-
-            header.addEventListener('click', () => {
-                const isExpanded = subBody.classList.toggle('open');
-                header.querySelector('.popup-setting-arrow-icon').classList.toggle('expanded', isExpanded);
-            });
-
-            row.appendChild(header);
-            row.appendChild(subBody);
-            return row;
-        }
-
-        // 4. Button
-        if (element.tagName === 'BUTTON') {
-            const label = document.createElement('label');
-            label.textContent = labelText;
-            label.className = 'popup-setting-label';
-            element.className = 'popup-setting-element';
-            row.appendChild(label);
-            row.appendChild(element);
-            return row;
-        }
-
-        // 5. 一般 Number / Dropdown
-        const label = document.createElement('label');
-        label.textContent = labelText;
-        label.className = 'popup-setting-label';
-        element.className = 'popup-setting-input';
-        row.appendChild(label);
-        row.appendChild(element);
-        return row;
-    };
-
-    const createRangeInput = (value, min = 0, max = 1, step = 0.1, onInputCallback) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'popup-setting-range-wrap';
-
-        const input = document.createElement('input');
-        input.type = 'range';
-        input.className = 'popup-setting-range';
-        input.min = min;
-        input.max = max;
-        input.step = step;
-        input.value = value;
-
-        const valSpan = document.createElement('span');
-        valSpan.className = 'popup-setting-range-val';
-        const formatVal = (v) => {
-            const num = parseFloat(v);
-            if (isNaN(num)) return v;
-            if (step >= 1) return Math.round(num).toString();
-            const precision = step < 0.01 ? 3 : (step < 0.1 ? 2 : 1);
-            return num.toFixed(precision);
-        };
-
-        const updateVisuals = () => {
-            valSpan.textContent = formatVal(input.value);
-            const minNum = parseFloat(input.min);
-            const maxNum = parseFloat(input.max);
-            const curVal = parseFloat(input.value);
-            const pct = (maxNum <= minNum) ? 0 : Math.max(0, Math.min(100, ((curVal - minNum) / (maxNum - minNum)) * 100));
-            input.style.setProperty('--range-pct', `${pct}%`);
-        };
-
-        updateVisuals();
-
-        input.addEventListener('input', () => {
-            updateVisuals();
-            if (onInputCallback) onInputCallback(parseFloat(input.value));
-        });
-        input.addEventListener('change', () => {
-            updateVisuals();
-        });
-
-        wrap.type = 'range';
-        Object.defineProperty(wrap, 'value', {
-            get: () => input.value,
-            set: (v) => {
-                input.value = v;
-                updateVisuals();
-            }
-        });
-        wrap.min = min;
-        wrap.max = max;
-        wrap.step = step;
-        wrap._updateDisplay = () => {
-            updateVisuals();
-        };
-
-        wrap.appendChild(input);
-        wrap.appendChild(valSpan);
-        return wrap;
-    };
-
-    const createCheckbox = (checked, id) => {
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.className = 'popup-setting-checkbox';
-        input.id = id;
-        input.checked = checked;
-        return input;
-    };
-
-    const createDropdown = (value, options = []) => {
-        const select = document.createElement('select');
-        select.className = 'popup-setting-dropdown';
-        options.forEach(opt => {
-            const o = document.createElement('option');
-            o.value = opt.value;
-            o.textContent = opt.label.startsWith('settings.') ? t(opt.label) : opt.label;
-            if (opt.value == value) o.selected = true;
-            select.appendChild(o);
-        });
-        return select;
-    };
-
     const inputRefs = {};
     let popupCtx = null;
 
@@ -4191,44 +3727,24 @@ function openSettings() {
         {
             label: 'settings.tabs.basic',
             items: [
+                { type: 'header', label: 'settings.sections.speedAndNotes' },
                 {
                     id: 'speed', type: 'range', label: 'settings.items.speed', min: 1, max: 20, step: 0.1, def: defaultSettings.speed,
                     apply: (val) => { renderer.settings.speed = val; draw(); }
-                },
-                {
-                    id: 'touchSpeed', type: 'range', label: 'settings.items.touchSpeed', min: 1, max: 20, step: 0.1, def: defaultSettings.touchSpeed,
-                    apply: (val) => { renderer.settings.touchSpeed = val; draw(); }
                 },
                 {
                     id: 'slideSpeed', type: 'range', label: 'settings.items.slideSpeed', min: -1, max: 1, step: 0.05, def: defaultSettings.slideSpeed,
                     apply: (val) => { renderer.settings.slideSpeed = val; draw(); }
                 },
                 {
-                    id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay',
-                    options: [
-                        { value: 0, label: 'settings.middleDisplayOpts.off' },
-                        { value: 1, label: 'settings.middleDisplayOpts.combo' },
-                        { value: 2, label: 'settings.middleDisplayOpts.scorePlus' },
-                        { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }
-                    ],
-                    def: defaultSettings.middleDisplay,
-                    apply: (val) => { renderer.settings.middleDisplay = parseInt(val); draw(); }
+                    id: 'touchSpeed', type: 'range', label: 'settings.items.touchSpeed', min: 1, max: 20, step: 0.1, def: defaultSettings.touchSpeed,
+                    apply: (val) => { renderer.settings.touchSpeed = val; draw(); }
                 },
                 {
-                    id: 'moviebrightness', type: 'dropdown', label: 'settings.items.moviebrightness',
-                    options: [
-                        { value: '0', label: 'settings.items.bright' },
-                        { value: '-1', label: 'settings.items.normal' },
-                        { value: '-2', label: 'settings.items.dark' },
-                        { value: '-3', label: 'settings.items.veryDark' },
-                        { value: '-4', label: '全黑' }
-                    ],
-                    def: defaultSettings.moviebrightness ?? -4,
-                    apply: (val) => {
-                        settings.moviebrightness = parseInt(val);
-                        tryUpdateBackgroundBrightness();
-                    }
+                    id: 'pinkStars', type: 'checkbox', label: 'settings.items.pinkStars', def: defaultSettings.pinkStars,
+                    apply: (val) => { renderer.settings.pinkStars = val; draw(); }
                 },
+                { type: 'header', label: 'settings.sections.playAndTouch' },
                 {
                     id: 'autoPlay', type: 'dropdown', label: 'settings.items.autoPlay',
                     options: [
@@ -4245,34 +3761,68 @@ function openSettings() {
                     }
                 },
                 {
-                    id: 'simplayPerfect', type: 'checkbox', label: 'Auto Play 強制完美', def: defaultSettings.simplayPerfect,
+                    id: 'simplayPerfect', type: 'checkbox', label: 'settings.items.simplayPerfect', def: defaultSettings.simplayPerfect,
+                    visibleWhen: (s) => s.autoPlay === 'simulate',
                     apply: (val) => {
                         settings.simplayPerfect = val;
                     }
                 },
                 {
-                    id: 'simplayUseButton', type: 'checkbox', label: t('settings.items.simplayUseButton') || 'Simplay 使用外框', def: defaultSettings.simplayUseButton ?? true,
+                    id: 'simplayUseButton', type: 'checkbox', label: 'settings.items.simplayUseButton', def: defaultSettings.simplayUseButton ?? true,
+                    visibleWhen: (s) => s.autoPlay === 'simulate',
                     apply: (val) => {
                         settings.simplayUseButton = val;
                     }
                 },
                 {
-                    id: 'randomOffset', type: 'range', label: 'Auto Play 判定偏移', def: defaultSettings.randomOffset, min: 0, max: 0.75, step: 0.01,
+                    id: 'randomOffset', type: 'range', label: 'settings.items.randomOffset', def: defaultSettings.randomOffset, min: 0, max: 0.75, step: 0.01,
+                    visibleWhen: (s) => s.autoPlay === 'simulate' && !s.simplayPerfect,
                     apply: (val) => {
                         settings.randomOffset = val;
                     }
                 },
                 {
-                    id: 'fatFinger', type: 'checkbox', label: '肥手指判定擴張 (多感應區覆蓋)', def: defaultSettings.fatFinger ?? true,
+                    id: 'fatFinger', type: 'checkbox', label: 'settings.items.fatFinger', def: defaultSettings.fatFinger ?? true,
                     apply: (val) => {
                         settings.fatFinger = val;
                     }
                 },
                 {
-                    id: 'fatFingerRadius', type: 'range', label: '肥手指判定半徑', min: 1, max: 10, step: 0.2, def: defaultSettings.fatFingerRadius ?? 4.2,
+                    id: 'fatFingerRadius', type: 'range', label: 'settings.items.fatFingerRadius', min: 1, max: 10, step: 0.2, def: defaultSettings.fatFingerRadius ?? 4.2,
+                    visibleWhen: (s) => s.fatFinger,
                     apply: (val) => {
                         settings.fatFingerRadius = parseFloat(val);
                     }
+                },
+                { type: 'header', label: 'settings.sections.language' },
+                {
+                    id: 'lang', type: 'dropdown', label: 'settings.items.lang',
+                    options: [
+                        { value: 'auto', label: 'settings.items.langAuto' },
+                        ...getAvailableLanguages().map(({ code, name }) => ({ value: code, label: name })),
+                    ],
+                    get: getLangSetting,
+                    apply: async (val) => {
+                        if (val === getLangSetting() || !await setLang(val)) return;
+                        if (popupCtx) {
+                            popupCtx.close();
+                            openSettings();
+                        }
+                    }
+                },
+            ],
+        },
+        {
+            label: 'settings.tabs.display',
+            items: [
+                { type: 'header', label: 'settings.sections.appearanceAndNotes' },
+                {
+                    id: 'rotateStars', type: 'checkbox', label: 'settings.items.rotateStars', def: defaultSettings.rotateStars,
+                    apply: (val) => { renderer.settings.rotateStars = val; draw(); }
+                },
+                {
+                    id: 'slideArrowHideBySensor', type: 'checkbox', label: 'settings.items.slideArrowHideBySensor', def: defaultSettings.slideArrowHideBySensor ?? true,
+                    apply: (val) => { renderer.settings.slideArrowHideBySensor = val; draw(); }
                 },
                 {
                     id: 'showOutline', type: 'checkbox', label: 'settings.items.showOutline', def: defaultSettings.showOutline,
@@ -4282,43 +3832,57 @@ function openSettings() {
                     }
                 },
                 {
-                    id: 'rotateStars', type: 'checkbox', label: 'settings.items.rotateStars', def: defaultSettings.rotateStars,
-                    apply: (val) => { renderer.settings.rotateStars = val; draw(); }
+                    id: 'slideIllegalRed', type: 'checkbox', label: 'settings.items.slideIllegalRed', def: defaultSettings.slideIllegalRed,
+                    apply: (val) => { renderer.settings.slideIllegalRed = val; draw(); }
+                },
+                { type: 'header', label: 'settings.sections.effectsAndJudge' },
+                {
+                    id: 'drawHitEffect', type: 'checkbox', label: 'settings.items.drawHitEffect', def: defaultSettings.drawHitEffect ?? true,
+                    apply: (val) => { renderer.settings.drawHitEffect = val; draw(); }
                 },
                 {
-                    id: 'pinkStars', type: 'checkbox', label: 'settings.items.pinkStars', def: defaultSettings.pinkStars,
-                    apply: (val) => { renderer.settings.pinkStars = val; draw(); }
+                    id: 'drawHanabiEffect', type: 'checkbox', label: 'settings.items.drawHanabiEffect', def: defaultSettings.drawHanabiEffect ?? true,
+                    apply: (val) => { renderer.settings.drawHanabiEffect = val; draw(); }
                 },
                 {
-                    id: 'lang', type: 'dropdown', label: 'settings.items.lang',
+                    id: 'richHanabi', type: 'checkbox', label: 'settings.items.richHanabi', def: defaultSettings.richHanabi,
+                    visibleWhen: (s) => s.drawHanabiEffect,
+                    apply: () => draw()
+                },
+                {
+                    id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,
+                    apply: (val) => { renderer.settings.showJudge = val; draw(); }
+                },
+                {
+                    id: 'showCriticalPerfect', type: 'checkbox', label: 'settings.items.showCriticalPerfect', def: defaultSettings.showCriticalPerfect ?? true,
+                    visibleWhen: (s) => s.showJudge,
+                    apply: (val) => { renderer.settings.showCriticalPerfect = val; draw(); }
+                },
+                {
+                    id: 'showBreakCriticalPerfect', type: 'checkbox', label: 'settings.items.showBreakCriticalPerfect', def: defaultSettings.showBreakCriticalPerfect ?? true,
+                    visibleWhen: (s) => s.showJudge && s.showCriticalPerfect,
+                    apply: (val) => { renderer.settings.showBreakCriticalPerfect = val; draw(); }
+                },
+                {
+                    id: 'showFastLate', type: 'checkbox', label: 'settings.items.showFastLate', def: defaultSettings.showFastLate ?? true,
+                    visibleWhen: (s) => s.showJudge,
+                    apply: (val) => { renderer.settings.showFastLate = val; draw(); }
+                },
+                { type: 'header', label: 'settings.sections.backgroundAndSensor' },
+                {
+                    id: 'moviebrightness', type: 'dropdown', label: 'settings.items.moviebrightness',
                     options: [
-                        { value: 'zh-TW', label: '繁體中文' },
-                        { value: 'en', label: 'English' },
-                        { value: 'ja', label: '日本語' }
+                        { value: '0', label: 'settings.items.bright' },
+                        { value: '-1', label: 'settings.items.normal' },
+                        { value: '-2', label: 'settings.items.dark' },
+                        { value: '-3', label: 'settings.items.veryDark' },
+                        { value: '-4', label: 'settings.items.minimumBrightness' }
                     ],
-                    def: getCurrentLang(),
-                    get: () => getCurrentLang(),
+                    def: defaultSettings.moviebrightness ?? -4,
                     apply: (val) => {
-                        setLang(val);
-                        idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-                        if (popupCtx) {
-                            popupCtx.close();
-                            openSettings();
-                        }
+                        settings.moviebrightness = parseInt(val);
+                        tryUpdateBackgroundBrightness();
                     }
-                }
-            ]
-        },
-        {
-            label: 'settings.tabs.display',
-            items: [
-                {
-                    id: 'showSensor', type: 'checkbox', label: 'settings.items.showSensor', def: defaultSettings.showSensor,
-                    apply: (val) => { renderer.settings.showSensor = val; draw(); }
-                },
-                {
-                    id: 'showSensorTextWhenPaused', type: 'checkbox', label: 'settings.items.showSensorTextWhenPaused', def: defaultSettings.showSensorTextWhenPaused,
-                    apply: (val) => { renderer.settings.showSensorTextWhenPaused = val; draw(); }
                 },
                 {
                     id: 'showBackgroundWhenPaused', type: 'checkbox', label: 'settings.items.showBackgroundWhenPaused', def: defaultSettings.showBackgroundWhenPaused,
@@ -4329,56 +3893,77 @@ function openSettings() {
                 },
                 {
                     id: 'showCoverWhenPaused', type: 'checkbox', label: 'settings.items.showCoverWhenPaused', def: defaultSettings.showCoverWhenPaused,
+                    visibleWhen: (s) => s.showBackgroundWhenPaused,
                     apply: (val) => {
                         settings.showCoverWhenPaused = val;
                         if (!playing) updatePauseBackgroundDisplay();
                     }
                 },
                 {
-                    id: 'slideIllegalRed', type: 'checkbox', label: '劃軌判定偏紅 (非法劃軌顯示紅色)', def: defaultSettings.slideIllegalRed,
-                    apply: (val) => { renderer.settings.slideIllegalRed = val; draw(); }
+                    id: 'showSensor', type: 'checkbox', label: 'settings.items.showSensor', def: defaultSettings.showSensor,
+                    apply: (val) => { renderer.settings.showSensor = val; draw(); }
                 },
                 {
-                    id: 'slideArrowHideBySensor', type: 'checkbox', label: 'settings.items.slideArrowHideBySensor', def: defaultSettings.slideArrowHideBySensor ?? true,
-                    apply: (val) => { renderer.settings.slideArrowHideBySensor = val; draw(); }
+                    id: 'showSensorTextWhenPaused', type: 'checkbox', label: 'settings.items.showSensorTextWhenPaused', def: defaultSettings.showSensorTextWhenPaused,
+                    apply: (val) => { renderer.settings.showSensorTextWhenPaused = val; draw(); }
                 },
                 {
-                    id: 'drawHitEffect', type: 'checkbox', label: 'settings.items.drawHitEffect', def: defaultSettings.drawHitEffect ?? true,
-                    apply: (val) => { renderer.settings.drawHitEffect = val; draw(); }
-                },
-                {
-                    id: 'drawHanabiEffect', type: 'checkbox', label: 'settings.items.drawHanabiEffect', def: defaultSettings.drawHanabiEffect ?? true,
-                    apply: (val) => { renderer.settings.drawHanabiEffect = val; draw(); }
-                },
-                {
-                    id: 'showJudge', type: 'checkbox', label: 'settings.items.showJudge', def: defaultSettings.showJudge ?? true,
-                    apply: (val) => { renderer.settings.showJudge = val; draw(); }
-                },
-                {
-                    id: 'showCriticalPerfect', type: 'checkbox', label: 'settings.items.showCriticalPerfect', def: defaultSettings.showCriticalPerfect ?? true,
-                    apply: (val) => { renderer.settings.showCriticalPerfect = val; draw(); }
-                },
-                {
-                    id: 'showBreakCriticalPerfect', type: 'checkbox', label: 'settings.items.showBreakCriticalPerfect', def: defaultSettings.showBreakCriticalPerfect ?? true,
-                    apply: (val) => { renderer.settings.showBreakCriticalPerfect = val; draw(); }
-                },
-                {
-                    id: 'showFastLate', type: 'checkbox', label: 'settings.items.showFastLate', def: defaultSettings.showFastLate ?? true,
-                    apply: (val) => { renderer.settings.showFastLate = val; draw(); }
-                },
-                {
-                    id: 'sensorHighlight', type: 'checkbox', label: '感應器高亮反饋', def: defaultSettings.sensorHighlight ?? true,
+                    id: 'sensorHighlight', type: 'checkbox', label: 'settings.items.sensorHighlight', def: defaultSettings.sensorHighlight ?? true,
                     apply: (val) => { renderer.settings.sensorHighlight = val; draw(); }
                 },
+                { type: 'header', label: 'settings.sections.canvasInfo' },
                 {
-                    id: 'slideDebug', type: 'checkbox', label: 'Slide 判定隊列 Debug 視圖 (Ctrl+D)', def: defaultSettings.slideDebug ?? false,
+                    id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay',
+                    options: [
+                        { value: 0, label: 'settings.middleDisplayOpts.off' },
+                        { value: 1, label: 'settings.middleDisplayOpts.combo' },
+                        { value: 2, label: 'settings.middleDisplayOpts.scorePlus' },
+                        { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }
+                    ],
+                    def: defaultSettings.middleDisplay,
+                    apply: (val) => { renderer.settings.middleDisplay = parseInt(val); draw(); }
+                },
+                {
+                    id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI,
+                    apply: () => draw()
+                },
+                {
+                    id: 'showUIPosition', type: 'dropdown', label: 'settings.items.showUIPosition',
+                    options: [
+                        { value: 'top-left', label: 'settings.positionOpts.topLeft' },
+                        { value: 'top-right', label: 'settings.positionOpts.topRight' },
+                        { value: 'bottom-left', label: 'settings.positionOpts.bottomLeft' },
+                        { value: 'bottom-right', label: 'settings.positionOpts.bottomRight' },
+                    ],
+                    def: defaultSettings.showUIPosition,
+                    visibleWhen: (s) => s.showUI,
+                    apply: () => draw()
+                },
+                {
+                    id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule,
+                    apply: () => { updatePlayCapsules(); updateTimeControlUI(); }
+                },
+                {
+                    id: 'timeDisplayCapsulePosition', type: 'dropdown', label: 'settings.items.timeDisplayCapsulePosition',
+                    options: [
+                        { value: 'left', label: 'settings.positionOpts.left' },
+                        { value: 'center', label: 'settings.positionOpts.center' },
+                        { value: 'right', label: 'settings.positionOpts.right' },
+                    ],
+                    def: defaultSettings.timeDisplayCapsulePosition,
+                    visibleWhen: (s) => s.timeDisplayCapsule,
+                    apply: updatePlayCapsules
+                },
+                {
+                    id: 'slideDebug', type: 'checkbox', label: 'settings.items.slideDebug', def: defaultSettings.slideDebug ?? false,
                     apply: (val) => { toggleSlideDebug(val); }
-                }
-            ]
+                },
+            ],
         },
         {
             label: 'settings.tabs.sfx',
             items: [
+                { type: 'header', label: 'settings.sections.volume' },
                 {
                     id: 'globalVolume', type: 'range', label: 'settings.items.globalVolume', min: 0, max: 1, step: 0.05, def: defaultSettings.globalVolume,
                     apply: (val) => { audioManager.setGlobalVolume(val); }
@@ -4392,7 +3977,12 @@ function openSettings() {
                     apply: (val) => { audioManager.setSFXVolume(val); }
                 },
                 {
-                    id: 'playbackSpeed', type: 'range', label: '播放速度', min: 0.25, max: 2, step: 0.05, def: defaultSettings.playbackSpeed || 1,
+                    id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,
+                    apply: (val) => { audioManager.setSFXVolumes(val); }
+                },
+                { type: 'header', label: 'settings.sections.sfxBehavior' },
+                {
+                    id: 'playbackSpeed', type: 'range', label: 'menu.playbackSpeed', min: 0.25, max: 2, step: 0.05, def: defaultSettings.playbackSpeed || 1,
                     apply: (val) => {
                         setPlaybackSpeed(val);
                     }
@@ -4401,18 +3991,21 @@ function openSettings() {
                     id: 'playHoldEnd', type: 'checkbox', label: 'settings.items.playHoldEnd', def: defaultSettings.playHoldEnd,
                     apply: (val) => { settings.playHoldEnd = val; }
                 },
-                {
-                    id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,
-                    apply: (val) => { audioManager.setSFXVolumes(val); }
-                }
-            ]
-        }
+            ],
+        },
     ];
 
+    const conditionalRows = [];
     playSettingsConfig.forEach((category) => {
         const section = addTab(t(category.label));
 
-        (category.items || []).forEach(item => {
+        category.items.forEach(item => {
+            if (item.type === 'header') {
+                const heading = createSettingSectionTitle(t(item.label));
+                heading.dataset.i18n = item.label;
+                section.appendChild(heading);
+                return;
+            }
             const targetRef = item.ref || settings;
             const targetKey = item.key || item.id;
             const currentVal = item.get ? item.get() : (targetRef[targetKey] ?? item.def);
@@ -4421,7 +4014,7 @@ function openSettings() {
 
             // A. Checkbox
             if (item.type === 'checkbox') {
-                el = createCheckbox(currentVal, `settings-${item.id}`);
+                el = createSettingCheckbox(currentVal, `settings-${item.id}`);
                 el.addEventListener('change', (e) => {
                     targetRef[targetKey] = e.target.checked;
                     if (item.apply) item.apply(e.target.checked);
@@ -4430,7 +4023,7 @@ function openSettings() {
             }
             // B. Dropdown
             else if (item.type === 'dropdown') {
-                el = createDropdown(currentVal, item.options);
+                el = createSettingDropdown(currentVal, item.options);
                 el.addEventListener('change', (e) => {
                     const parsedVal = isNaN(e.target.value) ? e.target.value : parseFloat(e.target.value);
                     targetRef[targetKey] = parsedVal;
@@ -4439,7 +4032,7 @@ function openSettings() {
             }
             // C. Range
             else if (item.type === 'range') {
-                el = createRangeInput(currentVal, item.min, item.max, item.step, (val) => {
+                el = createSettingRangeInput(currentVal, item.min, item.max, item.step, (val) => {
                     targetRef[targetKey] = val;
                     if (item.apply) item.apply(val);
                 });
@@ -4456,14 +4049,14 @@ function openSettings() {
                     const subDefault = item.def[subKey];
                     const subCurrent = currentVal[subKey] ?? subDefault;
 
-                    const subSlider = createRangeInput(subCurrent, 0, 1, 0.05, (subVal) => {
+                    const subSlider = createSettingRangeInput(subCurrent, 0, 1, 0.05, (subVal) => {
                         el.value[subKey] = subVal;
                         targetRef[targetKey][subKey] = subVal;
                         if (item.apply) item.apply(targetRef[targetKey]);
                     });
 
                     el._subRefs[subKey] = subSlider;
-                    const subRow = createRow(subKey, subSlider);
+                    const subRow = createSettingRow(t(`settings.sfxVolumeOpts.${subKey}`), subSlider);
                     el.appendChild(subRow);
                 });
             }
@@ -4477,10 +4070,19 @@ function openSettings() {
                 key: targetKey
             };
 
-            section.appendChild(createRow(t(item.label), el));
+            const row = createSettingRow(t(item.label), el);
+            if (item.visibleWhen) conditionalRows.push({ row, visibleWhen: item.visibleWhen });
+            section.appendChild(row);
         });
     });
 
+    const refreshVisibility = () => {
+        for (const { row, visibleWhen } of conditionalRows) {
+            row.style.display = visibleWhen(settings) ? '' : 'none';
+        }
+    };
+    container.addEventListener('change', refreshVisibility);
+    refreshVisibility();
     switchTab(0);
 
     const applyAndSave = () => {
@@ -4519,23 +4121,25 @@ function openSettings() {
         title: t('settings.title'),
         customContent: container,
         width: "85%",
-        maxWidth: "520px",
+        maxWidth: "560px",
         buttons: [
             {
-                text: t('popup.reset'),
+                text: t('popup.restorePlayDefaults'),
                 onClick: () => {
-                    if (!confirm('確定要將設定還原為預設值嗎？')) return;
+                    if (!confirm(t('popup.confirmRestorePlayDefaults'))) return;
                     Object.assign(settings, JSON.parse(JSON.stringify(defaultSettings)));
                     applyAudioSettings(settings);
                     setPlaybackSpeed(settings.playbackSpeed || 1);
                     toggleSlideDebug(false);
                     renderer.settings = settings;
                     updateOutlineUI();
+                    updatePlayCapsules();
+                    updateTimeControlUI();
                     updateAutoPlayUI();
                     tryUpdateBackgroundBrightness();
                     draw();
                     idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-                    simpleToast({ content: '已還原預設設定', type: 'info', timeout: 1500 });
+                    simpleToast({ content: t('toast.playDefaultsRestored'), type: 'info', timeout: 1500 });
                     if (popupCtx) {
                         popupCtx.close();
                         openSettings();

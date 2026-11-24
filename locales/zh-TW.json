@@ -266,6 +266,9 @@
     "placeholder": "在此輸入譜面資料..."
   },
   "toast": {
+    "playDefaultsRestored": "遊玩設定已還原為預設值。",
+    "slideDebugOpened": "已開啟滑軌判定除錯面板。",
+    "slideDebugClosed": "已關閉滑軌判定除錯面板。",
     "loadingAssetsWait": "素材載入中，請稍候...",
     "needBgm": "請先匯入音樂",
     "cropSuccess": "音訊已自播放頭裁剪",
@@ -355,6 +358,7 @@
       "keybindings": "快速鍵"
     },
     "sections": {
+      "playAndTouch": "遊玩模式與觸控",
       "speedAndNotes": "流速與音符",
       "language": "語言",
       "appearanceAndNotes": "外觀與音符",
@@ -408,7 +412,15 @@
       "showMiniPreview": "顯示預覽時間軸",
       "timeDisplayCapsule": "顯示懸浮時間膠囊",
       "enableQuickPanel": "啟用快速面板",
-      "simplayUseButton": "Simplay 使用外框",
+      "simplayPerfect": "模擬輸入採用完美判定",
+      "simplayUseButton": "模擬輸入使用外圈按鍵",
+      "randomOffset": "模擬輸入的最大時間偏移（秒）",
+      "fatFinger": "擴大觸控判定範圍",
+      "fatFingerRadius": "觸控判定半徑",
+      "slideIllegalRed": "以紅色標示異常滑軌",
+      "minimumBrightness": "最低亮度",
+      "sensorHighlight": "標示觸發中的感應器",
+      "slideDebug": "顯示滑軌判定除錯面板（Ctrl+D）",
       "lang": "語言 / Language",
       "langAuto": "跟隨系統",
       "drawHitEffect": "渲染擊打特效",
@@ -465,9 +477,9 @@
       "scoreMinus": "分數(101%-)"
     },
     "autoPlayOpts": {
-      "computer": "Autoplay (電腦)",
-      "simulate": "Autoplay (模擬)",
-      "off": "手動遊玩"
+      "computer": "自動",
+      "simulate": "模擬",
+      "off": "手動"
     },
     "invertWheelOpts": {
       "none": "預設",
@@ -512,6 +524,8 @@
       "comma": "拍子分隔逗號"
     },
     "sfxVolumeOpts": {
+      "judge_great": "GREAT 判定音",
+      "judge_good": "GOOD 判定音",
       "clock": "倒數節拍音",
       "answer": "正解音",
       "judge": "一般判定音",
@@ -527,6 +541,8 @@
     }
   },
   "popup": {
+    "restorePlayDefaults": "還原預設值",
+    "confirmRestorePlayDefaults": "要將遊玩設定還原為預設值嗎？",
     "save": "儲存",
     "apply": "套用",
     "cancel": "取消",
@@ -762,6 +778,7 @@
       "customLabel": "自訂參數"
     },
     "projectManager": {
+      "noProjectFiles": "選取的檔案中沒有譜面或影音素材。",
       "title": "專案總管",
       "untitled": "未命名專案",
       "searchPlaceholder": "搜尋專案名稱...",

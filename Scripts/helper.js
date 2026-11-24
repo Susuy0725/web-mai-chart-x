@@ -2186,7 +2186,7 @@ export async function ensureMediabunny() {
 
 export async function ensureJSZip() {
     if (window.JSZip) return window.JSZip;
-    await loadScript('Scripts/jszip.min.js');
+    await loadScript(new URL('./jszip.min.js', import.meta.url).href);
     return window.JSZip;
 }
 
@@ -2338,4 +2338,16 @@ export function syncDifficultySelectIndicators(selectEl, maidata, activeDiff = n
             delete opt.dataset.hasData;
         }
     }
+}
+
+/**
+ * 將秒數格式化為分:秒.百分秒，供時間顯示膠囊使用。
+ * @param {number} sec
+ * @returns {string}
+ */
+export function formatCapsuleTime(sec) {
+    const s = Math.max(0, Number.isFinite(sec) ? sec : 0);
+    const m = Math.floor(s / 60);
+    const rem = (s % 60).toFixed(2).padStart(5, '0');
+    return `${String(m).padStart(2, '0')}:${rem}`;
 }

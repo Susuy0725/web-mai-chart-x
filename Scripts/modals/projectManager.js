@@ -200,7 +200,8 @@ async function startProjectUpload(proj, card, getFileHandlerCtx) {
  * @param {Function} [options.getFileHandlerCtx]
  */
 export function openProjectManager({ getCurrentProjectId, loadProject, getFileHandlerCtx, images }) {
-    const defaultCoverUrl = images?.['no_image']?.src || 'Skin/Shared/no_image.png';
+    const fallbackCoverUrl = new URL('../../Skin/Shared/no_image.png', import.meta.url).href;
+    const defaultCoverUrl = images?.['no_image']?.src || fallbackCoverUrl;
     let projectManagerPopup;
 
     const formatLastEdit = (timestamp) => {
@@ -344,7 +345,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             `;
             imgEl.onerror = () => {
                 imgEl.onerror = null;
-                imgEl.src = 'Skin/Shared/no_image.png';
+                imgEl.src = fallbackCoverUrl;
             };
             imgEl.src = defaultCoverUrl;
 

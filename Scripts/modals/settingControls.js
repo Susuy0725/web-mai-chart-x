@@ -552,6 +552,9 @@ export function createSettingColorInput(value, onInputCallback) {
 
     input.addEventListener('input', () => {
         updateColor(input.value);
+    });
+    input.addEventListener('change', () => {
+        updateColor(input.value);
         if (onInputCallback) onInputCallback(input.value);
     });
 

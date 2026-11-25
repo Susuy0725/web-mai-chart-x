@@ -11,6 +11,7 @@
 
 ### Changed
 - 更改畫面樣式
+- 所有設定統一更改為即時生效，廢棄儲存按鍵
 
 ### Fixed
 - 修正 aria-label 與 title 沒有 i18n 的問題

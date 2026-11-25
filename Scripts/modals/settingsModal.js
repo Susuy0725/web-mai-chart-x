@@ -1,9 +1,10 @@
-import { popupWindow, clamp, simpleToast, defaultSyntaxColors, applySyntaxColors, syntaxColorPresets, getHighlight } from '../helper.js';
+import { popupWindow, clamp, simpleToast, defaultSyntaxColors, applySyntaxColors, resolveSyntaxColor, syntaxColorPresets, getHighlight } from '../helper.js';
 import { settingsConfig, isEasterEggUnlocked } from '../core/settingsConfig.js';
 import { t, setLang } from '../i18n.js';
 import { idbSet } from '../indexDB.js';
 import { appContext } from '../core/appContext.js';
 import { eventBus, EVENTS } from '../core/eventBus.js';
+import { applyThemeSettings, onThemeChange, DEFAULT_THEME_MODE, DEFAULT_ACCENT_COLOR } from '../core/themeManager.js';
 import {
     KEYBINDING_CATEGORIES,
     KEYBINDING_DEFINITIONS,
@@ -18,12 +19,12 @@ import {
 
 import {
     createSettingSectionTitle, createSettingRow, createSettingRangeInput,
-    createSettingNumberInput, createSettingCheckbox, createSettingDropdown,
+    createSettingNumberInput, createSettingCheckbox, createSettingDropdown, createSettingColorInput,
 } from './settingControls.js';
 
 export {
     createSettingSectionTitle, createSettingRow, createSettingRangeInput,
-    createSettingNumberInput, createSettingCheckbox, createSettingDropdown,
+    createSettingNumberInput, createSettingCheckbox, createSettingDropdown, createSettingColorInput,
 };
 
 /**
@@ -122,8 +123,11 @@ export function openSettingsModal(options = {}) {
 
             values[id] = finalVal;
 
-            // 深度指派物件結構，避免直接蓋掉引用
+            // 深度指派物件結構，避免直接蓋掉引用，並防禦空值
             if (config.type === 'object') {
+                if (!config.ref[config.key] || typeof config.ref[config.key] !== 'object') {
+                    config.ref[config.key] = {};
+                }
                 Object.assign(config.ref[config.key], finalVal);
             } else {
                 config.ref[config.key] = finalVal;
@@ -154,121 +158,9 @@ export function openSettingsModal(options = {}) {
 
     const createRangeInput = createSettingRangeInput;
 
-    const normalizeHexColor = (raw) => {
-        if (typeof raw !== 'string') return null;
-        const cleaned = raw.trim().replace(/^#/, '');
-        if (/^[0-9a-fA-F]{3}$/.test(cleaned)) {
-            return `#${cleaned.split('').map((ch) => ch + ch).join('').toLowerCase()}`;
-        }
-        if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
-            return `#${cleaned.toLowerCase()}`;
-        }
-        return null;
-    };
+    const createColorInput = createSettingColorInput;
 
-    const createColorInput = (value, onInputCallback) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'popup-setting-color-wrap';
-
-        const hexText = document.createElement('span');
-        hexText.className = 'popup-setting-color-hex';
-        hexText.textContent = (value || '').toUpperCase();
-        hexText.tabIndex = 0;
-        hexText.setAttribute('role', 'button');
-
-        const input = document.createElement('input');
-        input.type = 'color';
-        input.className = 'popup-setting-color-input';
-        input.value = value;
-
-        const updateColor = (newVal) => {
-            input.value = newVal;
-            hexText.textContent = (newVal || '').toUpperCase();
-        };
-
-        input.addEventListener('input', () => {
-            updateColor(input.value);
-            if (onInputCallback) onInputCallback(input.value);
-        });
-
-        let isEditingHex = false;
-        const enterHexEditMode = () => {
-            if (isEditingHex) return;
-            isEditingHex = true;
-
-            const editInput = document.createElement('input');
-            editInput.type = 'text';
-            editInput.className = 'popup-setting-color-hex-edit';
-            editInput.maxLength = 7;
-            editInput.spellcheck = false;
-            editInput.value = (input.value || '').toUpperCase();
-
-            let finished = false;
-            const finishEdit = (commit) => {
-                if (finished) return;
-                finished = true;
-                isEditingHex = false;
-
-                if (commit) {
-                    const normalized = normalizeHexColor(editInput.value);
-                    if (normalized) {
-                        updateColor(normalized);
-                        if (onInputCallback) onInputCallback(normalized);
-                    }
-                }
-
-                if (editInput.parentNode) {
-                    editInput.replaceWith(hexText);
-                }
-            };
-
-            editInput.addEventListener('click', (e) => e.stopPropagation());
-            editInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    finishEdit(true);
-                } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    finishEdit(false);
-                }
-            });
-            editInput.addEventListener('blur', () => finishEdit(true));
-
-            hexText.replaceWith(editInput);
-            editInput.focus();
-            editInput.select();
-        };
-
-        hexText.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            enterHexEditMode();
-        });
-        hexText.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                e.stopPropagation();
-                enterHexEditMode();
-            }
-        });
-
-        wrap.setValue = (newVal) => {
-            updateColor(newVal);
-        };
-        Object.defineProperty(wrap, 'value', {
-            get: () => input.value,
-            set: (newVal) => updateColor(newVal)
-        });
-        wrap._updateDisplay = () => {
-            updateColor(input.value);
-        };
-
-        wrap.appendChild(hexText);
-        wrap.appendChild(input);
-        return wrap;
-    };
+    let stopPreviewThemeSync = () => { };
 
     const createNumberInput = createSettingNumberInput;
 
@@ -901,13 +793,17 @@ export function openSettingsModal(options = {}) {
                 const syncPreviewColors = (colors) => {
                     const merged = { ...defaultSyntaxColors, ...(colors || {}) };
                     Object.entries(merged).forEach(([k, color]) => {
+                        const resolved = resolveSyntaxColor(k, color);
                         const cssVar = `--hl-${k.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-                        codeBlock.style.setProperty(cssVar, color);
+                        codeBlock.style.setProperty(cssVar, resolved);
                     });
                 };
 
                 el.appendChild(codeBlock);
                 syncPreviewColors(el.value);
+                stopPreviewThemeSync = onThemeChange(() => {
+                    syncPreviewColors(el.value);
+                });
                 el.appendChild(toolbarRow);
 
                 Object.keys(item.def).forEach((subKey) => {
@@ -995,6 +891,8 @@ export function openSettingsModal(options = {}) {
     };
 
     const oldSyntaxColors = settings.syntaxColors ? { ...settings.syntaxColors } : null;
+    const oldThemeMode = settings.themeMode ?? DEFAULT_THEME_MODE;
+    const oldAccentColor = settings.accentColor ?? DEFAULT_ACCENT_COLOR;
 
     popupCtx = popupWindow({
         title: t('settings.title'),
@@ -1003,6 +901,7 @@ export function openSettingsModal(options = {}) {
         maxWidth: "560px",
         onClose: () => {
             stopKeybindingRecording();
+            stopPreviewThemeSync();
         },
         buttons: [
             {
@@ -1025,6 +924,9 @@ export function openSettingsModal(options = {}) {
                 onClick: () => {
                     stopKeybindingRecording();
                     applyAudioSettings(oldAudioSettings);
+                    applyThemeSettings({ themeMode: oldThemeMode, accentColor: oldAccentColor });
+                    appContext.setSetting('themeMode', oldThemeMode);
+                    appContext.setSetting('accentColor', oldAccentColor);
                     if (oldSyntaxColors) {
                         applySyntaxColors(oldSyntaxColors);
                         if (settings) settings.syntaxColors = { ...oldSyntaxColors };
@@ -1044,6 +946,9 @@ export function openSettingsModal(options = {}) {
                             ref.ref[ref.key] = ref.def;
                         } else if (ref.type === 'object' || ref.type === 'color-object') {
                             ref.el.value = { ...ref.def };
+                            if (!ref.ref[ref.key] || typeof ref.ref[ref.key] !== 'object') {
+                                ref.ref[ref.key] = {};
+                            }
                             Object.assign(ref.ref[ref.key], ref.def);
                             if (ref.el._updateDisplay) ref.el._updateDisplay();
                             if (ref.apply) ref.apply(ref.ref[ref.key]);
@@ -1057,6 +962,8 @@ export function openSettingsModal(options = {}) {
                             if (ref.apply) ref.apply(ref.def);
                         }
                     });
+                    appContext.setSetting('themeMode', settings.themeMode ?? DEFAULT_THEME_MODE);
+                    appContext.setSetting('accentColor', settings.accentColor ?? DEFAULT_ACCENT_COLOR);
 
                     syncConditionalRows();
                     if (draw) draw();

@@ -47,7 +47,7 @@
     <main id="app" role="main"
         style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: hidden;">
         <div id="canvasContainer">
-            <canvas id="main" aria-label="譜面播放畫布"></canvas>
+            <canvas id="main" data-i18n-aria-label="a11y.playCanvas" aria-label="譜面播放畫布"></canvas>
             <div class="backgroundContainer">
                 <img src="" alt="背景圖片" onerror="this.style.display='none'" id="backgroundImage">
                 <video src="" alt="背景影片" onerror="this.style.display = 'none'" id="backgroundVideo" muted playsinline
@@ -60,22 +60,25 @@
                 <div id="speedDisplayCapsule" class="speed-display-capsule">1.00x</div>
             </div>
             <div id="playControlContainer">
-                <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01" aria-label="播放進度">
+                <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01" data-i18n-aria-label="a11y.playbackProgress" aria-label="播放進度">
                 <div class="controlsContainer">
-                    <div class="controlButton" data-buttonAction="reset" title="重新開始" role="button" tabindex="0"
-                        aria-label="重新開始">
+                    <div class="controlButton" data-buttonAction="reset"
+                        data-i18n-title="a11y.restart" data-i18n-aria-label="a11y.restart"
+                        title="重新開始" role="button" tabindex="0" aria-label="重新開始">
                         <span class="material-symbols-outlined" translate="no">
                             skip_previous
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="play/pause" data-playing="false" title="播放 / 暫停"
-                        role="button" tabindex="0" aria-label="播放或暫停">
+                    <div class="controlButton" data-buttonAction="play/pause" data-playing="false"
+                        data-i18n-title="keybindings.actions.playbackToggle" data-i18n-aria-label="keybindings.actions.playbackToggle"
+                        title="播放 / 暫停" role="button" tabindex="0" aria-label="播放或暫停">
                         <span class="material-symbols-outlined" translate="no">
                             play_arrow
                         </span>
                     </div>
                     <div class="controlButton" data-buttonAction="autoPlay" data-autoplay="computer"
-                        title="自動" role="button" tabindex="0" data-i18n-aria-label="settings.items.autoPlay" aria-label="遊玩模式">
+                        data-i18n-title="settings.autoPlayOpts.computer" title="自動" role="button" tabindex="0"
+                        data-i18n-aria-label="settings.items.autoPlay" aria-label="遊玩模式">
                         <span class="material-symbols-outlined" translate="no">
                             computer
                         </span>
@@ -91,16 +94,16 @@
                         <div id="speedPopover" class="speed-popover" role="toolbar" aria-hidden="true" inert
                             data-i18n-aria-label="menu.playbackSpeed" aria-label="播放速度">
                             <button type="button" id="speedPopoverMinus" class="splitter-toolbar-btn"
-                                data-i18n-aria-label="settings.keybindings.playbackSpeedDown"
-                                data-i18n-title="settings.keybindings.playbackSpeedDown" aria-label="減速播放 (-0.25x)"
+                                data-i18n-aria-label="keybindings.actions.playbackSpeedDown"
+                                data-i18n-title="keybindings.actions.playbackSpeedDown" aria-label="減速播放 (-0.25x)"
                                 title="減速播放 (-0.25x)">
                                 <span class="material-symbols-outlined splitter-icon" translate="no">remove</span>
                             </button>
                             <input type="text" id="speedPopoverInput" class="speed-popover-input" inputmode="decimal"
                                 value="1.00x" data-i18n-aria-label="menu.playbackSpeed" aria-label="播放速度">
                             <button type="button" id="speedPopoverAdd" class="splitter-toolbar-btn"
-                                data-i18n-aria-label="settings.keybindings.playbackSpeedUp"
-                                data-i18n-title="settings.keybindings.playbackSpeedUp" aria-label="加速播放 (+0.25x)"
+                                data-i18n-aria-label="keybindings.actions.playbackSpeedUp"
+                                data-i18n-title="keybindings.actions.playbackSpeedUp" aria-label="加速播放 (+0.25x)"
                                 title="加速播放 (+0.25x)">
                                 <span class="material-symbols-outlined splitter-icon" translate="no">add</span>
                             </button>
@@ -111,8 +114,9 @@
                             </button>
                         </div>
                     </div>
-                    <div class="controlButton" data-buttonAction="hide" data-hidden="false" title="隱藏面板" role="button"
-                        tabindex="0" aria-label="收合控制面板">
+                    <div class="controlButton" data-buttonAction="hide" data-hidden="false"
+                        data-i18n-title="a11y.collapseControls" data-i18n-aria-label="a11y.collapseControls"
+                        title="隱藏面板" role="button" tabindex="0" aria-label="收合控制面板">
                         <span class="material-symbols-outlined" translate="no">
                             keyboard_arrow_down
                         </span>
@@ -126,14 +130,16 @@
                         <span class="material-symbols-outlined" translate="no" aria-hidden="true">layers</span>
                         <select id="playDifficulty" data-i18n-aria-label="menu.changeDifficulty" aria-label="難度" disabled></select>
                     </label>
-                    <div class="controlButton" data-buttonAction="settings" title="設定" role="button" tabindex="0"
-                        aria-label="遊戲設定">
+                    <div class="controlButton" data-buttonAction="settings"
+                        data-i18n-title="menu.settings" data-i18n-aria-label="menu.settings"
+                        title="設定" role="button" tabindex="0" aria-label="遊戲設定">
                         <span class="material-symbols-outlined" translate="no">
                             settings
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="fullscreen" title="全螢幕" role="button" tabindex="0"
-                        aria-label="全螢幕">
+                    <div class="controlButton" data-buttonAction="fullscreen"
+                        data-i18n-title="menu.fullscreen" data-i18n-aria-label="menu.fullscreen"
+                        title="全螢幕" role="button" tabindex="0" aria-label="全螢幕">
                         <span class="material-symbols-outlined" translate="no">
                             fullscreen
                         </span>
@@ -145,7 +151,8 @@
                     </div> -->
                 </div>
             </div>
-            <div id="showPlayControlsBtn" title="顯示控制列" role="button" tabindex="0" aria-label="顯示控制列">
+            <div id="showPlayControlsBtn" data-i18n-title="a11y.showPlayControls" data-i18n-aria-label="a11y.showPlayControls"
+                title="顯示控制列" role="button" tabindex="0" aria-label="顯示控制列">
                 <span class="splitter-toolbar-btn" aria-hidden="true">
                     <span class="material-symbols-outlined" translate="no">keyboard_arrow_up</span>
                 </span>

@@ -8,6 +8,65 @@ export const LAYOUT_DIRECTIONS = {
     VERTICAL: 'vertical',
 };
 
+export const CANVAS_ASPECT_RATIOS = Object.freeze({
+    auto: null,
+    '16:9': 16 / 9,
+    '4:3': 4 / 3,
+    '1:1': 1,
+    '3:4': 3 / 4,
+    '9:16': 9 / 16,
+});
+
+/**
+ * 解析畫面比例設定值為數值長寬比 (w / h)；回傳 null 表示不限制比例（自動填滿）。
+ * @param {string} aspectRatio
+ * @returns {number|null}
+ */
+export function parseCanvasAspectRatio(aspectRatio) {
+    if (!aspectRatio || aspectRatio === 'auto') return null;
+    if (Object.prototype.hasOwnProperty.call(CANVAS_ASPECT_RATIOS, aspectRatio)) {
+        return CANVAS_ASPECT_RATIOS[aspectRatio];
+    }
+    if (typeof aspectRatio === 'string') {
+        const match = aspectRatio.trim().match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/);
+        if (match) {
+            const w = Number(match[1]);
+            const h = Number(match[2]);
+            if (w > 0 && h > 0) return w / h;
+        }
+    }
+    return null;
+}
+
+/**
+ * 在保留目標長寬比的前提下，以 contain 模式置中縮放進指定可用區域。
+ * @param {{ left?: number, top?: number, width: number, height: number }} slotRect
+ * @param {string} aspectRatio
+ * @returns {{ left: number, top: number, width: number, height: number }}
+ */
+export function fitRectToAspectRatio(slotRect, aspectRatio) {
+    const { left = 0, top = 0, width = 0, height = 0 } = slotRect || {};
+    const ratio = parseCanvasAspectRatio(aspectRatio);
+    if (!ratio || width <= 0 || height <= 0) {
+        return { left, top, width, height };
+    }
+    let fittedW = width;
+    let fittedH = height;
+    if (width / height > ratio) {
+        fittedH = height;
+        fittedW = height * ratio;
+    } else {
+        fittedW = width;
+        fittedH = width / ratio;
+    }
+    return {
+        left: left + (width - fittedW) / 2,
+        top: top + (height - fittedH) / 2,
+        width: fittedW,
+        height: fittedH,
+    };
+}
+
 /**
  * 正規化分割方向，目前預設為左右分割
  * @param {string} direction
@@ -155,37 +214,32 @@ export function computeCanvasAnimationRect({
     visible,
     splitRatio = 0.5,
     workspaceRect,
+    aspectRatio = 'auto',
 }) {
     const { left = 0, top = 0, width = 0, height = 0 } = workspaceRect || {};
+    let slotRect;
     if (!visible) {
-        return {
-            left: `${left}px`,
-            top: `${top}px`,
-            width: `${width}px`,
-            height: `${height}px`,
-        };
+        slotRect = { left, top, width, height };
+    } else {
+        const ratio = Number.isFinite(splitRatio) ? Math.max(0, Math.min(1, splitRatio)) : 0.5;
+        const isVertical = normalizeLayoutDirection(direction) === LAYOUT_DIRECTIONS.VERTICAL;
+
+        if (isVertical) {
+            const targetH = height * ratio;
+            const targetTop = swapped ? top + height * (1 - ratio) : top;
+            slotRect = { left, top: targetTop, width, height: targetH };
+        } else {
+            const targetW = width * ratio;
+            const targetLeft = swapped ? left + width * (1 - ratio) : left;
+            slotRect = { left: targetLeft, top, width: targetW, height };
+        }
     }
 
-    const ratio = Number.isFinite(splitRatio) ? Math.max(0, Math.min(1, splitRatio)) : 0.5;
-    const isVertical = normalizeLayoutDirection(direction) === LAYOUT_DIRECTIONS.VERTICAL;
-
-    if (isVertical) {
-        const targetH = height * ratio;
-        const targetTop = swapped ? top + height * (1 - ratio) : top;
-        return {
-            left: `${left}px`,
-            top: `${targetTop}px`,
-            width: `${width}px`,
-            height: `${targetH}px`,
-        };
-    }
-
-    const targetW = width * ratio;
-    const targetLeft = swapped ? left + width * (1 - ratio) : left;
+    const fitted = fitRectToAspectRatio(slotRect, aspectRatio);
     return {
-        left: `${targetLeft}px`,
-        top: `${top}px`,
-        width: `${targetW}px`,
-        height: `${height}px`,
+        left: `${fitted.left}px`,
+        top: `${fitted.top}px`,
+        width: `${fitted.width}px`,
+        height: `${fitted.height}px`,
     };
 }

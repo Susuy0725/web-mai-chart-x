@@ -212,14 +212,14 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
         return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
-    const makeIconButton = (iconName, tooltip, onClick, hoverColor = '#4a90e2') => {
+    const makeIconButton = (iconName, tooltip, onClick, hoverColor = 'var(--popup-accent, #4a90e2)') => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.title = tooltip;
         btn.style.cssText = `
             background: transparent;
             border: none;
-            color: #b0b0b0;
+            color: var(--popup-text-sub, #b0b0b0);
             padding: 4px;
             border-radius: 4px;
             cursor: pointer;
@@ -237,10 +237,10 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
 
         btn.onmouseenter = () => {
             btn.style.color = hoverColor;
-            btn.style.background = 'rgba(255,255,255,0.08)';
+            btn.style.background = 'var(--popup-surface-hover, rgba(255,255,255,0.08))';
         };
         btn.onmouseleave = () => {
-            btn.style.color = '#b0b0b0';
+            btn.style.color = 'var(--popup-text-sub, #b0b0b0)';
             btn.style.background = 'transparent';
         };
         btn.onclick = (e) => {
@@ -286,13 +286,13 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             const card = document.createElement('div');
             card.style.cssText = `
                 position: relative;
-                background: #1e1e1e;
-                border: 1px solid ${isCurrent ? '#4a90e2' : '#333333'};
+                background: var(--popup-surface, #1e1e1e);
+                border: 1px solid ${isCurrent ? 'var(--popup-accent, #4a90e2)' : 'var(--popup-border-light, #333333)'};
                 border-radius: 8px;
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
                 transition: border-color 0.15s ease, transform 0.15s ease;
                 box-sizing: border-box;
                 height: fit-content;
@@ -372,13 +372,13 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
                     position: absolute;
                     top: 6px;
                     right: 6px;
-                    background: #1e88e5;
-                    color: #fff;
+                    background: var(--popup-accent, #1e88e5);
+                    color: var(--accent-contrast-text, #fff);
                     font-size: 10px;
                     font-weight: 700;
                     padding: 2px 6px;
                     border-radius: 4px;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.35);
                 `;
                 badge.textContent = '使用中';
                 coverContainer.appendChild(badge);
@@ -436,7 +436,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             titleSpan.style.cssText = `
                 font-size: 13px;
                 font-weight: 700;
-                color: ${isCurrent ? '#6ba4f8' : '#ffffff'};
+                color: ${isCurrent ? 'var(--popup-accent, #6ba4f8)' : 'var(--popup-text-main, #ffffff)'};
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
@@ -448,7 +448,7 @@ export function openProjectManager({ getCurrentProjectId, loadProject, getFileHa
             lastEditSpan.textContent = `編輯：${formatLastEdit(proj.updatedAt || proj.createdAt)}`;
             lastEditSpan.style.cssText = `
                 font-size: 10px;
-                color: #888888;
+                color: var(--popup-text-muted, #888888);
                 margin-top: 2px;
                 font-family: inherit;
                 overflow: hidden;

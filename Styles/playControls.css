@@ -49,8 +49,8 @@
     border-radius: 9999px;
     background: var(--main-color);
     border: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
-    color: rgba(255, 255, 255, 0.9);
+    box-shadow: var(--ui-shadow-floating, 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25));
+    color: var(--ui-text, rgba(255, 255, 255, 0.9));
     font-family: 'mono', 'Consolas', monospace;
     font-size: 12px;
     line-height: 1;
@@ -67,7 +67,7 @@
 
 #playControls .speed-display-capsule.is-modified {
     background: var(--accent-color);
-    color: #ffffff;
+    color: var(--accent-contrast-text, #ffffff);
 }
 
 #playControls #timeControl {
@@ -126,20 +126,20 @@
     align-items: center;
     cursor: pointer;
     box-sizing: border-box;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5), 0 -1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating, 0 -4px 16px rgba(0, 0, 0, 0.5), 0 -1px 4px rgba(0, 0, 0, 0.25));
     border-radius: 7px 7px 0 0;
     transition: background-color 0.15s ease, opacity 200ms ease, transform 200ms ease;
     z-index: 100;
 }
 
 #playControls #showPlayControlsBtn:hover .splitter-toolbar-btn {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.95);
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
 }
 
 #playControls #showPlayControlsBtn:active .splitter-toolbar-btn {
-    background: #484852;
-    color: #ffffff;
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
     transform: scale(0.94);
 }
 
@@ -173,7 +173,7 @@
     height: 40px;
     /*border: 1px solid var(--top-utility-button-ouline);*/
     padding: 5px;
-    color: white;
+    color: var(--ui-text, white);
     font-size: 14px;
     cursor: pointer;
     align-items: center;
@@ -187,6 +187,11 @@
     left: 8px;
 }
 
+.controlsContainer .controlButton[data-buttonAction="focus"] {
+    position: absolute;
+    right: 8px;
+}
+
 .controlsContainer .controlSpeedAnchor {
     position: relative;
     display: flex;
@@ -195,7 +200,7 @@
 }
 
 .controlsContainer .controlButton[data-buttonAction="speed"].is-active::after {
-    background: #ffffff22;
+    background: var(--ui-hover-strong-bg, #ffffff22);
 }
 
 .speed-popover {
@@ -210,9 +215,9 @@
     height: 42px;
     box-sizing: border-box;
     background: var(--main-color);
-    border: none;
+    border: 1px solid var(--ui-border, transparent);
     border-radius: 7px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating, 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25));
     opacity: 0;
     pointer-events: none;
     z-index: 120;
@@ -233,10 +238,10 @@
     height: 32px;
     padding: 0 6px;
     box-sizing: border-box;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--ui-border-strong, rgba(255, 255, 255, 0.14));
     border-radius: 5px;
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.95);
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.06));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
     font-family: 'mono', 'Consolas', monospace;
     font-size: 12.5px;
     text-align: center;
@@ -246,12 +251,12 @@
 }
 
 .speed-popover-input:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.24);
+    background: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.1));
+    border-color: var(--ui-border-strong, rgba(255, 255, 255, 0.24));
 }
 
 .speed-popover-input:focus {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.12));
     border-color: var(--accent-color);
 }
 
@@ -267,7 +272,7 @@
 }
 
 .controlsContainer .controlButton:hover::after {
-    background: #ffffff15;
+    background: var(--ui-hover-bg, #ffffff15);
 }
 
 .controlsContainer .controlButton:active::after {
@@ -280,7 +285,7 @@
     width: 40px;
     height: 40px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--ui-ripple-bg, rgba(255, 255, 255, 0.4));
     z-index: -1;
     /* 預設為擴散與漸隱終點，放開滑鼠時觸發流暢 transition 動畫 */
     transform: scale(1);
@@ -307,20 +312,20 @@
     border: none;
     border-radius: 5px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.6));
     cursor: pointer;
     flex-shrink: 0;
     transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
 }
 
 .splitter-toolbar-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.95);
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
 }
 
 .splitter-toolbar-btn:active {
-    background: #484852;
-    color: #ffffff;
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
     transform: scale(0.94);
 }
 

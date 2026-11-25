@@ -1,17 +1,20 @@
 import { idbGet, idbSet, idbGetProject, idbSetProject, projectList, migrateFromLegacy } from '../Scripts/indexDB.js';
 import { saveProjectFilesToIDB } from '../Scripts/features/fileHandler.js';
-import { createSettingSectionTitle, createSettingRow, createSettingRangeInput, createSettingCheckbox, createSettingDropdown } from '../Scripts/modals/settingControls.js';
+import { createSettingSectionTitle, createSettingRow, createSettingRangeInput, createSettingCheckbox, createSettingDropdown, createSettingColorInput } from '../Scripts/modals/settingControls.js';
+import { applyThemeSettings, applyThemeFromBackup, DEFAULT_THEME_MODE, DEFAULT_ACCENT_COLOR } from '../Scripts/core/themeManager.js';
 import { openProjectManager } from '../Scripts/modals/projectManager.js';
 import { SimaiRenderer } from './renderer.js';
 import { simaiDecode } from '../Scripts/decode.js';
 import { cullSlideBucket } from '../Scripts/core/simaiLogicControler.js';
 import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, formatCapsuleTime, clamp, imgNotExists } from '../Scripts/helper.js';
+import { parseCanvasAspectRatio, fitRectToAspectRatio } from '../Scripts/core/panelLayout.js';
 import { t, getAvailableLanguages, getLangSetting, onLanguageChange, setLang } from '../Scripts/i18n.js';
 import { SimulatedPlayController } from './simplay.js';
 import { getSlideJudgeQueue, getSlideStepState, getSlideBranchPath } from './slidetables.js';
 import { toggleSlideDebug, isSlideDebugEnabled, renderSlideDebugOverlay, updateSlideDebugPanel, setSlideDebugToggleCallback } from './slideDebug.js';
 
 disableNavigationGestures();
+try { applyThemeFromBackup(); } catch (_) { }
 audioManager.setPlayMode(true);
 const simulatedPlayController = new SimulatedPlayController();
 
@@ -50,6 +53,9 @@ const defaultSettings = {
     renderSurroundingAuxiliaryText: true,
     splitRatio: 0.5, // 左右面板分割比例
     slideIllegalRed: false,
+    canvasAspectRatio: 'auto',
+    themeMode: DEFAULT_THEME_MODE,
+    accentColor: DEFAULT_ACCENT_COLOR,
     showUI: false,
     showUIPosition: 'top-left',
     timeDisplayCapsule: true,
@@ -525,6 +531,10 @@ if (savedSettings) {
 } else {
     settings = { ...defaultSettings };
 }
+applyThemeSettings({
+    themeMode: settings.themeMode ?? DEFAULT_THEME_MODE,
+    accentColor: settings.accentColor ?? DEFAULT_ACCENT_COLOR,
+});
 applyAudioSettings(settings);
 if (settings.slideDebug) {
     toggleSlideDebug(true);
@@ -624,7 +634,35 @@ const JUDGE_WINDOWS = {
 
 const canvasContainer = document.getElementById("canvasContainer");
 
+function applyPlayCanvasAspectRatio() {
+    if (!canvasContainer) return;
+    const ratioVal = settings?.canvasAspectRatio || 'auto';
+    if (!parseCanvasAspectRatio(ratioVal)) {
+        canvasContainer.classList.remove('aspect-ratio-constrained');
+        canvasContainer.style.left = '';
+        canvasContainer.style.top = '';
+        canvasContainer.style.width = '';
+        canvasContainer.style.height = '';
+        return;
+    }
+    const appRect = canvasContainer.parentElement?.getBoundingClientRect()
+        || { width: window.innerWidth, height: window.innerHeight };
+    const playH = hidden ? 0 : (document.getElementById('playControls')?.getBoundingClientRect().height || 0);
+    const rect = fitRectToAspectRatio({
+        left: 0,
+        top: 0,
+        width: Math.max(1, appRect.width),
+        height: Math.max(1, appRect.height - playH),
+    }, ratioVal);
+    canvasContainer.classList.add('aspect-ratio-constrained');
+    canvasContainer.style.left = `${rect.left}px`;
+    canvasContainer.style.top = `${rect.top}px`;
+    canvasContainer.style.width = `${rect.width}px`;
+    canvasContainer.style.height = `${rect.height}px`;
+}
+
 function resize() {
+    applyPlayCanvasAspectRatio();
     const dpr = window.devicePixelRatio || 1;
     const w = (canvasContainer ? canvasContainer.clientWidth : window.innerWidth) * dpr;
     const h = (canvasContainer ? canvasContainer.clientHeight : window.innerHeight) * dpr;
@@ -3815,6 +3853,28 @@ function openSettings() {
         {
             label: 'settings.tabs.display',
             items: [
+                { type: 'header', label: 'settings.sections.theme' },
+                {
+                    id: 'themeMode', type: 'dropdown', label: 'settings.items.themeMode',
+                    options: [
+                        { value: 'dark', label: 'settings.themeModeOpts.dark' },
+                        { value: 'light', label: 'settings.themeModeOpts.light' },
+                        { value: 'auto', label: 'settings.themeModeOpts.auto' },
+                    ],
+                    def: defaultSettings.themeMode || DEFAULT_THEME_MODE,
+                    apply: (val) => {
+                        settings.themeMode = val;
+                        applyThemeSettings({ themeMode: val, accentColor: settings.accentColor });
+                    }
+                },
+                {
+                    id: 'accentColor', type: 'color', label: 'settings.items.accentColor',
+                    def: defaultSettings.accentColor || DEFAULT_ACCENT_COLOR,
+                    apply: (val) => {
+                        settings.accentColor = val;
+                        applyThemeSettings({ themeMode: settings.themeMode, accentColor: val });
+                    }
+                },
                 { type: 'header', label: 'settings.sections.appearanceAndNotes' },
                 {
                     id: 'rotateStars', type: 'checkbox', label: 'settings.items.rotateStars', def: defaultSettings.rotateStars,
@@ -3834,6 +3894,19 @@ function openSettings() {
                 {
                     id: 'slideIllegalRed', type: 'checkbox', label: 'settings.items.slideIllegalRed', def: defaultSettings.slideIllegalRed,
                     apply: (val) => { renderer.settings.slideIllegalRed = val; draw(); }
+                },
+                {
+                    id: 'canvasAspectRatio', type: 'dropdown', label: 'settings.items.canvasAspectRatio',
+                    options: [
+                        { value: 'auto', label: 'settings.aspectRatioOpts.auto' },
+                        { value: '16:9', label: 'settings.aspectRatioOpts.r16_9' },
+                        { value: '4:3', label: 'settings.aspectRatioOpts.r4_3' },
+                        { value: '1:1', label: 'settings.aspectRatioOpts.r1_1' },
+                        { value: '3:4', label: 'settings.aspectRatioOpts.r3_4' },
+                        { value: '9:16', label: 'settings.aspectRatioOpts.r9_16' },
+                    ],
+                    def: defaultSettings.canvasAspectRatio || 'auto',
+                    apply: (val) => { settings.canvasAspectRatio = val; resize(); }
                 },
                 { type: 'header', label: 'settings.sections.effectsAndJudge' },
                 {
@@ -4037,6 +4110,13 @@ function openSettings() {
                     if (item.apply) item.apply(val);
                 });
             }
+            // C2. Color
+            else if (item.type === 'color') {
+                el = createSettingColorInput(currentVal, (newColor) => {
+                    targetRef[targetKey] = newColor;
+                    if (item.apply) item.apply(newColor);
+                });
+            }
             // D. Object (sfxVolumes)
             else if (item.type === 'object') {
                 el = document.createElement('div');
@@ -4128,7 +4208,11 @@ function openSettings() {
                 onClick: () => {
                     if (!confirm(t('popup.confirmRestorePlayDefaults'))) return;
                     Object.assign(settings, JSON.parse(JSON.stringify(defaultSettings)));
-                    applyAudioSettings(settings);
+                    applyThemeSettings({
+    themeMode: settings.themeMode ?? DEFAULT_THEME_MODE,
+    accentColor: settings.accentColor ?? DEFAULT_ACCENT_COLOR,
+});
+applyAudioSettings(settings);
                     setPlaybackSpeed(settings.playbackSpeed || 1);
                     toggleSlideDebug(false);
                     renderer.settings = settings;
@@ -4137,7 +4221,7 @@ function openSettings() {
                     updateTimeControlUI();
                     updateAutoPlayUI();
                     tryUpdateBackgroundBrightness();
-                    draw();
+                    resize();
                     idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
                     simpleToast({ content: t('toast.playDefaultsRestored'), type: 'info', timeout: 1500 });
                     if (popupCtx) {

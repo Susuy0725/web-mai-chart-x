@@ -39,7 +39,7 @@ function ensureSmoothBpmModalStyles() {
         }
 
         .sbm-card {
-            background: rgba(255, 255, 255, 0.035);
+            background: var(--popup-surface, rgba(255, 255, 255, 0.035));
             border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 10px;
             padding: 10px 12px;
@@ -58,16 +58,16 @@ function ensureSmoothBpmModalStyles() {
         .sbm-section-title {
             font-weight: 600;
             font-size: 12.5px;
-            color: #f1f5f9;
+            color: var(--popup-title-color, #f1f5f9);
             display: flex;
             align-items: center;
             gap: 6px;
         }
 
         .sbm-badge {
-            background: rgba(0, 229, 255, 0.12);
-            color: #00e5ff;
-            border: 1px solid rgba(0, 229, 255, 0.3);
+            background: var(--popup-accent-glow, rgba(0, 229, 255, 0.12));
+            color: var(--popup-accent, #00e5ff);
+            border: 1px solid color-mix(in srgb, var(--accent-color, #00e5ff) 32%, transparent);
             border-radius: 6px;
             padding: 2px 8px;
             font-size: 11px;
@@ -167,9 +167,9 @@ function ensureSmoothBpmModalStyles() {
         }
 
         .sbm-input {
-            background: rgba(0, 0, 0, 0.35);
+            background: var(--popup-background, rgba(0, 0, 0, 0.35));
             border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.12));
-            color: #fff;
+            color: var(--popup-text-main, #fff);
             border-radius: 6px;
             padding: 5px 8px;
             font-size: 12.5px;
@@ -180,8 +180,8 @@ function ensureSmoothBpmModalStyles() {
         }
 
         .sbm-input:focus {
-            border-color: #00e5ff;
-            box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.2);
+            border-color: var(--popup-accent, #00e5ff);
+            box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(0, 229, 255, 0.2));
         }
 
         .sbm-pills-row {
@@ -191,9 +191,9 @@ function ensureSmoothBpmModalStyles() {
         }
 
         .sbm-pill-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #cbd5e1;
+            background: var(--popup-surface, rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.1));
+            color: var(--popup-text-sub, #cbd5e1);
             border-radius: 5px;
             padding: 2px 7px;
             font-size: 11px;
@@ -203,15 +203,15 @@ function ensureSmoothBpmModalStyles() {
         }
 
         .sbm-pill-btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-            color: #fff;
+            background: var(--popup-surface-hover, rgba(255, 255, 255, 0.12));
+            color: var(--popup-title-color, #fff);
         }
 
         .sbm-pill-btn.active {
-            background: #00bcd4;
-            color: #000;
+            background: var(--popup-accent, #00bcd4);
+            color: var(--accent-contrast-text, #000);
             font-weight: 600;
-            border-color: #00e5ff;
+            border-color: var(--popup-accent, #00e5ff);
         }
 
         .sbm-checkbox-label {
@@ -220,11 +220,11 @@ function ensureSmoothBpmModalStyles() {
             gap: 6px;
             cursor: pointer;
             font-size: 11.5px;
-            color: #cbd5e1;
+            color: var(--popup-text-main, #cbd5e1);
         }
 
         .sbm-checkbox-label input {
-            accent-color: #00bcd4;
+            accent-color: var(--popup-accent, #00bcd4);
             cursor: pointer;
         }
 
@@ -232,8 +232,8 @@ function ensureSmoothBpmModalStyles() {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 6px;
-            background: rgba(0, 0, 0, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--popup-background, rgba(0, 0, 0, 0.25));
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.05));
             border-radius: 8px;
             padding: 6px 10px;
             text-align: center;
@@ -248,13 +248,13 @@ function ensureSmoothBpmModalStyles() {
         .sbm-stat-val {
             font-size: 13px;
             font-weight: 700;
-            color: #00e5ff;
+            color: var(--popup-accent, #00e5ff);
             font-family: monospace;
         }
 
         .sbm-stat-sub {
             font-size: 10px;
-            color: #94a3b8;
+            color: var(--popup-text-muted, #94a3b8);
         }
 
         .sbm-code-container {
@@ -264,13 +264,13 @@ function ensureSmoothBpmModalStyles() {
         }
 
         .sbm-code-box {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: var(--popup-content-bg, rgba(0, 0, 0, 0.5));
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 6px;
             padding: 6px 8px;
             font-family: Consolas, "Fira Code", monospace;
             font-size: 11px;
-            color: #7dd3fc;
+            color: var(--popup-accent, #7dd3fc);
             max-height: 58px;
             overflow-y: auto;
             white-space: pre-wrap;
@@ -291,17 +291,17 @@ function ensureSmoothBpmModalStyles() {
             gap: 6px;
             cursor: pointer;
             font-size: 11.5px;
-            color: #e2e8f0;
+            color: var(--popup-text-main, #e2e8f0);
         }
 
         .sbm-radio-label input {
-            accent-color: #00bcd4;
+            accent-color: var(--popup-accent, #00bcd4);
             cursor: pointer;
         }
 
         .sbm-tip {
             font-size: 10.5px;
-            color: #64748b;
+            color: var(--popup-text-muted, #64748b);
             line-height: 1.4;
         }
     `;

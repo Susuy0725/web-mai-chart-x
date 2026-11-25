@@ -40,7 +40,7 @@ function ensureNoteDurationModalStyles() {
         }
 
         .ndm-section-card {
-            background: rgba(255, 255, 255, 0.035);
+            background: var(--popup-surface, rgba(255, 255, 255, 0.035));
             border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 10px;
             padding: 12px;
@@ -55,7 +55,7 @@ function ensureNoteDurationModalStyles() {
             justify-content: space-between;
             font-size: 13px;
             font-weight: 600;
-            color: #f1f5f9;
+            color: var(--popup-title-color, #f1f5f9);
         }
 
         .ndm-section-title {
@@ -64,13 +64,13 @@ function ensureNoteDurationModalStyles() {
             gap: 6px;
             font-size: 13px;
             font-weight: 600;
-            color: #94a3b8;
+            color: var(--popup-text-sub, #94a3b8);
         }
 
         .ndm-tab-row {
             display: flex;
             gap: 4px;
-            background: rgba(0, 0, 0, 0.35);
+            background: var(--popup-background, rgba(0, 0, 0, 0.35));
             padding: 3px;
             border-radius: 8px;
             border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
@@ -80,7 +80,7 @@ function ensureNoteDurationModalStyles() {
         .ndm-tab-btn {
             border: none;
             background: transparent;
-            color: #94a3b8;
+            color: var(--popup-text-sub, #94a3b8);
             padding: 6px 14px;
             border-radius: 6px;
             font-size: 12px;
@@ -94,13 +94,13 @@ function ensureNoteDurationModalStyles() {
         }
 
         .ndm-tab-btn:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.08);
-            color: #ffffff;
+            background: var(--popup-surface-hover, rgba(255, 255, 255, 0.08));
+            color: var(--popup-title-color, #ffffff);
         }
 
         .ndm-tab-btn.active {
             background: var(--popup-accent, var(--accent-color, #49e)) !important;
-            color: #ffffff !important;
+            color: var(--accent-contrast-text, #ffffff) !important;
             box-shadow: 0 2px 8px var(--popup-accent-glow, rgba(56, 189, 248, 0.25)) !important;
         }
 
@@ -119,15 +119,15 @@ function ensureNoteDurationModalStyles() {
 
         .ndm-label {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--popup-text-sub, #94a3b8);
             white-space: nowrap;
         }
 
         .ndm-input {
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.12));
+            background: var(--popup-background, rgba(0, 0, 0, 0.45));
             border-radius: 6px;
-            color: #ffffff;
+            color: var(--popup-text-main, #ffffff);
             padding: 6px 8px;
             font-size: 13px;
             font-family: monospace;
@@ -138,12 +138,12 @@ function ensureNoteDurationModalStyles() {
         }
 
         .ndm-input:focus {
-            border-color: var(--popup-accent-hover, #38bdf8);
+            border-color: var(--popup-accent, #38bdf8);
             box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(56, 189, 248, 0.25));
         }
 
         .ndm-input::placeholder {
-            color: #64748b;
+            color: var(--popup-text-muted, #64748b);
             font-size: 11px;
         }
 
@@ -173,14 +173,14 @@ function ensureNoteDurationModalStyles() {
         .ndm-checkbox-label {
             cursor: pointer;
             font-size: 13px;
-            color: #cbd5e1;
+            color: var(--popup-text-main, #cbd5e1);
             user-select: none;
             -webkit-user-select: none;
             line-height: 1;
         }
 
         .ndm-preview-card {
-            background: rgba(0, 0, 0, 0.35);
+            background: var(--popup-surface, rgba(0, 0, 0, 0.35));
             border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 10px;
             padding: 10px 14px;
@@ -191,7 +191,7 @@ function ensureNoteDurationModalStyles() {
 
         .ndm-preview-label {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--popup-text-sub, #94a3b8);
             font-weight: 500;
         }
 
@@ -199,11 +199,11 @@ function ensureNoteDurationModalStyles() {
             font-family: monospace;
             font-size: 14px;
             font-weight: 700;
-            color: var(--popup-accent-hover, #38bdf8);
+            color: var(--popup-accent, #38bdf8);
             background: var(--popup-accent-glow, rgba(56, 189, 248, 0.12));
             padding: 3px 8px;
             border-radius: 6px;
-            border: 1px solid rgba(56, 189, 248, 0.25);
+            border: 1px solid color-mix(in srgb, var(--accent-color, #38bdf8) 28%, transparent);
             letter-spacing: 0.5px;
         }
     `;

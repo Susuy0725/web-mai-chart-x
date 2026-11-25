@@ -1,4 +1,5 @@
 import { t } from '../i18n.js';
+import { normalizeHexColor } from '../core/themeManager.js';
 
 /**
  * 建立設定分區標題列
@@ -519,4 +520,116 @@ export function createSettingDropdown(value, rawOpts = [], extraClassName = '') 
         select.appendChild(o);
     });
     return select;
+}
+
+/**
+ * 建立與設定頁一致的顏色選擇器（含可點擊編輯之 Hex 顯示與即時預覽）
+ * @param {string} value
+ * @param {Function} [onInputCallback]
+ * @returns {HTMLDivElement}
+ */
+export function createSettingColorInput(value, onInputCallback) {
+    const initialColor = normalizeHexColor(value, '#000000');
+    const wrap = document.createElement('div');
+    wrap.className = 'popup-setting-color-wrap';
+
+    const hexText = document.createElement('span');
+    hexText.className = 'popup-setting-color-hex';
+    hexText.textContent = initialColor.toUpperCase();
+    hexText.tabIndex = 0;
+    hexText.setAttribute('role', 'button');
+
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.className = 'popup-setting-color-input';
+    input.value = initialColor;
+
+    const updateColor = (newVal) => {
+        const normalized = normalizeHexColor(newVal, input.value || '#000000');
+        input.value = normalized;
+        hexText.textContent = normalized.toUpperCase();
+    };
+
+    input.addEventListener('input', () => {
+        updateColor(input.value);
+        if (onInputCallback) onInputCallback(input.value);
+    });
+
+    let isEditingHex = false;
+    const enterHexEditMode = () => {
+        if (isEditingHex) return;
+        isEditingHex = true;
+
+        const editInput = document.createElement('input');
+        editInput.type = 'text';
+        editInput.className = 'popup-setting-color-hex-edit';
+        editInput.maxLength = 7;
+        editInput.spellcheck = false;
+        editInput.value = (input.value || '').toUpperCase();
+
+        let finished = false;
+        const finishEdit = (commit) => {
+            if (finished) return;
+            finished = true;
+            isEditingHex = false;
+
+            if (commit) {
+                const normalized = normalizeHexColor(editInput.value, null);
+                if (normalized) {
+                    updateColor(normalized);
+                    if (onInputCallback) onInputCallback(normalized);
+                }
+            }
+
+            if (editInput.parentNode) {
+                editInput.replaceWith(hexText);
+            }
+        };
+
+        editInput.addEventListener('click', (e) => e.stopPropagation());
+        editInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                finishEdit(true);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                finishEdit(false);
+            }
+        });
+        editInput.addEventListener('blur', () => finishEdit(true));
+
+        hexText.replaceWith(editInput);
+        editInput.focus();
+        editInput.select();
+    };
+
+    hexText.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        enterHexEditMode();
+    });
+    hexText.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            enterHexEditMode();
+        }
+    });
+
+    wrap.setValue = (newVal) => {
+        updateColor(newVal);
+    };
+    Object.defineProperty(wrap, 'value', {
+        get: () => input.value,
+        set: (newVal) => updateColor(newVal)
+    });
+    wrap._updateDisplay = () => {
+        updateColor(input.value);
+    };
+
+    wrap.appendChild(hexText);
+    wrap.appendChild(input);
+    return wrap;
 }

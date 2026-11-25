@@ -258,6 +258,23 @@ export const defaultSyntaxColors = {
     comma: '#656b6d',
 };
 
+export const defaultLightSyntaxColors = {
+    note: '#1f2328',
+    comment: '#1a7f37',
+    bpm: '#b45309',
+    split: '#9a3412',
+    time: '#2f6f44',
+    slide: '#0369a1',
+    customSlide: '#7e22ce',
+    hold: '#15803d',
+    break: '#c2410c',
+    ex: '#a16207',
+    mine: '#be123c',
+    hanabi: '#9333ea',
+    touch: '#0284c7',
+    comma: '#6b7280',
+};
+
 export const syntaxColorPresets = {
     default: {
         name: 'default',
@@ -360,14 +377,34 @@ export const syntaxColorPresets = {
     }
 };
 
+/**
+ * 依據目前主題解析單一語法高亮色（若於淺色模式仍為暗色預設值，自動切換為可讀的淺色預設色）
+ * @param {string} key
+ * @param {string} [rawColor]
+ * @param {'dark'|'light'} [effectiveTheme]
+ * @returns {string}
+ */
+export function resolveSyntaxColor(key, rawColor, effectiveTheme = null) {
+    const baseDark = defaultSyntaxColors[key];
+    const color = rawColor || baseDark || '#d4d4d4';
+    const isLight = effectiveTheme
+        ? effectiveTheme === 'light'
+        : (typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light');
+    if (isLight && baseDark && defaultLightSyntaxColors[key] && String(color).toLowerCase() === baseDark.toLowerCase()) {
+        return defaultLightSyntaxColors[key];
+    }
+    return color;
+}
+
 export function applySyntaxColors(syntaxColors = {}) {
     const root = document.documentElement;
     const highlightLayer = document.getElementById('highlight-layer');
     const colors = { ...defaultSyntaxColors, ...(syntaxColors || {}) };
     Object.entries(colors).forEach(([key, color]) => {
+        const resolved = resolveSyntaxColor(key, color);
         const cssVar = `--hl-${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-        if (root) root.style.setProperty(cssVar, color);
-        if (highlightLayer) highlightLayer.style.setProperty(cssVar, color);
+        if (root) root.style.setProperty(cssVar, resolved);
+        if (highlightLayer) highlightLayer.style.setProperty(cssVar, resolved);
     });
 }
 
@@ -1016,6 +1053,7 @@ export function simpleToast(options = {}) {
     const bodyEl = document.createElement('div');
     bodyEl.className = 'toast-body-text';
     bodyEl.textContent = content;
+    if (!content) bodyEl.style.display = 'none';
     contentWrapper.appendChild(bodyEl);
 
     // Detail Text
@@ -1220,6 +1258,7 @@ export function simpleToast(options = {}) {
 
         if (newContent !== undefined) {
             bodyEl.textContent = newContent;
+            bodyEl.style.display = newContent ? 'flex' : 'none';
         }
 
         if (newDetail !== undefined) {

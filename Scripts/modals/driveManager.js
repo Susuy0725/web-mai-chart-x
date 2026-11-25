@@ -334,7 +334,7 @@ export function buildDriveTab(ctx) {
     // (B-1) 專案範圍篩選下拉選單 (全部/我的/與我共享)
     const filterSelect = document.createElement('select');
     filterSelect.className = 'drive-filter-select';
-    filterSelect.title = '篩選專案範圍';
+    filterSelect.title = t('a11y.filterScope');
 
     const optAll = document.createElement('option');
     optAll.value = 'all';

@@ -6,6 +6,7 @@ import { openSlideEditorModal } from './modals/slideEditorModal.js';
 import { openTouchGroupModal } from './modals/touchGroupModal.js';
 import { VisualSubMenu } from './features/visualSubMenu.js';
 import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
+import { applyThemeSettings, applyThemeFromBackup, onThemeChange, DEFAULT_THEME_MODE, DEFAULT_ACCENT_COLOR } from './core/themeManager.js';
 import { resolveKeybindingMatch } from './core/keybindings.js';
 export { defaultSettings };
 import {
@@ -16,6 +17,7 @@ import {
     computeEditorSlideAnimation,
     computeFloatingToolbarDock,
     computeCanvasAnimationRect,
+    parseCanvasAspectRatio,
 } from './core/panelLayout.js';
 import { eventBus, EVENTS } from './core/eventBus.js';
 import { appContext } from './core/appContext.js';
@@ -119,6 +121,7 @@ const projGet = (key) => idbGetProject(currentProjectId, key);
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
 
+try { applyThemeFromBackup(); } catch (_) { }
 try { applySyntaxColors(defaultSyntaxColors); } catch (_) { }
 
 const simaiLogicControler = new SimaiLogicControler(audioManager);
@@ -182,6 +185,7 @@ const playButton = getButton("play/pause", "control");
 const hideButton = getButton("hide", "control");
 const stopButton = getButton("stop", "control");
 const resetButton = getButton("reset", "control");
+const focusButton = getButton("focus", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
 const hideUtilityButton = getButton("hideUtility", "utility");
@@ -455,9 +459,38 @@ function clearSnappedEditorLayout() {
     editorContainer.style.marginBottom = '';
 }
 
+function applyCanvasContainerAspectRatio() {
+    if (!canvasContainer) return;
+    const ratioVal = settings?.canvasAspectRatio || 'auto';
+    if (!parseCanvasAspectRatio(ratioVal)) {
+        canvasContainer.classList.remove('aspect-ratio-constrained');
+        canvasContainer.style.left = '';
+        canvasContainer.style.top = '';
+        canvasContainer.style.width = '';
+        canvasContainer.style.height = '';
+        return;
+    }
+    const ws = getWorkspaceRect();
+    const editorHidden = document.body.classList.contains('editor-hidden');
+    const rect = computeCanvasAnimationRect({
+        direction: normalizeLayoutDirection(settings.layoutDirection),
+        swapped: Boolean(settings.panelSwapped),
+        visible: !editorHidden,
+        splitRatio: settings.splitRatio ?? 0.5,
+        workspaceRect: ws,
+        aspectRatio: ratioVal,
+    });
+    canvasContainer.classList.add('aspect-ratio-constrained');
+    canvasContainer.style.left = rect.left;
+    canvasContainer.style.top = rect.top;
+    canvasContainer.style.width = rect.width;
+    canvasContainer.style.height = rect.height;
+}
+
 function applySplitRatio(ratio) {
     applyPanelSwapState();
     document.documentElement.style.setProperty('--split-ratio', ratio);
+    applyCanvasContainerAspectRatio();
     updateSplitterToolbarDock();
 }
 
@@ -635,8 +668,7 @@ if (panelSplitter) {
             dragStartRatio = 0;
         } else {
             dragStartRatio = settings.splitRatio ?? 0.5;
-            canvasContainer.style.width = '';
-            canvasContainer.style.height = '';
+            applyCanvasContainerAspectRatio();
         }
 
         document.body.classList.add('resizing-panels');
@@ -1931,10 +1963,7 @@ function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = fa
     }
 
     if (!isInitComplete) {
-        canvasContainer.style.left = '';
-        canvasContainer.style.top = '';
-        canvasContainer.style.width = '';
-        canvasContainer.style.height = '';
+        applyCanvasContainerAspectRatio();
         resize(true);
         return;
     }
@@ -1943,6 +1972,7 @@ function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = fa
     const swapped = Boolean(settings.panelSwapped);
     const targetRatio = settings.splitRatio ?? 0.5;
     const effectiveRatio = (visible && canvasSnapped) ? 0 : targetRatio;
+    const aspectRatio = settings?.canvasAspectRatio || 'auto';
     const ws = getWorkspaceRect();
 
     const startFrame = (!wasCanvasHidden && prevCanvasRect && prevCanvasRect.width > 0 && prevCanvasRect.height > 0)
@@ -1958,6 +1988,7 @@ function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = fa
             visible: true,
             splitRatio: 0,
             workspaceRect: ws,
+            aspectRatio,
         });
 
     const endFrame = computeCanvasAnimationRect({
@@ -1966,6 +1997,7 @@ function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = fa
         visible,
         splitRatio: effectiveRatio,
         workspaceRect: ws,
+        aspectRatio,
     });
 
     const canvasAnimation = canvasContainer.animate(
@@ -2003,10 +2035,7 @@ function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = fa
             currentCanvasAnimation = null;
         }
         canvasAnimation.cancel();
-        canvasContainer.style.left = '';
-        canvasContainer.style.top = '';
-        canvasContainer.style.width = '';
-        canvasContainer.style.height = '';
+        applyCanvasContainerAspectRatio();
         if (visible && canvasSnapped) {
             noRender = true;
             canvasContainer.style.display = 'none';
@@ -4411,11 +4440,49 @@ hideButton.addEventListener('click', () => {
     resize();
 });
 
+/**
+ * 選取指定索引音符並將編輯器捲動至對應位置（同步高亮層與誤差 fallback）。
+ * @param {number} noteIdx
+ */
+function scrollEditorToIndex(noteIdx) {
+    const range = getNoteRangeAtIndex(noteIdx);
+    const text = editorInput.value;
+    const trimmed = getTrimmedNoteRange(text, range.start, range.end);
+
+    editorInput.focus({ preventScroll: true });
+    editorInput.setSelectionRange(range.start, range.end);
+
+    const viewH = editorInput.clientHeight;
+    if (viewH <= 0) return;
+
+    let noteTop = null;
+    let rects = editorHighlightOverlay.measureContentRects(trimmed.start, trimmed.end, 2, true);
+    if ((!rects || rects.length === 0) && text.length > 0) {
+        const anchor = Math.min(Math.max(0, range.start), text.length - 1);
+        rects = editorHighlightOverlay.measureContentRects(anchor, anchor + 1, 2, false);
+    }
+
+    if (rects && rects.length > 0) {
+        noteTop = rects[0].y;
+    } else {
+        const style = getComputedStyle(editorInput);
+        const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.4) || 20;
+        const lineIdx = text.slice(0, range.start).split('\n').length - 1;
+        noteTop = lineIdx * lineHeight;
+    }
+
+    const maxScroll = Math.max(0, editorInput.scrollHeight - viewH);
+    const targetTop = Math.max(0, Math.min(maxScroll, noteTop - viewH * 0.35));
+    cancelEditorAutoScroll();
+    smoothScrollEditorTo(targetTop);
+}
+
 getNowNoteIndex.addEventListener('click', () => {
-    const range = getNoteRangeAtIndex(nowIndex);
-    editorInput.selectionStart = range.start;
-    editorInput.selectionEnd = range.end;
-    editorInput.focus();
+    scrollEditorToIndex(nowIndex);
+});
+
+focusButton.addEventListener('click', () => {
+    getNowNoteIndex.click();
 });
 
 function seekToTime(targetTime) {
@@ -4604,6 +4671,7 @@ function update(timestamp) {
 }
 
 function resize(force = false) {
+    applyCanvasContainerAspectRatio();
     const dpr = getDPR();
 
     if (secondCtx) {
@@ -5203,6 +5271,10 @@ async function _init() {
         setSettings: (val) => {
             settings = val;
             appContext.settings = val;
+            applyThemeSettings({
+                themeMode: val?.themeMode ?? DEFAULT_THEME_MODE,
+                accentColor: val?.accentColor ?? DEFAULT_ACCENT_COLOR,
+            });
             if (val && val.skin) currentSkin = val.skin;
             if (val && val.syntaxColors) applySyntaxColors(val.syntaxColors);
             if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
@@ -5553,8 +5625,14 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     if (key === 'SfxVolume') audioManager?.setSFXVolume(value);
     if (key === 'sfxVolumes') audioManager?.setSFXVolumes(value);
 
-    // 語法高亮自訂顏色
+    // 語法高亮自訂顏色與主題 / 主色同步
     if (key === 'syntaxColors') applySyntaxColors(value);
+    if (key === 'themeMode') {
+        applyThemeSettings({ themeMode: value, accentColor: settings?.accentColor });
+    }
+    if (key === 'accentColor') {
+        applyThemeSettings({ themeMode: settings?.themeMode, accentColor: value });
+    }
 
     // 3. 背景與影片設定即時生效
     if (key === 'moviebrightness') applyMovieBrightness(value);
@@ -5571,8 +5649,8 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         if (canvasOutline) canvasOutline.style.display = value ? '' : 'none';
     }
 
-    // 5. 低解析度模式
-    if (key === 'lowRes') {
+    // 5. 低解析度模式與畫面比例
+    if (key === 'lowRes' || key === 'canvasAspectRatio') {
         resize(true);
     }
 
@@ -5683,6 +5761,16 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         flushPendingSaves();
     }
+});
+
+onThemeChange(() => {
+    try { applySyntaxColors(settings?.syntaxColors || defaultSyntaxColors); } catch (_) { }
+    try {
+        if (typeof editorHighlightOverlay !== 'undefined' && editorHighlightOverlay) {
+            editorHighlightOverlay.refreshAccentColor();
+            editorHighlightOverlay.render();
+        }
+    } catch (_) { }
 });
 
 _init();

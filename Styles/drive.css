@@ -41,9 +41,9 @@
 }
 
 .pm-tab-btn--active {
-    color: #ffffff;
+    color: var(--popup-text-main, #ffffff);
     border-bottom: 2px solid var(--popup-accent, #49e);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.05));
 }
 
 /* ── 雲端分頁主容器 ────────────────────────────────────────── */
@@ -192,9 +192,9 @@
     text-align: center;
     padding: 24px 16px;
     box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.15);
+    background: var(--popup-surface, rgba(0, 0, 0, 0.15));
     border-radius: var(--popup-radius-md, 6px);
-    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border: 1px dashed var(--popup-border-light, rgba(255, 255, 255, 0.1));
 }
 
 .drive-cloud-icon {
@@ -219,6 +219,8 @@
 .drive-signout-btn,
 .drive-refresh-btn {
     font-family: inherit;
+    display: flex;
+    align-items: center;
     /*background: transparent;
     border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
     color: var(--popup-text-sub, #bbb);
@@ -228,8 +230,8 @@
     padding: 3px 8px;    
     transition: background 0.15s ease, color 0.15s ease;
     white-space: nowrap;*/
-    padding: 5px 12px;
-    height: 30px;
+    padding: 6px 12px;
+    height: 32px;
     background: transparent;
     color: var(--popup-text-main, #ffffff);
     border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.16));
@@ -255,7 +257,7 @@
 .drive-signout-btn:hover,
 .drive-refresh-btn:hover {
     background: var(--popup-surface-hover, #32323c);
-    color: #ffffff;
+    color: var(--popup-text-main, #ffffff);
 }
 
 /* 頂部篩選下拉選單 (全部/我的/與我共享) */
@@ -276,8 +278,8 @@
 
 .drive-filter-select:hover {
     background: var(--popup-surface-hover, #32323c);
-    border-color: rgba(255, 255, 255, 0.3);
-    color: #ffffff;
+    border-color: var(--popup-border-light, rgba(255, 255, 255, 0.3));
+    color: var(--popup-text-main, #ffffff);
 }
 
 .drive-filter-select:focus {
@@ -296,13 +298,13 @@
 /* ── 雲端專案卡片 ──────────────────────────────────────────── */
 .drive-file-card {
     position: relative;
-    background: #1e1e1e;
-    border: 1px solid #333333;
+    background: var(--popup-surface, #1e1e1e);
+    border: 1px solid var(--popup-border-light, #333333);
     border-radius: 8px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
     transition: border-color 0.15s ease, transform 0.15s ease;
     box-sizing: border-box;
     height: fit-content;
@@ -311,14 +313,14 @@
 }
 
 .drive-file-card--linked {
-    border-color: #2e6930;
+    border-color: var(--popup-success, #2e6930);
 }
 
 .drive-file-icon-area {
     position: relative;
     width: 100%;
     aspect-ratio: 1 / 1;
-    background: #141414;
+    background: var(--popup-background, #141414);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -326,7 +328,7 @@
 
 .drive-file-icon {
     font-size: 46px;
-    color: #4a4a4a;
+    color: var(--popup-text-muted, #4a4a4a);
 }
 
 .drive-badge {
@@ -372,7 +374,7 @@
 .drive-file-card-name {
     font-size: 12px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--popup-text-main, #ffffff);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -383,7 +385,7 @@
     justify-content: space-between;
     align-items: center;
     font-size: 10px;
-    color: #888888;
+    color: var(--popup-text-muted, #888888);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

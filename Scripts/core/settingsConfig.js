@@ -3,6 +3,7 @@ import { eventBus, EVENTS } from './eventBus.js';
 import { openExportSelectionModal, openImportSelectionModal } from '../modals/maintenanceModal.js';
 import { openResourceManager } from '../modals/resourceManagerModal.js';
 import { simpleToast, defaultSyntaxColors, applySyntaxColors } from '../helper.js';
+import { DEFAULT_THEME_MODE, DEFAULT_ACCENT_COLOR } from './themeManager.js';
 
 export const defaultSettings = {
     // Game
@@ -99,6 +100,9 @@ export const defaultSettings = {
     drawHanabiEffect: true,
     richHitEffectBeta: false,
     showBorder: true,
+    canvasAspectRatio: 'auto',
+    themeMode: DEFAULT_THEME_MODE,
+    accentColor: DEFAULT_ACCENT_COLOR,
     customKeybindings: {}
 };
 
@@ -141,6 +145,24 @@ export const settingsConfig = [
     {
         label: 'settings.tabs.display',
         items: [
+            { type: 'header', label: 'settings.sections.theme' },
+            {
+                id: 'themeMode',
+                type: 'dropdown',
+                label: 'settings.items.themeMode',
+                options: [
+                    { value: 'dark', label: 'settings.themeModeOpts.dark' },
+                    { value: 'light', label: 'settings.themeModeOpts.light' },
+                    { value: 'auto', label: 'settings.themeModeOpts.auto' },
+                ],
+                def: defaultSettings.themeMode || DEFAULT_THEME_MODE
+            },
+            {
+                id: 'accentColor',
+                type: 'color',
+                label: 'settings.items.accentColor',
+                def: defaultSettings.accentColor || DEFAULT_ACCENT_COLOR
+            },
             { type: 'header', label: 'settings.sections.appearanceAndNotes' },
             {
                 id: 'skin',
@@ -175,6 +197,20 @@ export const settingsConfig = [
                 type: 'checkbox',
                 label: 'settings.items.showBorder',
                 def: defaultSettings.showBorder ?? true
+            },
+            {
+                id: 'canvasAspectRatio',
+                type: 'dropdown',
+                label: 'settings.items.canvasAspectRatio',
+                options: [
+                    { value: 'auto', label: 'settings.aspectRatioOpts.auto' },
+                    { value: '16:9', label: 'settings.aspectRatioOpts.r16_9' },
+                    { value: '4:3', label: 'settings.aspectRatioOpts.r4_3' },
+                    { value: '1:1', label: 'settings.aspectRatioOpts.r1_1' },
+                    { value: '3:4', label: 'settings.aspectRatioOpts.r3_4' },
+                    { value: '9:16', label: 'settings.aspectRatioOpts.r9_16' },
+                ],
+                def: defaultSettings.canvasAspectRatio || 'auto'
             },
             { type: 'header', label: 'settings.sections.effectsAndJudge' },
             {

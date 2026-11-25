@@ -26,7 +26,7 @@ function ensureSubdivisionStyles() {
             display: flex;
             flex-direction: column;
             gap: 14px;
-            color: #d0d0d0;
+            color: var(--popup-text-main, #d0d0d0);
             font-size: 13px;
             max-width: 640px;
             width: 100%;
@@ -37,8 +37,8 @@ function ensureSubdivisionStyles() {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: var(--popup-surface, rgba(255, 255, 255, 0.04));
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 6px;
             padding: 8px 12px;
             gap: 12px;
@@ -52,9 +52,9 @@ function ensureSubdivisionStyles() {
         }
 
         .subdiv-tag {
-            background: rgba(73, 158, 238, 0.15);
-            border: 1px solid rgba(73, 158, 238, 0.4);
-            color: #38bdf8;
+            background: var(--popup-accent-glow, rgba(73, 158, 238, 0.15));
+            border: 1px solid color-mix(in srgb, var(--accent-color, #49e) 40%, transparent);
+            color: var(--popup-accent, #38bdf8);
             padding: 2px 8px;
             border-radius: 4px;
             font-size: 12px;
@@ -63,8 +63,8 @@ function ensureSubdivisionStyles() {
 
         .subdiv-segmented {
             display: flex;
-            background: #18181b;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: var(--popup-background, #18181b);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.1));
             border-radius: 6px;
             padding: 2px;
             gap: 2px;
@@ -73,7 +73,7 @@ function ensureSubdivisionStyles() {
         .subdiv-segment-btn {
             background: transparent;
             border: none;
-            color: #888;
+            color: var(--popup-text-muted, #888);
             padding: 6px 12px;
             border-radius: 4px;
             font-size: 12px;
@@ -84,19 +84,19 @@ function ensureSubdivisionStyles() {
         }
 
         .subdiv-segment-btn:hover {
-            color: #fff;
-            background: rgba(255, 255, 255, 0.05);
+            color: var(--popup-title-color, #fff);
+            background: var(--popup-surface-hover, rgba(255, 255, 255, 0.05));
         }
 
         .subdiv-segment-btn.active {
             background: var(--popup-accent, #49e);
-            color: #fff;
-            box-shadow: 0 2px 6px rgba(73, 158, 238, 0.3);
+            color: var(--accent-contrast-text, #fff);
+            box-shadow: 0 2px 6px var(--popup-accent-glow, rgba(73, 158, 238, 0.3));
         }
 
         .subdiv-section {
-            background: #202024;
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: var(--popup-surface, #202024);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.06));
             border-radius: 6px;
             padding: 12px;
             display: flex;
@@ -107,7 +107,7 @@ function ensureSubdivisionStyles() {
         .subdiv-section-title {
             font-size: 12px;
             font-weight: 600;
-            color: #9e9e9e;
+            color: var(--popup-text-sub, #9e9e9e);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -119,10 +119,10 @@ function ensureSubdivisionStyles() {
         }
 
         .subdiv-preset-btn {
-            background: #2a2a30;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: var(--popup-background, #2a2a30);
+            border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.08));
             border-radius: 6px;
-            color: #e0e0e0;
+            color: var(--popup-text-main, #e0e0e0);
             padding: 8px 10px;
             font-size: 13px;
             font-weight: 500;
@@ -136,19 +136,19 @@ function ensureSubdivisionStyles() {
         }
 
         .subdiv-preset-btn:hover {
-            border-color: rgba(73, 158, 238, 0.5);
-            background: #32323a;
+            border-color: var(--popup-accent, rgba(73, 158, 238, 0.5));
+            background: var(--popup-surface-hover, #32323a);
         }
 
         .subdiv-preset-btn.active {
-            background: rgba(73, 158, 238, 0.2);
+            background: var(--popup-accent-glow, rgba(73, 158, 238, 0.2));
             border-color: var(--popup-accent, #49e);
-            color: #fff;
+            color: var(--popup-title-color, #fff);
         }
 
         .subdiv-preset-hint {
             font-size: 11px;
-            color: #888;
+            color: var(--popup-text-muted, #888);
         }
 
         .subdiv-custom-row {
@@ -159,10 +159,10 @@ function ensureSubdivisionStyles() {
         }
 
         .subdiv-custom-input {
-            background: #18181b;
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: var(--popup-background, #18181b);
+            border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
             border-radius: 4px;
-            color: #fff;
+            color: var(--popup-text-main, #fff);
             padding: 6px 10px;
             font-size: 13px;
             width: 70px;
@@ -178,7 +178,7 @@ function ensureSubdivisionStyles() {
             display: flex;
             flex-direction: column;
             gap: 6px;
-            background: rgba(255, 255, 255, 0.02);
+            background: var(--popup-background, rgba(255, 255, 255, 0.02));
             padding: 8px 10px;
             border-radius: 6px;
         }
@@ -189,7 +189,7 @@ function ensureSubdivisionStyles() {
             gap: 8px;
             cursor: pointer;
             font-size: 12px;
-            color: #bbb;
+            color: var(--popup-text-sub, #bbb);
             user-select: none;
         }
 

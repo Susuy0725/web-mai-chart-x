@@ -1,6 +1,8 @@
 /**
  * 外部視窗預覽與 Canvas 同步模組
  */
+import { t } from '../i18n.js';
+
 const VIDEO_SEEK_THRESHOLD = 0.3;
 
 export class SecondaryWindowManager {
@@ -269,7 +271,7 @@ export class SecondaryWindowManager {
             if (!force && lastIsPlaying === isPlaying) return;
             lastIsPlaying = isPlaying;
             secPlayBtn.innerHTML = isPlaying ? PAUSE_SVG_HTML : PLAY_SVG_HTML;
-            secPlayBtn.title = isPlaying ? '暫停 (Space)' : '播放 (Space)';
+            secPlayBtn.title = isPlaying ? t('a11y.pauseSpace') : t('a11y.playSpace');
         };
 
         if (secPlayBtn) {

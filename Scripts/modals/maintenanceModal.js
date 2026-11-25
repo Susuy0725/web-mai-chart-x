@@ -25,7 +25,7 @@ function ensureMaintenanceStyles() {
             display: flex;
             flex-direction: column;
             gap: 16px;
-            color: #d0d0d0;
+            color: var(--popup-text-main, #d0d0d0);
             font-size: 14px;
             max-width: 680px;
             box-sizing: border-box;
@@ -36,8 +36,8 @@ function ensureMaintenanceStyles() {
             gap: 10px;
         }
         .mm-stat-card {
-            background-color: #252525;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background-color: var(--popup-surface, #252525);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 6px;
             padding: 10px 14px;
             display: flex;
@@ -46,16 +46,16 @@ function ensureMaintenanceStyles() {
         }
         .mm-stat-label {
             font-size: 12px;
-            color: #9e9e9e;
+            color: var(--popup-text-muted, #9e9e9e);
         }
         .mm-stat-value {
             font-size: 20px;
             font-weight: 600;
-            color: #49e;
+            color: var(--popup-accent, #49e);
         }
         .mm-section {
-            background-color: #222;
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            background-color: var(--popup-surface, #222);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.06));
             border-radius: 6px;
             padding: 12px 16px;
             display: flex;
@@ -70,7 +70,7 @@ function ensureMaintenanceStyles() {
         .mm-section-title {
             font-size: 14px;
             font-weight: 600;
-            color: #f0f0f0;
+            color: var(--popup-title-color, #f0f0f0);
         }
         .mm-toggle-row {
             display: flex;
@@ -82,7 +82,7 @@ function ensureMaintenanceStyles() {
         .mm-toggle-row input[type="checkbox"] {
             width: 16px;
             height: 16px;
-            accent-color: #49e;
+            accent-color: var(--popup-accent, #49e);
             cursor: pointer;
         }
         .mm-master-toggle {
@@ -92,22 +92,22 @@ function ensureMaintenanceStyles() {
             cursor: pointer;
             user-select: none;
             font-size: 13px;
-            color: #ddd;
+            color: var(--popup-text-main, #ddd);
             padding: 2px 6px;
             border-radius: 4px;
             outline: none;
             transition: background 0.15s;
         }
         .mm-master-toggle:hover {
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--popup-surface-hover, rgba(255, 255, 255, 0.05));
         }
         .mm-master-toggle:focus-visible {
-            box-shadow: 0 0 0 2px rgba(68, 153, 238, 0.5);
+            box-shadow: 0 0 0 2px var(--popup-accent-glow, rgba(68, 153, 238, 0.5));
         }
         .mm-master-toggle input[type="checkbox"] {
             width: 16px;
             height: 16px;
-            accent-color: #49e;
+            accent-color: var(--popup-accent, #49e);
             pointer-events: none;
             margin: 0;
         }
@@ -124,8 +124,8 @@ function ensureMaintenanceStyles() {
             padding-right: 4px;
         }
         .mm-project-item {
-            background-color: #262626;
-            border: 1.5px solid rgba(255, 255, 255, 0.08);
+            background-color: var(--popup-background, #262626);
+            border: 1.5px solid var(--popup-border, rgba(255, 255, 255, 0.08));
             border-radius: 6px;
             padding: 9px 14px;
             display: flex;
@@ -137,21 +137,21 @@ function ensureMaintenanceStyles() {
             transition: background-color 0.15s ease, border-color 0.15s ease;
         }
         .mm-project-item:hover {
-            background-color: #303030;
-            border-color: rgba(255, 255, 255, 0.18);
+            background-color: var(--popup-surface-hover, #303030);
+            border-color: var(--popup-border-light, rgba(255, 255, 255, 0.18));
         }
         .mm-project-item.selected {
-            background-color: rgba(68, 153, 238, 0.12);
-            border-color: #49e;
+            background-color: var(--popup-accent-glow, rgba(68, 153, 238, 0.12));
+            border-color: var(--popup-accent, #49e);
         }
         .mm-project-item.selected:hover {
-            background-color: rgba(68, 153, 238, 0.18);
-            border-color: #6af;
+            background-color: color-mix(in srgb, var(--accent-color, #49e) 18%, transparent);
+            border-color: var(--popup-accent-hover, #6af);
         }
         .mm-project-name {
             font-size: 14px;
             font-weight: 500;
-            color: #e0e0e0;
+            color: var(--popup-text-main, #e0e0e0);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -159,7 +159,7 @@ function ensureMaintenanceStyles() {
             min-width: 0;
         }
         .mm-project-item.selected .mm-project-name {
-            color: #fff;
+            color: var(--popup-title-color, #fff);
             font-weight: 600;
         }
         .mm-tag-group {
@@ -171,18 +171,18 @@ function ensureMaintenanceStyles() {
             font-size: 10px;
             padding: 1px 6px;
             border-radius: 3px;
-            background-color: rgba(255, 255, 255, 0.06);
-            color: #888;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background-color: var(--popup-surface, rgba(255, 255, 255, 0.06));
+            color: var(--popup-text-muted, #888);
+            border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
         }
         .mm-tag.active {
-            background-color: rgba(68, 153, 238, 0.15);
-            color: #49e;
-            border-color: rgba(68, 153, 238, 0.3);
+            background-color: var(--popup-accent-glow, rgba(68, 153, 238, 0.15));
+            color: var(--popup-accent, #49e);
+            border-color: color-mix(in srgb, var(--accent-color, #49e) 35%, transparent);
         }
         .mm-notice {
             font-size: 12px;
-            color: #888;
+            color: var(--popup-text-muted, #888);
             line-height: 1.4;
         }
         /* 凍結式操作進度彈窗樣式 (Material Design) */
@@ -195,7 +195,7 @@ function ensureMaintenanceStyles() {
         }
         .mm-progress-msg {
             font-size: 14px;
-            color: #d0d0d0;
+            color: var(--popup-text-main, #d0d0d0);
             line-height: 1.5;
             min-height: 22px;
             word-break: break-all;
@@ -203,7 +203,7 @@ function ensureMaintenanceStyles() {
         .mm-progress-track {
             width: 100%;
             height: 8px;
-            background: #2a2a2a;
+            background: var(--popup-surface-active, #2a2a2a);
             border-radius: 4px;
             overflow: hidden;
             position: relative;
@@ -211,12 +211,12 @@ function ensureMaintenanceStyles() {
         .mm-progress-bar {
             height: 100%;
             width: 0%;
-            background: #49e;
+            background: var(--popup-accent, #49e);
             border-radius: 4px;
             transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
         }
         .mm-progress-bar.error {
-            background: #e55;
+            background: var(--popup-danger, #e55);
         }
         .mm-progress-footer {
             display: flex;
@@ -226,7 +226,7 @@ function ensureMaintenanceStyles() {
         .mm-progress-pct {
             font-size: 13px;
             font-weight: 600;
-            color: #888;
+            color: var(--popup-text-muted, #888);
             font-variant-numeric: tabular-nums;
         }
     `;

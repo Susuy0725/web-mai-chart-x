@@ -10,11 +10,37 @@
     --workspace-top: var(--utility-height, 40px);
     --workspace-height: calc(100% - var(--playControls-height) - var(--utility-height, 40px));
     --editor-background: #1F1F1F;
+    --editor-caret: #ffffff;
     --player-background: #111;
-    --accent-color: #49e;
+    --preview-background: #000;
+    --accent-color: #4499ee;
+    --accent-contrast-text: #ffffff;
     --main-color: #131313;
     --button-ouline: #2c2c2c;
     --timeline-color: rgb(212, 49, 57);
+    --timeline-color-background: #222;
+    --ui-text: #ffffff;
+    --ui-text-secondary: rgba(255, 255, 255, 0.72);
+    --ui-text-muted: rgba(255, 255, 255, 0.45);
+    --ui-hover-bg: rgba(255, 255, 255, 0.1);
+    --ui-hover-strong-bg: rgba(255, 255, 255, 0.14);
+    --ui-active-bg: #484852;
+    --ui-active-text: #ffffff;
+    --ui-border: rgba(255, 255, 255, 0.08);
+    --ui-border-strong: rgba(255, 255, 255, 0.18);
+    --ui-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    --ui-shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
+    --ui-ripple-bg: rgba(255, 255, 255, 0.4);
+    --splitter-line: #3a3a3a;
+    --input-underline: #838383;
+    --utility-edge-fade: rgba(0, 0, 0, 0.45);
+    --findbar-input-bg: #121216;
+    --findbar-input-border: #333;
+    --findbar-btn-bg: #2a2a35;
+    --findbar-btn-hover: #3b3b4a;
+    --warnbtn-bg: rgba(0, 0, 0, 0.75);
+    --diag-error-text: #ffb3b3;
+    --diag-warning-text: #ffd7b5;
     --submenu-top: 0;
     --submenu-left: 100%;
     --submenu-arrow-rotate: 0deg;
@@ -30,6 +56,42 @@
     --scrollbar-thumb-hover: rgba(255, 255, 255, 0.54);
     --scrollbar-radius: 9999px;
     color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+    --editor-background: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #ffffff);
+    --editor-caret: color-mix(in srgb, var(--accent-color, #4499ee) 16%, black);
+    --player-background: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #ddd);
+    ;
+    --preview-background: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #eee);
+    --main-color: color-mix(in srgb, var(--accent-color, #4499ee) 0.8%, #ffffff);
+    --button-ouline: #d4dbe4;
+    --timeline-color-background: #cbd5e1;
+    --ui-text: color-mix(in srgb, var(--accent-color, #4499ee) 16%, black);
+    --ui-text-secondary: rgba(30, 41, 59, 0.74);
+    --ui-text-muted: rgba(30, 41, 59, 0.5);
+    --ui-hover-bg: rgba(15, 23, 42, 0.07);
+    --ui-hover-strong-bg: rgba(15, 23, 42, 0.11);
+    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #ffffff);
+    --ui-active-text: #0f172a;
+    --ui-border: rgba(15, 23, 42, 0.1);
+    --ui-border-strong: rgba(15, 23, 42, 0.2);
+    --ui-shadow-floating: 0 6px 20px rgba(15, 23, 42, 0.14), 0 1px 4px rgba(15, 23, 42, 0.08);
+    --ui-shadow-menu: 0 10px 30px rgba(15, 23, 42, 0.16), 0 0 1px rgba(15, 23, 42, 0.2);
+    --ui-ripple-bg: rgba(15, 23, 42, 0.22);
+    --splitter-line: color-mix(in srgb, var(--accent-color, #4499ee) 10%, #ccc);
+    --input-underline: #94a3b8;
+    --utility-edge-fade: rgba(15, 23, 42, 0.12);
+    --findbar-input-bg: #f1f5f9;
+    --findbar-input-border: #cbd5e1;
+    --findbar-btn-bg: #e2e8f0;
+    --findbar-btn-hover: #cbd5e1;
+    --warnbtn-bg: rgba(255, 255, 255, 0.94);
+    --diag-error-text: #b91c1c;
+    --diag-warning-text: #c2410c;
+    --scrollbar-thumb: rgba(15, 23, 42, 0.28);
+    --scrollbar-thumb-hover: rgba(15, 23, 42, 0.45);
+    color-scheme: light;
 }
 
 @media (prefers-contrast: more) {
@@ -147,6 +209,10 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     --workspace-height: calc(100% - var(--playControls-height));
 }
 
+#canvasContainer.aspect-ratio-constrained {
+    overflow: hidden;
+}
+
 #canvasContainer #canvasOutline {
     display: none;
     position: absolute;
@@ -167,6 +233,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     height: 100%;
     top: 0;
     left: 0;
+    background: #111;
 }
 
 #canvasContainer #backgroundImage {
@@ -215,7 +282,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 }
 
 #miniPreviewContainer #miniPreview {
-    background: black;
+    background: var(--preview-background);
     position: absolute;
     width: calc(100% - 12px);
     height: 100%;
@@ -240,10 +307,11 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     width: 34px;
     height: 34px;
     background: var(--main-color);
-    box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--ui-shadow-floating);
+    border: 1px solid var(--ui-border);
     border-radius: 5px;
     z-index: 5;
-    color: white;
+    color: var(--ui-text, white);
     display: flex;
     justify-content: center;
     font-size: 20px;
@@ -253,7 +321,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 
 #miniPreviewContainer #mpzoomOut:hover,
 #miniPreviewContainer #mpzoomIn:hover {
-    box-shadow: 0 1px 4px 2px rgba(0, 0, 0, 0.7);
+    box-shadow: var(--ui-shadow-floating);
     background: var(--button-ouline);
 }
 
@@ -295,12 +363,12 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 
 #utilityContainer::before {
     left: 0;
-    background: linear-gradient(to right, rgba(0, 0, 0, 0.45), transparent);
+    background: linear-gradient(to right, var(--utility-edge-fade, rgba(0, 0, 0, 0.45)), transparent);
 }
 
 #utilityContainer::after {
     right: 0;
-    background: linear-gradient(to left, rgba(0, 0, 0, 0.45), transparent);
+    background: linear-gradient(to left, var(--utility-edge-fade, rgba(0, 0, 0, 0.45)), transparent);
 }
 
 #utilityContainer.can-scroll-left::before {
@@ -341,7 +409,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     cursor: pointer;
     box-sizing: border-box;
     border: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating);
     border-radius: 0 0 7px 7px;
     pointer-events: auto;
     transition: background-color 0.15s ease;
@@ -349,13 +417,13 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 }
 
 #utilityContainer #showUtilityBtn:hover .splitter-toolbar-btn {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.95);
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
 }
 
 #utilityContainer #showUtilityBtn:active .splitter-toolbar-btn {
-    background: #484852;
-    color: #ffffff;
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
     transform: scale(0.94);
 }
 
@@ -375,8 +443,8 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     padding: 0 12px 0 10px;
     border-radius: 9999px;
     background: var(--accent-color);
-    color: #ffffff;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.25);
+    color: var(--accent-contrast-text, #ffffff);
+    box-shadow: var(--ui-shadow-floating);
     font-size: 12px;
     font-weight: 500;
     line-height: 1;
@@ -417,12 +485,12 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 #utilityContainer .warnbtn {
     visibility: hidden;
     position: inherit;
-    background: rgba(0, 0, 0, 0.75);
+    background: var(--warnbtn-bg, rgba(0, 0, 0, 0.75));
     min-width: 54px;
     width: auto;
     height: 24px;
     padding: 0 8px;
-    color: white;
+    color: var(--ui-text, white);
     margin: 0 8px;
     right: 0;
     display: flex;
@@ -432,13 +500,13 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     cursor: pointer;
     justify-content: center;
     box-sizing: border-box;
-    border: 1px solid transparent;
+    border: 1px solid var(--ui-border, transparent);
     border-top: none;
     transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 #utilityContainer .warnbtn.has-error {
-    background: rgba(0, 0, 0, 0.75);
+    background: var(--warnbtn-bg, rgba(0, 0, 0, 0.75));
     border-color: rgba(255, 85, 85, 0.45);
 }
 
@@ -523,11 +591,11 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 }
 
 .warning-item.is-error {
-    color: #ffb3b3;
+    color: var(--diag-error-text, #ffb3b3);
 }
 
 .warning-item.is-warning {
-    color: #ffd7b5;
+    color: var(--diag-warning-text, #ffd7b5);
 }
 
 .warning-item.is-clickable {
@@ -662,7 +730,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     padding: 5px;
     background: transparent;
     box-sizing: border-box;
-    color: white;
+    color: var(--ui-text, white);
     width: 30px;
     height: 30px;
     text-align: center;
@@ -688,7 +756,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
 .utilityButton.disabled,
 .utilityDropdown-content .utilityButton.disabled,
 .utilitySubmenu .utilityButton.disabled {
-    color: #666666 !important;
+    color: var(--ui-text-muted, #666666) !important;
     opacity: 0.45;
     cursor: not-allowed !important;
     pointer-events: none;
@@ -719,9 +787,9 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     margin-left: 5px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid #838383;
+    border-bottom: 1px solid var(--input-underline, #838383);
     box-sizing: border-box;
-    color: white;
+    color: var(--ui-text, white);
     text-align: center;
     font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
@@ -741,17 +809,17 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     margin-left: 5px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid #838383;
+    border-bottom: 1px solid var(--input-underline, #838383);
     box-sizing: border-box;
-    color: white;
+    color: var(--ui-text, white);
     text-align: center;
     font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
 @supports not (appearance: base-select) {
     .utilityButton select option {
-        background: #202020;
-        color: white;
+        background: var(--main-color, #202020);
+        color: var(--ui-text, white);
         border: none;
     }
 }
@@ -849,7 +917,7 @@ body.layout-vertical.panels-swapped #panelSplitter {
     left: 2px;
     width: 2px;
     z-index: 1;
-    background: #3a3a3a;
+    background: var(--splitter-line, #3a3a3a);
     transition: background 0.15s ease, width 0.15s ease, height 0.15s ease, left 0.15s ease, top 0.15s ease;
 }
 
@@ -888,19 +956,19 @@ body.layout-vertical #panelSplitter.dragging::after {
     width: 10px;
     cursor: e-resize;
     z-index: 100;
-    background: rgba(74, 144, 226, 0.08);
+    background: color-mix(in srgb, var(--accent-color, #4a90e2) 10%, transparent);
     transition: background 0.15s ease;
 }
 
 #panelSplitter.snapped::after {
     left: 3px;
     width: 4px;
-    background: #3a3a3a;
+    background: var(--splitter-line, #3a3a3a);
     border-radius: 2px;
 }
 
 #panelSplitter.snapped:hover {
-    background: rgba(74, 144, 226, 0.18);
+    background: color-mix(in srgb, var(--accent-color, #4a90e2) 20%, transparent);
 }
 
 #panelSplitter.snapped:hover::after,
@@ -961,7 +1029,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     padding: 5px;
     background: var(--main-color);
     border: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating);
     border-radius: 7px;
     opacity: 0;
     pointer-events: none;
@@ -1047,7 +1115,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     height: 42px;
     flex-shrink: 0;
     cursor: col-resize;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--ui-text-muted, rgba(255, 255, 255, 0.45));
 }
 
 #panelSplitter.orientation-vertical .splitter-toolbar-handle {
@@ -1062,7 +1130,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 .splitter-handle-bars {
     display: block;
-    color: #333;
+    color: var(--ui-text-muted, #333);
     width: 4px;
     height: 20px;
     border-left: 2px solid currentColor;
@@ -1122,7 +1190,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     background: transparent;
     color: transparent;
     /* 文字透明，我們看底層的字 */
-    caret-color: #ffffff;
+    caret-color: var(--editor-caret, #ffffff);
     /* 但要讓閃爍游標看得見 */
     resize: none;
     z-index: 2;
@@ -1253,11 +1321,11 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--ui-shadow-menu);
     z-index: 1100;
     border: 1px solid var(--button-ouline);
-    border-radius: 10px;
-    padding: 4px;
+    border-radius: 18px;
+    padding: 5px;
     flex-direction: column;
     gap: 2px;
     opacity: 0;
@@ -1265,6 +1333,41 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     pointer-events: none;
     transform-origin: top left;
     transform: translateY(-12px) scaleY(0.75);
+    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0.16s;
+}
+
+.utilitySubmenu {
+    display: flex;
+    position: fixed;
+    top: var(--submenu-top, 0);
+    left: var(--submenu-left, 100%);
+    min-width: 155px;
+    max-height: calc(100dvh - var(--utility-height, 40px) - 8px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    contain: layout paint;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    background-color: var(--main-color);
+    border: 1px solid var(--button-ouline);
+    border-radius: 18px;
+    padding: 5px;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: var(--ui-shadow-menu);
+    z-index: 1110;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform-origin: top left;
+    transform: var(--submenu-transform-closed, translateX(-4px) scale(0.97));
     transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1),
         transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
         visibility 0.16s;
@@ -1292,7 +1395,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityButton:not(:has(input, select)):hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--ui-hover-bg, rgba(255, 255, 255, 0.1));
 }
 
 .utilityDropdown-content .utilityButton,
@@ -1307,10 +1410,10 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     justify-content: space-between;
     height: 30px;
     flex-shrink: 0;
-    border-radius: 6px;
+    border-radius: 13px;
     font-size: 13px;
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--ui-text, rgba(255, 255, 255, 0.92));
     cursor: pointer;
     touch-action: pan-y;
     transition: background-color 0.12s ease, color 0.12s ease;
@@ -1318,8 +1421,8 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 .utilityDropdown-content .utilityButton:hover,
 .utilitySubmenu .utilityButton:hover {
-    background-color: rgba(255, 255, 255, 0.14);
-    color: #ffffff;
+    background-color: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.14));
+    color: var(--ui-text, #ffffff);
 }
 
 .utilityDropdown-content .utilityMenuTitle {
@@ -1337,7 +1440,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     width: 16px;
     height: 16px;
     font-size: 16px;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--ui-text-muted, rgba(255, 255, 255, 0.45));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1348,47 +1451,12 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityDropdown-content .utilityMenuTitle:hover .utilityMenuArrow {
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
 }
 
 .utilityDropdown-content .utilityMenuTitle.open .utilityMenuArrow {
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
     transform: rotate(var(--submenu-arrow-rotate-open, 0deg));
-}
-
-.utilitySubmenu {
-    display: flex;
-    position: fixed;
-    top: var(--submenu-top, 0);
-    left: var(--submenu-left, 100%);
-    min-width: 155px;
-    max-height: calc(100dvh - var(--utility-height, 40px) - 8px);
-    box-sizing: border-box;
-    overflow-y: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
-    contain: layout paint;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
-    background-color: var(--main-color);
-    border: 1px solid var(--button-ouline);
-    border-radius: 10px;
-    padding: 4px;
-    flex-direction: column;
-    gap: 2px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
-    z-index: 1110;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform-origin: top left;
-    transform: var(--submenu-transform-closed, translateX(-4px) scale(0.97));
-    transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1),
-        transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
-        visibility 0.16s;
 }
 
 .utilityDropdown-content .utilityMenuTitle.open .utilitySubmenu,
@@ -1409,7 +1477,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     margin: 3px 0;
     flex-shrink: 0;
     border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--ui-border, rgba(255, 255, 255, 0.08));
 }
 
 .utilityDropdown-content *,
@@ -1428,7 +1496,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.72));
     z-index: 5;
     opacity: 0;
     visibility: hidden;
@@ -1512,7 +1580,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     align-items: flex-start;
     justify-content: center;
     background-color: var(--main-color);
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--ui-text, rgba(255, 255, 255, 0.85));
     user-select: none;
     box-sizing: border-box;
     transform-origin: 50% 50%;
@@ -1620,10 +1688,10 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 /* 選中高亮反饋 */
 .quick-panel[data-active-dir="middle"] #center {
-    border-color: #ffffff;
+    border-color: var(--accent-contrast-text, #ffffff);
     background-color: var(--accent-color, #4a90e2);
     scale: 1.1;
-    box-shadow: 0 0 14px var(--accent-color, rgba(74, 144, 226, 0.6));
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-color, #4a90e2) 60%, transparent);
 }
 
 .quick-panel[data-active-dir="up"] #select-up,
@@ -1635,7 +1703,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .quick-panel[data-active-dir="down-left"] #select-down-left,
 .quick-panel[data-active-dir="down-right"] #select-down-right {
     background-color: var(--accent-color, #4a90e2);
-    color: #ffffff;
+    color: var(--accent-contrast-text, #ffffff);
     z-index: 3;
 }
 
@@ -1686,24 +1754,24 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.3px;
-    color: #ffffff;
-    background: rgba(18, 18, 24, 0.92);
+    color: var(--ui-text, #ffffff);
+    background: var(--main-color, rgba(18, 18, 24, 0.92));
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--button-ouline);
     border-radius: 20px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--ui-shadow-floating);
     transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
     box-sizing: border-box;
 }
 
 .quick-panel-label[data-dir="middle"] {
-    color: rgba(255, 255, 255, 0.6);
-    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.6));
+    border-color: var(--ui-border-strong, rgba(255, 255, 255, 0.12));
 }
 
 .quick-panel-label:not([data-dir="middle"]) {
-    color: #ffffff;
+    color: var(--ui-text, #ffffff);
     border: 2px solid var(--accent-color, #4a90e2);
 }
 
@@ -1715,15 +1783,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     z-index: 100;
     background: var(--main-color);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--ui-border-strong, rgba(255, 255, 255, 0.15));
     border-radius: 8px;
     padding: 8px 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--ui-shadow-floating);
     display: flex;
     flex-direction: column;
     gap: 6px;
     font-size: 13px;
-    color: #eee;
+    color: var(--ui-text, #eee);
 }
 
 .findbar-row {
@@ -1734,7 +1802,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 .findbar-drag-handle {
     cursor: grab;
-    color: #666;
+    color: var(--ui-text-muted, #666);
     font-size: 18px;
     user-select: none;
     -webkit-user-select: none;
@@ -1744,15 +1812,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 .findbar-drag-handle:hover,
 .find-replace-bar.dragging .findbar-drag-handle {
-    color: #4a90e2;
+    color: var(--accent-color, #4a90e2);
     cursor: grabbing;
 }
 
 .findbar-input {
-    background: #121216;
-    border: 1px solid #333;
+    background: var(--findbar-input-bg, #121216);
+    border: 1px solid var(--findbar-input-border, #333);
     border-radius: 4px;
-    color: #fff;
+    color: var(--ui-text, #fff);
     padding: 4px 8px;
     font-size: 13px;
     outline: none;
@@ -1766,16 +1834,16 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 
 .findbar-count {
     font-size: 12px;
-    color: #888;
+    color: var(--ui-text-muted, #888);
     min-width: 45px;
     text-align: center;
 }
 
 .findbar-btn {
-    background: #2a2a35;
-    border: 1px solid #444;
+    background: var(--findbar-btn-bg, #2a2a35);
+    border: 1px solid var(--ui-border-strong, #444);
     border-radius: 4px;
-    color: #ddd;
+    color: var(--ui-text, #ddd);
     padding: 3px 8px;
     cursor: pointer;
     font-size: 12px;
@@ -1786,14 +1854,14 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .findbar-btn:hover {
-    background: #3b3b4a;
-    color: #fff;
+    background: var(--findbar-btn-hover, #3b3b4a);
+    color: var(--ui-text, #fff);
 }
 
 .findbar-btn.close-btn {
     background: transparent;
     border: none;
-    color: #aaa;
+    color: var(--ui-text-secondary, #aaa);
     font-size: 14px;
     padding: 2px 6px;
 }
@@ -1803,12 +1871,12 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .findbar-btn.action-btn {
-    background: #3a4a60;
-    border-color: #4a5a70;
+    background: color-mix(in srgb, var(--accent-color, #49e) 24%, var(--findbar-btn-bg, #2a2a35));
+    border-color: color-mix(in srgb, var(--accent-color, #49e) 45%, var(--ui-border-strong, #444));
 }
 
 .findbar-btn.action-btn:hover {
-    background: #4a6080;
+    background: color-mix(in srgb, var(--accent-color, #49e) 36%, var(--findbar-btn-bg, #2a2a35));
 }
 
 /* SwitchBox (輸入區右下角左右長條圓角矩形符號切換盒 - 懸浮感無描邊) */
@@ -1824,7 +1892,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     background: var(--main-color);
     border: none;
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating);
     user-select: none;
     -webkit-user-select: none;
 }
@@ -1841,19 +1909,19 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     height: 28px;
     border-radius: 4px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.6));
     transition: all 0.15s ease;
 }
 
 .switchBox .switch-item:hover {
-    color: rgba(255, 255, 255, 0.95);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
     border-radius: 4px;
 }
 
 .switchBox input[type="radio"]:checked+.switch-item {
-    background: #484852;
-    color: #ffffff;
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
     border-radius: 4px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
@@ -1865,7 +1933,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .switchBox .switch-divider {
     width: 1px;
     height: 16px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--ui-border-strong, rgba(255, 255, 255, 0.15));
     margin: 0 1px;
     flex-shrink: 0;
 }
@@ -1894,7 +1962,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     background: var(--main-color);
     border: none;
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating);
     transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     transform-origin: bottom center;
 }
@@ -1921,18 +1989,18 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     height: 32px;
     border-radius: 4px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.6));
     transition: all 0.15s ease;
 }
 
 .visual-tool-group .switch-item:hover {
-    color: rgba(255, 255, 255, 0.95);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
 }
 
 .visual-tool-group input[type="radio"]:checked+.switch-item {
-    background: #484852;
-    color: #ffffff;
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
@@ -1968,7 +2036,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     justify-content: center;
     font-size: 13px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--ui-text, #ffffff);
     letter-spacing: 0.5px;
     user-select: none;
     pointer-events: none;
@@ -2005,12 +2073,12 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .tool-division-item .division-text-btn {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--ui-text, rgba(255, 255, 255, 0.9));
 }
 
 .tool-division-item:hover .division-text-btn,
 .tool-division-item.menu-open .division-text-btn {
-    color: #ffffff;
+    color: var(--ui-text, #ffffff);
 }
 
 /* 帶有子選單的觸發按鈕容器 (通用模組) */
@@ -2052,7 +2120,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .layer-bpm-text {
-    color: #ffffff;
+    color: var(--ui-text, #ffffff);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: -0.5px;
@@ -2090,15 +2158,15 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     transform: none !important;
 }
 
-/* 處於 BPM 圖層時的高亮外觀 (Material Design 暗灰選取態，不使用黃色) */
+/* 處於 BPM 圖層時的高亮外觀 */
 .tool-layer-item.active-bpm {
-    background: #484852 !important;
-    color: #ffffff !important;
+    background: var(--ui-active-bg, #484852) !important;
+    color: var(--ui-active-text, #ffffff) !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
 }
 
 .tool-layer-item.active-bpm .layer-sync-badge {
-    color: #ffffff;
+    color: var(--ui-active-text, #ffffff);
 }
 
 /* 當處於 BPM 圖層時，隱藏效果套用按鈕與其子選單 */
@@ -2113,8 +2181,8 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .tool-place-item.menu-open,
 .tool-modifier-item.menu-open,
 .tool-division-item.menu-open {
-    background: #484852 !important;
-    color: #ffffff !important;
+    background: var(--ui-active-bg, #484852) !important;
+    color: var(--ui-active-text, #ffffff) !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
@@ -2165,7 +2233,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     background: var(--main-color);
     border: none !important;
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--ui-shadow-floating);
     z-index: 12;
     height: auto !important;
     max-height: calc(100vh - 120px) !important;
@@ -2363,7 +2431,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     border-radius: 4px;
     cursor: pointer;
     background: transparent;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.7));
     transition: all 0.15s ease;
     touch-action: manipulation;
     flex-shrink: 0;
@@ -2378,29 +2446,29 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .palette-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--ui-text, #ffffff);
 }
 
 .palette-item.active {
-    background: #484852;
-    color: #ffffff;
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
-/* 最底端展開/收納按鈕 (預設純黑底白字，固定時為白底黑字) */
+/* 最底端展開/收納按鈕 */
 .visual-collapse-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 32px;
     height: 32px;
-    background: #000000;
-    border: none;
+    background: var(--main-color, #000000);
+    border: 1px solid var(--ui-border, transparent);
     border-radius: 4px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--ui-shadow-floating);
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.7));
     transition: color 0.15s ease, background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.1s ease;
     touch-action: manipulation;
     user-select: none;
@@ -2409,44 +2477,45 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .visual-collapse-btn:hover {
-    color: #ffffff;
-    background: #111111;
+    color: var(--ui-text, #ffffff);
+    background: var(--ui-hover-bg, #111111);
 }
 
 .visual-collapse-btn:active {
-    color: rgba(255, 255, 255, 0.95);
-    background: #222222;
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
+    background: var(--ui-hover-strong-bg, #222222);
     transform: scale(0.95);
 }
 
-/* 固定狀態 (Pinned)：白底黑字，高對比鎖定視覺 */
+/* 固定狀態 (Pinned)：使用主色高對比鎖定視覺 */
 .visual-collapse-btn.pinned {
-    background: #ffffff !important;
-    color: #000000 !important;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+    background: var(--accent-color, #ffffff) !important;
+    color: var(--accent-contrast-text, #ffffff) !important;
+    border-color: var(--accent-color, transparent) !important;
+    box-shadow: var(--ui-shadow-floating) !important;
 }
 
 .visual-collapse-btn.pinned .material-symbols-outlined {
-    color: #000000 !important;
+    color: var(--accent-contrast-text, #ffffff) !important;
 }
 
 .visual-collapse-btn.pinned:hover {
-    background: #f0f0f0 !important;
-    color: #000000 !important;
+    filter: brightness(1.08);
+    color: var(--accent-contrast-text, #ffffff) !important;
 }
 
 .visual-collapse-btn.pinned:hover .material-symbols-outlined {
-    color: #000000 !important;
+    color: var(--accent-contrast-text, #ffffff) !important;
 }
 
 .visual-collapse-btn.pinned:active {
-    background: #e0e0e0 !important;
-    color: #000000 !important;
+    filter: brightness(0.94);
+    color: var(--accent-contrast-text, #ffffff) !important;
     transform: scale(0.95);
 }
 
 .visual-collapse-btn.pinned:active .material-symbols-outlined {
-    color: #000000 !important;
+    color: var(--accent-contrast-text, #ffffff) !important;
 }
 
 .visual-collapse-btn .material-symbols-outlined {
@@ -2843,7 +2912,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 .ext-card-btn.is-primary {
     background: var(--popup-accent, #49e);
     border-color: var(--popup-accent, #49e);
-    color: #ffffff;
+    color: var(--accent-contrast-text, #ffffff);
 }
 
 .ext-card-btn.is-primary:hover:not(:disabled) {
@@ -3073,8 +3142,8 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .utilityDropdown-content .utilityButton.editor-autocomplete-item.active {
-    background-color: rgba(255, 255, 255, 0.14);
-    color: #ffffff;
+    background-color: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.14));
+    color: var(--ui-text, #ffffff);
 }
 
 .editor-autocomplete-settings-btn {
@@ -3087,7 +3156,7 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.55));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3097,8 +3166,8 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
 }
 
 .editor-autocomplete-settings-btn:hover {
-    background-color: rgba(255, 255, 255, 0.14);
-    color: #ffffff;
+    background-color: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.14));
+    color: var(--ui-text, #ffffff);
 }
 
 .editor-autocomplete-settings-btn .material-symbols-outlined {

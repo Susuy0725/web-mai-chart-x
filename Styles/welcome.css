@@ -31,10 +31,10 @@
 }
 
 .wmc-welcome-dialog {
-    background: #1e1e1e;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--popup-background, #1e1e1e);
+    border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.1));
     border-radius: 16px;
-    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.15);
+    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45), 0 0 1px var(--popup-border-light, rgba(255, 255, 255, 0.15));
     width: 460px;
     max-width: calc(100vw - 32px);
     margin: auto;
@@ -203,14 +203,14 @@
 .wmc-welcome-brand {
     font-size: 22px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--popup-title-color, #ffffff);
     margin-bottom: 6px;
     letter-spacing: 0.5px;
 }
 
 .wmc-welcome-subdesc {
     font-size: 13px;
-    color: #9e9e9e;
+    color: var(--popup-text-sub, #9e9e9e);
     line-height: 1.5;
     margin-bottom: 24px;
 }
@@ -222,11 +222,11 @@
     gap: 8px;
     margin-bottom: 20px;
     font-size: 13px;
-    color: #d0d0d0;
+    color: var(--popup-text-main, #d0d0d0);
 }
 
 .wmc-welcome-agreement-row a {
-    color: #60a5fa;
+    color: var(--accent-color, #60a5fa);
     text-decoration: underline;
     text-underline-offset: 2px;
     cursor: pointer;
@@ -234,7 +234,7 @@
 }
 
 .wmc-welcome-agreement-row a:hover {
-    color: #93c5fd;
+    color: var(--popup-accent-hover, #93c5fd);
 }
 
 .wmc-welcome-checkbox {
@@ -257,16 +257,16 @@
 }
 
 .wmc-welcome-checkbox:checked {
-    background-color: #49e;
-    border-color: #49e;
+    background-color: var(--accent-color, #49e);
+    border-color: var(--accent-color, #49e);
 }
 
 .wmc-welcome-checkbox:checked::before {
     content: "";
     width: 9px;
     height: 5px;
-    border-left: 2px solid #ffffff;
-    border-bottom: 2px solid #ffffff;
+    border-left: 2px solid var(--accent-contrast-text, #ffffff);
+    border-bottom: 2px solid var(--accent-contrast-text, #ffffff);
     transform: rotate(-45deg) translate(1px, -1px);
 }
 

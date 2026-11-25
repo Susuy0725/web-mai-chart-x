@@ -5,6 +5,45 @@
     --timeline-color: rgb(212, 49, 57);
     --timeline-color-background: #222;
     --accent-color: #4499ee;
+    --accent-contrast-text: #ffffff;
+    --ui-text: #ffffff;
+    --ui-text-secondary: rgba(255, 255, 255, 0.72);
+    --ui-hover-bg: rgba(255, 255, 255, 0.1);
+    --ui-hover-strong-bg: rgba(255, 255, 255, 0.14);
+    --ui-active-bg: #484852;
+    --ui-active-text: #ffffff;
+    --ui-border: rgba(255, 255, 255, 0.08);
+    --ui-border-strong: rgba(255, 255, 255, 0.18);
+    --ui-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    --ui-shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
+    --ui-ripple-bg: rgba(255, 255, 255, 0.4);
+    --button-ouline: #2c2c2c;
+    --scrollbar-size: 8px;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.36);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.54);
+    --scrollbar-radius: 9999px;
+    color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+    --main-color: #ffffff;
+    --timeline-color-background: #cbd5e1;
+    --ui-text: #1e293b;
+    --ui-text-secondary: rgba(30, 41, 59, 0.74);
+    --ui-hover-bg: rgba(15, 23, 42, 0.07);
+    --ui-hover-strong-bg: rgba(15, 23, 42, 0.11);
+    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #e2e8f0);
+    --ui-active-text: #0f172a;
+    --ui-border: rgba(15, 23, 42, 0.1);
+    --ui-border-strong: rgba(15, 23, 42, 0.2);
+    --ui-shadow-floating: 0 6px 20px rgba(15, 23, 42, 0.14), 0 1px 4px rgba(15, 23, 42, 0.08);
+    --ui-shadow-menu: 0 10px 30px rgba(15, 23, 42, 0.16), 0 0 1px rgba(15, 23, 42, 0.2);
+    --ui-ripple-bg: rgba(15, 23, 42, 0.22);
+    --button-ouline: #d4dbe4;
+    --scrollbar-thumb: rgba(15, 23, 42, 0.28);
+    --scrollbar-thumb-hover: rgba(15, 23, 42, 0.45);
+    color-scheme: light;
 }
 
 @font-face {
@@ -55,7 +94,7 @@ select {
 }
 
 body {
-    background-color: #222;
+    background-color: #111;
     font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
@@ -65,8 +104,14 @@ body {
     height: calc(100% - var(--playControls-height));
     top: 0;
     left: 0;
+    background: #111;
     user-select: none;
     -webkit-user-select: none;
+}
+
+#canvasContainer.aspect-ratio-constrained {
+    overflow: hidden;
+    background: #000;
 }
 
 #canvasContainer .backgroundContainer {

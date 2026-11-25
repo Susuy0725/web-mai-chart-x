@@ -72,8 +72,15 @@ export function initQuickPanel({
 
     function updateLabel(dir) {
         if (!quickPanelLabel) return;
+        if (!dir || dir === 'middle') {
+            quickPanelLabel.textContent = '';
+            quickPanelLabel.setAttribute('data-dir', 'middle');
+            quickPanelLabel.style.display = 'none';
+            return;
+        }
         quickPanelLabel.textContent = getDirectionLabel(dir);
-        quickPanelLabel.setAttribute('data-dir', dir || 'middle');
+        quickPanelLabel.setAttribute('data-dir', dir);
+        quickPanelLabel.style.display = 'inline-flex';
     }
 
     // 關閉並重置面板狀態
@@ -249,11 +256,10 @@ export function initQuickPanel({
                 quickPanel.style.top = positionOfPointer.y + 'px';
                 quickPanel.style.display = 'block';
 
-                // 顯示並定位底部的功能標籤
+                // 定位面板下方功能標籤，未選中時由 updateLabel 維持隱藏
                 if (quickPanelLabel) {
                     quickPanelLabel.style.left = positionOfPointer.x + 'px';
-                    quickPanelLabel.style.top = (positionOfPointer.y + 82) + 'px';
-                    quickPanelLabel.style.display = 'flex';
+                    quickPanelLabel.style.top = (positionOfPointer.y + 94) + 'px';
                     updateLabel('middle');
                 }
 

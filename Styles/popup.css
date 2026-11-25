@@ -50,23 +50,23 @@
 }
 
 :root[data-theme="light"] {
-    --popup-padding-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #fff);
-    --popup-background: #ffffff;
-    --popup-surface: color-mix(in srgb, var(--accent-color, #4499ee) 0.5%, #fff);
-    --popup-surface-hover: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #eee);
-    --popup-surface-active: color-mix(in srgb, var(--accent-color, #4499ee) 14%, #fff);
-    --popup-border: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #eee);
+    --popup-padding-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #efefef);
+    --popup-background: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f7f7f7);
+    --popup-surface: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f5f5f5);
+    --popup-surface-hover: color-mix(in srgb, var(--accent-color, #4499ee) 3%, #e8e8e8);
+    --popup-surface-active: color-mix(in srgb, var(--accent-color, #4499ee) 14%, #efefef);
+    --popup-border: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #e0e0e0);
     --popup-border-light: rgba(15, 23, 42, 0.18);
-    --popup-text-main: #1e293b;
-    --popup-text-sub: #475569;
-    --popup-text-muted: #64748b;
-    --popup-title-color: #0f172a;
-    --popup-button-bg: #fff;
-    --popup-button-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #eee);
-    --popup-button-hover-bg: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #ddd);
-    --popup-button-hover-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #ddd);
-    --popup-content-bg: #f1f5f9;
-    --popup-page-bg: #ffffff;
+    --popup-text-main: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #434343);
+    --popup-text-sub: #555555;
+    --popup-text-muted: #666666;
+    --popup-title-color: color-mix(in srgb, var(--accent-color, #4499ee) 20%, #2b2b2b);
+    --popup-button-bg: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f5f5f5);
+    --popup-button-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #dddddd);
+    --popup-button-hover-bg: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #e2e2e2);
+    --popup-button-hover-border: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #d2d2d2);
+    --popup-content-bg: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #e8e8e8);
+    --popup-page-bg: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f7f7f7);
     --popup-accent-hover: color-mix(in srgb, var(--accent-color, #4499ee) 84%, #000000);
     --popup-accent-glow: color-mix(in srgb, var(--accent-color, #4499ee) 24%, transparent);
     --popup-danger: #dc2626;
@@ -250,7 +250,6 @@
 .popup-custom-content {
     padding: 10px;
     background: var(--popup-background);
-    border: 1px solid var(--popup-border, #333333);
     border-radius: 4px;
     display: none;
     height: 100%;
@@ -2887,55 +2886,12 @@
         gap: 10px;
     }
 
-    select.difficulty-select option::after {
-        content: "";
-        width: 10px;
-        height: 10px;
-        border-radius: 3px;
-        flex-shrink: 0;
-        background-color: black;
-        opacity: 0.3;
-    }
-
     select.difficulty-select option[data-has-data="true"]::after {
-        opacity: 1;
-    }
-
-    /*
-    1: "#248ACA",
-    2: "#43C122",
-    3: "#FFBA01",
-    4: "#FE5963",
-    5: "#A356E9",
-    6: "#E3E6E5",
-    7: "#FF6EFC",
-    */
-
-    select.difficulty-select option[data-has-data="true"][value="7"]::after {
-        background-color: #FF6EFC;
-    }
-
-    select.difficulty-select option[data-has-data="true"][value="6"]::after {
-        background-color: #c4a2e4;
-    }
-
-    select.difficulty-select option[data-has-data="true"][value="5"]::after {
-        background-color: #A356E9;
-    }
-
-    select.difficulty-select option[data-has-data="true"][value="4"]::after {
-        background-color: #FE5963;
-    }
-
-    select.difficulty-select option[data-has-data="true"][value="3"]::after {
-        background-color: #FFBA01;
-    }
-
-    select.difficulty-select option[data-has-data="true"][value="2"]::after {
-        background-color: #43C122;
-    }
-
-    select.difficulty-select option[data-has-data="true"][value="1"]::after {
-        background-color: #248ACA;
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background-color: var(--accent-color, #4499ee);
     }
 }

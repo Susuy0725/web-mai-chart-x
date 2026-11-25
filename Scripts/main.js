@@ -1929,17 +1929,47 @@ const saveMaidata = debounce(() => {
     saveMaidataImmediate();
 }, 500);
 
-const inputDebounce = debounce(() => {
-    // 記錄歷史 (diff)
-    recordEditorHistory();
-    const value = editorInput.value;
-    // 解析 Note 邏輯
-    getres(value);
-    applyHighlight(value);
-    maidata["inote_" + nowDifficulty] = value;
-    updateDifficultyIndicators();
-    saveMaidata();
-}, settings.inputDebounceTime || 500);
+const inputDebounce = (() => {
+    let timer = null;
+    const runInputUpdate = () => {
+        // 記錄歷史 (diff)
+        recordEditorHistory();
+        const value = editorInput.value;
+        // 解析 Note 邏輯
+        getres(value);
+        applyHighlight(value);
+        maidata["inote_" + nowDifficulty] = value;
+        updateDifficultyIndicators();
+        saveMaidata();
+    };
+
+    const debounced = () => {
+        if (timer) clearTimeout(timer);
+        const parsedDelay = Number(settings.inputDebounceTime);
+        const delay = Number.isFinite(parsedDelay) ? Math.max(0, parsedDelay) : 800;
+        timer = setTimeout(() => {
+            timer = null;
+            runInputUpdate();
+        }, delay);
+    };
+
+    debounced.cancel = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    };
+
+    debounced.flush = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+            runInputUpdate();
+        }
+    };
+
+    return debounced;
+})();
 
 function setElementDisplay(element, visible, value = 'block') {
     element.style.display = visible ? value : 'none';
@@ -5654,8 +5684,8 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
         resize(true);
     }
 
-    // 6. 需觸發畫布重繪與膠囊同步的項目
-    if (key === 'timeDisplayCapsule' || key === 'timeDisplayCapsulePosition') {
+    // 6. 需觸發畫布重繪與膠囊/編輯器版面同步的項目
+    if (['timeDisplayCapsule', 'timeDisplayCapsulePosition', 'globalTimeline', 'showMiniPreview'].includes(key)) {
         setEditorCss();
     }
     const redrawKeys = [

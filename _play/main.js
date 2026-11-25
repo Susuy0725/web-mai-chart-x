@@ -2116,11 +2116,25 @@ function togglePlay() {
     tryUpdateBackgroundBrightness();
 }
 
-const saveSettingsDebounce = debounce(() => {
-    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
+const persistPlaySettings = () => {
+    const settingsStr = JSON.stringify(settings);
+    idbSet('simai_settings', settingsStr).catch((error) => {
         console.error('儲存設定到 IndexedDB 失敗:', error);
     });
-}, 300);
+    try {
+        localStorage.setItem('simai_settings_backup', settingsStr);
+    } catch (_) { }
+};
+
+const saveSettingsDebounce = debounce(persistPlaySettings, 300);
+
+const flushPlaySettingsSave = () => {
+    if (typeof saveSettingsDebounce?.flush === 'function') {
+        saveSettingsDebounce.flush();
+    }
+};
+window.addEventListener('beforeunload', flushPlaySettingsSave);
+window.addEventListener('pagehide', flushPlaySettingsSave);
 
 function setPlaybackSpeed(speed) {
     typeof speed === 'string' && (speed = parseFloat(speed));
@@ -3842,6 +3856,7 @@ function openSettings() {
                     get: getLangSetting,
                     apply: async (val) => {
                         if (val === getLangSetting() || !await setLang(val)) return;
+                        flushPlaySettingsSave();
                         if (popupCtx) {
                             popupCtx.close();
                             openSettings();
@@ -4091,6 +4106,7 @@ function openSettings() {
                 el.addEventListener('change', (e) => {
                     targetRef[targetKey] = e.target.checked;
                     if (item.apply) item.apply(e.target.checked);
+                    saveSettingsDebounce();
                 });
                 el.addEventListener('click', (e) => e.stopPropagation());
             }
@@ -4101,6 +4117,7 @@ function openSettings() {
                     const parsedVal = isNaN(e.target.value) ? e.target.value : parseFloat(e.target.value);
                     targetRef[targetKey] = parsedVal;
                     if (item.apply) item.apply(parsedVal);
+                    saveSettingsDebounce();
                 });
             }
             // C. Range
@@ -4108,6 +4125,7 @@ function openSettings() {
                 el = createSettingRangeInput(currentVal, item.min, item.max, item.step, (val) => {
                     targetRef[targetKey] = val;
                     if (item.apply) item.apply(val);
+                    saveSettingsDebounce();
                 });
             }
             // C2. Color
@@ -4115,6 +4133,7 @@ function openSettings() {
                 el = createSettingColorInput(currentVal, (newColor) => {
                     targetRef[targetKey] = newColor;
                     if (item.apply) item.apply(newColor);
+                    saveSettingsDebounce();
                 });
             }
             // D. Object (sfxVolumes)
@@ -4133,6 +4152,7 @@ function openSettings() {
                         el.value[subKey] = subVal;
                         targetRef[targetKey][subKey] = subVal;
                         if (item.apply) item.apply(targetRef[targetKey]);
+                        saveSettingsDebounce();
                     });
 
                     el._subRefs[subKey] = subSlider;
@@ -4165,43 +4185,14 @@ function openSettings() {
     refreshVisibility();
     switchTab(0);
 
-    const applyAndSave = () => {
-        Object.keys(inputRefs).forEach(id => {
-            const config = inputRefs[id];
-            let finalVal;
-
-            if (config.type === 'checkbox') {
-                finalVal = config.el.checked;
-            } else if (config.type === 'dropdown') {
-                finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
-            } else if (config.type === 'object') {
-                finalVal = { ...config.el.value };
-            } else if (config.type === 'range') {
-                finalVal = parseFloat(config.el.value);
-            } else {
-                finalVal = config.el.value;
-            }
-
-            if (config.type === 'object') {
-                Object.assign(config.ref[config.key], finalVal);
-            } else {
-                config.ref[config.key] = finalVal;
-            }
-
-            if (config.apply) {
-                config.apply(finalVal);
-            }
-        });
-
-        idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-        simpleToast({ content: t('toast.settingsSaved'), type: 'success', timeout: 1500 });
-    };
-
     popupCtx = popupWindow({
         title: t('settings.title'),
         customContent: container,
         width: "85%",
         maxWidth: "560px",
+        onClose: () => {
+            flushPlaySettingsSave();
+        },
         buttons: [
             {
                 text: t('popup.restorePlayDefaults'),
@@ -4209,10 +4200,10 @@ function openSettings() {
                     if (!confirm(t('popup.confirmRestorePlayDefaults'))) return;
                     Object.assign(settings, JSON.parse(JSON.stringify(defaultSettings)));
                     applyThemeSettings({
-    themeMode: settings.themeMode ?? DEFAULT_THEME_MODE,
-    accentColor: settings.accentColor ?? DEFAULT_ACCENT_COLOR,
-});
-applyAudioSettings(settings);
+                        themeMode: settings.themeMode ?? DEFAULT_THEME_MODE,
+                        accentColor: settings.accentColor ?? DEFAULT_ACCENT_COLOR,
+                    });
+                    applyAudioSettings(settings);
                     setPlaybackSpeed(settings.playbackSpeed || 1);
                     toggleSlideDebug(false);
                     renderer.settings = settings;
@@ -4222,24 +4213,13 @@ applyAudioSettings(settings);
                     updateAutoPlayUI();
                     tryUpdateBackgroundBrightness();
                     resize();
-                    idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
+                    persistPlaySettings();
                     simpleToast({ content: t('toast.playDefaultsRestored'), type: 'info', timeout: 1500 });
                     if (popupCtx) {
                         popupCtx.close();
                         openSettings();
                     }
                 }
-            },
-            {
-                text: t('popup.save'),
-                onClick: () => {
-                    applyAndSave();
-                },
-                hideOnClick: true
-            },
-            {
-                text: t('popup.close'),
-                hideOnClick: true
             }
         ]
     });

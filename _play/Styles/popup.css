@@ -16,7 +16,7 @@
     --popup-padding-border: #222;
     --popup-background: #1a1a1a;
     --popup-surface: #111;
-    --popup-surface-hover: #32323c;
+    --popup-surface-hover: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #222);
     --popup-surface-active: #333;
     --popup-border: rgba(255, 255, 255, 0.08);
     --popup-border-light: rgba(255, 255, 255, 0.15);
@@ -50,23 +50,23 @@
 }
 
 :root[data-theme="light"] {
-    --popup-padding-border: #f1f5f9;
-    --popup-background: #ffffff;
-    --popup-surface: #f8fafc;
-    --popup-surface-hover: #eef2f7;
-    --popup-surface-active: color-mix(in srgb, var(--accent-color, #4499ee) 14%, #e2e8f0);
-    --popup-border: rgba(15, 23, 42, 0.1);
+    --popup-padding-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #efefef);
+    --popup-background: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f7f7f7);
+    --popup-surface: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f5f5f5);
+    --popup-surface-hover: color-mix(in srgb, var(--accent-color, #4499ee) 3%, #e8e8e8);
+    --popup-surface-active: color-mix(in srgb, var(--accent-color, #4499ee) 14%, #efefef);
+    --popup-border: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #e0e0e0);
     --popup-border-light: rgba(15, 23, 42, 0.18);
-    --popup-text-main: #1e293b;
-    --popup-text-sub: #475569;
-    --popup-text-muted: #64748b;
-    --popup-title-color: #0f172a;
-    --popup-button-bg: #f8fafc;
-    --popup-button-border: #cbd5e1;
-    --popup-button-hover-bg: #e2e8f0;
-    --popup-button-hover-border: #94a3b8;
-    --popup-content-bg: #f1f5f9;
-    --popup-page-bg: #ffffff;
+    --popup-text-main: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #434343);
+    --popup-text-sub: #555555;
+    --popup-text-muted: #666666;
+    --popup-title-color: color-mix(in srgb, var(--accent-color, #4499ee) 20%, #2b2b2b);
+    --popup-button-bg: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f5f5f5);
+    --popup-button-border: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #dddddd);
+    --popup-button-hover-bg: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #e2e2e2);
+    --popup-button-hover-border: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #d2d2d2);
+    --popup-content-bg: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #e8e8e8);
+    --popup-page-bg: color-mix(in srgb, var(--accent-color, #4499ee) 1%, #f7f7f7);
     --popup-accent-hover: color-mix(in srgb, var(--accent-color, #4499ee) 84%, #000000);
     --popup-accent-glow: color-mix(in srgb, var(--accent-color, #4499ee) 24%, transparent);
     --popup-danger: #dc2626;
@@ -250,7 +250,6 @@
 .popup-custom-content {
     padding: 10px;
     background: var(--popup-background);
-    border: 1px solid var(--popup-border, #333333);
     border-radius: 4px;
     display: none;
     height: 100%;
@@ -426,7 +425,7 @@
     flex-direction: column;
     gap: 4px;
     width: 100%;
-    min-height: 22px;
+    min-height: 32px;
     justify-content: center;
 }
 
@@ -1744,13 +1743,12 @@
     color: var(--accent-contrast-text, #ffffff);
     font-weight: 600;
     border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.2));
-    box-shadow: 0 2px 8px var(--popup-accent-glow);
 }
 
 .popup-btn-primary:hover:not(:disabled) {
     background: var(--popup-accent-hover);
     border-color: var(--popup-border-light, rgba(255, 255, 255, 0.35));
-    box-shadow: 0 4px 12px var(--popup-accent-glow);
+    box-shadow: 0 0 0px 2px var(--popup-accent-glow);
 }
 
 .popup-btn-primary.popup-btn-flat,
@@ -2894,7 +2892,6 @@
         height: 7px;
         border-radius: 50%;
         flex-shrink: 0;
-        background-color: #4ade80;
-        box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+        background-color: var(--accent-color, #4499ee);
     }
 }

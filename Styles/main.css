@@ -38,7 +38,7 @@
     --findbar-input-border: #333;
     --findbar-btn-bg: #2a2a35;
     --findbar-btn-hover: #3b3b4a;
-    --warnbtn-bg: rgba(0, 0, 0, 0.75);
+    --warnbtn-bg: var(--main-color);
     --diag-error-text: #ffb3b3;
     --diag-warning-text: #ffd7b5;
     --submenu-top: 0;
@@ -59,34 +59,32 @@
 }
 
 :root[data-theme="light"] {
-    --editor-background: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #ffffff);
-    --editor-caret: color-mix(in srgb, var(--accent-color, #4499ee) 16%, black);
-    --player-background: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #ddd);
-    ;
-    --preview-background: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #eee);
-    --main-color: color-mix(in srgb, var(--accent-color, #4499ee) 0.8%, #ffffff);
-    --button-ouline: #d4dbe4;
-    --timeline-color-background: #cbd5e1;
-    --ui-text: color-mix(in srgb, var(--accent-color, #4499ee) 16%, black);
-    --ui-text-secondary: rgba(30, 41, 59, 0.74);
-    --ui-text-muted: rgba(30, 41, 59, 0.5);
+    --editor-background: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #dddddd);
+    --editor-caret: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #434343);
+    --player-background: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #dddddd);
+    --preview-background: color-mix(in srgb, var(--accent-color, #4499ee) 5%, #eeeeee);
+    --main-color: color-mix(in srgb, var(--accent-color, #4499ee) 0.8%, #efefef);
+    --button-ouline: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #d5d5d5);
+    --timeline-color-background: color-mix(in srgb, var(--accent-color, #4499ee) 8%, #cccccc);
+    --ui-text: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #434343);
+    --ui-text-secondary: rgba(43, 43, 43, 0.74);
+    --ui-text-muted: rgba(43, 43, 43, 0.56);
     --ui-hover-bg: rgba(15, 23, 42, 0.07);
     --ui-hover-strong-bg: rgba(15, 23, 42, 0.11);
-    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #ffffff);
-    --ui-active-text: #0f172a;
+    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #efefef);
+    --ui-active-text: color-mix(in srgb, var(--accent-color, #4499ee) 20%, #2b2b2b);
     --ui-border: rgba(15, 23, 42, 0.1);
     --ui-border-strong: rgba(15, 23, 42, 0.2);
     --ui-shadow-floating: 0 6px 20px rgba(15, 23, 42, 0.14), 0 1px 4px rgba(15, 23, 42, 0.08);
     --ui-shadow-menu: 0 10px 30px rgba(15, 23, 42, 0.16), 0 0 1px rgba(15, 23, 42, 0.2);
     --ui-ripple-bg: rgba(15, 23, 42, 0.22);
-    --splitter-line: color-mix(in srgb, var(--accent-color, #4499ee) 10%, #ccc);
+    --splitter-line: color-mix(in srgb, var(--accent-color, #4499ee) 10%, #cccccc);
     --input-underline: #94a3b8;
     --utility-edge-fade: rgba(15, 23, 42, 0.12);
-    --findbar-input-bg: #f1f5f9;
-    --findbar-input-border: #cbd5e1;
-    --findbar-btn-bg: #e2e8f0;
-    --findbar-btn-hover: #cbd5e1;
-    --warnbtn-bg: rgba(255, 255, 255, 0.94);
+    --findbar-input-bg: color-mix(in srgb, var(--accent-color, #4499ee) 2%, #e6e6e6);
+    --findbar-input-border: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #cccccc);
+    --findbar-btn-bg: color-mix(in srgb, var(--accent-color, #4499ee) 3%, #dddddd);
+    --findbar-btn-hover: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #d0d0d0);
     --diag-error-text: #b91c1c;
     --diag-warning-text: #c2410c;
     --scrollbar-thumb: rgba(15, 23, 42, 0.28);
@@ -627,6 +625,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     touch-action: pan-x;
     user-select: none;
     -webkit-user-select: none;
+    box-shadow: 0px 1px 4px #00000040;
 }
 
 #topUtilityBtns::-webkit-scrollbar {

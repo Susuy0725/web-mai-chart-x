@@ -1,10 +1,8 @@
 import { popupWindow, clamp, simpleToast, defaultSyntaxColors, applySyntaxColors, resolveSyntaxColor, syntaxColorPresets, getHighlight } from '../helper.js';
 import { settingsConfig, isEasterEggUnlocked } from '../core/settingsConfig.js';
 import { t, setLang } from '../i18n.js';
-import { idbSet } from '../indexDB.js';
 import { appContext } from '../core/appContext.js';
-import { eventBus, EVENTS } from '../core/eventBus.js';
-import { applyThemeSettings, onThemeChange, DEFAULT_THEME_MODE, DEFAULT_ACCENT_COLOR } from '../core/themeManager.js';
+import { onThemeChange } from '../core/themeManager.js';
 import {
     KEYBINDING_CATEGORIES,
     KEYBINDING_DEFINITIONS,
@@ -40,10 +38,21 @@ export {
 export function openSettingsModal(options = {}) {
     const settings = options.settings || appContext.settings;
     const audioManager = options.audioManager || appContext.audioManager;
-    const saveSettingsDebounce = options.saveSettingsDebounce || (() => appContext.saveSettings());
+    const saveSettingsDebounce = options.saveSettingsDebounce || appContext.get('saveSettingsDebounce') || (() => appContext.saveSettings());
     const setEditorCss = options.setEditorCss || appContext.get('setEditorCss');
     const draw = options.draw || (() => appContext.draw());
     const initialTab = options.initialTab || 0;
+
+    const flushSettingsSave = () => {
+        if (typeof saveSettingsDebounce?.flush === 'function') {
+            saveSettingsDebounce.flush();
+            return;
+        }
+        const registeredSave = appContext.get('saveSettingsDebounce');
+        if (typeof registeredSave?.flush === 'function') {
+            registeredSave.flush();
+        }
+    };
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
 
@@ -98,62 +107,32 @@ export function openSettingsModal(options = {}) {
 
     const createRow = createSettingRow;
 
-    const applySettings = () => {
-        const values = {};
-
-        Object.keys(inputRefs).forEach(id => {
-            const config = inputRefs[id];
-            let finalVal;
-
-            if (config.type === 'button') {
-                return;
-            } else if (config.type === 'checkbox') {
-                finalVal = config.el.checked;
-            } else if (config.type === 'dropdown') {
-                finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
-            } else if (config.type === 'text' || config.type === 'color') {
-                finalVal = config.el.value;
-            } else if (config.type === 'object' || config.type === 'color-object' || config.type === 'keybindings') {
-                // 直接複製子選單同步完的物件結果
-                finalVal = { ...config.el.value };
-            } else {
-                const rawVal = parseFloat(config.el.value);
-                finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
+    const assignSettingValue = (targetRef, targetKey, value, type, fallback = {}) => {
+        if (type === 'object') {
+            if (!targetRef[targetKey] || typeof targetRef[targetKey] !== 'object') {
+                targetRef[targetKey] = { ...fallback };
             }
+            Object.assign(targetRef[targetKey], value);
+            return targetRef[targetKey];
+        }
+        targetRef[targetKey] = value;
+        return value;
+    };
 
-            values[id] = finalVal;
-
-            // 深度指派物件結構，避免直接蓋掉引用，並防禦空值
-            if (config.type === 'object') {
-                if (!config.ref[config.key] || typeof config.ref[config.key] !== 'object') {
-                    config.ref[config.key] = {};
-                }
-                Object.assign(config.ref[config.key], finalVal);
-            } else {
-                config.ref[config.key] = finalVal;
+    const commitSetting = (targetRef, targetKey, value, item, { save = true } = {}) => {
+        const committedValue = assignSettingValue(targetRef, targetKey, value, item?.type, item?.def);
+        appContext.setSetting(targetKey, committedValue);
+        if (item?.apply) {
+            try {
+                item.apply(committedValue);
+            } catch (err) {
+                console.error(`[settingsModal] Error applying setting "${item.id || targetKey}":`, err);
             }
-        });
-
-        // 透過 appContext 同步並派發變更事件
-        Object.keys(values).forEach(id => {
-            appContext.setSetting(id, values[id]);
-        });
-
-        Object.keys(inputRefs).forEach(id => {
-            if (inputRefs[id].apply) {
-                try {
-                    inputRefs[id].apply(values[id], values);
-                } catch (err) {
-                    console.error(`[settingsModal] Error applying setting "${id}":`, err);
-                }
-            }
-        });
-
-        eventBus.emit(EVENTS.SETTINGS_SAVED, { allSettings: settings });
-        if (saveSettingsDebounce) saveSettingsDebounce();
-        if (setEditorCss) setEditorCss();
-        if (draw) draw();
-        simpleToast({ content: t('toast.settingsSaved'), type: 'success', timeout: 1500 });
+        }
+        if (save && saveSettingsDebounce) {
+            saveSettingsDebounce();
+        }
+        return committedValue;
     };
 
     const createRangeInput = createSettingRangeInput;
@@ -166,17 +145,9 @@ export function openSettingsModal(options = {}) {
 
     const createCheckbox = createSettingCheckbox;
 
-    function applyAudioSettings(s) {
-        if (!audioManager || !s) return;
-        if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
-        if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
-        if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
-        if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
-    }
-
     const createDropdown = createSettingDropdown;
 
-    const createKeybindingsEditor = (initialValue, onCleanupRegister) => {
+    const createKeybindingsEditor = (initialValue, onChange, onCleanupRegister) => {
         const panel = document.createElement('div');
         panel.className = 'popup-setting-kb-panel';
 
@@ -188,8 +159,11 @@ export function openSettingsModal(options = {}) {
         let keydownCaptureHandler = null;
         let searchQuery = '';
 
-        const syncValue = () => {
+        const syncValue = (notify = true) => {
             panel.value = { ...workingMap };
+            if (notify && typeof onChange === 'function') {
+                onChange({ ...workingMap });
+            }
         };
 
         const setBinding = (actionId, combo) => {
@@ -593,10 +567,7 @@ export function openSettingsModal(options = {}) {
                 el = createCheckbox(currentVal, `settings-${item.id}`);
                 el.addEventListener('change', (e) => {
                     try {
-                        const checked = e.target.checked;
-                        targetRef[targetKey] = checked;
-                        appContext.setSetting(targetKey, checked);
-                        if (item.apply) item.apply(checked);
+                        commitSetting(targetRef, targetKey, e.target.checked, item);
                     } catch (err) { }
                     syncConditionalRows();
                 });
@@ -607,16 +578,14 @@ export function openSettingsModal(options = {}) {
                 el = createDropdown(currentVal, item.options);
                 el.addEventListener('change', async (e) => {
                     const newValue = isNaN(e.target.value) ? e.target.value : parseFloat(e.target.value);
-                    try {
-                        targetRef[targetKey] = newValue;
-                        appContext.setSetting(targetKey, newValue);
-                    } catch (err) { }
-                    syncConditionalRows();
                     if (item.id === 'lang') {
                         el.disabled = true;
                         const success = await setLang(newValue);
                         if (success) {
-                            idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
+                            targetRef[targetKey] = newValue;
+                            appContext.setSetting(targetKey, newValue);
+                            if (saveSettingsDebounce) saveSettingsDebounce();
+                            flushSettingsSave();
                             if (popupCtx) {
                                 popupCtx.close();
                                 // 重新開啟設定彈窗以應用新語系介面
@@ -633,16 +602,19 @@ export function openSettingsModal(options = {}) {
                             el.disabled = false;
                             el.value = currentVal;
                         }
+                        return;
                     }
+                    try {
+                        commitSetting(targetRef, targetKey, newValue, item);
+                    } catch (err) { }
+                    syncConditionalRows();
                 });
             }
             // --- C. 處理 Range ---
             else if (item.type === 'range') {
                 el = createRangeInput(currentVal, item.min, item.max, item.step, (val) => {
                     try {
-                        targetRef[targetKey] = val;
-                        appContext.setSetting(targetKey, val);
-                        if (item.apply) item.apply(val);
+                        commitSetting(targetRef, targetKey, val, item);
                     } catch (err) { }
                 }, item.rangeOptions);
             }
@@ -650,9 +622,7 @@ export function openSettingsModal(options = {}) {
             else if (item.type === 'color') {
                 el = createColorInput(currentVal, (newColor) => {
                     try {
-                        targetRef[targetKey] = newColor;
-                        appContext.setSetting(targetKey, newColor);
-                        if (item.apply) item.apply(newColor);
+                        commitSetting(targetRef, targetKey, newColor, item);
                     } catch (err) { }
                 });
             }
@@ -662,11 +632,9 @@ export function openSettingsModal(options = {}) {
                 el.type = 'text';
                 el.className = 'popup-setting-input popup-setting-input-text';
                 el.value = currentVal ?? '';
-                el.addEventListener('input', (e) => {
+                el.addEventListener('change', (e) => {
                     try {
-                        targetRef[targetKey] = e.target.value;
-                        appContext.setSetting(targetKey, e.target.value);
-                        if (item.apply) item.apply(e.target.value);
+                        commitSetting(targetRef, targetKey, e.target.value, item);
                     } catch (err) { }
                 });
             }
@@ -685,9 +653,13 @@ export function openSettingsModal(options = {}) {
                     const subSlider = createRangeInput(subCurrent, 0, 1, 0.05, (subVal) => {
                         try {
                             el.value[subKey] = subVal;
+                            if (!targetRef[targetKey] || typeof targetRef[targetKey] !== 'object') {
+                                targetRef[targetKey] = { ...item.def };
+                            }
                             targetRef[targetKey][subKey] = subVal;
                             appContext.setSetting(targetKey, targetRef[targetKey]);
                             if (item.apply) item.apply(targetRef[targetKey]);
+                            if (saveSettingsDebounce) saveSettingsDebounce();
                         } catch (e) { }
                     });
 
@@ -759,9 +731,7 @@ export function openSettingsModal(options = {}) {
                     if (selected === 'custom' || !syntaxColorPresets[selected]) return;
                     const newColors = { ...syntaxColorPresets[selected].colors };
                     Object.assign(el.value, newColors);
-                    targetRef[targetKey] = { ...newColors };
-                    appContext.setSetting(targetKey, targetRef[targetKey]);
-                    if (item.apply) item.apply(targetRef[targetKey]);
+                    commitSetting(targetRef, targetKey, { ...newColors }, item);
                     el._updateDisplay();
                 });
 
@@ -776,9 +746,7 @@ export function openSettingsModal(options = {}) {
                 resetBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     Object.assign(el.value, defaultSyntaxColors);
-                    targetRef[targetKey] = { ...defaultSyntaxColors };
-                    appContext.setSetting(targetKey, targetRef[targetKey]);
-                    if (item.apply) item.apply(targetRef[targetKey]);
+                    commitSetting(targetRef, targetKey, { ...defaultSyntaxColors }, item);
                     el._updateDisplay();
                 });
                 toolbarRow.appendChild(resetBtn);
@@ -814,11 +782,15 @@ export function openSettingsModal(options = {}) {
                     const colorInput = createColorInput(subCurrent, (newColor) => {
                         try {
                             el.value[subKey] = newColor;
+                            if (!targetRef[targetKey] || typeof targetRef[targetKey] !== 'object') {
+                                targetRef[targetKey] = { ...item.def };
+                            }
                             targetRef[targetKey][subKey] = newColor;
                             appContext.setSetting(targetKey, targetRef[targetKey]);
                             if (item.apply) item.apply(targetRef[targetKey]);
                             presetSelect.value = detectMatchingPreset(targetRef[targetKey]);
                             syncPreviewColors(el.value);
+                            if (saveSettingsDebounce) saveSettingsDebounce();
                         } catch (e) { }
                     });
 
@@ -839,7 +811,9 @@ export function openSettingsModal(options = {}) {
             }
             // --- F2. 處理自訂快速鍵面板 (Keybindings) ---
             else if (item.type === 'keybindings') {
-                el = createKeybindingsEditor(currentVal);
+                el = createKeybindingsEditor(currentVal, (nextMap) => {
+                    commitSetting(targetRef, targetKey, nextMap, item);
+                });
             }
             // --- E. 處理 Button ---
             else if (item.type === 'button') {
@@ -853,6 +827,26 @@ export function openSettingsModal(options = {}) {
             // --- F. 一般 Number ---
             else {
                 el = createNumberInput(currentVal, item.step, item.min, item.max);
+                el.addEventListener('change', () => {
+                    const rawVal = parseFloat(el.value);
+                    const minNum = Number(el.min);
+                    const maxNum = Number(el.max);
+                    let finalVal;
+                    if (isNaN(rawVal)) {
+                        finalVal = targetRef[targetKey] ?? item.def;
+                    } else {
+                        finalVal = clamp(
+                            rawVal,
+                            Number.isFinite(minNum) ? minNum : -Infinity,
+                            Number.isFinite(maxNum) ? maxNum : Infinity
+                        );
+                    }
+                    el.value = String(finalVal);
+                    try {
+                        commitSetting(targetRef, targetKey, finalVal, item);
+                    } catch (err) { }
+                    syncConditionalRows();
+                });
             }
 
             const rowEl = item.type === 'keybindings'
@@ -883,17 +877,6 @@ export function openSettingsModal(options = {}) {
     }
     switchTab(currentTabIndex);
 
-    const oldAudioSettings = {
-        globalVolume: settings.globalVolume,
-        musicVolume: settings.musicVolume,
-        SfxVolume: settings.SfxVolume,
-        sfxVolumes: settings.sfxVolumes ? { ...settings.sfxVolumes } : null
-    };
-
-    const oldSyntaxColors = settings.syntaxColors ? { ...settings.syntaxColors } : null;
-    const oldThemeMode = settings.themeMode ?? DEFAULT_THEME_MODE;
-    const oldAccentColor = settings.accentColor ?? DEFAULT_ACCENT_COLOR;
-
     popupCtx = popupWindow({
         title: t('settings.title'),
         customContent: container,
@@ -902,41 +885,13 @@ export function openSettingsModal(options = {}) {
         onClose: () => {
             stopKeybindingRecording();
             stopPreviewThemeSync();
+            flushSettingsSave();
         },
         buttons: [
             {
-                text: t('popup.save'),
-                onClick: () => {
-                    stopKeybindingRecording();
-                    applySettings();
-                },
-                hideOnClick: true
-            },
-            {
-                text: t('popup.apply'),
-                onClick: () => {
-                    stopKeybindingRecording();
-                    applySettings();
-                }
-            },
-            {
-                text: t('popup.cancel'),
-                onClick: () => {
-                    stopKeybindingRecording();
-                    applyAudioSettings(oldAudioSettings);
-                    applyThemeSettings({ themeMode: oldThemeMode, accentColor: oldAccentColor });
-                    appContext.setSetting('themeMode', oldThemeMode);
-                    appContext.setSetting('accentColor', oldAccentColor);
-                    if (oldSyntaxColors) {
-                        applySyntaxColors(oldSyntaxColors);
-                        if (settings) settings.syntaxColors = { ...oldSyntaxColors };
-                    }
-                },
-                hideOnClick: true
-            },
-            {
                 text: t('popup.reset'),
                 onClick: () => {
+                    if (!confirm(t('popup.confirmResetSettings'))) return;
                     stopKeybindingRecording();
                     Object.values(inputRefs).forEach(ref => {
                         if (ref.type === 'button') {
@@ -951,25 +906,34 @@ export function openSettingsModal(options = {}) {
                             }
                             Object.assign(ref.ref[ref.key], ref.def);
                             if (ref.el._updateDisplay) ref.el._updateDisplay();
-                            if (ref.apply) ref.apply(ref.ref[ref.key]);
                         } else if (ref.type === 'keybindings') {
-                            ref.el.value = { ...(ref.def || {}) };
+                            const resetBindings = { ...(ref.def || {}) };
+                            ref.el.value = resetBindings;
+                            ref.ref[ref.key] = { ...resetBindings };
                             if (ref.el._updateDisplay) ref.el._updateDisplay();
                         } else {
                             ref.el.value = ref.def;
                             ref.ref[ref.key] = ref.def;
                             if (ref.el._updateDisplay) ref.el._updateDisplay();
-                            if (ref.apply) ref.apply(ref.def);
+                        }
+
+                        appContext.setSetting(ref.key, ref.ref[ref.key]);
+                        if (ref.apply) {
+                            try {
+                                ref.apply(ref.ref[ref.key]);
+                            } catch (err) {
+                                console.error(`[settingsModal] Error resetting setting "${ref.key}":`, err);
+                            }
                         }
                     });
-                    appContext.setSetting('themeMode', settings.themeMode ?? DEFAULT_THEME_MODE);
-                    appContext.setSetting('accentColor', settings.accentColor ?? DEFAULT_ACCENT_COLOR);
 
                     syncConditionalRows();
+                    if (setEditorCss) setEditorCss();
                     if (draw) draw();
+                    if (saveSettingsDebounce) saveSettingsDebounce();
                     simpleToast({ content: t('toast.restoreSaved'), type: 'info', timeout: 1500 });
                 }
-            },
+            }
         ]
     });
 }

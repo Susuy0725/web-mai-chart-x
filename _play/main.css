@@ -27,23 +27,30 @@
 }
 
 :root[data-theme="light"] {
-    --main-color: #ffffff;
-    --timeline-color-background: #cbd5e1;
-    --ui-text: #1e293b;
-    --ui-text-secondary: rgba(30, 41, 59, 0.74);
+    --main-color: color-mix(in srgb, var(--accent-color, #4499ee) 0.8%, #efefef);
+    --timeline-color-background: color-mix(in srgb, var(--accent-color, #4499ee) 8%, #cccccc);
+    --ui-text: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #434343);
+    --ui-text-secondary: rgba(43, 43, 43, 0.74);
     --ui-hover-bg: rgba(15, 23, 42, 0.07);
     --ui-hover-strong-bg: rgba(15, 23, 42, 0.11);
-    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #e2e8f0);
-    --ui-active-text: #0f172a;
+    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #efefef);
+    --ui-active-text: color-mix(in srgb, var(--accent-color, #4499ee) 20%, #2b2b2b);
     --ui-border: rgba(15, 23, 42, 0.1);
     --ui-border-strong: rgba(15, 23, 42, 0.2);
     --ui-shadow-floating: 0 6px 20px rgba(15, 23, 42, 0.14), 0 1px 4px rgba(15, 23, 42, 0.08);
     --ui-shadow-menu: 0 10px 30px rgba(15, 23, 42, 0.16), 0 0 1px rgba(15, 23, 42, 0.2);
     --ui-ripple-bg: rgba(15, 23, 42, 0.22);
-    --button-ouline: #d4dbe4;
+    --button-ouline: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #d5d5d5);
     --scrollbar-thumb: rgba(15, 23, 42, 0.28);
     --scrollbar-thumb-hover: rgba(15, 23, 42, 0.45);
     color-scheme: light;
+}
+
+@media (prefers-contrast: more) {
+    :root {
+        --scrollbar-thumb: #ffffff;
+        --scrollbar-track: #000000;
+    }
 }
 
 @font-face {
@@ -603,4 +610,110 @@ body {
     display: flex;
     gap: 4px;
     flex-wrap: wrap;
+}
+
+/* 全域統一滾動條樣式 */
+.popup-setting-sidebar,
+.popup-setting-content,
+.project-manager-grid,
+.popup-body,
+.popup-buttons,
+.popup-content,
+.popup-search-results,
+.popup-diff-list,
+.changelog-markdown,
+.resource-manager-modal,
+.chart-info-textarea,
+.slide-debug-body,
+.slide-debug-table-container {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@supports not (scrollbar-color: auto) {
+
+    .popup-setting-sidebar,
+    .popup-setting-content,
+    .project-manager-grid,
+    .popup-body,
+    .popup-buttons,
+    .popup-content,
+    .popup-search-results,
+    .popup-diff-list,
+    .changelog-markdown,
+    .resource-manager-modal,
+    .chart-info-textarea,
+    .slide-debug-body,
+    .slide-debug-table-container {
+        scrollbar-width: auto;
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar,
+    .popup-setting-content::-webkit-scrollbar,
+    .project-manager-grid::-webkit-scrollbar,
+    .popup-body::-webkit-scrollbar,
+    .popup-buttons::-webkit-scrollbar,
+    .popup-content::-webkit-scrollbar,
+    .popup-search-results::-webkit-scrollbar,
+    .popup-diff-list::-webkit-scrollbar,
+    .changelog-markdown::-webkit-scrollbar,
+    .resource-manager-modal::-webkit-scrollbar,
+    .chart-info-textarea::-webkit-scrollbar,
+    .slide-debug-body::-webkit-scrollbar,
+    .slide-debug-table-container::-webkit-scrollbar {
+        width: var(--scrollbar-size);
+        height: var(--scrollbar-size);
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar-track,
+    .popup-setting-content::-webkit-scrollbar-track,
+    .project-manager-grid::-webkit-scrollbar-track,
+    .popup-body::-webkit-scrollbar-track,
+    .popup-buttons::-webkit-scrollbar-track,
+    .popup-content::-webkit-scrollbar-track,
+    .popup-search-results::-webkit-scrollbar-track,
+    .popup-diff-list::-webkit-scrollbar-track,
+    .changelog-markdown::-webkit-scrollbar-track,
+    .resource-manager-modal::-webkit-scrollbar-track,
+    .chart-info-textarea::-webkit-scrollbar-track,
+    .slide-debug-body::-webkit-scrollbar-track,
+    .slide-debug-table-container::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: var(--scrollbar-radius);
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar-thumb,
+    .popup-setting-content::-webkit-scrollbar-thumb,
+    .project-manager-grid::-webkit-scrollbar-thumb,
+    .popup-body::-webkit-scrollbar-thumb,
+    .popup-buttons::-webkit-scrollbar-thumb,
+    .popup-content::-webkit-scrollbar-thumb,
+    .popup-search-results::-webkit-scrollbar-thumb,
+    .popup-diff-list::-webkit-scrollbar-thumb,
+    .changelog-markdown::-webkit-scrollbar-thumb,
+    .resource-manager-modal::-webkit-scrollbar-thumb,
+    .chart-info-textarea::-webkit-scrollbar-thumb,
+    .slide-debug-body::-webkit-scrollbar-thumb,
+    .slide-debug-table-container::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb);
+        border: 2px solid transparent;
+        background-clip: content-box;
+        border-radius: var(--scrollbar-radius);
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar-thumb:hover,
+    .popup-setting-content::-webkit-scrollbar-thumb:hover,
+    .project-manager-grid::-webkit-scrollbar-thumb:hover,
+    .popup-body::-webkit-scrollbar-thumb:hover,
+    .popup-buttons::-webkit-scrollbar-thumb:hover,
+    .popup-content::-webkit-scrollbar-thumb:hover,
+    .popup-search-results::-webkit-scrollbar-thumb:hover,
+    .popup-diff-list::-webkit-scrollbar-thumb:hover,
+    .changelog-markdown::-webkit-scrollbar-thumb:hover,
+    .resource-manager-modal::-webkit-scrollbar-thumb:hover,
+    .chart-info-textarea::-webkit-scrollbar-thumb:hover,
+    .slide-debug-body::-webkit-scrollbar-thumb:hover,
+    .slide-debug-table-container::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar-thumb-hover);
+    }
 }

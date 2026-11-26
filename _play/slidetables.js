@@ -3,6 +3,8 @@
  * Reference: TeamMajdata/MajdataPlay (Assets/Scripts/Scenes/Game/Misc/Notes/Slide/SlideTables.cs, SlideArea.cs)
  */
 
+import { touchRefPos, noteRefPos } from '../Scripts/core/chartGeometry.js';
+
 export class SlideArea {
     constructor(areas, isLast = false, isSkippable = true) {
         this.areas = Array.isArray(areas) ? areas : [areas];
@@ -605,10 +607,19 @@ export function getSlideJudgeQueue(note, renderer = null) {
     return fQueue;
 }
 
+function normalizeSlideSensorId(sensorId) {
+    if (!sensorId) return null;
+    return sensorId.startsWith('K') ? ('A' + sensorId.slice(1)) : sensorId;
+}
+
 function fallbackGeometricQueue(note, renderer) {
     const isChainChild = note && (note.firstSlide === false || !!note.prevSlide);
     const startSkippable = isChainChild ? true : false;
-    if (!renderer || typeof renderer.getSensorIdAtPoint !== 'function') {
+    const hasTouchSensorLookup = renderer && (
+        typeof renderer.getTouchSensorIdAtPoint === 'function' ||
+        typeof renderer.getSensorIdAtPoint === 'function'
+    );
+    if (!hasTouchSensorLookup) {
         return [
             new SlideArea(`A${note.pos}`, false, startSkippable),
             new SlideArea(`A${note.slideEnd}`, true, true)
@@ -633,16 +644,20 @@ function fallbackGeometricQueue(note, renderer) {
     if (samples && samples.length > 0) {
         for (let i = 0; i < samples.length; i++) {
             const s = samples[i];
-            if (s && s.sensorId && s.sensorId !== lastSensor) {
-                sensorList.push(s.sensorId);
-                lastSensor = s.sensorId;
+            const sid = normalizeSlideSensorId(s && s.sensorId);
+            if (sid && sid !== lastSensor) {
+                sensorList.push(sid);
+                lastSensor = sid;
             }
         }
     } else {
         const numSamples = Math.max(8, Math.min(24, Math.ceil(path.totalLength * 0.4)));
+        const getTouchSensor = typeof renderer.getTouchSensorIdAtPoint === 'function'
+            ? (x, y) => renderer.getTouchSensorIdAtPoint(x, y, true)
+            : (x, y) => normalizeSlideSensorId(renderer.getSensorIdAtPoint(x, y, true));
         for (let i = 0; i <= numSamples; i++) {
             const pt = path.getPointAt(i / numSamples);
-            const sid = renderer.getSensorIdAtPoint(pt.x, pt.y, true);
+            const sid = getTouchSensor(pt.x, pt.y);
             if (sid && sid !== lastSensor) {
                 sensorList.push(sid);
                 lastSensor = sid;
@@ -660,4 +675,186 @@ function fallbackGeometricQueue(note, renderer) {
         queue.push(new SlideArea(sensorList[i], isLast, true));
     }
     return queue;
+}
+
+function getSlideSensorPoint(sensorId) {
+    if (!sensorId || sensorId === 'C' || sensorId === 'C1' || sensorId === 'C2') {
+        return { x: 0, y: 0 };
+    }
+    const group = sensorId[0].toUpperCase();
+    const num = parseInt(sensorId.slice(1), 10);
+    if (!isNaN(num) && num >= 1 && num <= 8) {
+        if (touchRefPos[group] && touchRefPos[group][num - 1]) {
+            return touchRefPos[group][num - 1];
+        }
+        if (group === 'A' && noteRefPos[num - 1]) {
+            return noteRefPos[num - 1];
+        }
+    }
+    return { x: 0, y: 0 };
+}
+
+function getSlideAreaCenter(area) {
+    const ids = area && Array.isArray(area.areas) ? area.areas : [];
+    if (ids.length === 0) return { x: 0, y: 0 };
+    let sx = 0;
+    let sy = 0;
+    for (let i = 0; i < ids.length; i++) {
+        const pt = getSlideSensorPoint(ids[i]);
+        sx += pt.x;
+        sy += pt.y;
+    }
+    return { x: sx / ids.length, y: sy / ids.length };
+}
+
+/**
+ * 依據 Slide 音符與分支索引取得該分支對應的幾何路徑 (Wi-Fi 支援左/中/右三分支)
+ */
+export function getSlideBranchPath(note, branchIndex = 0, branchCount = 1) {
+    if (!note) return null;
+    if (note.isWifi && note.wPaths && branchCount === 3) {
+        if (branchIndex === 0) return note.wPaths.w1 || note.path;
+        if (branchIndex === 2) return note.wPaths.w2 || note.path;
+    }
+    return note.path || null;
+}
+
+/**
+ * 計算 Slide 判定隊列各步驟在路徑上的非線性勻速時間門檻 [0 ... 1]
+ * 使模擬手指與電腦自動遊玩依路徑真實弧長勻速推進，且最後一個感應區固定於 progress = 1.0 按下。
+ */
+export function getSlideStepThresholds(fullQ, path = null) {
+    const n = Array.isArray(fullQ) ? fullQ.length : 0;
+    if (n <= 1) return [0];
+    if (n === 2) return [0, 1];
+
+    if (fullQ._stepThresholds && fullQ._stepThresholdPath === (path || null) && fullQ._stepThresholds.length === n) {
+        return fullQ._stepThresholds;
+    }
+
+    const centers = new Array(n);
+    for (let i = 0; i < n; i++) {
+        centers[i] = getSlideAreaCenter(fullQ[i]);
+    }
+
+    let thresholds;
+
+    if (path && path.totalLength >= 1e-4 && typeof path.getPointAt === 'function') {
+        const sampleCount = Math.max(48, n * 12);
+        const pts = new Array(sampleCount + 1);
+        for (let k = 0; k <= sampleCount; k++) {
+            pts[k] = path.getPointAt(k / sampleCount);
+        }
+
+        const stride = sampleCount + 1;
+        const dp = new Float64Array(n * stride);
+        const prevChoice = new Int16Array(n * stride);
+        dp.fill(Infinity);
+        prevChoice.fill(-1);
+
+        dp[0] = 0;
+
+        for (let i = 1; i < n - 1; i++) {
+            const cx = centers[i].x;
+            const cy = centers[i].y;
+            const minK = i;
+            const maxK = sampleCount - (n - 1 - i);
+            const rowOffset = i * stride;
+            const prevRowOffset = (i - 1) * stride;
+
+            // 前綴最小值優化：使嚴格單調搜尋 O(n * sampleCount) 完成
+            let bestPrevCost = Infinity;
+            let bestPrevK = -1;
+            for (let k = minK; k <= maxK; k++) {
+                const candidatePrevK = k - 1;
+                const candidateCost = dp[prevRowOffset + candidatePrevK];
+                if (candidateCost < bestPrevCost) {
+                    bestPrevCost = candidateCost;
+                    bestPrevK = candidatePrevK;
+                }
+                if (bestPrevK !== -1) {
+                    const dx = pts[k].x - cx;
+                    const dy = pts[k].y - cy;
+                    dp[rowOffset + k] = bestPrevCost + dx * dx + dy * dy;
+                    prevChoice[rowOffset + k] = bestPrevK;
+                }
+            }
+        }
+
+        // 終點固定落在 k = sampleCount，從最後一步的合法範圍挑選最佳前驅
+        let bestLastPrevK = -1;
+        let bestLastCost = Infinity;
+        const lastPrevRowOffset = (n - 2) * stride;
+        for (let k = n - 2; k <= sampleCount - 1; k++) {
+            const cost = dp[lastPrevRowOffset + k];
+            if (cost < bestLastCost) {
+                bestLastCost = cost;
+                bestLastPrevK = k;
+            }
+        }
+
+        thresholds = new Array(n);
+        thresholds[0] = 0;
+        thresholds[n - 1] = 1;
+        let curK = bestLastPrevK;
+        for (let i = n - 2; i >= 1; i--) {
+            thresholds[i] = curK / sampleCount;
+            curK = prevChoice[i * stride + curK];
+        }
+    } else {
+        // Fallback：無可用路徑時依感應區中心累計歐氏距離比例分配
+        const cumDist = new Array(n);
+        cumDist[0] = 0;
+        for (let i = 1; i < n; i++) {
+            const dx = centers[i].x - centers[i - 1].x;
+            const dy = centers[i].y - centers[i - 1].y;
+            cumDist[i] = cumDist[i - 1] + Math.max(0.01, Math.hypot(dx, dy));
+        }
+        const total = cumDist[n - 1] || 1;
+        thresholds = new Array(n);
+        thresholds[0] = 0;
+        for (let i = 1; i < n - 1; i++) {
+            thresholds[i] = cumDist[i] / total;
+        }
+        thresholds[n - 1] = 1;
+    }
+
+    fullQ._stepThresholds = thresholds;
+    fullQ._stepThresholdPath = path || null;
+    return thresholds;
+}
+
+/**
+ * 將線性時間進度 progress ∈ [0, 1] 非線性映射為勻速滑動之感應區步驟索引與區內進度
+ * - p < 1.0 時僅推進於 0 .. n-2
+ * - p >= 1.0 (Slide 結束時刻) 才按下最後一個感應區 n-1
+ */
+export function getSlideStepState(fullQ, path, progress) {
+    const n = Array.isArray(fullQ) ? fullQ.length : 0;
+    const p = Math.min(1, Math.max(0, Number.isFinite(progress) ? progress : 0));
+    if (n <= 1) {
+        return { curIdx: 0, floatIdx: 0, frac: 0, progress: p };
+    }
+    if (p >= 1) {
+        return { curIdx: n - 1, floatIdx: n - 1, frac: 0, progress: 1 };
+    }
+
+    const thresholds = getSlideStepThresholds(fullQ, path);
+    let curIdx = 0;
+    for (let i = n - 2; i >= 0; i--) {
+        if (p >= thresholds[i]) {
+            curIdx = i;
+            break;
+        }
+    }
+    const startP = thresholds[curIdx];
+    const endP = thresholds[curIdx + 1];
+    const span = Math.max(1e-6, endP - startP);
+    const frac = Math.min(0.999999, Math.max(0, (p - startP) / span));
+    return {
+        curIdx,
+        floatIdx: curIdx + frac,
+        frac,
+        progress: p
+    };
 }

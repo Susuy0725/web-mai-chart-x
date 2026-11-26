@@ -3,7 +3,7 @@
  * 提供 Slide 判定隊列的實時視覺化疊層與浮動除錯面板
  */
 
-import { touchRefPos, noteRefPos, innerCirleBase } from '../Scripts/helper.js';
+import { touchRefPos, noteRefPos, innerCirleBase } from '../Scripts/core/chartGeometry.js';
 import { getSlideJudgeQueue } from './slidetables.js';
 
 let isEnabled = false;

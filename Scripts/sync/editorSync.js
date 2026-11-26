@@ -284,6 +284,8 @@ class EditorSyncManager {
                 if (typeof this.editorContext.onRemoteRestart === 'function') {
                     this.editorContext.onRemoteRestart();
                 }
+            } else if (msg.action === 'speed') {
+                this.editorContext.onRemoteSpeed?.(msg.speed || 1);
             }
         } finally {
             this._isRemoteTriggered = false;

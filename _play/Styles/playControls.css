@@ -1,0 +1,338 @@
+#playControls {
+    user-select: none;
+    -webkit-user-select: none;
+    position: absolute;
+    width: 100%;
+    height: var(--playControls-height);
+    bottom: 0;
+    left: 0;
+    z-index: 105;
+    background: var(--main-color);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0px -1px 4px #00000040;
+}
+
+#playControls #playCapsulesContainer {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 11;
+}
+
+#playControls #playCapsulesContainer[data-position="left"] {
+    left: 10px;
+    right: auto;
+    transform: none;
+}
+
+#playControls #playCapsulesContainer[data-position="right"] {
+    left: auto;
+    right: 10px;
+    transform: none;
+}
+
+#playControls .time-display-capsule,
+#playControls .speed-display-capsule {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    padding: 0 14px;
+    border-radius: 9999px;
+    background: var(--main-color);
+    border: none;
+    box-shadow: var(--ui-shadow-floating, 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25));
+    color: var(--ui-text, rgba(255, 255, 255, 0.9));
+    font-family: 'mono', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+    contain: layout style;
+}
+
+#playControls .speed-display-capsule {
+    transition: background-color 150ms ease, color 150ms ease;
+}
+
+#playControls .speed-display-capsule.is-modified {
+    background: var(--accent-color);
+    color: var(--accent-contrast-text, #ffffff);
+}
+
+#playControls #timeControl {
+    appearance: none;
+    -webkit-appearance: none;
+    width: calc(100% - 16px);
+    height: 10px;
+    background: linear-gradient(90deg, var(--timeline-color, #962d2d) 0%, var(--timeline-color, #962d2d) var(--timeline-progress, 0%), var(--timeline-color-background, #222) var(--timeline-progress, 0%), var(--timeline-color-background, #222) 100%);
+    margin: 10px 8px;
+    border-radius: 7px;
+    border: none;
+    outline: none;
+}
+
+#timeControl:hover::-webkit-slider-thumb {
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    scale: 1.3;
+}
+
+#timeControl::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--timeline-color, #962d2d);
+    border-radius: 10px;
+    cursor: pointer;
+    scale: 1;
+    transition: scale 200ms ease;
+}
+
+#timeControl::-moz-range-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--timeline-color, #962d2d);
+    border-radius: 10px;
+    cursor: pointer;
+    scale: 1;
+    transition: scale 200ms ease;
+}
+
+#playControls #showPlayControlsBtn {
+    background: var(--main-color);
+    width: 42px;
+    height: 42px;
+    padding: 5px;
+    margin: 0;
+    position: absolute;
+    bottom: 0;
+    left: 8px;
+    right: auto;
+    border: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-sizing: border-box;
+    box-shadow: var(--ui-shadow-floating, 0 -4px 16px rgba(0, 0, 0, 0.5), 0 -1px 4px rgba(0, 0, 0, 0.25));
+    border-radius: 7px 7px 0 0;
+    transition: background-color 0.15s ease, opacity 200ms ease, transform 200ms ease;
+    z-index: 100;
+}
+
+#playControls #showPlayControlsBtn:hover .splitter-toolbar-btn {
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
+}
+
+#playControls #showPlayControlsBtn:active .splitter-toolbar-btn {
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
+    transform: scale(0.94);
+}
+
+#playControls #showPlayControlsBtn .material-symbols-outlined {
+    font-size: 20px;
+    line-height: 1;
+}
+
+#playControls #playControlContainer {
+    position: relative;
+    width: 100%;
+    height: 80px;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#playControls .controlsContainer {
+    position: relative;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.controlsContainer .controlButton {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    /*border: 1px solid var(--top-utility-button-ouline);*/
+    padding: 5px;
+    color: var(--ui-text, white);
+    font-size: 14px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.controlsContainer .controlButton[data-buttonAction="hide"] {
+    position: absolute;
+    left: 8px;
+}
+
+
+.controlsContainer .controlSpeedAnchor {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.controlsContainer .controlButton[data-buttonAction="speed"].is-active::after {
+    background: var(--ui-hover-strong-bg, #ffffff22);
+}
+
+.speed-popover {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    height: 42px;
+    box-sizing: border-box;
+    background: var(--main-color);
+    border: 1px solid var(--ui-border, transparent);
+    border-radius: 7px;
+    box-shadow: var(--ui-shadow-floating, 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25));
+    opacity: 0;
+    pointer-events: none;
+    z-index: 120;
+    transform: translateX(-50%) translateY(4px) scale(0.92);
+    transition:
+        opacity 0.16s ease,
+        transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.speed-popover.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.speed-popover-input {
+    width: 56px;
+    height: 32px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border: 1px solid var(--ui-border-strong, rgba(255, 255, 255, 0.14));
+    border-radius: 5px;
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.06));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
+    font-family: 'mono', 'Consolas', monospace;
+    font-size: 12.5px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.speed-popover-input:hover {
+    background: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.1));
+    border-color: var(--ui-border-strong, rgba(255, 255, 255, 0.24));
+}
+
+.speed-popover-input:focus {
+    background: var(--ui-hover-strong-bg, rgba(255, 255, 255, 0.12));
+    border-color: var(--accent-color);
+}
+
+.controlsContainer .controlButton::after {
+    content: '';
+    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    position: absolute;
+    background: transparent;
+    z-index: -1;
+    transition: background 50ms ease, border-radius 50ms ease;
+}
+
+.controlsContainer .controlButton:hover::after {
+    background: var(--ui-hover-bg, #ffffff15);
+}
+
+.controlsContainer .controlButton:active::after {
+    background: transparent;
+}
+
+.controlsContainer .controlButton::before {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--ui-ripple-bg, rgba(255, 255, 255, 0.4));
+    z-index: -1;
+    /* 預設為擴散與漸隱終點，放開滑鼠時觸發流暢 transition 動畫 */
+    transform: scale(1);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.1, 0.8, 0.3, 1), opacity 0.4s ease-out, border-radius 0.4s ease-out;
+}
+
+.controlsContainer .controlButton:active::before {
+    /* 按下瞬間(0s)重置為起點，不受放開時間限制 */
+    transform: scale(0);
+    opacity: 0.6;
+    transition: 0s;
+    border-radius: 20px;
+}
+
+.splitter-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--ui-text-secondary, rgba(255, 255, 255, 0.6));
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.splitter-toolbar-btn:hover {
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--ui-text, rgba(255, 255, 255, 0.95));
+}
+
+.splitter-toolbar-btn:active {
+    background: var(--ui-active-bg, #484852);
+    color: var(--ui-active-text, #ffffff);
+    transform: scale(0.94);
+}
+
+.splitter-toolbar-btn .splitter-icon {
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 300,
+        'GRAD' 0,
+        'opsz' 24;
+    width: 24px;
+    height: 24px;
+    display: block;
+    transition: transform 0.2s ease;
+}

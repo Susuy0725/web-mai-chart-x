@@ -471,7 +471,8 @@ export class SyncManager {
         statusRow.className = 'popup-setting-row';
         const statusLabel = document.createElement('span');
         statusLabel.className = 'popup-setting-label';
-        statusLabel.textContent = '連線狀態';
+        statusLabel.dataset.i18n = 'settings.connection.statusLabel';
+        statusLabel.textContent = t('settings.connection.statusLabel');
 
         const statusValue = document.createElement('span');
         statusValue.style.fontSize = '14px';

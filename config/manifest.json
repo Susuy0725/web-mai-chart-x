@@ -1,0 +1,30 @@
+{
+  "defaultLocale": "en",
+  "locales": [
+    {
+      "code": "zh-TW",
+      "name": "繁體中文",
+      "englishName": "Traditional Chinese"
+    },
+    {
+      "code": "en",
+      "name": "English",
+      "englishName": "English"
+    },
+    {
+      "code": "ja",
+      "name": "日本語",
+      "englishName": "Japanese"
+    },
+    {
+      "code": "zh-CN",
+      "name": "简体中文",
+      "englishName": "Simplified Chinese"
+    },
+    {
+      "code": "ko",
+      "name": "한국어",
+      "englishName": "Korean"
+    }
+  ]
+}

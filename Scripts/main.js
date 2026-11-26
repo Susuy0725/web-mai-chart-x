@@ -27,6 +27,8 @@ import { extensionOverrideRegistry } from './core/extensionOverrideRegistry.js';
 import { loadStoredExtensions } from './core/extensionLoader.js';
 import { initExtensionMenu } from './features/extensionMenu.js';
 import { PlaybackEngine } from './core/playbackEngine.js';
+import { serializeMaidata } from './core/wmcxExtract.js';
+import { editorSync } from './sync/editorSync.js';
 import { initServiceWorker } from './core/swManager.js';
 import { runInitModal } from './core/init.js';
 import { SecondaryWindowManager } from './features/secondaryWindow.js';
@@ -58,14 +60,6 @@ import { t, setLang, getCurrentLang, applyI18nToDOM, i18nReady, onLanguageChange
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
-<<<<<<< HEAD
-import { editorSync } from './sync/editorSync.js';
-import * as googleDriveService from './drive/googleDriveService.js';
-import * as cloudProjectManager from './drive/cloudProjectManager.js';
-import { createGoogleSignInButton } from './drive/googleButton.js';
-import { openProjectManagerModal } from './projectManagerModal.js';
-import { normalizeFiles, parseProjectBundle, saveProjectToIdb, runImportModal } from './projectLoader.js';
-=======
 import { openBgmEditor, openTapBpm } from './modals/bgmEditor.js';
 import { openMainoteFetcher } from './modals/mainoteFetcher.js';
 import { openProjectManager } from './modals/projectManager.js';
@@ -81,178 +75,11 @@ import { generateSmoothBpmByDuration, initSmoothBpmLauncher } from './features/s
 import { openSmoothBpmModal } from './modals/smoothBpmModal.js';
 import { handleFormatDocument, formatDocument, formatSimai } from './features/formatter.js';
 export { toggleNoteFlag };
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 majdataWs.setToastHandler(simpleToast);
 
-<<<<<<< HEAD
-const isDev =
-    import.meta.env?.VITE_MODE === 'debug' ||
-    Boolean(import.meta.env?.DEV) ||
-    self.location.port === '5173' ||
-    self.location.hostname === 'localhost' ||
-    self.location.hostname === '127.0.0.1' ||
-    self.location.hostname.endsWith('.ngrok-free.app') ||
-    self.location.hostname.endsWith('.ngrok-free.dev') ||
-    self.location.hostname.endsWith('.ngrok.io');
-
-let swProgressToast = null;
-
-function showSwUpdateProgress({ loaded = 0, total = 0, progress = 0, file = '' } = {}) {
-    if (!swProgressToast) {
-        swProgressToast = document.createElement('div');
-        swProgressToast.className = 'sw-update-toast show';
-        swProgressToast.innerHTML = `
-            <div class="sw-update-header">
-                <span class="sw-update-title">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation: sw-spin 1.2s linear infinite;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                    <span class="sw-title-text">${t('toast.swUpdating') || '正在下載離線更新...'}</span>
-                </span>
-                <span class="sw-update-percent">${progress}%</span>
-            </div>
-            <div class="sw-update-progress-bar-bg">
-                <div class="sw-update-progress-bar-fill" style="transform: scaleX(${progress / 100})"></div>
-            </div>
-            <div class="sw-update-details">
-                <span class="sw-update-file">${file ? file.replace('./', '') : ''}</span>
-                <span class="sw-update-count">${loaded} / ${total}</span>
-            </div>
-        `;
-        document.body.appendChild(swProgressToast);
-    } else {
-        const fill = swProgressToast.querySelector('.sw-update-progress-bar-fill');
-        const percent = swProgressToast.querySelector('.sw-update-percent');
-        const fileEl = swProgressToast.querySelector('.sw-update-file');
-        const countEl = swProgressToast.querySelector('.sw-update-count');
-
-        if (fill) fill.style.transform = `scaleX(${progress / 100})`;
-        if (percent) percent.textContent = `${progress}%`;
-        if (fileEl && file) fileEl.textContent = file.replace('./', '');
-        if (countEl) countEl.textContent = `${loaded} / ${total}`;
-    }
-}
-
-window.showSwUpdateComplete = showSwUpdateComplete;
-
-function showSwUpdateComplete() {
-    if (!swProgressToast) {
-        swProgressToast = document.createElement('div');
-        document.body.appendChild(swProgressToast);
-    }
-
-    swProgressToast.className = 'sw-update-toast show completed';
-    swProgressToast.innerHTML = `
-        <div class="sw-update-header">
-            <span class="sw-update-title">
-                <svg style="color: var(--sw-complete-color);" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <span>${t('toast.swUpdated') || '版本更新已就緒！'}</span>
-            </span>
-            <span class="sw-update-percent">100%</span>
-        </div>
-        <div class="sw-update-progress-bar-bg">
-            <div class="sw-update-progress-bar-fill" style="transform: scaleX(1)"></div>
-        </div>
-        <div class="sw-update-details">
-            <span>${t('toast.swUpdateDetail') || '快取已更新，請重新整理以套用最新版本'}</span>
-        </div>
-        <div class="sw-update-actions">
-            <button class="sw-update-btn sw-update-btn-dismiss">${t('toast.swDismiss') || '稍後'}</button>
-            <button class="sw-update-btn sw-update-btn-reload">${t('toast.swReloadNow') || '立即重新整理'}</button>
-        </div>
-    `;
-
-    const reloadBtn = swProgressToast.querySelector('.sw-update-btn-reload');
-    const dismissBtn = swProgressToast.querySelector('.sw-update-btn-dismiss');
-
-    if (reloadBtn) {
-        reloadBtn.addEventListener('click', () => {
-            window.location.reload();
-        });
-    }
-
-    if (dismissBtn) {
-        dismissBtn.addEventListener('click', () => {
-            swProgressToast.classList.remove('show');
-            setTimeout(() => {
-                swProgressToast?.remove();
-                swProgressToast = null;
-            }, 300);
-        });
-    }
-}
-
-function showCleanCompleteAndReload() {
-    popupWindow({
-        title: t('popup.resource.clearCache') || "清除緩存",
-        content: t('popup.resource.clearCompleteReload') || "清理完成，將重新整理以完成清除",
-        unclosable: true,
-        buttons: [{
-            text: t('popup.resource.confirm') || t('popup.ok') || "確定",
-            onClick: () => {
-                window.location.reload();
-            }
-        }]
-    });
-}
-
-if ('serviceWorker' in navigator) {
-    if (isDev) {
-        // 測試與開發環境 (localhost / 127.0.0.1 / ngrok)：自動註銷 Service Worker 並清空開發快取，防止干擾除錯
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-            for (const registration of registrations) {
-                registration.unregister().then(() => {
-                    console.log('[SW] 測試環境：已自動註銷 Service Worker');
-                });
-            }
-        });
-        if (window.caches) {
-            caches.keys().then((keys) => {
-                for (const key of keys) {
-                    caches.delete(key).then(() => {
-                        console.log('[SW] 測試環境：已清除舊快取:', key);
-                    });
-                }
-            });
-        }
-    } else {
-        // 正式發布環境：正常註冊並啟用離線快取功能
-        navigator.serviceWorker.addEventListener('message', (event) => {
-            const data = event.data;
-            if (!data) return;
-
-            if (data.type === 'SW_UPDATE_START' || data.type === 'SW_UPDATE_PROGRESS') {
-                showSwUpdateProgress(data);
-            } else if (data.type === 'SW_UPDATE_COMPLETE') {
-                showSwUpdateComplete();
-            }
-        });
-
-        navigator.serviceWorker.register('./sw.js')
-            .then((reg) => {
-                console.log('Service worker registered:', reg);
-
-                reg.addEventListener('updatefound', () => {
-                    const newWorker = reg.installing;
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            showSwUpdateComplete();
-                        }
-                    });
-                });
-
-                reg.update().catch((err) => {
-                    console.warn('Service worker update failed:', err);
-                });
-            })
-            .catch((err) => {
-                console.warn('Service worker registration failed:', err);
-            });
-    }
-}
-=======
 initServiceWorker();
 disableNavigationGestures();
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 let
     isInitComplete = false,
@@ -290,8 +117,8 @@ function revokeBlobUrls() {
 }
 
 // 專案命名空間化的讀寫包裝
-const projSet = (key, value) => currentProjectId ? idbSetProject(currentProjectId, key, value) : Promise.resolve();
-const projGet = (key) => currentProjectId ? idbGetProject(currentProjectId, key) : Promise.resolve(null);
+const projSet = (key, value) => idbSetProject(currentProjectId, key, value);
+const projGet = (key) => idbGetProject(currentProjectId, key);
 
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
@@ -346,15 +173,6 @@ if (typeof document !== 'undefined' && document.fonts) {
 
 const canvas = document.getElementById('main');
 const canvasContainer = document.getElementById('canvasContainer');
-
-if (canvasContainer) {
-    canvasContainer.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvasContainer.addEventListener('selectstart', (e) => e.preventDefault());
-}
-if (canvas) {
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('selectstart', (e) => e.preventDefault());
-}
 const timeline = document.getElementById('timeControl');
 const playCapsulesContainer = document.getElementById('playCapsulesContainer');
 const timeDisplayCapsule = document.getElementById('timeDisplayCapsule');
@@ -472,7 +290,6 @@ const findReplaceButton = getButton("findReplace", "utility");
 const toggleBkButton = getButton("toggleBk", "utility");
 const toggleExButton = getButton("toggleEx", "utility");
 const connectMajdataViewButton = getButton("connectMajdataView", "utility");
-const syncPlayButton = getButton("syncPlay", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
 const smoothBpmMenuButton = getButton("smoothBpm", "utility");
@@ -1535,218 +1352,6 @@ function applyAudioSettings(s) {
     if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
 }
 
-<<<<<<< HEAD
-const settingsConfig = [
-    {
-        label: 'settings.tabs.general',
-        items: [
-            { id: 'speed', type: 'number', label: 'settings.items.speed', step: 0.1, min: 1, max: 20, def: defaultSettings.speed },
-            { id: 'slideSpeed', type: 'number', label: 'settings.items.slideSpeed', step: 0.1, min: -1, max: 1, def: defaultSettings.slideSpeed, },
-            { id: 'touchSpeed', type: 'number', label: 'settings.items.touchSpeed', step: 0.1, min: 1, max: 20, def: defaultSettings.touchSpeed },
-            { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.scorePlus' }, { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }], def: defaultSettings.middleDisplay },
-            {
-                id: 'moviebrightness',
-                type: 'dropdown',
-                label: 'settings.items.moviebrightness',
-                options: [
-                    { value: '0', label: 'settings.items.bright' },
-                    { value: '-1', label: 'settings.items.normal' },
-                    { value: '-2', label: 'settings.items.dark' },
-                    { value: '-3', label: 'settings.items.veryDark' },
-                ],
-                def: defaultSettings.moviebrightness || 0,
-                apply: (val) => applyMovieBrightness(val),
-            },
-            {
-                id: 'pinkStars',
-                type: 'checkbox',
-                label: 'settings.items.pinkStars',
-                def: defaultSettings.pinkStars || false
-            },
-            {
-                id: 'lang',
-                type: 'dropdown',
-                label: 'settings.items.lang',
-                options: [
-                    { value: 'zh-TW', label: '繁體中文' },
-                    { value: 'en', label: 'English' },
-                    { value: 'ja', label: '日本語' },
-                ],
-                def: getCurrentLang(),
-                get: () => getCurrentLang(),
-                apply: (val) => {
-                    setLang(val);
-                }
-            },
-        ]
-    },
-    {
-        label: 'settings.tabs.display',
-        items: [
-            {
-                id: 'showSensor',
-                type: 'checkbox',
-                label: 'settings.items.showSensor',
-                def: defaultSettings.showSensor
-            },
-            {
-                id: 'showSensorTextWhenPaused',
-                type: 'checkbox',
-                label: 'settings.items.showSensorTextWhenPaused',
-                def: defaultSettings.showSensorTextWhenPaused
-            },
-            {
-                id: 'hideBackgroundWhenPaused',
-                type: 'checkbox',
-                label: 'settings.items.hideBackgroundWhenPaused',
-                def: defaultSettings.hideBackgroundWhenPaused
-            },
-            {
-                id: 'rotateStars',
-                type: 'checkbox',
-                label: 'settings.items.rotateStars',
-                def: defaultSettings.rotateStars || false
-            },
-            {
-                id: 'slideArrowHideBySensor',
-                type: 'checkbox',
-                label: 'settings.items.slideArrowHideBySensor',
-                def: defaultSettings.slideArrowHideBySensor ?? true
-            },
-            {
-                id: 'hideOutline',
-                type: 'checkbox',
-                label: 'settings.items.hideOutline',
-                def: defaultSettings.hideOutline || false,
-                apply: (val) => {
-                    if (canvasOutline) canvasOutline.style.display = val ? 'none' : '';
-                }
-            },
-            {
-                id: 'showCoverWhenPaused',
-                type: 'checkbox',
-                label: 'settings.items.showCoverWhenPaused',
-                def: defaultSettings.showCoverWhenPaused || false
-            },
-            {
-                id: 'drawHitEffect',
-                type: 'checkbox',
-                label: 'settings.items.drawHitEffect',
-                def: defaultSettings.drawHitEffect || false
-            },
-            {
-                id: 'drawHanabiEffect',
-                type: 'checkbox',
-                label: 'settings.items.drawHanabiEffect',
-                def: defaultSettings.drawHanabiEffect || false
-            },
-            {
-                id: 'lowRes',
-                type: 'checkbox',
-                label: 'settings.items.lowRes',
-                def: defaultSettings.lowRes || false,
-                apply: () => {
-                    resize(true);
-                }
-            },
-            {
-                id: 'majdataWsUrl',
-                type: 'text',
-                label: 'settings.items.majdataWsUrl',
-                def: defaultSettings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata'
-            },
-            {
-                id: 'autoConnectMajdataView',
-                type: 'checkbox',
-                label: 'settings.items.autoConnectMajdataView',
-                def: defaultSettings.autoConnectMajdataView || false
-            },
-            {
-                id: 'resetPanelRatio',
-                type: 'button',
-                label: 'settings.items.resetPanelRatio',
-                btnText: 'popup.reset',
-                onClick: () => {
-                    settings.splitRatio = 0.5;
-                    settings.canvasSnapped = false;
-                    applySplitRatio(0.5);
-                    if (canvasSnapped) {
-                        snapRestoreCanvas();
-                    }
-                    setEditorCss();
-                    resize(true);
-                    draw();
-                    saveSettingsDebounce();
-                    simpleToast({ content: t('toast.panelRatioReset'), type: 'info', timeout: 1500 });
-                }
-            }
-        ]
-    },
-    {
-        label: 'settings.tabs.sfx',
-        items: [
-            {
-                id: 'globalVolume', type: 'range', label: 'settings.items.globalVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.globalVolume,
-                apply: (val) => { audioManager.setGlobalVolume(val); }
-            },
-            {
-                id: 'musicVolume', type: 'range', label: 'settings.items.musicVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.musicVolume,
-                apply: (val) => { audioManager.setBGMVolume(val); }
-            },
-            {
-                id: 'SfxVolume', type: 'range', label: 'settings.items.SfxVolume', min: 0, max: 1, step: 0.1, def: defaultSettings.SfxVolume,
-                apply: (val) => { audioManager.setSFXVolume(val); }
-            },
-            {
-                id: 'sfxVolumes', type: 'object', label: 'settings.items.sfxVolumes', def: defaultSettings.sfxVolumes,
-                apply: (val) => { audioManager.setSFXVolumes(val); }
-            },
-            {
-                id: 'notPlayHoldEnd',
-                type: 'checkbox',
-                label: 'settings.items.notPlayHoldEnd',
-                def: defaultSettings.notPlayHoldEnd
-            }
-        ]
-    },
-    {
-        label: 'settings.tabs.other',
-        items: [
-            {
-                id: 'autocomplete', type: 'checkbox', label: 'settings.items.autocomplete', def: defaultSettings.autocomplete
-            },
-            {
-                id: 'maxSlideCount', type: 'number', label: 'settings.items.maxSlideCount', min: 1, max: 100, step: 1, def: defaultSettings.maxSlideCount
-            },
-            {
-                id: 'inputDebounceTime', type: 'number', label: 'settings.items.inputDebounceTime', min: 0, max: 2000, step: 50, def: defaultSettings.inputDebounceTime
-            },
-            {
-                id: 'showUI', type: 'checkbox', label: 'settings.items.showUI', def: defaultSettings.showUI
-            },
-            {
-                id: 'autoPauseOnScroll', type: 'checkbox', label: 'settings.items.autoPauseOnScroll', def: defaultSettings.autoPauseOnScroll
-            },
-            {
-                id: 'globalTimeline', type: 'checkbox', label: 'settings.items.globalTimeline', def: defaultSettings.globalTimeline
-            },
-            {
-                id: 'enableQuickPanel', type: 'checkbox', label: 'settings.items.enableQuickPanel', def: defaultSettings.enableQuickPanel
-            },
-            {
-                id: 'openResourceManager',
-                type: 'button',
-                label: 'settings.items.manageResources',
-                btnText: 'settings.connection.btnOpen',
-                onClick: () => {
-                    openResourceManager();
-                }
-            }
-        ]
-    }
-];
-=======
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function applyMovieBrightness(val) {
     const raw = (val !== undefined && val !== null) ? val : settings.moviebrightness;
@@ -1841,375 +1446,9 @@ const syncTimelineProgress = (time) => {
     return ratio;
 };
 
-<<<<<<< HEAD
-async function openResourceManager() {
-    async function getSize() {
-        // open a fresh readonly transaction each time so it won't be closed already
-        const db = await openDB();
-        const transaction = db.transaction("editorState", "readonly");
-        const store = transaction.objectStore("editorState");
-
-        let details = t('popup.resource.dbStatus') || "IndexedDB 儲存狀態：\n\n";
-        let totalSize = 0;
-
-        // 取得所有 Key 並統計大小
-        const keys = await new Promise(res => {
-            const req = store.getAllKeys();
-            req.onsuccess = () => res(req.result);
-        });
-
-        for (const key of keys) {
-            const data = await idbGet(key);
-            let size = 0;
-            if (data instanceof Blob) size = data.size;
-            else if (data instanceof ArrayBuffer) size = data.byteLength;
-            else size = JSON.stringify(data).length * 2;
-
-            totalSize += size;
-            details += `• ${key}: ${formatSize(size)}\n`;
-        }
-        details += t('popup.resource.totalUsage', { size: formatSize(totalSize) }) || `\n總計使用量: ${formatSize(totalSize)}`;
-
-        return details;
-    }
-
-    // 呼叫你的 simplePopupWindow
-    popupWindow({
-        title: t('popup.resource.title') || "資源管理",
-        content: await getSize(),
-        buttons: [
-            {
-                text: t('popup.resource.clearCache') || "清除緩存",
-                onClick: (manageCtx) => {
-                    const refreshManage = async () => {
-                        manageCtx.setContent(await getSize());
-                    };
-
-                    popupWindow({
-                        title: t('popup.resource.clearCache') || "清除緩存",
-                        width: "max-content",
-                        buttons: [
-                            {
-                                text: t('popup.resource.clearAll') || "清除所有資料",
-                                onClick: async () => {
-                                    const confirmed = confirm(t('popup.resource.confirmClearAll') || "確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
-                                    if (!confirmed) return;
-                                    const db = await openDB();
-                                    const transaction = db.transaction("editorState", "readwrite");
-                                    const store = transaction.objectStore("editorState");
-                                    store.clear();
-                                    await refreshManage();
-                                    try {
-                                        await transaction.complete;
-                                        console.log("已清除 IndexedDB 中的所有資料");
-                                        showCleanCompleteAndReload();
-                                    } catch (e) {
-                                        console.error("清除 IndexedDB 資料失敗:", e);
-                                    }
-                                }
-                            },
-                            {
-                                text: t('popup.resource.clearChartCache') || "清除譜面暫存",
-                                onClick: async () => {
-                                    const confirmed = confirm(t('popup.resource.confirmClearChart') || "確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
-                                    if (!confirmed) return;
-
-                                    const db = await openDB();
-                                    const transaction = db.transaction("editorState", "readwrite");
-                                    const store = transaction.objectStore("editorState");
-
-                                    // 1. 取得所有 Key
-                                    const getKeysRequest = store.getAllKeys();
-
-                                    getKeysRequest.onsuccess = async () => {
-                                        const allKeys = getKeysRequest.result;
-                                        let deleteCount = 0;
-
-                                        // 2. 篩選並刪除符合條件的 Key
-                                        allKeys.forEach(key => {
-                                            if (typeof key === 'string' && key.startsWith('simai_')) {
-                                                store.delete(key);
-                                                deleteCount++;
-                                            }
-                                        });
-                                        await refreshManage();
-
-                                        transaction.oncomplete = () => {
-                                            console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                                            showCleanCompleteAndReload();
-                                        };
-                                    };
-
-                                    transaction.onerror = async (e) => {
-                                        console.error("清除特定資料失敗:", e);
-                                        await refreshManage();
-                                    };
-                                }
-                            },
-                            {
-                                text: t('popup.resource.clearAssetCache') || "清除素材暫存",
-                                onClick: async () => {
-                                    const confirmed = confirm(t('popup.resource.confirmClearAsset') || "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
-                                    if (!confirmed) return;
-
-                                    const db = await openDB();
-                                    const transaction = db.transaction("editorState", "readwrite");
-                                    const store = transaction.objectStore("editorState");
-
-                                    // 1. 取得所有 Key
-                                    const getKeysRequest = store.getAllKeys();
-
-                                    getKeysRequest.onsuccess = async () => {
-                                        const allKeys = getKeysRequest.result;
-                                        let deleteCount = 0;
-
-                                        // 2. 篩選並刪除符合條件的 Key
-                                        allKeys.forEach(key => {
-                                            if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
-                                                store.delete(key);
-                                                deleteCount++;
-                                            }
-                                            if (typeof key === 'string' && key.startsWith('img_cache_')) {
-                                                store.delete(key);
-                                                deleteCount++;
-                                            }
-                                        });
-
-                                        await refreshManage();
-
-                                        transaction.oncomplete = () => {
-                                            console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                                            showCleanCompleteAndReload();
-                                        };
-                                    };
-
-                                    transaction.onerror = async (e) => {
-                                        console.error("清除特定資料失敗:", e);
-                                        await refreshManage();
-                                    };
-                                }
-                            },
-                            {
-                                text: t('popup.resource.close') || t('popup.close') || "關閉",
-                                hideOnClick: true
-                            }
-                        ]
-                    });
-                }
-            },
-            {
-                text: t('popup.close'),
-                hideOnClick: true
-            }
-        ]
-    });
-}
-
-if (manageResourcesButton) {
-    manageResourcesButton.addEventListener('click', openResourceManager);
-}
-/**
- * 將 AudioBuffer 轉換為 16-bit PCM WAV Blob
- */
-function audioBufferToWav(buffer) {
-    const numOfChan = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const format = 1; // 1 = raw PCM
-    const bitDepth = 16;
-
-    let result;
-    if (numOfChan === 2) {
-        result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
-    } else {
-        result = buffer.getChannelData(0);
-    }
-
-    return writeWavFile(result, numOfChan, sampleRate, format, bitDepth);
-}
-
-function interleave(inputL, inputR) {
-    const length = inputL.length + inputR.length;
-    const result = new Float32Array(length);
-    let index = 0;
-    let inputIndex = 0;
-    while (index < length) {
-        result[index++] = inputL[inputIndex];
-        result[index++] = inputR[inputIndex];
-        inputIndex++;
-    }
-    return result;
-}
-
-function writeWavFile(samples, numOfChan, sampleRate, format, bitDepth) {
-    const blockAlign = numOfChan * (bitDepth / 8);
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = samples.length * (bitDepth / 8);
-    const buffer = new ArrayBuffer(44 + dataSize);
-    const view = new DataView(buffer);
-
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + dataSize, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, format, true);
-    view.setUint16(22, numOfChan, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitDepth, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, dataSize, true);
-
-    let offset = 44;
-    for (let i = 0; i < samples.length; i++, offset += 2) {
-        const s = Math.max(-1, Math.min(1, samples[i]));
-        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-
-    return new Blob([view], { type: 'audio/wav' });
-}
-
-function writeString(view, offset, string) {
-    for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-    }
-}
-
-/**
- * 1. 音訊緩衝區管理器（負責音訊運算、備份與復原）
- */
-class BgmEditorBufferManager {
-    constructor(audioManager) {
-        this.audioManager = audioManager;
-        // 💾 核心儲存：保留最原始的音訊備份
-        this.originalBuffer = audioManager.bgmBuffer;
-        // 當前編輯中的緩衝區
-        this.currentBuffer = audioManager.bgmBuffer;
-    }
-
-    get buffer() { return this.currentBuffer; }
-    get duration() { return this.currentBuffer.duration; }
-    get sampleRate() { return this.currentBuffer.sampleRate; }
-
-    /** 🟢 復原功能：還原至最原始匯入的狀態 */
-    restoreOriginal() {
-        this.currentBuffer = this.originalBuffer;
-        this.audioManager.bgmBuffer = this.originalBuffer;
-    }
-
-    /** 🛠️ 核心：建立新的 AudioBuffer 並複製資料 */
-    createNewBuffer(newLength, copyCallback) {
-        const ctx = this.audioManager.ctx;
-        const oldBuf = this.currentBuffer;
-        const newBuffer = ctx.createBuffer(oldBuf.numberOfChannels, newLength, oldBuf.sampleRate);
-
-        for (let ch = 0; ch < oldBuf.numberOfChannels; ch++) {
-            const oldData = oldBuf.getChannelData(ch);
-            const newData = newBuffer.getChannelData(ch);
-            copyCallback(oldData, newData);
-        }
-
-        this.currentBuffer = newBuffer;
-        this.audioManager.bgmBuffer = newBuffer;
-        return newBuffer;
-    }
-
-    /** ✂️ 裁切音訊：刪除起點前或指定長度的音訊 */
-    cropStart(offsetTime) {
-        const startSample = Math.floor(offsetTime * this.sampleRate);
-        const newLen = this.currentBuffer.length - startSample;
-        if (newLen <= 0) return false;
-
-        this.createNewBuffer(newLen, (oldData, newData) => {
-            newData.set(oldData.subarray(startSample));
-        });
-        return true;
-    }
-
-    /** ➕ 補白音訊：在開頭插入指定秒數的靜音 */
-    padStart(seconds) {
-        const padSamples = Math.floor(seconds * this.sampleRate);
-        const newLen = this.currentBuffer.length + padSamples;
-
-        this.createNewBuffer(newLen, (oldData, newData) => {
-            newData.set(oldData, padSamples); // 前面自動補 0 靜音
-        });
-    }
-}
-
-/**
- * 2. 波形畫布管理器（負責視覺波形渲染計算）
- */
-class BgmEditorWaveformCanvas {
-    constructor(canvas, bufferManager) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        this.bm = bufferManager;
-    }
-
-    /** 🎨 繪製渲染核心 */
-    draw(offsetTime, zoomValue) {
-        const bgmBuffer = this.bm.buffer;
-        const duration = this.bm.duration;
-        const data = bgmBuffer.getChannelData(0);
-
-        const zoom = Math.max(1, parseFloat(zoomValue) || 1);
-        const viewLength = Math.max(0.1, duration / zoom);
-        const viewCenter = Math.min(duration, Math.max(0, offsetTime));
-
-        let viewStart = viewCenter - viewLength / 2;
-        if (viewStart < 0) viewStart = 0;
-        if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
-        const viewEnd = viewStart + viewLength;
-
-        const startSample = Math.floor(viewStart * this.bm.sampleRate);
-        const endSample = Math.min(data.length, Math.ceil(viewEnd * this.bm.sampleRate));
-        const viewSamples = Math.max(1, endSample - startSample);
-        const step = Math.ceil(viewSamples / this.canvas.width);
-
-        // 畫布清理與背景
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // 1. 繪製藍色音訊波形
-        this.ctx.fillStyle = '#1e90ff';
-        for (let i = 0; i < this.canvas.width; i++) {
-            let min = 1.0, max = -1.0;
-            const sampleBase = startSample + Math.floor((i / this.canvas.width) * viewSamples);
-            for (let j = 0; j < step; j++) {
-                const idx = sampleBase + j;
-                if (idx >= endSample) break;
-                const datum = data[idx];
-                if (datum < min) min = datum;
-                if (datum > max) max = datum;
-            }
-            const y = (1 - max) * this.canvas.height / 2;
-            const h = Math.max(1, (max - min) * this.canvas.height / 2);
-            this.ctx.fillRect(i, y, 1, h);
-        }
-
-        // 2. 繪製紅色播放頭
-        const x = ((offsetTime - viewStart) / viewLength) * this.canvas.width;
-        this.ctx.strokeStyle = '#ff3333';
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        this.ctx.moveTo(Math.max(0, Math.min(this.canvas.width, x)), 0);
-        this.ctx.lineTo(Math.max(0, Math.min(this.canvas.width, x)), this.canvas.height);
-        this.ctx.stroke();
-    }
-}
-
-/**
- * 3. 主要事件監聽觸發入口
- */
-editMusicButton.addEventListener('click', () => {
-    if (!audioManager.bgmBuffer) {
-        simpleToast({ content: t('toast.needBgm'), type: 'warning' });
-=======
 const updateSlider = (time, force = false) => {
     updateTimeCapsule(time, force);
     if (!timeline || timeline.style.display === 'none') {
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         return;
     }
     const now = performance.now();
@@ -2543,364 +1782,8 @@ const getres = async (simaiDataValue, options = {}) => {
 
     const decodeOpts = { enableSyntaxCheck: settings.enableSyntaxCheck !== false, ...options };
 
-<<<<<<< HEAD
-    // 定義選項清單
-    const levelOptions = [{ value: '', text: t('popup.fetchMainote.allLevels') }];
-    for (let i = 1; i <= 6; i++) levelOptions.push({ value: i.toString(), text: `Level ${i}` });
-    for (let i = 7; i <= 14; i++) {
-        levelOptions.push({ value: i.toString(), text: `Level ${i}` })
-        levelOptions.push({ value: i.toString() + '+', text: `Level ${i}+` })
-    };
-    levelOptions.push({ value: 15, text: `Level 15` });
-
-    const difficultyOptions = [
-        { value: '', text: t('popup.fetchMainote.allDifficulties') },
-        { value: 'Re:MASTER', text: 'Re:MASTER' },
-        { value: 'MASTER', text: 'MASTER' },
-        { value: 'EXPERT', text: 'EXPERT' },
-        { value: 'ADVANCED', text: 'ADVANCED' },
-        { value: 'BASIC', text: 'BASIC' },
-        { value: 'EASY', text: 'EASY' },
-    ];
-
-    const versionOptions = [
-        { value: '', text: t('popup.fetchMainote.allVersions') },
-        { value: 'maimai', text: 'maimai' },
-        { value: 'maimai PLUS', text: 'maimai PLUS' },
-        { value: 'GreeN', text: 'GreeN' },
-        { value: 'GreeN PLUS', text: 'GreeN PLUS' },
-        { value: 'ORANGE', text: 'ORANGE' },
-        { value: 'ORANGE PLUS', text: 'ORANGE PLUS' },
-        { value: 'PiNK', text: 'PiNK' },
-        { value: 'PiNK PLUS', text: 'PiNK PLUS' },
-        { value: 'MURASAKi', text: 'MURASAKi' },
-        { value: 'MURASAKi PLUS', text: 'MURASAKi PLUS' },
-        { value: 'MiLK', text: 'MiLK' },
-        { value: 'MiLK PLUS', text: 'MiLK PLUS' },
-        { value: 'FiNALE', text: 'FiNALE' },
-        { value: 'でらっくす', text: 'でらっくす (DX)' },
-        { value: 'でらっくす PLUS', text: 'でらっくす PLUS' },
-        { value: 'Splash', text: 'Splash' },
-        { value: 'Splash PLUS', text: 'Splash PLUS' },
-        { value: 'UNiVERSE', text: 'UNiVERSE' },
-        { value: 'UNiVERSE PLUS', text: 'UNiVERSE PLUS' },
-        { value: 'FESTiVAL', text: 'FESTiVAL' },
-        { value: 'FESTiVAL PLUS', text: 'FESTiVAL PLUS' },
-        { value: 'BUDDiES', text: 'BUDDiES' },
-        { value: 'BUDDiES PLUS', text: 'BUDDiES PLUS' },
-        { value: 'PRiSM', text: 'PRiSM' },
-        { value: 'PRiSM PLUS', text: 'PRiSM PLUS' },
-        { value: 'CiRCLE', text: 'CiRCLE' },
-        { value: 'CiRCLE PLUS', text: 'CiRCLE PLUS' },
-    ];
-
-    const categoryOptions = [
-        { value: '', text: t('popup.fetchMainote.allCategories') },
-        { value: 'POPS＆アニメ', text: 'POPS & ANIME' },
-        { value: 'niconico＆ボーカロイド', text: 'niconico & VOCALOID' },
-        { value: '東方Project', text: '東方Project' },
-        { value: 'ゲーム＆バラエティ', text: 'GAME & VARIETY' },
-        { value: 'maimai', text: 'maimai' },
-        { value: 'オンゲキ＆CHUNITHM', text: 'Ongeki & CHUNITHM' }
-    ];
-
-    // 建立 UI 元件
-    const { row: songRow, input: songInput } = createInput(t('popup.fetchMainote.songTitle'), t('popup.fetchMainote.songTitlePlaceholder'));
-    const { row: levelRow, select: levelSelect } = createSelect(t('popup.fetchMainote.level'), levelOptions);
-    const { row: difficultyRow, select: difficultySelect } = createSelect(t('popup.fetchMainote.difficulty'), difficultyOptions);
-    const { row: versionRow, select: versionSelect } = createSelect(t('popup.fetchMainote.version'), versionOptions);
-    const { row: categoryRow, select: categorySelect } = createSelect(t('popup.fetchMainote.category'), categoryOptions);
-
-    container.append(songRow, levelRow, difficultyRow, versionRow, categoryRow);
-
-    // 搜尋按鈕
-    const searchBtn = document.createElement('button');
-    searchBtn.textContent = t('popup.fetchMainote.btnSearch');
-    searchBtn.style.cssText = 'padding:10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;margin-top:8px;transition:background 0.2s;';
-    searchBtn.onmouseover = () => searchBtn.style.background = '#0052a3';
-    searchBtn.onmouseout = () => searchBtn.style.background = '#0066cc';
-
-    searchBtn.addEventListener('click', async () => {
-        searchBtn.disabled = true;
-        searchBtn.textContent = t('popup.fetchMainote.searching');
-
-        const result = await getLevelCharts({
-            level: levelSelect.value,
-            songTitle: songInput.value,
-            version: versionSelect.value,
-            category: categorySelect.value,
-            difficulty: difficultySelect.value
-        });
-
-        if (!result || result.length === 0) {
-            simpleToast({ content: t('toast.chartsNotFound'), type: 'warning', timeout: 1800 });
-            searchBtn.disabled = false;
-            searchBtn.textContent = t('popup.fetchMainote.btnSearch');
-            return;
-        }
-
-        // 1. 難度顏色與排序對照
-        const diffOrder = { 'EASY': 0, 'BASIC': 1, 'ADVANCED': 2, 'EXPERT': 3, 'MASTER': 4, 'RE:MASTER': 5, 'REMASTER': 5, 'UTAGE': 6 };
-        const diffColors = {
-            'EASY': { bg: '#00c2ff', text: '#fff' },
-            'BASIC': { bg: '#22b14c', text: '#fff' },
-            'ADVANCED': { bg: '#ff9800', text: '#fff' },
-            'EXPERT': { bg: '#f44336', text: '#fff' },
-            'MASTER': { bg: '#9c27b0', text: '#fff' },
-            'RE:MASTER': { bg: '#e040fb', text: '#fff' },
-            'REMASTER': { bg: '#e040fb', text: '#fff' },
-            'UTAGE': { bg: '#ff5722', text: '#fff' }
-        };
-
-        // 2. 依 (title + chartType) 聚合歌曲列表
-        const songGroupsMap = new Map();
-
-        result.forEach((chart) => {
-            const songTitle = chart.songs?.title || t('popup.fetchMainote.unknownSong');
-            const rawType = (chart.type || chart.chart_type || chart.songs?.type || chart.songs?.chart_type || '').toUpperCase();
-            let chartType = '';
-            if (rawType.includes('DX') || chart.is_dx || chart.songs?.is_dx) {
-                chartType = 'DX';
-            } else if (rawType.includes('STD') || rawType.includes('STANDARD') || chart.is_std || chart.songs?.is_std) {
-                chartType = 'STD';
-            } else {
-                chartType = rawType;
-            }
-
-            const groupKey = `${songTitle}___${chartType}`;
-            if (!songGroupsMap.has(groupKey)) {
-                songGroupsMap.set(groupKey, {
-                    title: songTitle,
-                    chartType: chartType,
-                    song: chart.songs || {},
-                    charts: []
-                });
-            }
-            songGroupsMap.get(groupKey).charts.push(chart);
-        });
-
-        const songGroups = Array.from(songGroupsMap.values());
-
-        // 建立結果列表
-        const resultContainer = document.createElement('div');
-        resultContainer.style.cssText = 'display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding-right:4px;';
-
-        let resultPopupCtx = null;
-
-        // 通用選擇/載入 chart 處理函式
-        const selectAndLoadChart = (targetChart) => {
-            const songTitle = targetChart.songs?.title || targetChart.title || t('popup.fetchMainote.unknownSong');
-            const maidataHaveContext = (() => {
-                if (audioManager.haveBGM && audioManager.haveBGM()) return true;
-                for (let i = 1; i <= 7; i++) {
-                    if (maidata && maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") return true;
-                }
-                return false;
-            })();
-
-            const loadChart = async (mode) => {
-                if (mode === 'new') {
-                    const newId = await projectCreate(t('popup.projectManager.untitled'));
-                    currentProjectId = newId;
-                    localStorage.setItem('simai_lastProjectId', currentProjectId);
-                    console.log(`[Project] 已建立新專案: ${newId}`);
-                }
-
-                setDataEmpty();
-
-                const diffKey = (targetChart.difficulty || 'MASTER').toUpperCase();
-                const diffMap = { 'EASY': 1, 'BASIC': 2, 'ADVANCED': 3, 'EXPERT': 4, 'MASTER': 5, 'RE:MASTER': 6, 'REMASTER': 6, 'UTAGE': 7 };
-                const targetDiff = diffMap[diffKey] || 5;
-
-                maidata = {};
-                maidata.title = songTitle;
-                maidata[`inote_${targetDiff}`] = targetChart.chart_data || '';
-
-                nowDifficulty = targetDiff;
-                changeDifficulty.value = nowDifficulty;
-                projSet('now_difficulty', nowDifficulty).catch(() => { });
-
-                editorInput.value = maidata[`inote_${targetDiff}`] || '';
-                getres(editorInput.value);
-                applyHighlight(editorInput.value);
-
-                undoStack = [];
-                redoStack = [];
-                historyMap = {};
-                lastEditorValue = editorInput.value || '';
-                updateUndoRedoUI();
-
-                saveMaidata();
-
-                const displayName = maidata.title || songTitle;
-                if (displayName && currentProjectId) {
-                    projectUpdateName(currentProjectId, displayName).catch(() => { });
-                }
-
-                simpleToast({ content: t('toast.chartLoaded', { title: songTitle }), type: 'success', timeout: 1500 });
-                if (resultPopupCtx) resultPopupCtx.close();
-                if (mainctx) mainctx.close();
-            };
-
-            if (maidataHaveContext) {
-                popupWindow({
-                    title: t('popup.fetchMainote.loadChartTitle'),
-                    content: t('popup.fetchMainote.loadChartConfirm'),
-                    buttons: [
-                        {
-                            text: t('popup.fetchMainote.overwriteProject'),
-                            onClick: (ctx) => { ctx.close(); loadChart('overwrite'); }
-                        },
-                        {
-                            text: t('popup.fetchMainote.openNewProject'),
-                            onClick: (ctx) => { ctx.close(); loadChart('new'); }
-                        },
-                        {
-                            text: t('popup.fetchMainote.cancel'),
-                            hideOnClick: true
-                        }
-                    ]
-                });
-            } else {
-                loadChart('overwrite');
-            }
-        };
-
-        // 彈出二級難度選擇子視窗 (點擊整張歌曲卡片時)
-        const openDifficultySelectPopup = (group) => {
-            const diffListContainer = document.createElement('div');
-            diffListContainer.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:4px 0;';
-
-            group.charts.forEach((c) => {
-                const diffKey = (c.difficulty || 'MASTER').toUpperCase();
-                const col = diffColors[diffKey] || { bg: '#555', text: '#fff' };
-                const btn = document.createElement('button');
-                btn.style.cssText = `padding:10px 14px;background:${col.bg};color:${col.text};border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:14px;display:flex;justify-content:space-between;align-items:center;transition:transform 0.1s, filter 0.1s;`;
-                btn.innerHTML = `<span>${diffKey}</span><span>Lv ${c.level || 'N/A'}</span>`;
-                btn.onmouseover = () => { btn.style.filter = 'brightness(1.15)'; btn.style.transform = 'scale(1.02)'; };
-                btn.onmouseout = () => { btn.style.filter = 'none'; btn.style.transform = 'none'; };
-
-                btn.onclick = () => {
-                    if (diffPopupCtx) diffPopupCtx.close();
-                    selectAndLoadChart(c);
-                };
-                diffListContainer.appendChild(btn);
-            });
-
-            const diffPopupCtx = popupWindow({
-                title: `${group.title} ${group.chartType ? `[${group.chartType}]` : ''} - 選擇難度`,
-                customContent: diffListContainer,
-                buttons: [
-                    { text: t('popup.fetchMainote.cancel'), hideOnClick: true }
-                ]
-            });
-        };
-
-        // 渲染聚合結果卡片
-        songGroups.forEach((group) => {
-            // 排序該歌曲下的難度
-            group.charts.sort((a, b) => {
-                const orderA = diffOrder[(a.difficulty || '').toUpperCase()] ?? 99;
-                const orderB = diffOrder[(b.difficulty || '').toUpperCase()] ?? 99;
-                return orderA - orderB;
-            });
-
-            const card = document.createElement('div');
-            card.style.cssText = 'padding:10px 12px;background:#26262a;border:1px solid #3d3d45;border-radius:6px;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;gap:8px;';
-
-            // Header 區域: Title + Type Badge
-            const header = document.createElement('div');
-            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
-
-            const titleEl = document.createElement('div');
-            titleEl.style.cssText = 'font-weight:600;color:#fff;font-size:14px;word-break:break-word;';
-            titleEl.textContent = group.title;
-
-            header.appendChild(titleEl);
-
-            if (group.chartType) {
-                const typeBadge = document.createElement('span');
-                const isDx = group.chartType === 'DX';
-                typeBadge.style.cssText = `font-size:11px;font-weight:bold;padding:2px 6px;border-radius:4px;background:${isDx ? 'linear-gradient(135deg, #7b2cbf, #3a0ca3)' : '#344e41'};color:#fff;border:1px solid ${isDx ? '#9d4edd' : '#588157'};letter-spacing:0.5px;`;
-                typeBadge.textContent = group.chartType;
-                header.appendChild(typeBadge);
-            }
-
-            // 難度等級 Badge 列
-            const badgesRow = document.createElement('div');
-            badgesRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;';
-
-            group.charts.forEach((chart) => {
-                const diffKey = (chart.difficulty || 'MASTER').toUpperCase();
-                const col = diffColors[diffKey] || { bg: '#555', text: '#fff' };
-                const badge = document.createElement('button');
-                badge.style.cssText = `padding:3px 8px;background:${col.bg};color:${col.text};border:none;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;transition:transform 0.15s, filter 0.15s;`;
-                badge.textContent = `[${chart.level || '?'}]`;
-                badge.title = `${diffKey} (Lv ${chart.level || '?'})`;
-
-                badge.onmouseover = (e) => {
-                    e.stopPropagation();
-                    badge.style.transform = 'scale(1.12)';
-                    badge.style.filter = 'brightness(1.2)';
-                };
-                badge.onmouseout = (e) => {
-                    e.stopPropagation();
-                    badge.style.transform = 'none';
-                    badge.style.filter = 'none';
-                };
-
-                // 點擊特定難度 Badge 直接載入
-                badge.onclick = (e) => {
-                    e.stopPropagation();
-                    selectAndLoadChart(chart);
-                };
-
-                badgesRow.appendChild(badge);
-            });
-
-            card.appendChild(header);
-            card.appendChild(badgesRow);
-
-            // 點擊卡片空白處 -> 彈出難度選擇
-            card.onclick = () => {
-                if (group.charts.length === 1) {
-                    selectAndLoadChart(group.charts[0]);
-                } else {
-                    openDifficultySelectPopup(group);
-                }
-            };
-
-            card.onmouseenter = () => { card.style.borderColor = '#0066cc'; card.style.background = '#303036'; };
-            card.onmouseleave = () => { card.style.borderColor = '#3d3d45'; card.style.background = '#26262a'; };
-
-            resultContainer.appendChild(card);
-        });
-
-        resultPopupCtx = popupWindow({
-            title: t('popup.fetchMainote.searchResults', { count: result.length }),
-            customContent: resultContainer,
-            buttons: [{ text: t('popup.close'), hideOnClick: true }]
-        });
-
-        searchBtn.disabled = false;
-        searchBtn.textContent = t('popup.fetchMainote.btnSearch');
-    });
-
-    container.appendChild(searchBtn);
-
-    mainctx = popupWindow({
-        title: t('popup.fetchMainote.title'),
-        customContent: container,
-        buttons: [{ text: t('popup.close'), hideOnClick: true }]
-    });
-});
-
-const getres = ((simaiDataValue) => {
-    const result = (() => {
-=======
     // 若指定同步或 Worker 不可用，直接同步解析 (維持最高相容性)
     if (options.sync || !decodeWorkerManager.isAvailable()) {
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         try {
             const result = decodeWorkerManager.decodeSync(simaiDataValue, 0, decodeOpts);
             applyDecodeResult(result, simaiDataValue);
@@ -3034,71 +1917,11 @@ function saveMaidataImmediate() {
         if (name) projectUpdateName(currentProjectId, name).catch(() => { });
     }
 
-    // 雲端專案自動存檔 (Google Drive)
-    if (cloudProjectManager.isCurrentCloudProject() && googleDriveService.isLoggedIn()) {
-        const cloudFolderId = cloudProjectManager.getCloudFolderId();
-        const cloudName = cloudProjectManager.getCloudProjectName();
-        const simaiText = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : '';
-        googleDriveService.autoSaveProject(cloudFolderId, {
-            maidataText: simaiText,
-            metadata: {
-                id: cloudFolderId,
-                name: cloudName || maidata?.title || '未命名專案',
-                nowDifficulty,
-                timeControl: realTime
-            }
-        }).catch((err) => {
-            console.error('[GoogleDrive] 雲端自動存檔失敗:', err);
-        });
-    }
-
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
     cachedChartSnapshot = null;
     eventBus.emit(EVENTS.MAIDATA_CHANGED, { ...maidata });
 
-<<<<<<< HEAD
-/**
- * 載入或匯入專案檔案時，全量同步推送至 Google Drive (含即時進度條與清空舊檔支援)
- */
-async function syncFullProjectToCloud({ clearExisting = false } = {}) {
-    if (!cloudProjectManager.isCurrentCloudProject() || !googleDriveService.isLoggedIn()) return;
-    const simaiText = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : '';
-    const audioFile = typeof audioManager?.getBGMFile === 'function' ? audioManager.getBGMFile() : null;
-    const bgImg = backgroundImage || null;
-    const bgVid = backgroundVideo || null;
-
-    try {
-        await cloudProjectManager.syncProjectToCloud({
-            folderId: cloudProjectManager.getCloudFolderId(),
-            projectName: cloudProjectManager.getCloudProjectName(),
-            maidataText: simaiText,
-            audioFile,
-            bgImageFile: bgImg,
-            bgVideoFile: bgVid,
-            metadata: {
-                nowDifficulty,
-                timeControl: realTime
-            },
-            clearExisting,
-            onToast: simpleToast
-        });
-    } catch (err) {
-        console.error('[GoogleDrive] 全量專案推送失敗:', err);
-    }
-}
-
-const inputDebounce = debounce(() => {
-    // 記錄歷史 (diff)
-    recordEditorHistory();
-    const value = editorInput.value;
-    // 解析 Note 邏輯
-    getres(value);
-    applyHighlight(value);
-    maidata["inote_" + nowDifficulty] = value;
-    saveMaidata();
-}, settings.inputDebounceTime || 500);
-=======
     return projSet('maidata', maidata).catch((error) => {
         console.error("儲存maidata到IndexedDB失敗:", error);
     });
@@ -3149,7 +1972,6 @@ const inputDebounce = (() => {
 
     return debounced;
 })();
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function setElementDisplay(element, visible, value = 'block') {
     element.style.display = visible ? value : 'none';
@@ -3389,6 +2211,7 @@ function setPlaybackSpeed(speed) {
     const playing = playButton.dataset.playing === 'true';
 
     settings.playbackSpeed = speed;
+    editorSync.sendSpeed(speed);
     if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
         speedPopoverInput.value = `${speed.toFixed(2)}x`;
     }
@@ -3401,9 +2224,6 @@ function setPlaybackSpeed(speed) {
     }
     if (editorBackgroundVideo.src) {
         editorBackgroundVideo.playbackRate = speed;
-    }
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.sendSpeed(speed);
     }
     saveSettingsDebounce();
 }
@@ -3525,513 +2345,8 @@ const setEditorCss = (visible = null) => {
     animateEditorContainer(visible);
 };
 
-<<<<<<< HEAD
-function openSettings(initialTabIndex = 0) {
-    const container = document.createElement('div');
-    container.className = 'popup-setting-container';
-
-    // 左側導覽列 (Tabs)
-    const sidebar = document.createElement('div');
-    sidebar.className = 'popup-setting-sidebar';
-
-    // 右側內容區
-    const contentArea = document.createElement('div');
-    contentArea.className = 'popup-setting-content';
-
-    container.appendChild(sidebar);
-    container.appendChild(contentArea);
-
-    const sections = [];
-    const tabs = [];
-
-    const switchTab = (index) => {
-        tabs.forEach((tab, i) => {
-            tab.classList.toggle('active', i === index);
-        });
-        sections.forEach((sec, i) => {
-            sec.classList.toggle('active', i === index);
-        });
-    };
-
-    const addTab = (label) => {
-        const index = tabs.length;
-        const tab = document.createElement('div');
-        tab.textContent = label;
-        tab.className = 'popup-setting-tab';
-        tab.addEventListener('click', () => switchTab(index));
-        sidebar.appendChild(tab);
-        tabs.push(tab);
-
-        const section = document.createElement('div');
-        section.className = 'popup-setting-section';
-
-        contentArea.appendChild(section);
-        sections.push(section);
-
-        return section;
-    };
-
-    const createRow = (labelText, element) => {
-        const row = document.createElement('div');
-        row.className = 'popup-setting-row';
-
-        // 1. Checkbox
-        if (element.type === 'checkbox') {
-            const wrapper = document.createElement('label');
-            wrapper.className = 'popup-setting-wrapper';
-            const text = document.createElement('span');
-            text.textContent = labelText;
-            text.className = 'popup-setting-text';
-            wrapper.appendChild(text);
-            wrapper.appendChild(element);
-            row.appendChild(wrapper);
-            return row;
-        }
-
-        // 2. Range (自訂 div 滑桿主容器)
-        if (element.type === 'range') {
-            const wrapper = document.createElement('label');
-            wrapper.className = 'popup-setting-wrapper';
-            const text = document.createElement('span');
-            text.textContent = labelText;
-            text.className = 'popup-setting-text';
-
-            element.style.width = '140px';
-            element.style.flexShrink = '0';
-            wrapper.appendChild(text);
-            wrapper.appendChild(element);
-            row.appendChild(wrapper);
-            return row;
-        }
-
-        // 3. Object (子屬性折疊選單)
-        if (element.dataset && element.dataset.type === 'object-container') {
-            row.className = 'popup-setting-row popup-setting-row-object';
-
-            const header = document.createElement('div');
-            header.className = 'popup-setting-object-header';
-            header.innerHTML = `<span>${labelText}</span><span class="popup-setting-arrow-icon">▼</span>`;
-
-            const subBody = element;
-            subBody.className = 'popup-setting-subbody';
-
-            header.addEventListener('click', () => {
-                const isExpanded = subBody.classList.toggle('open');
-                header.querySelector('.popup-setting-arrow-icon').classList.toggle('expanded', isExpanded);
-            });
-
-            row.appendChild(header);
-            row.appendChild(subBody);
-            return row;
-        }
-
-        // 4. Button
-        if (element.tagName === 'BUTTON') {
-            const label = document.createElement('label');
-            label.textContent = labelText;
-            label.className = 'popup-setting-label';
-            element.className = 'popup-setting-element';
-            row.appendChild(label);
-            row.appendChild(element);
-            return row;
-        }
-
-        // 5. 一般 Number / Dropdown
-        const label = document.createElement('label');
-        label.textContent = labelText;
-        label.className = 'popup-setting-label';
-        element.className = 'popup-setting-input';
-        row.appendChild(label);
-        row.appendChild(element);
-        return row;
-    };
-
-    const applySettings = () => {
-        const values = {};
-
-        Object.keys(inputRefs).forEach(id => {
-            const config = inputRefs[id];
-            let finalVal;
-
-            if (config.type === 'button') {
-                return;
-            } else if (config.type === 'checkbox') {
-                finalVal = config.el.checked;
-            } else if (config.type === 'dropdown') {
-                finalVal = isNaN(config.el.value) ? config.el.value : parseFloat(config.el.value);
-            } else if (config.type === 'object') {
-                // 🔥 直接複製子選單同步完的物件結果
-                finalVal = { ...config.el.value };
-            } else {
-                const rawVal = parseFloat(config.el.value);
-                finalVal = isNaN(rawVal) ? config.def : clamp(rawVal, Number(config.el.min), Number(config.el.max));
-            }
-
-            values[id] = finalVal;
-
-            // 核心修正：深度指派物件結構，避免直接蓋掉引用
-            if (config.type === 'object') {
-                Object.assign(config.ref[config.key], finalVal);
-            } else {
-                config.ref[config.key] = finalVal;
-            }
-        });
-
-        Object.keys(inputRefs).forEach(id => {
-            if (inputRefs[id].apply) {
-                inputRefs[id].apply(values[id], values);
-            }
-        });
-
-        saveSettingsDebounce();
-        setEditorCss();
-        draw();
-        simpleToast({ content: t('toast.settingsSaved'), type: 'success', timeout: 1500 });
-    };
-
-    const createNumberInput = (value, step = 0.1, min = -999, max = 9999) => {
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.step = step;
-        input.min = min;
-        input.max = max;
-        input.value = value;
-        return input;
-    };
-
-    const createCheckbox = (checked, id) => {
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.className = 'popup-setting-checkbox';
-        input.id = id;
-        input.checked = checked;
-        return input;
-    };
-
-    function applyAudioSettings(s) {
-        if (!audioManager || !s) return;
-        if (s.globalVolume !== undefined) audioManager.setGlobalVolume(s.globalVolume);
-        if (s.musicVolume !== undefined) audioManager.setBGMVolume(s.musicVolume);
-        if (s.SfxVolume !== undefined) audioManager.setSFXVolume(s.SfxVolume);
-        if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
-    }
-
-    const createDropdown = (value, options = []) => {
-        const select = document.createElement('select');
-        select.className = 'popup-setting-dropdown';
-        options.forEach(opt => {
-            const o = document.createElement('option');
-            o.value = opt.value;
-            o.textContent = opt.label.startsWith('settings.') ? t(opt.label) : opt.label;
-            if (opt.value == value) o.selected = true;
-            select.appendChild(o);
-        });
-        return select;
-    };
-
-    const inputRefs = {};
-    let popupCtx = null;
-
-    // 定義渲染設定分頁函式
-    const renderCategory = (category) => {
-        const section = addTab(t(category.label));
-
-        if (category.html) {
-            section.innerHTML += category.html;
-        }
-
-        (category.items || []).forEach(item => {
-            const targetRef = item.ref || settings;
-            const targetKey = item.key || item.id;
-            const currentVal = item.get ? item.get() : (targetRef[targetKey] ?? item.def);
-
-            let el;
-
-            // --- A. 處理 Checkbox ---
-            if (item.type === 'checkbox') {
-                el = createCheckbox(currentVal, `settings-${item.id}`);
-                el.addEventListener('change', (e) => {
-                    try { targetRef[targetKey] = e.target.checked; } catch (err) { }
-                });
-                el.addEventListener('click', (e) => e.stopPropagation());
-            }
-            // --- B. 處理 Dropdown ---
-            else if (item.type === 'dropdown') {
-                el = createDropdown(currentVal, item.options);
-                el.addEventListener('change', (e) => {
-                    try { targetRef[targetKey] = e.target.value; } catch (err) { }
-                    if (item.id === 'lang') {
-                        setLang(e.target.value);
-                        idbSet('simai_settings', JSON.stringify(settings)).catch(() => { });
-                        if (popupCtx) {
-                            popupCtx.close();
-                            settingsButton.click();
-                        }
-                    }
-                });
-            }
-            // --- C. 處理 Range ---
-            else if (item.type === 'range') {
-                el = createCustomSlider(currentVal, item.min, item.max, item.step, (val) => {
-                    try {
-                        targetRef[targetKey] = val;
-                        if (item.apply) item.apply(val);
-                    } catch (err) { }
-                });
-            }
-            // --- D. 🔥 新增：深度處理 Object (如 sfxVolumes) ---
-            else if (item.type === 'object') {
-                el = document.createElement('div');
-                el.dataset.type = 'object-container';
-                el.value = { ...currentVal }; // 初始化當前快照
-
-                // 建立一個子引用表，方便 applySettings 與重置時對準各別滑桿
-                el._subRefs = {};
-
-                Object.keys(item.def).forEach((subKey, index) => {
-                    const subDefault = item.def[subKey];
-                    const subCurrent = currentVal[subKey] ?? subDefault;
-
-                    // 為每一個音效建立專屬的客製化滑桿
-                    const subSlider = createCustomSlider(subCurrent, 0, 1, 0.05, (subVal) => {
-                        try {
-                            el.value[subKey] = subVal;
-                            targetRef[targetKey][subKey] = subVal; // 即時同步寫入記憶體
-                            if (item.apply) item.apply(targetRef[targetKey]); // 觸發試聽
-                        } catch (e) { }
-                    });
-
-                    el._subRefs[subKey] = subSlider;
-
-                    // 將每個子滑桿組件包裝進 row 塞入容器中
-                    const subRow = createRow(subKey, subSlider);
-                    el.appendChild(subRow);
-                });
-
-                // 實作 Object 的面板更新與重置映射
-                el._updateDisplay = () => {
-                    Object.keys(el._subRefs).forEach(subKey => {
-                        el._subRefs[subKey].value = targetRef[targetKey][subKey] ?? item.def[subKey];
-                        if (el._subRefs[subKey]._updateDisplay) el._subRefs[subKey]._updateDisplay();
-                    });
-                };
-            }
-            // --- E. 處理 Button ---
-            else if (item.type === 'button') {
-                el = document.createElement('button');
-                el.type = 'button';
-                el.textContent = t(item.btnText || 'popup.reset');
-                if (item.onClick) {
-                    el.addEventListener('click', item.onClick);
-                }
-            }
-            // --- F. 一般 Number ---
-            else {
-                el = createNumberInput(currentVal, item.step, item.min, item.max);
-            }
-
-            inputRefs[item.id] = {
-                el,
-                def: item.def,
-                type: item.type,
-                apply: item.apply,
-                ref: targetRef,
-                key: targetKey
-            };
-            section.appendChild(createRow(t(item.label), el));
-        });
-    };
-
-    // 先渲染前置一般分頁（通用、顯示、音效，排除「其他」）
-    const otherCategory = settingsConfig.find(category => category.label === 'settings.tabs.other');
-    const normalCategories = settingsConfig.filter(category => category.label !== 'settings.tabs.other');
-
-    normalCategories.forEach(renderCategory);
-
-    // =========================================================
-    // 同步 (Sync) 標籤頁
-    // =========================================================
-    const syncSection = addTab(t('settings.tabs.sync') || '同步');
-
-    // 1. Google Drive 雲端同步區塊
-    const gdriveBox = document.createElement('div');
-    gdriveBox.style.cssText = 'display:flex; flex-direction:column; gap:10px; padding:12px; background:#181818; border:1px solid #333; border-radius:6px; margin-bottom:8px;';
-
-    const gdriveTitle = document.createElement('div');
-    gdriveTitle.style.cssText = 'font-weight:600; font-size:13px; color:#fff; display:flex; align-items:center; gap:6px;';
-    gdriveTitle.innerHTML = `<span class="material-symbols-outlined" style="color:#4a90e2; font-size:20px;">cloud</span>${t('settings.gdrive.title') || 'Google Drive 雲端同步'}`;
-    gdriveBox.appendChild(gdriveTitle);
-
-    const gdriveStatusRow = document.createElement('div');
-    gdriveStatusRow.style.cssText = 'display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; font-size:12px; color:#aaa; gap:8px 12px;';
-
-    const statusText = document.createElement('span');
-    statusText.style.lineHeight = '1.4';
-    const gdriveBtnContainer = document.createElement('div');
-    gdriveBtnContainer.style.flexShrink = '0';
-
-    const updateGdriveUI = () => {
-        const loggedIn = googleDriveService.isLoggedIn();
-        const user = googleDriveService.getCurrentUser();
-        gdriveBtnContainer.innerHTML = '';
-
-        if (loggedIn) {
-            statusText.textContent = t('settings.gdrive.loggedInAs', { account: user?.email || user?.name || 'Google 使用者' });
-            statusText.style.color = '#4caf50';
-            statusText.style.whiteSpace = 'normal';
-            statusText.style.wordBreak = 'break-all';
-
-            const logoutBtn = document.createElement('button');
-            logoutBtn.type = 'button';
-            logoutBtn.className = 'popup-button';
-            logoutBtn.style.cssText = 'padding:6px 14px; font-size:12px; cursor:pointer; flex-shrink:0; background:#3a2020; border-color:#662222; color:#fff; border-radius:6px;';
-            logoutBtn.textContent = t('settings.gdrive.logoutBtn') || '登出帳號';
-            logoutBtn.onclick = () => {
-                googleDriveService.logout();
-                simpleToast({ content: t('settings.gdrive.logoutSuccess') || '已登出 Google 帳號', type: 'info', timeout: 1500 });
-                updateGdriveUI();
-            };
-            gdriveBtnContainer.appendChild(logoutBtn);
-        } else {
-            statusText.textContent = t('settings.gdrive.notLoggedIn') || '尚未登入';
-            statusText.style.color = '#888';
-            statusText.style.whiteSpace = 'nowrap';
-
-            const googleBtn = createGoogleSignInButton({
-                theme: 'dark',
-                size: 'small',
-                text: t('settings.gdrive.loginBtn') || '登入 Google 帳號',
-                onClick: async () => {
-                    try {
-                        googleBtn.setLoading(true, t('settings.gdrive.loggingIn') || '正在登入...');
-                        await googleDriveService.login();
-                        simpleToast({ content: t('settings.gdrive.loginSuccess') || 'Google Drive 登入成功！', type: 'success', timeout: 1500 });
-                        updateGdriveUI();
-                    } catch (err) {
-                        console.error('[GoogleDrive] 登入錯誤:', err);
-                        simpleToast({ content: t('settings.gdrive.loginError', { error: err.message || err }), type: 'error', timeout: 3000 });
-                        updateGdriveUI();
-                    }
-                }
-            });
-            gdriveBtnContainer.appendChild(googleBtn);
-        }
-    };
-
-    updateGdriveUI();
-    gdriveStatusRow.appendChild(statusText);
-    gdriveStatusRow.appendChild(gdriveBtnContainer);
-    gdriveBox.appendChild(gdriveStatusRow);
-
-    const gdriveHint = document.createElement('div');
-    gdriveHint.style.cssText = 'font-size:11px; color:#777; line-height:1.4;';
-    gdriveHint.textContent = t('settings.gdrive.autoSaveDesc') || '編輯雲端專案時，譜面變更將自動同步回 Google Drive。';
-    gdriveBox.appendChild(gdriveHint);
-
-    syncSection.appendChild(gdriveBox);
-
-    // 2. 手機 P2P WebRTC 同步區塊
-    const p2pBox = document.createElement('div');
-    p2pBox.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#181818; border:1px solid #333; border-radius:6px;';
-    const p2pLabel = document.createElement('span');
-    p2pLabel.textContent = t('menu.toolsSyncPlay') || '同步至 _play (手機)';
-    p2pLabel.style.cssText = 'font-size:13px; color:#ddd;';
-    const openP2pBtn = document.createElement('button');
-    openP2pBtn.className = 'popup-button';
-    openP2pBtn.textContent = t('settings.connection.btnOpen') || '開啟';
-    openP2pBtn.style.cssText = 'padding:5px 14px; font-size:12px; cursor:pointer;';
-    openP2pBtn.onclick = () => {
-        const syncPlayBtn = document.getElementById('syncPlayButton');
-        if (syncPlayBtn) syncPlayBtn.click();
-    };
-    p2pBox.appendChild(p2pLabel);
-    p2pBox.appendChild(openP2pBtn);
-    syncSection.appendChild(p2pBox);
-
-    // =========================================================
-    // 其他 (Other) 標籤頁（放置在最下方）
-    // =========================================================
-    if (otherCategory) {
-        renderCategory(otherCategory);
-    }
-
-    switchTab(initialTabIndex);
-
-    const oldAudioSettings = {
-        globalVolume: settings.globalVolume,
-        musicVolume: settings.musicVolume,
-        SfxVolume: settings.SfxVolume,
-        sfxVolumes: settings.sfxVolumes ? { ...settings.sfxVolumes } : null
-    };
-
-    popupCtx = popupWindow({
-        title: t('settings.title'),
-        customContent: container,
-        width: "85%",
-        maxWidth: "500px",
-        buttons: [
-            {
-                text: t('popup.save'),
-                onClick: (ctx) => { applySettings(); },
-                hideOnClick: true
-            },
-            {
-                text: t('popup.apply'),
-                onClick: (ctx) => { applySettings(); }
-            },
-            {
-                text: t('popup.cancel'),
-                onClick: () => {
-                    applyAudioSettings(oldAudioSettings);
-                },
-                hideOnClick: true
-            },
-            {
-                text: t('popup.reset'),
-                onClick: (ctx) => {
-                    Object.values(inputRefs).forEach(ref => {
-                        if (ref.type === 'button') {
-                            return;
-                        } else if (ref.type === 'checkbox') {
-                            ref.el.checked = ref.def;
-                            ref.ref[ref.key] = ref.def; // 🟢 同步寫回記憶體
-                        } else if (ref.type === 'object') {
-                            // 🔴 關鍵修正 1：快照完全恢復成預設值
-                            ref.el.value = { ...ref.def };
-
-                            // 🔴 關鍵修正 2：深度將記憶體 settings[key] 中的子屬性全數洗回預設值
-                            // 不能直接 ref.ref[ref.key] = ref.def，會斷開引用，必須用 Object.assign
-                            Object.assign(ref.ref[ref.key], ref.def);
-
-                            // 🔴 關鍵修正 3：先改完記憶體，再叫子滑桿們去讀取新數值並重繪背景
-                            if (ref.el._updateDisplay) ref.el._updateDisplay();
-
-                            // 觸發音效管理器的即時即刻同步
-                            if (ref.apply) ref.apply(ref.ref[ref.key]);
-                        } else {
-                            ref.el.value = ref.def;
-                            ref.ref[ref.key] = ref.def; // 🟢 同步寫回記憶體
-
-                            if (ref.el._updateDisplay) ref.el._updateDisplay();
-                            if (ref.apply) ref.apply(ref.def);
-                        }
-                    });
-
-                    // 🟢 關鍵修正 4：重置後強制重新重繪畫布，讓畫面上的感應器、速度即時校正
-                    draw();
-                    simpleToast({ content: t('toast.restoreSaved'), type: 'info', timeout: 1500 });
-                }
-            },
-        ]
-    });
-}
-
-settingsButton.addEventListener('click', () => {
-    openSettings(0);
-=======
 settingsButton.addEventListener('click', () => {
     openSettingsModal();
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 });
 
 chartInfoButton.addEventListener('click', () => {
@@ -4182,300 +2497,9 @@ redoButton.addEventListener('click', () => {
 // 初始化按鈕禁用狀態
 updateUndoRedoUI();
 
-<<<<<<< HEAD
-// 支援幫助說明的 Markdown 渲染與更新日誌快取
-let changelogCache = null;
-async function getChangelogContent() {
-    if (changelogCache) return changelogCache;
-    try {
-        const res = await fetch('./CHANGELOG.md');
-        if (res.ok) {
-            changelogCache = await res.text();
-            return changelogCache;
-        }
-    } catch (e) {
-        console.warn('載入 CHANGELOG.md 失敗:', e);
-    }
-    return null;
-}
-
-function renderMarkdown(md) {
-    if (!md) return '';
-
-    const lines = md.split(/\r?\n/);
-    const htmlLines = [];
-    let inList = false;
-
-    const escapeHtml = (str) => {
-        return str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    };
-
-    const formatInline = (text) => {
-        return text
-            .replace(/`([^`]+)`/g, '<span class="code-highlight">$1</span>')
-            .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#3b82f6; text-decoration:none;">$1</a>');
-    };
-
-    for (let i = 0; i < lines.length; i++) {
-        const rawLine = lines[i];
-        const trimmed = rawLine.trim();
-
-        if (!trimmed) {
-            if (inList) {
-                htmlLines.push('</ul>');
-                inList = false;
-            }
-            continue;
-        }
-
-        if (trimmed.startsWith('# ')) {
-            if (inList) { htmlLines.push('</ul>'); inList = false; }
-            htmlLines.push(`<h3 style="color:#fff; font-size:16px; margin:6px 0 14px 0; border-bottom:1px solid #333; padding-bottom:6px;">${formatInline(escapeHtml(trimmed.slice(2).trim()))}</h3>`);
-            continue;
-        }
-        if (trimmed.startsWith('## ')) {
-            if (inList) { htmlLines.push('</ul>'); inList = false; }
-            htmlLines.push(`<h4>${formatInline(escapeHtml(trimmed.slice(3).trim()))}</h4>`);
-            continue;
-        }
-        if (trimmed.startsWith('### ')) {
-            if (inList) { htmlLines.push('</ul>'); inList = false; }
-            htmlLines.push(`<h5 style="color:#ddd; font-size:14px; margin:12px 0 6px 0;">${formatInline(escapeHtml(trimmed.slice(4).trim()))}</h5>`);
-            continue;
-        }
-
-        if (trimmed.startsWith('> ') || trimmed.startsWith('&gt; ')) {
-            if (inList) { htmlLines.push('</ul>'); inList = false; }
-            const quoteContent = trimmed.replace(/^(&gt;|>)\s*/, '');
-            htmlLines.push(`<blockquote>${formatInline(escapeHtml(quoteContent))}</blockquote>`);
-            continue;
-        }
-
-        const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
-        if (listMatch) {
-            if (!inList) {
-                htmlLines.push('<ul>');
-                inList = true;
-            }
-            let itemContent = listMatch[1];
-            if (itemContent.startsWith('> ') || itemContent.startsWith('&gt; ')) {
-                const subQuote = itemContent.replace(/^(&gt;|>)\s*/, '');
-                htmlLines.push(`<li><blockquote style="margin:2px 0;">${formatInline(escapeHtml(subQuote))}</blockquote></li>`);
-            } else {
-                htmlLines.push(`<li>${formatInline(escapeHtml(itemContent))}</li>`);
-            }
-            continue;
-        }
-
-        if (inList) { htmlLines.push('</ul>'); inList = false; }
-        htmlLines.push(`<p>${formatInline(escapeHtml(trimmed))}</p>`);
-    }
-
-    if (inList) {
-        htmlLines.push('</ul>');
-    }
-
-    return htmlLines.join('\n');
-}
-
-helpButton.addEventListener('click', () => {
-    // 💡 以後想改內容、加新功能，只要改這個設定陣列就好！
-    const helpData = [
-        {
-            tabTitle: t('popup.help.basicTab'),
-            title: t('popup.help.basicTitle'),
-            items: t('popup.help.basicItems'),
-            isList: false // 控制要用一般段落 <p> 還是一般列表 <ul>
-        },
-        {
-            tabTitle: t('popup.help.shortcutTab'),
-            title: t('popup.help.shortcutTitle'),
-            items: t('popup.help.shortcutItems'),
-            isList: true
-        },
-        {
-            tabTitle: t('popup.help.changelogTab') || '更新日誌',
-            title: t('popup.help.changelogTitle') || '更新日誌 (Changelog)',
-            isCustom: true
-        }
-    ];
-
-    // --- 1. CSS 樣式獨立抽出來 ---
-    const style = `
-    <style>
-      .help-container {
-        color: #aaaaaa;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
-      .help-tabs {
-        display: flex;
-        gap: 4px;
-        margin-bottom: 20px;
-        border-bottom: 1px solid #2d2d2d;
-        overflow-x: auto;
-        scrollbar-width: none;
-      }
-      .help-tabs::-webkit-scrollbar { display: none; }
-      .tab-btn {
-        background: transparent;
-        color: #757575;
-        border: none;
-        padding: 10px 20px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        white-space: nowrap;
-        position: relative;
-        transition: color 0.2s ease;
-      }
-      .tab-btn:hover { color: #ffffff; }
-      .tab-btn.active { color: #ffffff; font-weight: bold; }
-      .tab-btn.active::after {
-        content: "";
-        position: absolute;
-        bottom: -1px; left: 20px; right: 20px; height: 3px;
-        background-color: #3b82f6;
-      }
-      .tab-pane {
-        font-size: 13.5px;
-        line-height: 1.8;
-        color: #aaaaaa;
-        animation: fadeIn 0.15s ease-out;
-      }
-      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      .tab-pane h4 {
-        color: #ffffff; font-size: 15px; margin-top: 0; margin-bottom: 16px;
-        border-left: 3px solid #3b82f6; padding-left: 8px; font-weight: 600;
-      }
-      .tab-pane p { margin: 8px 0 12px 0; }
-      .tab-pane ul { margin: 8px 0 12px 0; padding-left: 0; list-style: none; }
-      .tab-pane li { position: relative; padding-left: 16px; margin-bottom: 8px; }
-      .tab-pane li::before {
-        content: "•"; color: #3b82f6; font-weight: bold;
-        position: absolute; left: 4px; top: 0;
-      }
-      .tab-pane b { color: #ffffff; }
-      .tab-pane blockquote {
-        margin: 6px 0 10px 0;
-        padding: 4px 12px;
-        background: rgba(255, 255, 255, 0.04);
-        border-left: 3px solid #666;
-        color: #888;
-        font-size: 12.5px;
-        border-radius: 0 4px 4px 0;
-      }
-      .changelog-scroll {
-        max-height: 52vh;
-        overflow-y: auto;
-        padding-right: 6px;
-      }
-      .changelog-scroll::-webkit-scrollbar {
-        width: 6px;
-      }
-      .changelog-scroll::-webkit-scrollbar-thumb {
-        background: #333;
-        border-radius: 3px;
-      }
-      .changelog-scroll::-webkit-scrollbar-thumb:hover {
-        background: #555;
-      }
-      .code-highlight {
-        background: #242424; color: #ffffff; padding: 3px 8px; border-radius: 4px;
-        font-family: Consolas, Monaco, monospace; font-size: 12px; border: 1px solid #3a3a3a;
-        display: inline-block; line-height: 1.2; margin: 0 2px; vertical-align: middle;
-      }
-      /* 讓 Material Icons 在文字裡對齊更完美 */
-      .material-symbols-outlined {
-        vertical-align: middle;
-        font-size: 18px;
-        margin: 0 2px;
-      }
-    </style>`;
-
-    // --- 2. 透過 Array 串接自動產生 HTML 結構 ---
-    const tabsHTML = helpData.map((data, i) => `
-        <button class="tab-btn ${i === 0 ? 'active' : ''}">${data.tabTitle}</button>
-    `).join('');
-
-    const panesHTML = helpData.map((data, i) => {
-        if (data.isCustom) {
-            return `
-                <div class="tab-pane" style="display: ${i === 0 ? 'block' : 'none'};">
-                    <div class="changelog-scroll" id="help-changelog-container">
-                        <p style="color:#777;">${t('popup.help.changelogLoading') || '正在載入更新日誌...'}</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        // 依據 isList 決定渲染成 <ul><li> 還是複數個 <p>
-        const contentBody = data.isList
-            ? `<ul>${data.items.map(item => `<li>${item}</li>`).join('')}</ul>`
-            : data.items.map(item => `<p>${item}</p>`).join('');
-
-        return `
-            <div class="tab-pane" style="display: ${i === 0 ? 'block' : 'none'};">
-                <h4>${data.title}</h4>
-                ${contentBody}
-            </div>
-        `;
-    }).join('');
-
-    // 組合成最終內容
-    const content = `
-        ${style}
-        <div class="help-container">
-            <div class="help-tabs">${tabsHTML}</div>
-            ${panesHTML}
-        </div>
-    `;
-
-    // --- 3. 開啟彈窗與事件綁定 ---
-    popupWindow({
-        title: t('popup.help.title'),
-        customContent: content,
-        width: 480,
-        height: "80%",
-        buttons: [
-            { text: t('popup.close'), hideOnClick: true }
-        ],
-        onOpen: (ctx) => {
-            const container = ctx.elements.customContent;
-            const buttons = container.querySelectorAll('.tab-btn');
-            const panes = container.querySelectorAll('.tab-pane');
-            buttons.forEach((btn, index) => {
-                btn.onclick = () => {
-                    buttons.forEach(b => b.classList.remove('active'));
-                    panes.forEach(p => p.style.display = 'none');
-                    btn.classList.add('active');
-                    panes[index].style.display = 'block';
-                };
-            });
-
-            // 異步載入並渲染 CHANGELOG.md
-            const changelogContainer = container.querySelector('#help-changelog-container');
-            if (changelogContainer) {
-                getChangelogContent().then(md => {
-                    if (md) {
-                        changelogContainer.innerHTML = renderMarkdown(md);
-                    } else {
-                        changelogContainer.innerHTML = `<p style="color:#e57373;">${t('popup.help.changelogError') || '無法載入更新日誌'}</p>`;
-                    }
-                }).catch(() => {
-                    changelogContainer.innerHTML = `<p style="color:#e57373;">${t('popup.help.changelogError') || '無法載入更新日誌'}</p>`;
-                });
-            }
-        }
-=======
 if (helpBasicButton) {
     helpBasicButton.addEventListener('click', () => {
         openHelpModal('basic');
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     });
 }
 
@@ -4918,175 +2942,6 @@ function maidataProcess(e) {
     updateUndoRedoUI();
 }
 
-<<<<<<< HEAD
-async function handleFolderInput(files, onProgress) {
-    const entries = await normalizeFiles(files, (pct, name) => {
-        if (typeof onProgress === 'function') {
-            onProgress(Math.round(pct * 0.4), t('popup.import.readingFolder', { percent: pct }) || `正在讀取檔案 (${pct}%)...`);
-        }
-    });
-    if (typeof onProgress === 'function') {
-        onProgress(45, t('popup.import.parsingFiles') || '正在解析專案內容...');
-    }
-    const bundle = await parseProjectBundle(entries, (pct, name) => {
-        if (typeof onProgress === 'function') {
-            onProgress(45 + Math.round(pct * 0.25), t('popup.import.parsingFiles') || '正在解析專案內容...');
-        }
-    });
-
-    if (currentProjectId) {
-        if (typeof onProgress === 'function') {
-            onProgress(70, t('popup.import.savingDatabase', { percent: 0 }) || '正在儲存至資料庫...');
-        }
-        await saveProjectToIdb(currentProjectId, bundle, (pct) => {
-            if (typeof onProgress === 'function') {
-                onProgress(70 + Math.round(pct * 0.2), t('popup.import.savingDatabase', { percent: pct }) || `正在儲存至資料庫 (${pct}%)...`);
-            }
-        });
-    }
-
-    if (typeof onProgress === 'function') {
-        onProgress(92, t('popup.import.rendering') || '正在套用並渲染畫面...');
-    }
-
-    if (bundle.bgm) {
-        const url = URL.createObjectURL(bundle.bgm);
-        await audioManager.setBackgroundMusic(url, bundle.bgm);
-        setEndtime(endTime);
-    }
-
-    if (bundle.maidata) {
-        maidataProcess(bundle.maidata);
-        resize();
-    }
-
-    if (bundle.bgImage) {
-        backgroundImage = bundle.bgImage;
-        editorBackgroundImage.src = URL.createObjectURL(backgroundImage);
-        editorBackgroundImage.style.display = 'block';
-    }
-
-    if (bundle.bgVideo) {
-        backgroundVideo = bundle.bgVideo;
-        editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-        editorBackgroundVideo.style.display = 'none';
-        editorBackgroundVideo.style.filter = `brightness(${1 + 0.75 * settings.moviebrightness})`;
-    }
-
-    applyMovieBrightness(settings.moviebrightness);
-    if (typeof onProgress === 'function') {
-        onProgress(100, t('popup.import.complete') || '完成！正在套用專案...');
-    }
-}
-
-readMaidataButton.addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                setDataEmpty();
-                maidataProcess(e.target.result);
-                resize();
-            };
-            reader.readAsText(file);
-        }
-    };
-    input.click();
-});
-
-const readZipButton = getButton("readZip", "utility");
-if (readZipButton) {
-    readZipButton.addEventListener('click', () => {
-        const maidataHaveContext = (() => {
-            if (audioManager.haveBGM()) {
-                return true;
-            }
-            for (let i = 1; i <= 7; i++) {
-                if (maidata[`inote_${i}`] && maidata[`inote_${i}`].trim() !== "") {
-                    return true;
-                }
-            }
-            return false;
-        })();
-
-        const triggerZipInput = (mode) => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.zip';
-            input.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    await ensureJSZip();
-                    try {
-                        await runImportModal({
-                            title: t('popup.import.title') || '正在匯入專案...',
-                            task: async (step) => {
-                                step(5, t('popup.import.readingZip', { percent: 0 }) || '正在讀取壓縮檔...');
-                                if (mode === 'new') {
-                                    const newId = await projectCreate(file.name.replace(/\.zip$/i, '') || t('popup.projectManager.untitled'));
-                                    currentProjectId = newId;
-                                    localStorage.setItem('simai_lastProjectId', currentProjectId);
-                                    console.log(`[Project] 已建立新專案: ${newId}`);
-                                }
-                                setDataEmpty();
-                                const zip = await JSZip.loadAsync(file, (meta) => {
-                                    const pct = Math.round(meta.percent);
-                                    step(Math.round(pct * 0.35), t('popup.import.readingZip', { percent: pct }) || `正在解壓縮檔案 (${pct}%)...`);
-                                });
-                                await handleFolderInput(zip.files, (p, msg) => {
-                                    step(35 + Math.round(p * 0.6), msg);
-                                });
-                                setEndtime(endTime);
-                                draw();
-                                if (maidata?.title && currentProjectId) {
-                                    projectUpdateName(currentProjectId, maidata.title).catch(() => { });
-                                }
-                                resize();
-                            }
-                        });
-                        simpleToast({ content: mode === 'new' ? t('toast.projectOpenedNew') : t('toast.projectLoadedCurrent'), type: 'success', timeout: 1500 });
-                    } catch (err) {
-                        console.error('ZIP 匯入失敗:', err);
-                    }
-                }
-            };
-            input.click();
-        };
-
-        if (maidataHaveContext) {
-            popupWindow({
-                title: t('popup.loadConfirm.titleZip'),
-                content: t('popup.loadConfirm.content'),
-                buttons: [
-                    {
-                        text: t('popup.loadConfirm.overwrite'),
-                        onClick: (ctx) => {
-                            ctx.close();
-                            triggerZipInput('overwrite');
-                        }
-                    },
-                    {
-                        text: t('popup.loadConfirm.newProject'),
-                        onClick: (ctx) => {
-                            ctx.close();
-                            triggerZipInput('new');
-                        }
-                    },
-                    {
-                        text: t('popup.cancel'),
-                        hideOnClick: true
-                    }
-                ]
-            });
-        } else {
-            triggerZipInput('overwrite');
-        }
-    });
-}
-=======
 initFileHandlers({
     readMaidataButton,
     addMusicButton,
@@ -5117,7 +2972,6 @@ initFileHandlers({
     applyMovieBrightness,
     projSet
 });
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
@@ -5191,13 +3045,8 @@ changeDifficulty.addEventListener('change', (e) => {
 
     inputDebounce();
     difficultyInputDebounce();
-<<<<<<< HEAD
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.pushCurrentChart();
-    }
-=======
     updateDifficultyIndicators();
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
+    editorSync.pushCurrentChart();
 });
 
 
@@ -5273,70 +3122,6 @@ setupZoomButton(previewZoomInButton, true);
 setupZoomButton(previewZoomOutButton, false);
 
 
-<<<<<<< HEAD
-let utilityBtnsAnim = null;
-
-hideUtilityButton.addEventListener('click', () => {
-    const utilityBtns = document.getElementById('topUtilityBtns');
-    const utilityContainer = document.getElementById('utilityContainer');
-    const isHidden = hideUtilityButton.dataset.hidden === 'true';
-
-    // 收起所有已開啟的下拉選單與子選單
-    document.querySelectorAll('.utilityDropdown').forEach(d => {
-        d.classList.remove('open');
-        d.querySelectorAll('.utilityMenuTitle').forEach(t => t.classList.remove('open'));
-    });
-
-    if (utilityBtnsAnim) {
-        utilityBtnsAnim.cancel();
-        utilityBtnsAnim = null;
-    }
-
-    if (isHidden) {
-        utilityBtns.style.display = 'flex';
-        utilityBtns.style.height = '';
-        utilityBtns.style.opacity = '';
-        utilityBtns.style.padding = '';
-
-        utilityBtnsAnim = utilityBtns.animate([
-            { opacity: 0, height: '0px', padding: '0 5px' },
-            { opacity: 1, height: '40px', padding: '5px' }
-        ], { duration: 200, easing: 'ease' });
-
-        utilityBtnsAnim.onfinish = () => {
-            if (utilityBtnsAnim) {
-                utilityBtnsAnim.cancel();
-                utilityBtnsAnim = null;
-            }
-            utilityBtns.style.display = 'flex';
-            utilityBtns.style.height = '40px';
-            utilityBtns.style.opacity = '1';
-            utilityBtns.style.padding = '5px';
-        };
-
-        canvasContainer.classList.remove('expanded');
-        editorContainer.classList.remove('expanded');
-        if (panelSplitter) panelSplitter.classList.remove('expanded');
-        utilityContainer.classList.remove('expanded');
-    } else {
-        utilityBtnsAnim = utilityBtns.animate([
-            { opacity: 1, height: '40px', padding: '5px' },
-            { opacity: 0, height: '0px', padding: '0 5px' }
-        ], { duration: 200, easing: 'ease' });
-
-        utilityBtnsAnim.onfinish = () => {
-            if (utilityBtnsAnim) {
-                utilityBtnsAnim.cancel();
-                utilityBtnsAnim = null;
-            }
-            utilityBtns.style.display = 'none';
-        };
-
-        canvasContainer.classList.add('expanded');
-        editorContainer.classList.add('expanded');
-        if (panelSplitter) panelSplitter.classList.add('expanded');
-        utilityContainer.classList.add('expanded');
-=======
 const topUtilityBtnsEl = document.getElementById('topUtilityBtns');
 const utilityContainerEl = document.getElementById('utilityContainer');
 
@@ -5354,14 +3139,10 @@ function calculateUtilityRows() {
     const rowHeight = getUtilityRowHeight();
     if (!topUtilityBtnsEl || topUtilityBtnsEl.offsetHeight <= 0) {
         return getExpectedUtilityRows();
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     }
     return Math.max(1, Math.round(topUtilityBtnsEl.offsetHeight / rowHeight));
 }
 
-<<<<<<< HEAD
-
-=======
 function updateUtilityHeight() {
     const rowHeight = getUtilityRowHeight();
     const rows = calculateUtilityRows();
@@ -5683,7 +3464,6 @@ function closeSubmenusInContent(content, exceptMenuTitle = null) {
         }
     });
 }
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function ensureScrollIndicators(container) {
     if (!container) return null;
@@ -6287,24 +4067,8 @@ function getTrimmedNoteRange(text, start, end) {
             break;
         }
     }
-<<<<<<< HEAD
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.sendSeek(realTime);
-    }
-    projSet('timeControl', realTime).catch((error) => {
-        console.error("儲存時間控制值到 IndexedDB 失敗:", error);
-    });
-}, 300);
-
-const videoSeekDebounce = debounce((time) => {
-    if (editorBackgroundVideo && editorBackgroundVideo.readyState >= 1) {
-        if (Math.abs(editorBackgroundVideo.currentTime - time) > 0.05) {
-            try { editorBackgroundVideo.currentTime = time; } catch (_) { }
-        }
-=======
     while (e > s && /\s/.test(text[e - 1])) {
         e--;
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     }
     return { start: s, end: e };
 }
@@ -6484,6 +4248,33 @@ const playbackEngine = new PlaybackEngine({
 });
 
 appContext.register('playbackEngine', playbackEngine);
+editorSync.init({
+    editorInput,
+    syncButton: getButton('syncPlay', 'utility'),
+    getChartMeta: () => ({ title: maidata.title, artist: maidata.artist, offset: musicDelay }),
+    getDifficulty: () => String(nowDifficulty),
+    getFullMaidata: () => serializeMaidata({ ...maidata, ['inote_' + nowDifficulty]: editorInput.value }),
+    getAudioFile: () => audioManager.getBGMFile(),
+    onRemotePlay: (time, speed) => {
+        if (speed !== settings.playbackSpeed) setPlaybackSpeed(speed);
+        playbackEngine.seekToRealTime(time);
+        if (!playbackEngine.isPlaying) playbackEngine.play();
+    },
+    onRemotePause: () => { if (playbackEngine.isPlaying) playbackEngine.pause(); },
+    onRemoteRestart: () => playbackEngine.reset(),
+    onRemoteSeek: time => playbackEngine.seekToRealTime(time),
+    onRemoteSpeed: setPlaybackSpeed
+});
+eventBus.on(EVENTS.PLAYBACK_SEEK, ({ realTime }) => editorSync.sendSeek(realTime));
+eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying, realTime }) => {
+    if (isPlaying) {
+        editorSync.sendPlay(realTime, settings.playbackSpeed || 1);
+    } else {
+        editorSync.sendPause();
+        editorSync.sendSeek(realTime);
+    }
+});
+eventBus.on(EVENTS.PROJECT_LOADED, () => editorSync.pushCurrentProject());
 appContext.register('getIsImagesLoaded', () => isImagesLoaded);
 appContext.register('getIsInitComplete', () => isInitComplete);
 
@@ -6502,62 +4293,9 @@ eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying, realTime }) => {
 
 // UI 控制按鈕綁定
 playButton.addEventListener('click', () => {
-<<<<<<< HEAD
-    bgmUpdateTimer = null; // 重置 BGM 更新計時器
-    if (playButton.dataset.playing === 'true') {
-        updatePauseBackgroundDisplay();
-        editorBackgroundVideo.pause();
-
-        playButton.dataset.playing = 'false';
-        playButton.children[0].innerText = "play_arrow";
-        lastTimestamp = null;
-        playStartTimestamp = null;
-
-        // --- 停止音效與 BGM ---
-        audioManager.stopAllLongSounds();
-        audioManager.stopBGM();
-
-        notes.forEach(n => n._riserActive = false); // 強制重置標記
-
-        if (majdataWs.isConnected()) {
-            majdataWs.pause();
-        }
-        if (editorSync && editorSync.isConnected()) {
-            editorSync.sendPause();
-        }
-
-        draw(); // 立即更新畫布，反映暫停狀態
-    } else {
-        lastStartTime = realTime; // 記錄開始播放的時間點
-        editorBackgroundImage.style.display = (editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0) ? 'block' : 'none';
-        editorBackgroundVideo.style.display =
-            ((editorBackgroundVideo.readyState === 4) ? 'block' : 'none');
-        editorBackgroundVideo.currentTime = realTime;
-        if (editorBackgroundVideo.paused && editorBackgroundVideo.readyState >= 1) {
-            editorBackgroundVideo.play().catch(() => { });
-        }
-        playButton.dataset.playing = 'true';
-        playButton.children[0].innerText = "pause";
-        lastTimestamp = performance.now();
-        playStartRealTime = realTime;
-        playStartTimestamp = performance.now();
-
-        // --- 從當前的 realTime 同步啟動 BGM ---
-        audioManager.playBGM(realTime);
-
-        if (majdataWs.isConnected()) {
-            sendMajdataPlay();
-        }
-        if (editorSync && editorSync.isConnected()) {
-            editorSync.sendPlay(realTime, settings.playbackSpeed || 1);
-        }
-
-        update(lastTimestamp);
-=======
     if (!isImagesLoaded) {
         simpleToast({ content: t('toast.loadingAssetsWait') || '素材載入中，請稍候...', type: 'warning' });
         return;
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     }
     playbackEngine.toggle();
 });
@@ -6578,37 +4316,6 @@ timeline.addEventListener('input', () => {
     updateVisualTime(val);
     slideInputDebounce();
 });
-<<<<<<< HEAD
-
-resetButton.addEventListener('click', () => {
-    updatePauseBackgroundDisplay();
-    editorBackgroundVideo.pause();
-    playButton.dataset.playing = 'false';
-    playButton.children[0].innerText = "play_arrow";
-    bgmUpdateTimer = null;
-    lastTimestamp = null;
-    playStartTimestamp = null;
-    realTime = 0;
-    globalTime = realTime - musicDelay;
-    updateSlider(realTime);
-
-    // --- 停止音效與 BGM ---
-    audioManager.stopAllLongSounds();
-    audioManager.stopBGM();
-
-    videoSeekDebounce(0);
-
-    notes.forEach(n => n._riserActive = false); // 強制重置標記
-
-    if (majdataWs.isConnected()) {
-        majdataWs.stop();
-    }
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.sendRestart();
-    }
-
-    draw(); // 立即更新畫布，反映停止狀態
-=======
 timeline.addEventListener('pointerup', () => {
     isTimelineDragging = false;
     slideInputDebounce();
@@ -6624,7 +4331,6 @@ timeline.addEventListener('change', () => {
     syncTimelineProgress(val);
     slideInputDebounce();
     projSet('timeControl', playbackEngine.realTime).catch(() => { });
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 });
 
 // 保持既有輔助函式簽名向後相容
@@ -6640,18 +4346,9 @@ function requestNextFrame(callback) {
     playbackEngine.requestNextFrame(callback);
 }
 
-<<<<<<< HEAD
-    if (majdataWs.isConnected()) {
-        majdataWs.stop();
-    }
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.sendRestart();
-    }
-=======
 function cancelNextFrame() {
     playbackEngine.cancelNextFrame();
 }
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 const slideInputDebounce = () => playbackEngine.slideInputDebounce();
 const videoSeekDebounce = (time) => playbackEngine.videoSeekDebounce(time);
@@ -6663,61 +4360,6 @@ if (connectMajdataViewButton) {
     });
 }
 
-<<<<<<< HEAD
-// 初始化編輯器端 WebRTC 同步管理器 (與 _play 雙向連動)
-editorSync.init({
-    editorInput,
-    playButton,
-    syncButton: syncPlayButton,
-    getRealTime: () => realTime,
-    getPlaybackSpeed: () => settings.playbackSpeed || 1,
-    getChartMeta: () => ({
-        title: (maidata && maidata.title) || '',
-        artist: (maidata && maidata.artist) || '',
-        offset: (typeof musicDelay !== 'undefined') ? musicDelay : 0
-    }),
-    getFullMaidata: () => getSimaiDataString(),
-    getAudioFile: () => audioManager.bgmFile || audioManager.bgmBlob || null,
-    getDifficulty: () => (changeDifficulty ? changeDifficulty.value : '3'),
-    onRemotePlay: (targetTime, speed) => {
-        // 套用速度（若有差異）
-        if (typeof speed === 'number' && speed !== settings.playbackSpeed) {
-            setPlaybackSpeed(speed);
-        }
-        if (playButton.dataset.playing !== 'true') {
-            realTime = targetTime;
-            updateSlider(realTime);
-            playButton.click();
-        } else {
-            // 已在播放中：重新對齊時間
-            realTime = targetTime;
-            updateSlider(realTime);
-        }
-    },
-    onRemotePause: () => {
-        if (playButton.dataset.playing === 'true') {
-            playButton.click();
-        }
-    },
-    onRemoteSeek: (targetTime) => {
-        realTime = targetTime;
-        updateSlider(realTime);
-        updateVisualTime(realTime);
-    },
-    onRemoteRestart: () => {
-        resetButton.click();
-    },
-    onRemoteSpeed: (speed) => {
-        if (typeof speed === 'number') {
-            setPlaybackSpeed(speed);
-        }
-    }
-});
-
-keyboardButton.addEventListener('click', () => {
-    editorInput.focus();
-});
-=======
 const formatSpeedPopoverValue = (speed) => {
     const numericSpeed = Number(speed);
     const validSpeed = Number.isFinite(numericSpeed) && numericSpeed > 0 ? numericSpeed : 1;
@@ -6805,7 +4447,6 @@ if (speedControlButton && speedPopover) {
         }
     });
 }
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const c = window.getComputedStyle(document.documentElement);
@@ -7499,13 +5140,8 @@ async function loadProjectData(step, expectedGen = null) {
     }
 
     if (savedMaiData) {
-<<<<<<< HEAD
-        s(88, "還原編輯內容...");
-        maidata = typeof savedMaiData === 'string' ? parseMaidata(savedMaiData) : (savedMaiData || {});
-=======
         s(88, t('popup.init.restoringContent'));
         maidata = savedMaiData;
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         editorInput.value = maidata["inote_" + nowDifficulty] || '';
         getres(editorInput.value);
         applyHighlight(editorInput.value);
@@ -7616,17 +5252,9 @@ async function loadProject(projectId) {
         audioManager.stopBGM();
     }
 
-<<<<<<< HEAD
-    // 若連線同步中，通知對端停止播放並重置進度
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.sendPause();
-        editorSync.sendSeek(0);
-    }
-=======
     // 在切換 currentProjectId 前，先 flush 舊專案未寫入的修改，並取消任何未執行的防抖
     saveMaidata.flush?.();
     inputDebounce.cancel?.();
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
     currentProjectId = projectId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
@@ -7644,15 +5272,6 @@ async function loadProject(projectId) {
         return null;
     }
 
-<<<<<<< HEAD
-    if (editorSync && editorSync.isConnected()) {
-        editorSync.pushCurrentProject();
-        await editorSync.pushCurrentProject();
-    }
-
-    const list = await projectList();
-=======
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     const proj = list.find(p => p.id === projectId);
     return proj;
 }
@@ -7660,109 +5279,6 @@ async function loadProject(projectId) {
 /**
  * 開啟專案總管 UI
  */
-<<<<<<< HEAD
-function openProjectManager() {
-    openProjectManagerModal({
-        currentProjectId,
-        onLoadProject: async (projectId) => {
-            await loadProject(projectId);
-        },
-        onDeleteCurrentProject: async () => {
-            currentProjectId = null;
-            localStorage.removeItem('simai_lastProjectId');
-            cloudProjectManager?.clearCloudProject?.();
-            setDataEmpty();
-            draw();
-            resize();
-            simpleToast({ content: '已清空編輯器狀態，未指定專案', type: 'info', timeout: 1500 });
-        },
-        onImportFolder: (onSuccess) => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.webkitdirectory = true;
-            input.onchange = async (e) => {
-                const files = e.target.files;
-                if (files && files.length > 0) {
-                    try {
-                        await runImportModal({
-                            title: t('popup.import.title') || '正在匯入專案...',
-                            task: async (step) => {
-                                step(5, t('popup.import.readingFolder', { percent: 0 }) || '正在讀取資料夾檔案...');
-                                const newId = await projectCreate('匯入專案');
-                                currentProjectId = newId;
-                                cloudProjectManager?.clearCloudProject?.();
-                                localStorage.setItem('simai_lastProjectId', currentProjectId);
-                                setDataEmpty();
-                                await handleFolderInput(files, (p, msg) => {
-                                    step(5 + Math.round(p * 0.9), msg);
-                                });
-                                if (maidata?.title) {
-                                    await projectUpdateName(newId, maidata.title);
-                                }
-                                draw();
-                                resize();
-                            }
-                        });
-                        simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
-                        if (typeof onSuccess === 'function') onSuccess();
-                    } catch (err) {
-                        console.error('資料夾匯入失敗:', err);
-                    }
-                }
-            };
-            input.click();
-        },
-        onImportZip: (onSuccess) => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.zip';
-            input.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    try {
-                        await ensureJSZip();
-                        await runImportModal({
-                            title: t('popup.import.title') || '正在匯入專案...',
-                            task: async (step) => {
-                                step(5, t('popup.import.readingZip', { percent: 0 }) || '正在讀取壓縮檔...');
-                                const newId = await projectCreate(file.name.replace(/\.zip$/i, ''));
-                                currentProjectId = newId;
-                                cloudProjectManager?.clearCloudProject?.();
-                                localStorage.setItem('simai_lastProjectId', currentProjectId);
-                                setDataEmpty();
-                                const zip = await JSZip.loadAsync(file, (meta) => {
-                                    const pct = Math.round(meta.percent);
-                                    step(Math.round(pct * 0.35), t('popup.import.readingZip', { percent: pct }) || `正在解壓縮檔案 (${pct}%)...`);
-                                });
-                                await handleFolderInput(zip.files, (p, msg) => {
-                                    step(35 + Math.round(p * 0.6), msg);
-                                });
-                                if (maidata?.title) {
-                                    await projectUpdateName(newId, maidata.title);
-                                }
-                                draw();
-                                resize();
-                            }
-                        });
-                        simpleToast({ content: t('toast.projectOpenedNew') || '已建立並載入新專案', type: 'success', timeout: 1500 });
-                        if (typeof onSuccess === 'function') onSuccess();
-                    } catch (err) {
-                        console.error('ZIP 匯入失敗:', err);
-                    }
-                }
-            };
-            input.click();
-        },
-        openSettings,
-        simpleToast,
-        popupWindow,
-        assetPrefix: ''
-    });
-}
-
-// 綁定專案總管按鈕
-=======
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 const projectManagerButton = getButton("projectManager", "utility");
 if (projectManagerButton) {
     projectManagerButton.addEventListener('click', () => {
@@ -7800,235 +5316,6 @@ if (projectManagerButton) {
     });
 }
 
-<<<<<<< HEAD
-function _init() {
-    popupWindow({
-        title: t('popup.init.title'),
-        content: "",
-        buttons: [],
-        unclosable: true,
-        onOpen: async (ctx) => {
-            try {
-                const step = (p, msg) => (ctx.setProgress(p), ctx.setContent(msg));
-                let sfxPct = 0;
-                let imgPct = 0;
-                const updateCombinedStep = (msg) => {
-                    const combinedPct = Math.min(78, Math.round((sfxPct * 0.38) + (imgPct * 0.40)));
-                    step(combinedPct, msg);
-                };
-
-                const [_, loadedImages] = await Promise.all([
-                    audioManager.init((pct, key) => {
-                        sfxPct = pct;
-                        updateCombinedStep(t('popup.init.loadingSfx', { key, percent: Math.round(pct) }));
-                    }),
-                    loadAllImages((pct, key) => {
-                        imgPct = pct;
-                        updateCombinedStep(t('popup.init.loadingAssets', { key, percent: Math.round(pct) }));
-                    })
-                ]);
-                images = loadedImages;
-
-                // === 專案系統初始化 ===
-                step(78, t('popup.init.initProjects'));
-                const migratedId = await migrateFromLegacy();
-                if (migratedId) {
-                    currentProjectId = migratedId;
-                    localStorage.setItem('simai_lastProjectId', currentProjectId);
-                    console.log(`[Project] 遷移完成，使用專案: ${currentProjectId}`);
-                } else {
-                    // 嘗試從 localStorage 取得上次使用的專案
-                    const lastId = localStorage.getItem('simai_lastProjectId');
-                    const list = await projectList();
-                    if (lastId && list.some(p => p.id === lastId)) {
-                        currentProjectId = lastId;
-                    } else if (list.length > 0) {
-                        // 使用最後更新的專案
-                        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-                        currentProjectId = list[0].id;
-                    } else {
-                        // 全新使用者，建立預設空白專案
-                        currentProjectId = await projectCreate(t('popup.projectManager.untitled'));
-                    }
-                    localStorage.setItem('simai_lastProjectId', currentProjectId);
-                }
-
-                // === 載入全域設定 (不隨專案切換) ===
-                step(80, t('popup.init.restoringSettings'));
-                const savedSettings = await idbGet('simai_settings');
-                if (savedSettings) {
-                    settings = JSON.parse(savedSettings);
-                    let isMissingSettings = false;
-                    for (const key in defaultSettings) {
-                        if (!(key in settings)) {
-                            settings[key] = defaultSettings[key];
-                            console.warn(`設定項 "${key}" 在已儲存的設定中缺失，已自動補齊預設值。`);
-                            isMissingSettings = true;
-                        }
-                    }
-                    if (isMissingSettings) {
-                        await idbSet('simai_settings', JSON.stringify(settings));
-                    }
-                    playbackSpeedInput.value = settings.playbackSpeed;
-                } else {
-                    settings = { ...defaultSettings }
-                    await idbSet('simai_settings', JSON.stringify(settings));
-                };
-
-                // 🟢 關鍵修復：初始化完成後立刻將載入的音量設定套用到 audioManager
-                applyAudioSettings(settings);
-
-                // === 載入當前專案資料 ===
-                step(84, t('popup.init.restoringState'));
-                await loadProjectData(step);
-
-                window.settings = settings;
-                if (settings.autoConnectMajdataView) {
-                    majdataWs.connect(settings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata');
-                }
-                applySplitRatio(settings.splitRatio ?? 0.5);
-                if (settings.canvasSnapped) {
-                    snapHideCanvas();
-                }
-                setSwitchBoxDisplayModeUI(settings.displayMode ?? 'simai');
-                if (visualToolModeSelect) {
-                    visualToolModeSelect.value = settings.visualToolMode ?? 'edit';
-                }
-                setGridDivisionUI(settings.gridDivision ?? 4);
-                updateGridDivisionVisibility();
-                renderer = new SimaiRenderer(canvas, settings);
-                renderer.setImages(images);
-                visualEditorRenderer = new SimaiVisualEditor(visualEditor, settings);
-                visualEditorRenderer.setEditMode(settings.visualToolMode ?? 'edit');
-                visualEditorRenderer.setImages(images);
-                visualEditorRenderer.setContext(visualCtx || visualEditor.getContext('2d'));
-                visualEditorRenderer.setZoom(settings.visualZoom);
-                visualEditorRenderer.setNoteEditCallbacks(visualPlaceNote, visualDeleteNote, visualChangeNote, visualPlaceHoldNote);
-                visualEditorRenderer.setTimeQuantizer(quantizeTime);
-                const v1 = timebaseButton.querySelector('input[name="tb1"]').value;
-                const v2 = timebaseButton.querySelector('input[name="tb2"]').value;
-                visualEditorRenderer.setTimebase(v1, v2);
-                previewRender = new SimaiPreviewRenderer(previewCanvas, settings);
-                previewRender.setZoom(settings.visualZoom);
-                previewRender.setTimebase(v1, v2);
-                setPlaybackSpeed(settings.playbackSpeed);
-                if (canvasOutline) canvasOutline.style.display = settings.hideOutline ? 'none' : '';
-                applyMovieBrightness(settings.moviebrightness);
-                draw();
-                updateSlider(realTime);
-                setEditorCss(!await projGet('hide_editor'));
-                step(100, "完成！正在渲染畫面...");
-                resize(); ctx.close();
-                isInitComplete = true;
-                updateDiscordRPC(maidata, nowDifficulty);
-            } catch (e) {
-                console.error("初始化失敗:", e);
-                ctx.setContent(t('popup.init.errorRefresh', { error: e.message }) || `初始化發生錯誤：\n${e.message}\n請嘗試重新整理。`);
-                // 報錯時可以考慮顯示一個「強制關閉」按鈕，或者讓視窗可以被手動關閉
-                ctx.setButtons([{
-                    text: t('popup.resource.clearAll') || "清除所有資料",
-                    onClick: async () => {
-                        const confirmed = confirm(t('popup.resource.confirmClearAll') || "確定要清除 IndexedDB 中的所有資料嗎？此操作無法復原！");
-                        if (!confirmed) return;
-                        const db = await openDB();
-                        const transaction = db.transaction("editorState", "readwrite");
-                        const store = transaction.objectStore("editorState");
-                        store.clear();
-                        try {
-                            await transaction.complete;
-                            console.log("已清除 IndexedDB 中的所有資料");
-                            showCleanCompleteAndReload();
-                        } catch (e) {
-                            console.error("清除 IndexedDB 資料失敗:", e);
-                        }
-                    }
-                }, {
-                    text: t('popup.resource.clearChartCache') || "清除譜面暫存",
-                    onClick: async () => {
-                        const confirmed = confirm(t('popup.resource.confirmClearChart') || "確定要清除所有譜面資料嗎？音效與圖片快取將會保留。");
-                        if (!confirmed) return;
-
-                        const db = await openDB();
-                        const transaction = db.transaction("editorState", "readwrite");
-                        const store = transaction.objectStore("editorState");
-
-                        // 1. 取得所有 Key
-                        const getKeysRequest = store.getAllKeys();
-
-                        getKeysRequest.onsuccess = () => {
-                            const allKeys = getKeysRequest.result;
-                            let deleteCount = 0;
-
-                            // 2. 篩選並刪除符合條件的 Key
-                            allKeys.forEach(key => {
-                                if (typeof key === 'string' && (key.startsWith('simai_') || key.startsWith('proj_') || key === '__project_list__')) {
-                                    store.delete(key);
-                                    deleteCount++;
-                                }
-                            });
-
-                            transaction.oncomplete = () => {
-                                console.log(`[IDB] 已成功清理 ${deleteCount} 項譜面資料`);
-                                showCleanCompleteAndReload();
-                            };
-                        };
-
-                        transaction.onerror = (e) => {
-                            console.error("清除特定資料失敗:", e);
-                        };
-                    }
-                },
-                {
-                    text: t('popup.resource.clearAssetCache') || "清除素材暫存",
-                    onClick: async () => {
-                        const confirmed = confirm(t('popup.resource.confirmClearAsset') || "確定要清除所有音效與圖片快取資料嗎？譜面資料將會保留。");
-                        if (!confirmed) return;
-
-                        const db = await openDB();
-                        const transaction = db.transaction("editorState", "readwrite");
-                        const store = transaction.objectStore("editorState");
-
-                        // 1. 取得所有 Key
-                        const getKeysRequest = store.getAllKeys();
-
-                        getKeysRequest.onsuccess = () => {
-                            const allKeys = getKeysRequest.result;
-                            let deleteCount = 0;
-
-                            // 2. 篩選並刪除符合條件的 Key
-                            allKeys.forEach(key => {
-                                if (typeof key === 'string' && key.startsWith('sfx_cache_')) {
-                                    store.delete(key);
-                                    deleteCount++;
-                                }
-                                if (typeof key === 'string' && key.startsWith('img_cache_')) {
-                                    store.delete(key);
-                                    deleteCount++;
-                                }
-                            });
-
-                            transaction.oncomplete = () => {
-                                console.log(`[IDB] 已成功清理 ${deleteCount} 項素材快取資料`);
-                                showCleanCompleteAndReload();
-                            };
-                        };
-
-                        transaction.onerror = (e) => {
-                            console.error("清除特定資料失敗:", e);
-                        };
-                    }
-                },
-                {
-                    text: t('popup.close'),
-                    onClick: () => {
-                        popupWindow({
-                            title: t('popup.warning.title') || "警告",
-                            content: t('popup.warning.continueRisk') || "如果繼續使用可能會遇到不可預期的錯誤，建議先清除資料或重新整理頁面。\n<br>建議可以先清除暫存資料後再嘗試載入，看看是否是因為某筆資料損壞導致的問題。",
-                            buttons: [{ text: t('popup.warning.continue') || "繼續", onClick: () => { ctx.close(); }, hideOnClick: true }, { text: t('popup.cancel') || "取消", hideOnClick: true }]
-                        });
-                    }
-                }]);
-=======
 async function _init() {
     await i18nReady;
     runInitModal({
@@ -8053,7 +5340,6 @@ async function _init() {
             if (val && val.syntaxColors) applySyntaxColors(val.syntaxColors);
             if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
                 speedPopoverInput.value = formatSpeedPopoverValue(val?.playbackSpeed);
->>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
             }
             syncVisualSubMenus();
         },

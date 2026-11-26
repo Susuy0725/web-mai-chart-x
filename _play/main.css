@@ -1,8 +1,56 @@
 :root {
-    --playControls-height-max: 100px;
+    --playControls-height-max: calc(90px + env(safe-area-inset-bottom));
     --playControls-height: var(--playControls-height-max);
-    --timeline-color: #c22;
-    --timeline-color-background: #111;
+    --main-color: #131313;
+    --timeline-color: rgb(212, 49, 57);
+    --timeline-color-background: #222;
+    --accent-color: #4499ee;
+    --accent-contrast-text: #ffffff;
+    --ui-text: #ffffff;
+    --ui-text-secondary: rgba(255, 255, 255, 0.72);
+    --ui-hover-bg: rgba(255, 255, 255, 0.1);
+    --ui-hover-strong-bg: rgba(255, 255, 255, 0.14);
+    --ui-active-bg: #484852;
+    --ui-active-text: #ffffff;
+    --ui-border: rgba(255, 255, 255, 0.08);
+    --ui-border-strong: rgba(255, 255, 255, 0.18);
+    --ui-shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.25);
+    --ui-shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.6);
+    --ui-ripple-bg: rgba(255, 255, 255, 0.4);
+    --button-ouline: #2c2c2c;
+    --scrollbar-size: 8px;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.36);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.54);
+    --scrollbar-radius: 9999px;
+    color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+    --main-color: color-mix(in srgb, var(--accent-color, #4499ee) 0.8%, #efefef);
+    --timeline-color-background: color-mix(in srgb, var(--accent-color, #4499ee) 8%, #cccccc);
+    --ui-text: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #434343);
+    --ui-text-secondary: rgba(43, 43, 43, 0.74);
+    --ui-hover-bg: rgba(15, 23, 42, 0.07);
+    --ui-hover-strong-bg: rgba(15, 23, 42, 0.11);
+    --ui-active-bg: color-mix(in srgb, var(--accent-color, #4499ee) 16%, #efefef);
+    --ui-active-text: color-mix(in srgb, var(--accent-color, #4499ee) 20%, #2b2b2b);
+    --ui-border: rgba(15, 23, 42, 0.1);
+    --ui-border-strong: rgba(15, 23, 42, 0.2);
+    --ui-shadow-floating: 0 6px 20px rgba(15, 23, 42, 0.14), 0 1px 4px rgba(15, 23, 42, 0.08);
+    --ui-shadow-menu: 0 10px 30px rgba(15, 23, 42, 0.16), 0 0 1px rgba(15, 23, 42, 0.2);
+    --ui-ripple-bg: rgba(15, 23, 42, 0.22);
+    --button-ouline: color-mix(in srgb, var(--accent-color, #4499ee) 6%, #d5d5d5);
+    --scrollbar-thumb: rgba(15, 23, 42, 0.28);
+    --scrollbar-thumb-hover: rgba(15, 23, 42, 0.45);
+    color-scheme: light;
+}
+
+@media (prefers-contrast: more) {
+    :root {
+        --scrollbar-thumb: #ffffff;
+        --scrollbar-track: #000000;
+    }
 }
 
 @font-face {
@@ -19,18 +67,42 @@
 
 @font-face {
     font-family: 'title';
-    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('truetype');
+    src: url('../Fonts/FOT-NewRodin\ Pro\ B.otf') format('opentype');
     font-display: swap;
 }
 
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
+*,
+*::before,
+*::after {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+    touch-action: manipulation;
     height: 100%;
-    overflow: hidden;
-    touch-action: none;
-    background-color: #222;
+    width: 100%;
+    margin: 0;
+}
+
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+select {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+}
+
+body {
+    background-color: #111;
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
 }
 
 #canvasContainer {
@@ -39,27 +111,14 @@ html, body {
     height: calc(100% - var(--playControls-height));
     top: 0;
     left: 0;
+    background: #111;
     user-select: none;
     -webkit-user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
 }
 
-#canvasContainer * {
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-}
-
-#canvasContainer #canvasOutline {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    top: 0;
-    left: 0;
-    object-fit: contain;
-    scale: 0.89;
+#canvasContainer.aspect-ratio-constrained {
+    overflow: hidden;
+    background: #000;
 }
 
 #canvasContainer .backgroundContainer {
@@ -102,214 +161,94 @@ html, body {
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none;
-    -webkit-touch-callout: none;
 }
-
 
 #playControls {
-    user-select: none;
-    -webkit-user-select: none;
-    position: absolute;
-    width: 100%;
-    height: var(--playControls-height);
-    bottom: 0;
-    left: 0;
     z-index: 10;
-    background: var(--top-utility-bg);
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: center;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-sizing: border-box;
 }
 
-#playControls #timeControl {
-    appearance: none;
-    -webkit-appearance: none;
-    width: calc(100% - 16px);
-    height: 10px;
-    background: var(--timeline-color-background);
-    margin: 10px 8px;
-    margin-bottom: 12px;
-    border-radius: 7px;
-    border: none;
-    outline: none;
-    transition: background 0.3s ease;
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 32;
 }
 
-#timeControl:hover::-webkit-slider-thumb {
-    scale: 1.3;
+#playControls button.controlButton {
+    border: 0;
+    background: transparent;
 }
 
-#timeControl::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: var(--timeline-color);
-    border-radius: 10px;
-    cursor: pointer;
-    scale: 1;
-    transition: scale 200ms ease;
-}
-
-#timeControl::-moz-range-thumb {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 8px;
-    height: 15px;
-    background: #962d2d;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
-    border-radius: 10px;
-    cursor: pointer;
-}
-
-#playControls #miniPreviewContainer {
+#playControls .play-difficulty {
     position: relative;
-    width: 100%;
-    height: 60px;
 }
 
-#playControls #showPlayControlsBtn {
-    background-color: #222;
-    overflow: hidden;
-    width: 50px;
-    height: 50px;
+.play-difficulty select {
     position: absolute;
-    margin: 16px;
-    bottom: 0;
-    right: 0;
-    color: white;
-    display: flex;
-    align-content: center;
-    text-align: center;
-    cursor: pointer;
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
-    border-radius: 25px;
-    transition: background-color 100ms ease;
-}
-
-#playControls #showPlayControlsBtn:hover {
-    background-color: #333;
-}
-
-#playControls #playControlContainer {
-    position: relative;
+    inset: 0;
     width: 100%;
-    height: 80px;
-    top: 8px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    height: 100%;
+    opacity: 0;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.play-difficulty:focus-within {
+    outline: 2px solid var(--accent-color);
+}
+
+.play-difficulty:has(select:disabled) {
+    opacity: 0.4;
 }
 
 #playControls .controlsContainer {
-    display: flex;
-    gap: clamp(8px, 1.8vw, 18px);
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 12px;
-    transition: transform 200ms ease;
-    max-width: 100%;
-    padding: 0 10px;
-    box-sizing: border-box;
+    gap: clamp(4px, calc(5vw - 18px), 20px);
+}
+
+#playControls.hide {
+    padding: 0;
+}
+
+#playControls.hide #playControlContainer,
+#playControls.hide #playCapsulesContainer,
+#playControls #playCapsulesContainer[hidden],
+#playControls:not(.hide) #showPlayControlsBtn {
+    display: none;
+}
+
+#playControls #showPlayControlsBtn {
+    left: max(8px, env(safe-area-inset-left));
+    bottom: env(safe-area-inset-bottom);
+}
+
+#playControls :focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
+}
+
+@media (max-width: 560px) {
+    :root {
+        --playControls-height-max: calc(132px + env(safe-area-inset-bottom));
+    }
+
+    #playControls #playControlContainer {
+        height: auto;
+    }
+
+    #playControls .controlsContainer {
+        display: grid;
+        grid-template-columns: repeat(4, 40px);
+        gap: 2px clamp(4px, 2vw, 12px);
+        margin: 0;
+    }
+
+    #playControls .controlButton[data-buttonAction="hide"] {
+        left: max(8px, env(safe-area-inset-left));
+        top: 0;
+    }
 }
 
 .popup-backdrop {
     z-index: 999;
-}
-
-#playControls.hide #playControlContainer {
-    display: none;
-}
-
-#playControls #showPlayControlsBtn {
-    display: none;
-}
-
-#playControls.hide #showPlayControlsBtn {
-    display: block;
-}
-
-.controlsContainer .controlButton {
-    display: flex;
-    width: 40px;
-    height: 40px;
-    padding: 5px;
-    border-radius: 5px;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    box-sizing: border-box;
-}
-
-.controlsContainer .controlButton::before {
-    content: '';
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    z-index: 0;
-    pointer-events: none;
-    border-radius: 20px;
-    transition: background-color 150ms ease, border-radius 200ms ease;
-}
-
-.controlsContainer .controlButton:hover::before {
-    background-color: #ffffff20;
-    border-radius: 5px;
-}
-
-.controlsContainer .controlButton:active::before {
-    background-color: #ffffff60;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton {
-    width: auto;
-    min-width: 66px;
-    padding: 2px 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    position: relative;
-    user-select: none;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton::before {
-    width: 100%;
-    height: 100%;
-    border-radius: 5px;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton input {
-    width: 38px;
-    background: transparent;
-    border: none;
-    color: #fff;
-    font-size: 13px;
-    font-weight: bold;
-    font-family: inherit;
-    text-align: right;
-    outline: none;
-    appearance: textfield;
-    -moz-appearance: textfield;
-    padding: 0;
-    margin: 0;
-    cursor: text;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton input::-webkit-outer-spin-button,
-.controlsContainer .controlButton.playbackSpeedButton input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.controlsContainer .controlButton.playbackSpeedButton .speedUnit {
-    font-size: 12px;
-    color: #bbb;
-    user-select: none;
-    font-weight: bold;
 }
 
 /* ============================================================
@@ -319,23 +258,6 @@ html, body {
     color: #00e5ff;
     background: rgba(0, 229, 255, 0.18);
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
-}
-
-.controlsContainer .controlButton[data-buttonaction="connection"].connected {
-    color: #00e676;
-    background: rgba(0, 230, 118, 0.18);
-    box-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
-}
-
-.controlsContainer .controlButton[data-buttonaction="connection"].connecting {
-    color: #ffab00;
-    background: rgba(255, 171, 0, 0.18);
-    animation: syncPulse 1.2s infinite ease-in-out;
-}
-
-@keyframes syncPulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(0.96); }
 }
 
 .slide-debug-panel {
@@ -585,11 +507,35 @@ html, body {
     color: #fff;
 }
 
-.sensor-chip.ring-A { background: rgba(255, 82, 82, 0.25); color: #ff8a80; border: 1px solid rgba(255, 82, 82, 0.4); }
-.sensor-chip.ring-B { background: rgba(255, 215, 64, 0.25); color: #ffe57f; border: 1px solid rgba(255, 215, 64, 0.4); }
-.sensor-chip.ring-C { background: rgba(234, 128, 252, 0.25); color: #ea80fc; border: 1px solid rgba(234, 128, 252, 0.4); }
-.sensor-chip.ring-D { background: rgba(68, 138, 255, 0.25); color: #82b1ff; border: 1px solid rgba(68, 138, 255, 0.4); }
-.sensor-chip.ring-E { background: rgba(0, 230, 118, 0.25); color: #b9f6ca; border: 1px solid rgba(0, 230, 118, 0.4); }
+.sensor-chip.ring-A {
+    background: rgba(255, 82, 82, 0.25);
+    color: #ff8a80;
+    border: 1px solid rgba(255, 82, 82, 0.4);
+}
+
+.sensor-chip.ring-B {
+    background: rgba(255, 215, 64, 0.25);
+    color: #ffe57f;
+    border: 1px solid rgba(255, 215, 64, 0.4);
+}
+
+.sensor-chip.ring-C {
+    background: rgba(234, 128, 252, 0.25);
+    color: #ea80fc;
+    border: 1px solid rgba(234, 128, 252, 0.4);
+}
+
+.sensor-chip.ring-D {
+    background: rgba(68, 138, 255, 0.25);
+    color: #82b1ff;
+    border: 1px solid rgba(68, 138, 255, 0.4);
+}
+
+.sensor-chip.ring-E {
+    background: rgba(0, 230, 118, 0.25);
+    color: #b9f6ca;
+    border: 1px solid rgba(0, 230, 118, 0.4);
+}
 
 .sensor-chip.active {
     background: rgba(255, 64, 129, 0.35);
@@ -664,4 +610,110 @@ html, body {
     display: flex;
     gap: 4px;
     flex-wrap: wrap;
+}
+
+/* 全域統一滾動條樣式 */
+.popup-setting-sidebar,
+.popup-setting-content,
+.project-manager-grid,
+.popup-body,
+.popup-buttons,
+.popup-content,
+.popup-search-results,
+.popup-diff-list,
+.changelog-markdown,
+.resource-manager-modal,
+.chart-info-textarea,
+.slide-debug-body,
+.slide-debug-table-container {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@supports not (scrollbar-color: auto) {
+
+    .popup-setting-sidebar,
+    .popup-setting-content,
+    .project-manager-grid,
+    .popup-body,
+    .popup-buttons,
+    .popup-content,
+    .popup-search-results,
+    .popup-diff-list,
+    .changelog-markdown,
+    .resource-manager-modal,
+    .chart-info-textarea,
+    .slide-debug-body,
+    .slide-debug-table-container {
+        scrollbar-width: auto;
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar,
+    .popup-setting-content::-webkit-scrollbar,
+    .project-manager-grid::-webkit-scrollbar,
+    .popup-body::-webkit-scrollbar,
+    .popup-buttons::-webkit-scrollbar,
+    .popup-content::-webkit-scrollbar,
+    .popup-search-results::-webkit-scrollbar,
+    .popup-diff-list::-webkit-scrollbar,
+    .changelog-markdown::-webkit-scrollbar,
+    .resource-manager-modal::-webkit-scrollbar,
+    .chart-info-textarea::-webkit-scrollbar,
+    .slide-debug-body::-webkit-scrollbar,
+    .slide-debug-table-container::-webkit-scrollbar {
+        width: var(--scrollbar-size);
+        height: var(--scrollbar-size);
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar-track,
+    .popup-setting-content::-webkit-scrollbar-track,
+    .project-manager-grid::-webkit-scrollbar-track,
+    .popup-body::-webkit-scrollbar-track,
+    .popup-buttons::-webkit-scrollbar-track,
+    .popup-content::-webkit-scrollbar-track,
+    .popup-search-results::-webkit-scrollbar-track,
+    .popup-diff-list::-webkit-scrollbar-track,
+    .changelog-markdown::-webkit-scrollbar-track,
+    .resource-manager-modal::-webkit-scrollbar-track,
+    .chart-info-textarea::-webkit-scrollbar-track,
+    .slide-debug-body::-webkit-scrollbar-track,
+    .slide-debug-table-container::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: var(--scrollbar-radius);
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar-thumb,
+    .popup-setting-content::-webkit-scrollbar-thumb,
+    .project-manager-grid::-webkit-scrollbar-thumb,
+    .popup-body::-webkit-scrollbar-thumb,
+    .popup-buttons::-webkit-scrollbar-thumb,
+    .popup-content::-webkit-scrollbar-thumb,
+    .popup-search-results::-webkit-scrollbar-thumb,
+    .popup-diff-list::-webkit-scrollbar-thumb,
+    .changelog-markdown::-webkit-scrollbar-thumb,
+    .resource-manager-modal::-webkit-scrollbar-thumb,
+    .chart-info-textarea::-webkit-scrollbar-thumb,
+    .slide-debug-body::-webkit-scrollbar-thumb,
+    .slide-debug-table-container::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb);
+        border: 2px solid transparent;
+        background-clip: content-box;
+        border-radius: var(--scrollbar-radius);
+    }
+
+    .popup-setting-sidebar::-webkit-scrollbar-thumb:hover,
+    .popup-setting-content::-webkit-scrollbar-thumb:hover,
+    .project-manager-grid::-webkit-scrollbar-thumb:hover,
+    .popup-body::-webkit-scrollbar-thumb:hover,
+    .popup-buttons::-webkit-scrollbar-thumb:hover,
+    .popup-content::-webkit-scrollbar-thumb:hover,
+    .popup-search-results::-webkit-scrollbar-thumb:hover,
+    .popup-diff-list::-webkit-scrollbar-thumb:hover,
+    .changelog-markdown::-webkit-scrollbar-thumb:hover,
+    .resource-manager-modal::-webkit-scrollbar-thumb:hover,
+    .chart-info-textarea::-webkit-scrollbar-thumb:hover,
+    .slide-debug-body::-webkit-scrollbar-thumb:hover,
+    .slide-debug-table-container::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar-thumb-hover);
+    }
 }

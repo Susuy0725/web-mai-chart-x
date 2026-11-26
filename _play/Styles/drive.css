@@ -1,0 +1,720 @@
+/* Styles/drive.css
+   Google Drive 雲端專案管理樣式
+   遵循 Material Design 規範，使用原生 HTML + CSS，絕無表情符號。
+*/
+
+/* ── 專案總管主外層容器與分頁欄 ────────────────────────────── */
+.pm-main-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    flex: 1 1 auto;
+}
+
+.pm-tab-bar {
+    display: flex;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+    flex-shrink: 0;
+}
+
+.pm-tab-btn {
+    font-family: inherit;
+    background: transparent;
+    border: none;
+    border-radius: var(--popup-radius-sm, 4px);
+    color: var(--popup-text-sub, #bbb);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 16px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    border-bottom: 2px solid transparent;
+}
+
+.pm-tab-btn:hover {
+    background: var(--popup-surface-hover, #32323c);
+    color: var(--popup-text-main, #d0d0d0);
+}
+
+.pm-tab-btn--active {
+    color: var(--popup-text-main, #ffffff);
+    border-bottom: 2px solid var(--popup-accent, #49e);
+    background: var(--ui-hover-bg, rgba(255, 255, 255, 0.05));
+}
+
+/* ── 雲端分頁主容器 ────────────────────────────────────────── */
+.pm-tab-content--drive {
+    height: 370px;
+    min-height: 370px;
+    max-height: 370px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.drive-tab-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.pm-local-toolbar {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pm-local-toolbar .drive-signout-btn {
+    white-space: nowrap;
+}
+
+.drive-tab-root .project-manager-grid {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+}
+
+/* ── 頂部帳號狀態列（未登入與已登入統一架構） ─────────────── */
+.drive-account-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--popup-surface, #111);
+    border-radius: var(--popup-radius-md, 6px);
+    border: 1px solid var(--popup-border, rgba(255, 255, 255, 0.08));
+    flex-shrink: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    margin-top: 10px;
+}
+
+.drive-account-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.drive-account-avatar-placeholder {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: #777;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.drive-account-name {
+    flex: 1;
+    font-size: 13px;
+    color: var(--popup-text-main, #d0d0d0);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.drive-account-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Google 官方設計規範圓角矩形按鈕 */
+.g-signin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #131314;
+    border: 1px solid #747775;
+    border-radius: 4px;
+    padding: 0 12px;
+    height: 32px;
+    color: #e3e3e3;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    box-sizing: border-box;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.g-signin-btn:hover:not(:disabled) {
+    background-color: #202124;
+    border-color: #8e918f;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.g-signin-btn:active:not(:disabled) {
+    background-color: #303134;
+}
+
+.g-signin-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.g-signin-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* ── 未登入狀態下方引導視圖 ────────────────────────────────── */
+.drive-not-signed-in {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1 1 0;
+    min-height: 0;
+    text-align: center;
+    padding: 24px 16px;
+    box-sizing: border-box;
+    background: var(--popup-surface, rgba(0, 0, 0, 0.15));
+    border-radius: var(--popup-radius-md, 6px);
+    border: 1px dashed var(--popup-border-light, rgba(255, 255, 255, 0.1));
+}
+
+.drive-cloud-icon {
+    font-size: 48px;
+    color: var(--popup-text-muted, #555);
+}
+
+.drive-not-signed-in-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--popup-text-main, #d0d0d0);
+    letter-spacing: 0.2px;
+}
+
+.drive-not-signed-in-sub {
+    font-size: 12px;
+    color: var(--popup-text-sub, #888);
+    max-width: 320px;
+    line-height: 1.5;
+}
+
+.drive-signout-btn,
+.drive-refresh-btn {
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    /*background: transparent;
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
+    color: var(--popup-text-sub, #bbb);
+    border-radius: var(--popup-radius-sm, 4px);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 3px 8px;    
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;*/
+    padding: 5px 12px;
+    height: 30px;
+    background: transparent;
+    color: var(--popup-text-main, #ffffff);
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.16));
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s, border-color 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.drive-refresh-btn {
+    padding: 3px 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drive-refresh-btn .material-symbols-outlined {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.drive-signout-btn:hover,
+.drive-refresh-btn:hover {
+    background: var(--popup-surface-hover, #32323c);
+    color: var(--popup-text-main, #ffffff);
+}
+
+/* 頂部篩選下拉選單 (全部/我的/與我共享) */
+.drive-filter-select {
+    background: var(--popup-surface, #1e1e24);
+    color: var(--popup-text-main, #d0d0d0);
+    border: 1px solid var(--popup-border-light, rgba(255, 255, 255, 0.15));
+    border-radius: var(--popup-radius-sm, 4px);
+    font-size: 11.5px;
+    height: 24px;
+    padding: 0 6px;
+    cursor: pointer;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    box-sizing: border-box;
+}
+
+.drive-filter-select:hover {
+    background: var(--popup-surface-hover, #32323c);
+    border-color: var(--popup-border-light, rgba(255, 255, 255, 0.3));
+    color: var(--popup-text-main, #ffffff);
+}
+
+.drive-filter-select:focus {
+    border-color: var(--popup-accent, #49e);
+}
+
+.drive-file-grid {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* ── 雲端專案卡片 ──────────────────────────────────────────── */
+.drive-file-card {
+    position: relative;
+    background: var(--popup-surface, #1e1e1e);
+    border: 1px solid var(--popup-border-light, #333333);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+    box-sizing: border-box;
+    height: fit-content;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.drive-file-card--linked {
+    border-color: var(--popup-success, #2e6930);
+}
+
+.drive-file-icon-area {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--popup-background, #141414);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drive-file-icon {
+    font-size: 46px;
+    color: var(--popup-text-muted, #4a4a4a);
+}
+
+.drive-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 0.2px;
+}
+
+.drive-badge--synced {
+    background: #1b5e20;
+    color: #a5d6a7;
+    border: 1px solid rgba(165, 214, 167, 0.2);
+}
+
+.drive-badge--cloud {
+    background: #0d47a1;
+    color: #90caf9;
+    border: 1px solid rgba(144, 202, 249, 0.2);
+}
+
+/* 唯讀標籤：位於尚未關聯本地（或已同步本地）下方 */
+.drive-badge--readonly {
+    top: 28px;
+    background: #e65100;
+    color: #ffe0b2;
+    border: 1px solid rgba(255, 224, 178, 0.3);
+}
+
+.drive-file-card-body {
+    padding: 8px 8px 4px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    box-sizing: border-box;
+}
+
+.drive-file-card-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--popup-text-main, #ffffff);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.drive-file-card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--popup-text-muted, #888888);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.drive-file-card-btns {
+    display: flex;
+    gap: 4px;
+    padding: 4px 8px 8px 8px;
+    justify-content: flex-end;
+}
+
+.drive-file-btn {
+    background: transparent;
+    border: none;
+    color: #888888;
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.drive-file-btn .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.drive-file-btn--download:hover:not(:disabled) {
+    color: #4a90e2;
+    background: rgba(74, 144, 226, 0.12);
+}
+
+.drive-file-btn--upload:hover:not(:disabled) {
+    color: #66bb6a;
+    background: rgba(102, 187, 106, 0.12);
+}
+
+.drive-file-btn--delete:hover:not(:disabled) {
+    color: #ef5350;
+    background: rgba(239, 83, 80, 0.12);
+}
+
+.drive-file-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.drive-loading,
+.drive-empty-msg {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #888888;
+    padding: 48px 16px;
+    font-size: 13px;
+}
+
+.drive-error-msg {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--popup-danger, #ef4444);
+    padding: 24px 16px;
+    font-size: 12px;
+}
+
+/* ── 傳輸進度卡片置中灰色遮罩元件 (Card Progress Overlay) ──── */
+.tp-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(22, 22, 22, 0.9);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: 8px;
+    box-sizing: border-box;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 14px;
+    gap: 8px;
+    color: var(--popup-text-main, #d0d0d0);
+    text-align: center;
+    animation: tp-overlay-fade-in 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    pointer-events: auto;
+}
+
+@keyframes tp-overlay-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.tp-status-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+}
+
+.tp-icon {
+    font-size: 30px;
+    line-height: 1;
+    color: var(--popup-accent, #49e);
+}
+
+.tp-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffffff;
+    max-width: 92%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.3;
+}
+
+.tp-bytes {
+    font-size: 11px;
+    color: var(--popup-accent, #49e);
+    font-weight: 500;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+[data-state="error"] .tp-icon,
+[data-state="error"] .tp-text {
+    color: var(--popup-danger, #ef4444);
+}
+
+[data-state="completed"] .tp-icon,
+[data-state="completed"] .tp-text {
+    color: var(--popup-success, #10b981);
+}
+
+.tp-bar-bg {
+    width: 82%;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+    margin-top: 3px;
+}
+
+.tp-bar-fill {
+    height: 100%;
+    background: var(--popup-accent, #49e);
+    border-radius: 3px;
+    transition: width 0.2s ease;
+    width: 0%;
+}
+
+[data-state="completed"] .tp-bar-fill {
+    background: var(--popup-success, #10b981);
+}
+
+[data-state="error"] .tp-bar-fill {
+    background: var(--popup-danger, #ef4444);
+    width: 0% !important;
+}
+
+/* Material Design Indeterminate 動畫（純 CSS） */
+.tp-bar-fill.tp-bar-indeterminate {
+    width: 40% !important;
+    animation: tp-material-indeterminate 1.5s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+}
+
+@keyframes tp-material-indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    50% {
+        transform: translateX(120%);
+    }
+
+    100% {
+        transform: translateX(250%);
+    }
+}
+
+.tp-error-msg {
+    font-size: 11px;
+    color: var(--popup-danger, #ef4444);
+    line-height: 1.4;
+    max-width: 90%;
+    word-break: break-word;
+    margin-top: 2px;
+}
+
+/* ── 專案卡片底部進度浮層（避免遮蔽音樂封面） ──── */
+.tp-wrapper.tp-wrapper--card-bottom {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: auto;
+    min-height: 56px;
+    max-height: 80px;
+    background: linear-gradient(to bottom, rgba(20, 20, 20, 0.9) 0%, rgba(13, 13, 13, 0.97) 100%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0 0 7px 7px;
+    padding: 7px 9px;
+    gap: 3px;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.55);
+    animation: tp-bottom-slide-up 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    z-index: 10;
+}
+
+@keyframes tp-bottom-slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.tp-wrapper--card-bottom .tp-status-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px 4px;
+    width: 100%;
+    padding: 0;
+}
+
+.tp-wrapper--card-bottom .tp-icon {
+    font-size: 16px;
+    line-height: 1;
+    margin-right: 2px;
+    flex-shrink: 0;
+}
+
+.tp-wrapper--card-bottom .tp-text {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    flex: 1 1 auto;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: none;
+}
+
+.tp-wrapper--card-bottom .tp-bytes {
+    font-size: 10px;
+    line-height: 1.2;
+    width: 100%;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tp-wrapper--card-bottom .tp-bytes:empty {
+    display: none;
+}
+
+.tp-wrapper--card-bottom .tp-bar-bg {
+    width: 100%;
+    height: 4px;
+    margin-top: 1px;
+    border-radius: 2px;
+}
+
+.tp-wrapper--card-bottom .tp-error-msg {
+    font-size: 10px;
+    line-height: 1.3;
+    max-width: 100%;
+    margin-top: 2px;
+}
+
+
+/* ── 全螢幕模式 (Mobile / Page Route <= 440px) 響應式適配 ─────────── */
+@media (max-width: 440px) {
+    .pm-main-container {
+        flex: 1 1 auto;
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+
+    .pm-tab-content--drive {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+    }
+
+    .drive-tab-root {
+        height: 100% !important;
+        min-height: 0 !important;
+        flex: 1 1 auto;
+    }
+
+    .drive-tab-root .drive-file-grid {
+        height: 100% !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        flex: 1 1 auto;
+        overflow-y: auto !important;
+    }
+
+    .drive-tab-root .drive-not-signed-in {
+        height: 100% !important;
+        min-height: 0 !important;
+        flex: 1 1 auto;
+    }
+}

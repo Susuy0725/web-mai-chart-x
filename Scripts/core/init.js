@@ -1,0 +1,558 @@
+import { popupWindow } from '../helper.js';
+import { t } from '../i18n.js';
+import { openDB } from '../indexDB.js';
+import { clearAcceptLog } from './legalVersionManager.js';
+
+/**
+ * 執行編輯器初始化載入流程彈窗
+ * @param {Object} ctx
+ */
+export function runInitModal(ctx) {
+    // 建立共用的設定讀取 Promise，避免背景素材載入與前景初始化並行造成 IndexedDB 競爭
+    const sharedSettingsStrPromise = fetchSavedSettingsString(ctx);
+
+    // 1. 背景非同步啟動圖片素材與音效載入（不阻塞使用者檢視與操作編輯器）
+    (async () => {
+        try {
+            let initSkin = 'Default';
+            try {
+                const sStr = await sharedSettingsStrPromise;
+                if (sStr) {
+                    const parsed = JSON.parse(sStr);
+                    if (parsed && parsed.skin) initSkin = parsed.skin;
+                }
+            } catch (_) { }
+
+            const loadedImages = await ctx.loadAllImages(null, initSkin);
+            ctx.setImages(loadedImages);
+            if (typeof ctx.getRenderer === 'function' && ctx.getRenderer()) {
+                ctx.getRenderer().setImages(loadedImages);
+            }
+            if (typeof ctx.getVisualEditorRenderer === 'function' && ctx.getVisualEditorRenderer()) {
+                ctx.getVisualEditorRenderer().setImages(loadedImages);
+            }
+            if (typeof ctx.getPreviewRender === 'function' && ctx.getPreviewRender()) {
+                if (typeof ctx.getPreviewRender().setImages === 'function') {
+                    ctx.getPreviewRender().setImages(loadedImages);
+                }
+            }
+            if (typeof ctx.setIsImagesLoaded === 'function') {
+                ctx.setIsImagesLoaded(true);
+            }
+            // 圖片素材完全抓取完成後觸發首繪，讓譜面完整呈現
+            if (typeof ctx.draw === 'function') {
+                ctx.draw();
+            }
+        } catch (err) {
+            console.error('[Assets] 背景圖片載入失敗:', err);
+        }
+    })();
+
+    if (ctx.audioManager && typeof ctx.audioManager.init === 'function') {
+        ctx.audioManager.init().catch(err => {
+            console.warn('[Audio] 背景音效載入失敗:', err);
+        });
+    }
+
+    // 2. 前景立即初始化專案與編輯器 UI，讓使用者第一時間看到編輯器
+    (async () => {
+        try {
+            const step = () => { };
+
+            // 平行確定專案與讀取設定（兩者互不相依），縮短首屏啟動時間
+            const [, settings] = await Promise.all([
+                setupCurrentProject(ctx, step),
+                loadAndRestoreSettings(ctx, step, sharedSettingsStrPromise),
+            ]);
+
+            // 載入專案譜面資料與設定編輯器 UI
+            await setupEditorUIAndData(ctx, settings, step);
+
+            // 初始化三大渲染核心（若背景圖片尚未就緒則以 {} 或已完成之 images 注入）
+            const currentImages = (typeof ctx.getImages === 'function' ? ctx.getImages() : null) || {};
+            initRenderers(ctx, settings, currentImages);
+
+            // 調整尺寸、套用樣式、解鎖介面並完成初始化
+            await finalizeInit(ctx, settings);
+        } catch (e) {
+            handleInitError(e);
+        }
+    })();
+}
+
+// ==========================================
+// 私有輔助函數 (各階段職責拆分)
+// ==========================================
+
+/**
+ * 1. 載入靜態素材 (音效 + 圖片)
+ */
+async function loadAssets(ctx, step) {
+    let sfxPct = 0;
+    let imgPct = 0;
+
+    const updateCombinedStep = (msg) => {
+        const combinedPct = Math.min(78, Math.round((sfxPct * 0.38) + (imgPct * 0.40)));
+        step(combinedPct, msg);
+    };
+
+    const [_, loadedImages] = await Promise.all([
+        ctx.audioManager.init((pct, key) => {
+            sfxPct = pct;
+            updateCombinedStep(t('popup.init.loadingSfx', { key, percent: Math.round(pct) }));
+        }),
+        ctx.loadAllImages((pct, key) => {
+            imgPct = pct;
+            updateCombinedStep(t('popup.init.loadingAssets', { key, percent: Math.round(pct) }));
+        })
+    ]);
+
+    ctx.setImages(loadedImages);
+    return loadedImages;
+}
+
+/**
+ * 2. 專案系統初始化與舊版遷移
+ */
+async function setupCurrentProject(ctx, step) {
+    step(78, t('popup.init.initProjects'));
+
+    const list = await ctx.projectList();
+    const migratedId = await ctx.migrateFromLegacy(list);
+    const lastId = localStorage.getItem('simai_lastProjectId');
+    const isDatabaseEmpty = (!migratedId && (!list || list.length === 0));
+    if (typeof ctx.setIsDatabaseEmpty === 'function') {
+        ctx.setIsDatabaseEmpty(isDatabaseEmpty);
+    }
+
+    if (migratedId) {
+        ctx.setCurrentProjectId(migratedId);
+        localStorage.setItem('simai_lastProjectId', migratedId);
+        console.log(`[Project] 遷移完成，使用專案: ${migratedId}`);
+        return;
+    }
+
+    if (lastId && list.some(p => p.id === lastId)) {
+        ctx.setCurrentProjectId(lastId);
+    } else if (list.length > 0) {
+        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        ctx.setCurrentProjectId(list[0].id);
+    } else {
+        const newId = await ctx.projectCreate(t('popup.projectManager.untitled'));
+        ctx.setCurrentProjectId(newId);
+    }
+    localStorage.setItem('simai_lastProjectId', ctx.getCurrentProjectId());
+}
+
+const BACKUP_SETTINGS_KEY = 'simai_settings_backup';
+
+/**
+ * 安全讀取已儲存的設定字串，具備重試機制與 localStorage 備份回退
+ */
+async function fetchSavedSettingsString(ctx) {
+    let sStr = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+        attempts++;
+        try {
+            sStr = await ctx.idbGet('simai_settings');
+            if (sStr && typeof sStr === 'string' && sStr.trim() !== '' && sStr.trim() !== '{}') {
+                break;
+            }
+        } catch (e) {
+            console.warn(`[Settings] 讀取 IndexedDB simai_settings 失敗 (第 ${attempts} 次嘗試):`, e);
+        }
+        if (attempts < maxAttempts) {
+            // 在重試前稍作等待，讓繁忙的 IndexedDB 交易佇列有時間恢復
+            await new Promise(r => setTimeout(r, 60 * attempts));
+        }
+    }
+
+    // 若 IndexedDB 讀取失敗或回傳空物件，嘗試從 localStorage 備份恢復
+    if (!sStr || sStr === '{}') {
+        try {
+            const backup = localStorage.getItem(BACKUP_SETTINGS_KEY);
+            if (backup && backup.trim() !== '' && backup.trim() !== '{}') {
+                console.info('[Settings] IndexedDB 未能取得有效設定，成功自 localStorage 備份還原設定。');
+                sStr = backup;
+            }
+        } catch (_) { }
+    }
+
+    return sStr;
+}
+
+/**
+ * 3. 載入並補齊全域設定（具備效能延遲容錯、空值保護與防複寫機制）
+ */
+async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
+    step(80, t('popup.init.restoringSettings'));
+
+    const savedSettingsStr = sharedSettingsPromise
+        ? await sharedSettingsPromise
+        : await fetchSavedSettingsString(ctx);
+
+    let parsedSettings = null;
+    let isFromValidSaved = false;
+
+    if (savedSettingsStr) {
+        try {
+            const parsed = JSON.parse(savedSettingsStr);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 2) {
+                parsedSettings = parsed;
+                isFromValidSaved = true;
+            } else {
+                console.warn('[Settings] 已儲存設定內容為空或鍵值過少，忽略以防複寫。', parsed);
+            }
+        } catch (err) {
+            console.error('[Settings] 解析已儲存設定 JSON 失敗:', err);
+        }
+    }
+
+    // 合併預設值與使用者原有設定：以 defaultSettings 為基底，保留使用者既有值
+    const settings = {
+        ...ctx.defaultSettings,
+        ...(parsedSettings || {})
+    };
+
+    // 深入合併巢狀物件（例如音效各音軌獨立音量），避免漏掉新增的預設音效或洗掉使用者單獨調過的音量
+    if (ctx.defaultSettings.sfxVolumes) {
+        settings.sfxVolumes = {
+            ...ctx.defaultSettings.sfxVolumes,
+            ...(parsedSettings?.sfxVolumes || {})
+        };
+    }
+
+    if (ctx.defaultSettings.syntaxColors) {
+        settings.syntaxColors = {
+            ...ctx.defaultSettings.syntaxColors,
+            ...(parsedSettings?.syntaxColors || {})
+        };
+    }
+
+    if (ctx.defaultSettings.customKeybindings) {
+        settings.customKeybindings = {
+            ...ctx.defaultSettings.customKeybindings,
+            ...(parsedSettings?.customKeybindings || {})
+        };
+    }
+
+    // 檢查是否有缺少的新設定項目，並遷移已反轉語意的舊設定鍵
+    let hasNewKeys = false;
+    const legacyInvertedMap = [
+        ['hideOutline', 'showOutline'],
+        ['noBorder', 'showBorder'],
+        ['disableVideo', 'enableVideo'],
+        ['hideBackgroundWhenPaused', 'showBackgroundWhenPaused'],
+        ['notPlayHoldEnd', 'playHoldEnd'],
+        ['disableSyntaxCheck', 'enableSyntaxCheck'],
+    ];
+    if (parsedSettings) {
+        if (!('previewAudioVisualMode' in parsedSettings)) {
+            if (parsedSettings.disablePreviewWaveform === true || parsedSettings.enablePreviewWaveform === false) {
+                settings.previewAudioVisualMode = 'off';
+                hasNewKeys = true;
+            }
+        }
+        if ('disablePreviewWaveform' in settings) {
+            delete settings.disablePreviewWaveform;
+            hasNewKeys = true;
+        }
+        if ('enablePreviewWaveform' in settings) {
+            delete settings.enablePreviewWaveform;
+            hasNewKeys = true;
+        }
+        if (!('showUIPosition' in parsedSettings) && ('showUIHorizontalPosition' in parsedSettings || 'showUIVerticalPosition' in parsedSettings)) {
+            const horiz = parsedSettings.showUIHorizontalPosition === 'right' ? 'right' : 'left';
+            const vert = parsedSettings.showUIVerticalPosition === 'bottom' ? 'bottom' : 'top';
+            settings.showUIPosition = `${vert}-${horiz}`;
+            hasNewKeys = true;
+        }
+        if ('showUIHorizontalPosition' in settings) {
+            delete settings.showUIHorizontalPosition;
+            hasNewKeys = true;
+        }
+        if ('showUIVerticalPosition' in settings) {
+            delete settings.showUIVerticalPosition;
+            hasNewKeys = true;
+        }
+    }
+    if (parsedSettings) {
+        for (const [oldKey, newKey] of legacyInvertedMap) {
+            if (oldKey in parsedSettings) {
+                if (!(newKey in parsedSettings)) {
+                    settings[newKey] = !parsedSettings[oldKey];
+                }
+                delete settings[oldKey];
+                hasNewKeys = true;
+            }
+        }
+    }
+    for (const key in ctx.defaultSettings) {
+        if (!parsedSettings || !(key in parsedSettings)) {
+            hasNewKeys = true;
+        }
+    }
+
+    // 關鍵修復：絕不在「載入階段」無條件複寫 IndexedDB！
+    // 只有在確認成功讀取到有效的使用者設定、且確實有新鍵值需要補齊時，才非同步在背景回寫，絕不阻塞首屏與破壞原有設定
+    if (isFromValidSaved && hasNewKeys) {
+        Promise.resolve().then(async () => {
+            try {
+                const updatedStr = JSON.stringify(settings);
+                await ctx.idbSet('simai_settings', updatedStr);
+                try { localStorage.setItem(BACKUP_SETTINGS_KEY, updatedStr); } catch (_) { }
+            } catch (e) {
+                console.warn('[Settings] 背景補齊缺失設定項回寫失敗:', e);
+            }
+        });
+    }
+
+    // 效果修飾屬性於初始化時重設為預設值 'none'，避免重新整理後殘留地雷或 Break 造成誤放
+    settings.visualSelectedModifier = 'none';
+
+    // 即時將正確的設定同步至 localStorage 備份，防範後續極端情況中斷
+    try {
+        localStorage.setItem(BACKUP_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (_) { }
+
+    ctx.setSettings(settings);
+    ctx.applyAudioSettings(settings);
+
+    return settings;
+}
+
+/**
+ * 4. 載入專案資料與同步 UI 狀態
+ */
+async function setupEditorUIAndData(ctx, settings, step) {
+    step(84, t('popup.init.restoringState'));
+    await ctx.loadProjectData(step);
+
+    if (settings.autoConnectMajdataView) {
+        ctx.majdataWs.connect(settings.majdataWsUrl || 'ws://127.0.0.1:8083/majdata');
+    }
+
+    ctx.applySplitRatio(settings.splitRatio ?? 0.5);
+
+    if (settings.canvasSnapped) {
+        ctx.snapHideCanvas();
+    }
+
+    if (typeof ctx.setDisplayModeUI === 'function') {
+        ctx.setDisplayModeUI(settings.displayMode ?? 'simai');
+    }
+    if (typeof ctx.setVisualToolUI === 'function') {
+        ctx.setVisualToolUI(settings.visualToolMode ?? 'edit');
+    }
+
+    if (ctx.visualToolModeSelect) {
+        ctx.visualToolModeSelect.value = settings.visualToolMode ?? 'edit';
+    }
+
+    ctx.setGridDivisionUI(settings.gridDivision ?? 4);
+    ctx.updateGridDivisionVisibility();
+
+    if (typeof ctx.syncVisualSubMenus === 'function') {
+        ctx.syncVisualSubMenus();
+    }
+}
+
+/**
+ * 5. 初始化各渲染器實例 (主畫布、視覺軌道編輯器、迷你預覽)
+ */
+function initRenderers(ctx, settings, loadedImages) {
+    // 主遊戲畫面渲染器
+    const renderer = new ctx.SimaiRenderer(ctx.canvas, settings);
+    renderer.setImages(loadedImages);
+    ctx.setRenderer(renderer);
+
+    // 視覺軌道編輯器渲染器
+    const visualEditorRenderer = new ctx.SimaiVisualEditor(ctx.visualEditor, settings);
+    visualEditorRenderer.setEditMode(settings.visualToolMode ?? 'edit');
+    visualEditorRenderer.setImages(loadedImages);
+    visualEditorRenderer.setContext(ctx.visualCtx || ctx.visualEditor.getContext('2d'));
+    visualEditorRenderer.setZoom(settings.visualZoom);
+    visualEditorRenderer.setNoteEditCallbacks(
+        ctx.visualPlaceNote,
+        ctx.visualDeleteNote,
+        ctx.visualChangeNote,
+        ctx.visualPlaceHoldNote,
+        ctx.visualUpdateHoldDuration
+    );
+    visualEditorRenderer.setTimeQuantizer(ctx.quantizeTime);
+    if (typeof ctx.onSelectionChange === 'function') {
+        visualEditorRenderer.setSelectionCallback(ctx.onSelectionChange);
+    }
+    if (typeof visualEditorRenderer.setLayerMode === 'function') {
+        visualEditorRenderer.setLayerMode(settings.visualLayerMode || 'note');
+    }
+    if (typeof visualEditorRenderer.setTagEditCallbacks === 'function') {
+        visualEditorRenderer.setTagEditCallbacks(
+            ctx.visualPlaceTimingTag,
+            ctx.visualDeleteTag,
+            ctx.visualEditTag,
+            ctx.onVisualTagSelect
+        );
+    }
+    if (typeof ctx.updateVisualTime === 'function' && typeof visualEditorRenderer.setTimeScrollCallback === 'function') {
+        visualEditorRenderer.setTimeScrollCallback((deltaSec) => {
+            const current = (typeof ctx.getRealTime === 'function' ? ctx.getRealTime() : visualEditorRenderer.globalTime) || 0;
+            ctx.updateVisualTime(current + deltaSec);
+        });
+    }
+
+    // 安全讀取拍號輸入值
+    const v1 = ctx.timebaseButton?.querySelector('input[name="tb1"]')?.value ?? 4;
+    const v2 = ctx.timebaseButton?.querySelector('input[name="tb2"]')?.value ?? 4;
+    visualEditorRenderer.setTimebase(v1, v2);
+    ctx.setVisualEditorRenderer(visualEditorRenderer);
+
+    // 軌道迷你縮圖預覽渲染器
+    const previewRender = new ctx.SimaiPreviewRenderer(ctx.previewCanvas, settings);
+    previewRender.setZoom(settings.visualZoom);
+    previewRender.setTimebase(v1, v2);
+    if (typeof previewRender.setImages === 'function') {
+        previewRender.setImages(loadedImages);
+    }
+    ctx.setPreviewRender(previewRender);
+
+    // 若圖片在此之前已於背景載入完成，直接繪製
+    if (typeof ctx.getIsImagesLoaded === 'function' && ctx.getIsImagesLoaded()) {
+        ctx.draw();
+    }
+}
+
+/**
+ * 6. 首繪、調整介面尺寸與啟動就緒
+ */
+async function finalizeInit(ctx, settings) {
+    ctx.setPlaybackSpeed(settings.playbackSpeed);
+
+    if (ctx.canvasOutline) {
+        ctx.canvasOutline.style.display = settings.showOutline === false ? 'none' : '';
+    }
+
+    ctx.applyMovieBrightness(settings.moviebrightness);
+    ctx.updateSlider(ctx.getRealTime());
+    ctx.setEditorCss(!await ctx.projGet('hide_editor'));
+
+    ctx.resize();
+    ctx.setIsInitComplete(true);
+    ctx.updateDiscordRPC(ctx.getMaidata(), ctx.getNowDifficulty());
+
+    if (typeof ctx.onInitFinished === 'function') {
+        try {
+            ctx.onInitFinished();
+        } catch (e) {
+            console.error('[init] onInitFinished 執行失敗:', e);
+        }
+    }
+}
+
+/**
+ * 7. 初始化例外救援處理
+ */
+function handleInitError(e) {
+    console.error("初始化失敗:", e);
+    let errorPopup = null;
+    errorPopup = popupWindow({
+        title: t('popup.init.title'),
+        content: t('popup.init.errorContent', { message: e.message }),
+        unclosable: true,
+        buttons: [
+            {
+                text: t('popup.init.clearAll'),
+                onClick: async () => {
+                    if (!confirm(t('popup.init.confirmClearAll'))) return;
+                    try {
+                        await clearIndexedDBStore();
+                        clearAcceptLog();
+                        try {
+                            localStorage.removeItem('simai_lastProjectId');
+                        } catch { }
+                        console.log("已清除 IndexedDB 中的所有資料");
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("清除 IndexedDB 資料失敗:", err);
+                    }
+                }
+            },
+            {
+                text: t('popup.init.clearChartCache'),
+                onClick: async () => {
+                    if (!confirm(t('popup.init.confirmClearChart'))) return;
+                    try {
+                        const count = await clearIndexedDBStore((key) =>
+                            typeof key === 'string' && (key.startsWith('simai_') || key.startsWith('proj_') || key === '__project_list__')
+                        );
+                        console.log(`[IDB] 已成功清理 ${count} 項譜面資料`);
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("清除特定資料失敗:", err);
+                    }
+                }
+            },
+            {
+                text: t('popup.init.clearAssetCache'),
+                onClick: async () => {
+                    if (!confirm(t('popup.init.confirmClearAsset'))) return;
+                    try {
+                        const count = await clearIndexedDBStore((key) =>
+                            typeof key === 'string' && (key.startsWith('sfx_cache_') || key.startsWith('img_cache_'))
+                        );
+                        console.log(`[IDB] 已成功清理 ${count} 項素材快取資料`);
+                        window.location.reload();
+                    } catch (err) {
+                        console.error("清除特定資料失敗:", err);
+                    }
+                }
+            },
+            {
+                text: t('popup.close'),
+                onClick: () => {
+                    errorPopup?.close();
+                }
+            }
+        ]
+    });
+}
+
+/**
+ * 輔助函數：清理 IndexedDB editorState 中的特定資料或全部資料
+ * @param {Function} [filterFn] - 過濾鍵值的函式，未傳入則 clear 全部
+ * @returns {Promise<number>} 刪除的筆數
+ */
+async function clearIndexedDBStore(filterFn) {
+    const db = await openDB();
+    const transaction = db.transaction("editorState", "readwrite");
+    const store = transaction.objectStore("editorState");
+
+    let deleteCount = 0;
+
+    if (!filterFn) {
+        store.clear();
+    } else {
+        const keys = await new Promise((resolve, reject) => {
+            const req = store.getAllKeys();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+
+        for (const key of keys) {
+            if (filterFn(key)) {
+                store.delete(key);
+                deleteCount++;
+            }
+        }
+    }
+
+    await new Promise((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = (err) => reject(err);
+    });
+
+    return deleteCount;
+}

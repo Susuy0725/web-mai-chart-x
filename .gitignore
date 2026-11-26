@@ -3,6 +3,7 @@ node_modules/
 
 # Build and Dev Server outputs
 dist/
+<<<<<<< HEAD
 .vite/
 vite.config.js
 
@@ -34,3 +35,17 @@ ehthumbs.db
 *.njsproj
 *.sln
 *.sw?
+=======
+node_modules/
+.env
+vite.config.js
+scratch/
+examples/
+package-lock.json
+package.json
+
+# Local agent instructions
+[Aa][Gg][Ee][Nn][Tt].[Mm][Dd]
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
+[Gg][Ee][Mm][Ii][Nn][Ii].[Mm][Dd]
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c

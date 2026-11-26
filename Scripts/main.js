@@ -1,28 +1,91 @@
+import { createVisualNoteCallbacks, initVisualScroller, stripLeadingTags, openDivisionInputModal } from './features/visualEditor.js';
+import { EditorHighlightOverlay } from './features/editorHighlightOverlay.js';
+import { showFloatingMenu, hideFloatingMenu, showBoxFloatingMenu, hideBoxFloatingMenu, showTagFloatingMenu } from './features/visualFloatingMenu.js';
+import { openNoteDurationModal } from './modals/noteDurationModal.js';
+import { openSlideEditorModal } from './modals/slideEditorModal.js';
+import { openTouchGroupModal } from './modals/touchGroupModal.js';
+import { VisualSubMenu } from './features/visualSubMenu.js';
+import { settingsConfig, defaultSettings } from './core/settingsConfig.js';
+import { applyThemeSettings, applyThemeFromBackup, onThemeChange, DEFAULT_THEME_MODE, DEFAULT_ACCENT_COLOR } from './core/themeManager.js';
+import { resolveKeybindingMatch } from './core/keybindings.js';
+export { defaultSettings };
+import {
+    LAYOUT_DIRECTIONS,
+    normalizeLayoutDirection,
+    getSplitterPositionRatio,
+    computeDraggedSplitRatio,
+    computeEditorSlideAnimation,
+    computeFloatingToolbarDock,
+    computeCanvasAnimationRect,
+    parseCanvasAspectRatio,
+} from './core/panelLayout.js';
+import { eventBus, EVENTS } from './core/eventBus.js';
+import { appContext } from './core/appContext.js';
+import { commandRegistry } from './core/commandRegistry.js';
+import { extensionManager } from './core/extensionManager.js';
+import { extensionOverrideRegistry } from './core/extensionOverrideRegistry.js';
+import { loadStoredExtensions } from './core/extensionLoader.js';
+import { initExtensionMenu } from './features/extensionMenu.js';
+import { PlaybackEngine } from './core/playbackEngine.js';
+import { initServiceWorker } from './core/swManager.js';
+import { runInitModal } from './core/init.js';
+import { SecondaryWindowManager } from './features/secondaryWindow.js';
+import { frameProfiler } from './core/frameProfiler.js';
+import { initFileHandlers } from './features/fileHandler.js';
+import { initQuickPanel } from './features/quickPanel.js';
+import { openHelpModal } from './modals/helpModal.js';
+import { openAboutModal } from './modals/aboutModal.js';
+import { openChangelogModal } from './modals/changelogModal.js';
+import { openChartInfoModal } from './modals/chartInfoModal.js';
+import { openResourceManager } from './modals/resourceManagerModal.js';
+import { openSettingsModal } from './modals/settingsModal.js';
 import { openDB, idbGet, idbSet, idbSetProject, idbGetProject, projectList, projectCreate, projectDelete, projectRename, projectTouch, projectUpdateName, migrateFromLegacy } from './indexDB.js';
 import {
-    scaleBase, getButton, debounce, throttle,
+    getButton, disableNavigationGestures, debounce, throttle,
     getHighlight, parseMaidata, popupWindow, loadAllImages,
-    simpleToast, formatSize, getSimaiDataString, contantRotate, flipSelectedText,
-    clamp, createLabeledInput1, createCustomSlider, videoRender,
-    ensureMediabunny, ensureJSZip, ensureSupabase, ensureJsMediaTags
+    simpleToast,
+    formatCapsuleTime,
+    clamp,
+    defaultSyntaxColors,
+    applySyntaxColors,
+    syncDifficultySelectIndicators
 } from './helper.js';
+import { SimaiLogicControler } from './core/simaiLogicControler.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
-import { t, setLang, getCurrentLang, applyI18nToDOM } from './i18n.js';
+import { decodeWorkerManager } from './core/decodeWorkerManager.js';
+import { t, setLang, getCurrentLang, applyI18nToDOM, i18nReady, onLanguageChange } from './i18n.js';
 import { updateDiscordRPC } from '../rpc.js';
 import { audioManager } from './audioManager.js';
 import { majdataWs } from './majdataWs.js';
+<<<<<<< HEAD
 import { editorSync } from './sync/editorSync.js';
 import * as googleDriveService from './drive/googleDriveService.js';
 import * as cloudProjectManager from './drive/cloudProjectManager.js';
 import { createGoogleSignInButton } from './drive/googleButton.js';
 import { openProjectManagerModal } from './projectManagerModal.js';
 import { normalizeFiles, parseProjectBundle, saveProjectToIdb, runImportModal } from './projectLoader.js';
+=======
+import { openBgmEditor, openTapBpm } from './modals/bgmEditor.js';
+import { openMainoteFetcher } from './modals/mainoteFetcher.js';
+import { openProjectManager } from './modals/projectManager.js';
+import { checkAndHandleDriveOpenWith } from './services/driveOpenWith.js';
+import { openRecordVideoModal } from './modals/recordVideoModal.js';
+import { initFindReplace, openFindBar, closeFindBar } from './features/findReplace.js';
+import { initEditorAutocomplete } from './features/editorAutocomplete.js';
+import { toggleNoteFlag, handleToggleBkEx, applySelectedRotation, applyVerticalFlip, applyHorizontalFlip } from './features/noteModifier.js';
+import { showWelcomeModal } from './modals/welcomeModal.js';
+import { showLegalUpdateModal } from './modals/legalUpdateModal.js';
+import { openSubdivisionModal } from './modals/subdivisionModal.js';
+import { generateSmoothBpmByDuration, initSmoothBpmLauncher } from './features/smoothBpm.js';
+import { openSmoothBpmModal } from './modals/smoothBpmModal.js';
+import { handleFormatDocument, formatDocument, formatSimai } from './features/formatter.js';
+export { toggleNoteFlag };
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
-// 初始化進行靜態翻譯
-applyI18nToDOM();
 majdataWs.setToastHandler(simpleToast);
 
+<<<<<<< HEAD
 const isDev =
     import.meta.env?.VITE_MODE === 'debug' ||
     Boolean(import.meta.env?.DEV) ||
@@ -186,15 +249,23 @@ if ('serviceWorker' in navigator) {
             });
     }
 }
+=======
+initServiceWorker();
+disableNavigationGestures();
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 let
     isInitComplete = false,
-    images,
-    readyBeat = false,
+    isImagesLoaded = false,
+    isDatabaseEmpty = false,
+    images = {},
     maidata = {},
     nowDifficulty = 5,
     backgroundImage,
     backgroundVideo,
+    currentBgBlobUrl = null,
+    currentBgVideoBlobUrl = null,
+    loadGeneration = 0,
     renderer,
     visualEditorRenderer,
     previewRender,
@@ -202,7 +273,21 @@ let
     isContextEdited = false,
     isVerticalMode = (document.documentElement.clientWidth / document.documentElement.clientHeight) <= 0.587,
     currentProjectId = null,
-    lastEditorValue = '';
+    lastEditorValue = '',
+    globalTime = 0,
+    realTime = 0,
+    lastStartTime = 0;
+
+function revokeBlobUrls() {
+    if (currentBgBlobUrl) {
+        try { URL.revokeObjectURL(currentBgBlobUrl); } catch (_) { }
+        currentBgBlobUrl = null;
+    }
+    if (currentBgVideoBlobUrl) {
+        try { URL.revokeObjectURL(currentBgVideoBlobUrl); } catch (_) { }
+        currentBgVideoBlobUrl = null;
+    }
+}
 
 // 專案命名空間化的讀寫包裝
 const projSet = (key, value) => currentProjectId ? idbSetProject(currentProjectId, key, value) : Promise.resolve();
@@ -211,7 +296,37 @@ const projGet = (key) => currentProjectId ? idbGetProject(currentProjectId, key)
 window.popupWindow = popupWindow;
 window.simpleToast = simpleToast;
 
-_init();
+try { applyThemeFromBackup(); } catch (_) { }
+try { applySyntaxColors(defaultSyntaxColors); } catch (_) { }
+
+const simaiLogicControler = new SimaiLogicControler(audioManager);
+audioManager.onSoundLoaded = (key, audioBuffer) => {
+    extensionOverrideRegistry.applyDefaultSoundBuffer(key, audioBuffer);
+};
+
+const isVisualMode = () => settings.displayMode === 'visual';
+
+const BACKUP_SETTINGS_KEY = 'simai_settings_backup';
+
+const saveSettingsDebounce = debounce(() => {
+    // 效能與防覆寫保護：在初始化完成且設定已完整載入前，嚴禁回寫 IndexedDB，避免以空物件覆寫既有設定
+    if (!isInitComplete || !settings || Object.keys(settings).length < 5) {
+        return;
+    }
+    const cleanSettings = extensionOverrideRegistry.getCleanSettings(settings);
+    if (majdataWs.isConnected()) {
+        majdataWs.sendSetting(cleanSettings);
+    }
+    const settingsStr = JSON.stringify(cleanSettings);
+    idbSet('simai_settings', settingsStr).catch((error) => {
+        console.error('儲存設定到 IndexedDB 失敗:', error);
+    });
+    try {
+        localStorage.setItem(BACKUP_SETTINGS_KEY, settingsStr);
+    } catch (_) { }
+}, 300);
+
+
 
 if (typeof document !== 'undefined' && document.fonts) {
     Promise.all([
@@ -241,15 +356,24 @@ if (canvas) {
     canvas.addEventListener('selectstart', (e) => e.preventDefault());
 }
 const timeline = document.getElementById('timeControl');
-const keyboardButton = getButton("keyboard", "control");
+const playCapsulesContainer = document.getElementById('playCapsulesContainer');
+const timeDisplayCapsule = document.getElementById('timeDisplayCapsule');
+const speedDisplayCapsule = document.getElementById('speedDisplayCapsule');
+const speedControlButton = getButton("speed", "control");
+const speedPopover = document.getElementById('speedPopover');
+const speedPopoverMinus = document.getElementById('speedPopoverMinus');
+const speedPopoverAdd = document.getElementById('speedPopoverAdd');
+const speedPopoverReset = document.getElementById('speedPopoverReset');
+const speedPopoverInput = document.getElementById('speedPopoverInput');
 const playButton = getButton("play/pause", "control");
 const hideButton = getButton("hide", "control");
 const stopButton = getButton("stop", "control");
 const resetButton = getButton("reset", "control");
+const focusButton = getButton("focus", "control");
 const quickGenerateButton = getButton("quickGenerate", "utility");
 const hideEditorButton = getButton("hideEditor", "utility");
-const hideUtilityButton = document.querySelector("#utilityContainer .closeBtn");
-const readyBeatCheckbox = getButton("readyBeat", "utility").children[0];
+const hideUtilityButton = getButton("hideUtility", "utility");
+const showUtilityButton = document.getElementById("showUtilityBtn");
 const offsetInput = getButton("offset", "utility").children[0];
 const changeDifficulty = getButton("changeDifficulty", "utility").children[0];
 const addMusicButton = getButton("addMusic", "utility");
@@ -260,11 +384,43 @@ const chartInfoButton = getButton("chartInfo", "utility");
 const settingsButton = getButton("settings", "utility");
 const popup = getButton("popup", "utility");
 const getNowNoteIndex = getButton("getNowNoteIndex", "utility");
-const switchBoxRadios = document.querySelectorAll('input[name="switchBoxMode"]');
-const setSwitchBoxDisplayModeUI = (mode) => {
-    const radioVal = (mode === 'simai') ? 'keyboard' : 'selector';
-    const radio = document.querySelector(`input[name="switchBoxMode"][value="${radioVal}"]`);
+const visualToolBarEl = document.getElementById('visualToolBar');
+const visualToolGroupEl = document.getElementById('visualToolGroup');
+const visualNotePaletteEl = document.getElementById('visualNotePalette');
+const visualToolCollapseBtn = document.getElementById('visualToolCollapseBtn');
+const toolPlaceLabel = document.getElementById('toolPlaceLabel');
+const currentNoteIcon = document.getElementById('currentNoteIcon');
+const visualToolRadios = document.querySelectorAll('input[name="visualTool"]');
+const paletteItems = document.querySelectorAll('#visualNotePalette .palette-item');
+const visualHistoryGroupEl = document.getElementById('visualHistoryGroup');
+const visualZoomGroupEl = document.getElementById('visualZoomGroup');
+const visualUndoBtn = document.getElementById('visualUndoBtn');
+const visualRedoBtn = document.getElementById('visualRedoBtn');
+const visualZoomInBtn = document.getElementById('visualZoomInBtn');
+const visualZoomOutBtn = document.getElementById('visualZoomOutBtn');
+const visualModifierBtn = document.getElementById('visualModifierBtn');
+const visualModifierPaletteEl = document.getElementById('visualModifierPalette');
+const currentModifierIcon = document.getElementById('currentModifierIcon');
+const modifierPaletteItems = document.querySelectorAll('#visualModifierPalette .palette-item');
+const visualDivisionGroupEl = document.getElementById('visualDivisionGroup');
+const visualDivisionBtn = document.getElementById('visualDivisionBtn');
+const visualDivisionPaletteEl = document.getElementById('visualDivisionPalette');
+const currentDivisionText = document.getElementById('currentDivisionText');
+const currentNoteIconContainer = document.getElementById('currentNoteIconContainer');
+const visualLayerGroupEl = document.getElementById('visualLayerGroup');
+const visualLayerBtn = document.getElementById('visualLayerBtn');
+
+const setVisualToolUI = (mode) => {
+    hideFloatingMenu();
+    const radioVal = (mode === 'edit') ? 'place' : mode;
+    const radio = document.querySelector(`input[name="visualTool"][value="${radioVal}"]`);
     if (radio) radio.checked = true;
+};
+const displayModeBtn = document.querySelector('.utilityButton[data-buttonAction="displayMode"]');
+const displayModeSelect = displayModeBtn ? displayModeBtn.querySelector('select[name="displayMode"]') : null;
+const setDisplayModeUI = (mode) => {
+    if (displayModeSelect) displayModeSelect.value = mode;
+    updateGridDivisionVisibility();
 };
 const getCursorNoteIndex = getButton("getCursorNoteIndex", "utility");
 const visualEditor = document.getElementById('visualEditor');
@@ -276,6 +432,8 @@ const rCCwiseButton = getButton("rotateCounterClockwise", "utility");
 const r180Button = getButton("rotate180", "utility");
 const fVerticalButton = getButton("flipVertical", "utility");
 const fHorizontalButton = getButton("flipHorizontal", "utility");
+const subdivisionButton = getButton("subdivisionTool", "utility");
+const formatDocumentButton = getButton("formatDocument", "utility");
 const editorBackgroundImage = document.getElementById('backgroundImage');
 const editorBackgroundVideo = document.getElementById('backgroundVideo');
 if (editorBackgroundVideo) {
@@ -303,11 +461,12 @@ if (editorBackgroundVideo) {
 }
 const tapBpmButton = getButton("tapBpm", "utility");
 const manageResourcesButton = getButton("manageResources", "utility");
-const playbackSpeedInput = getButton("playbackSpeed", "utility").children[0];
-const playbackReset = getButton("playbackSpeed", "utility");
 const undoButton = getButton("undo", "utility");
 const redoButton = getButton("redo", "utility");
-const helpButton = getButton("help", "utility");
+const helpBasicButton = getButton("helpBasic", "utility");
+const helpShortcutsButton = getButton("helpShortcuts", "utility");
+const changelogButton = getButton("changelog", "utility");
+const aboutButton = getButton("about", "utility");
 const fullscreenButton = getButton("fullscreen", "utility");
 const findReplaceButton = getButton("findReplace", "utility");
 const toggleBkButton = getButton("toggleBk", "utility");
@@ -316,14 +475,21 @@ const connectMajdataViewButton = getButton("connectMajdataView", "utility");
 const syncPlayButton = getButton("syncPlay", "utility");
 const recordVideoButton = getButton("recordVideo", "utility");
 const fetchFromMainoteButton = getButton("fetchFromMainote", "utility");
+const smoothBpmMenuButton = getButton("smoothBpm", "utility");
+const smoothBpmBtn = document.getElementById("mpSmoothBpmBtn");
 const previewContainer = document.getElementById('miniPreviewContainer');
 const previewCanvas = document.getElementById('miniPreview');
 const previewZoomInButton = document.getElementById('mpzoomIn');
 const previewZoomOutButton = document.getElementById('mpzoomOut');
 const editorContainer = document.getElementById('editorContainer');
 const panelSplitter = document.getElementById('panelSplitter');
+const panelSplitterToolbar = document.getElementById('panelSplitterToolbar');
+const splitterDirectionBtn = document.getElementById('splitterDirectionBtn');
+const splitterDragHandle = document.getElementById('splitterDragHandle');
+const splitterSwapBtn = document.getElementById('splitterSwapBtn');
 const editorInput = document.getElementById('editor-input');
 const highlightLayer = document.getElementById('highlight-layer');
+const editorHighlightCanvas = document.getElementById('editor-highlight-canvas');
 const findReplaceBar = document.getElementById('findReplaceBar');
 const findInput = document.getElementById('findInput');
 const replaceInput = document.getElementById('replaceInput');
@@ -339,9 +505,178 @@ const quickPanel = document.getElementById('quick-panel');
 const timebaseButton = document.querySelector('.utilityButton[data-buttonAction="timebase"]');
 const canvasOutline = document.getElementById('canvasOutline');
 const backgroundContainer = document.querySelector('#canvasContainer .backgroundContainer');
+const visualToolModeBtn = document.querySelector('.utilityButton[data-buttonAction="visualToolMode"]');
+const visualToolModeSelect = visualToolModeBtn ? visualToolModeBtn.querySelector('select[name="visualToolMode"]') : null;
+
+let lastTimestamp = null;
+let playStartTimestamp = null;
+let playStartRealTime = 0;
+let secondCtx = null;
+let externalWindow = null;
+let timeControlSliding = false; // 新增滑動狀態標記
+let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
+let nowIndex = 0;
+let lastCursorIndex = -1;
+let visualCtx = null;
+let errors = [], errorPositions = [], errorItems = [];
+let warnings = [], warningPositions = [], warningPositionsConst = [], warningItems = [];
+let decodedTags = [];
+let cachedChartSnapshot = null;
+let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
+
+let lastCanvasSize = { w: 0, h: 0 };
+let lastVisualEditorSize = { w: 0, h: 0 };
+
+function getWorkspaceRect() {
+    const appEl = document.getElementById('app');
+    const topUtilityEl = document.getElementById('topUtilityBtns');
+    const playEl = document.getElementById('playControls');
+    const appRect = appEl
+        ? appEl.getBoundingClientRect()
+        : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+
+    const isExpanded = canvasContainer?.classList.contains('expanded') || panelSplitter?.classList.contains('expanded');
+    let top = 0;
+    if (!isExpanded) {
+        const measuredUtilityH = topUtilityEl ? topUtilityEl.getBoundingClientRect().height : 0;
+        if (measuredUtilityH > 0) {
+            top = measuredUtilityH;
+        } else {
+            const cssUtilityH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--utility-height'));
+            top = Number.isFinite(cssUtilityH) && cssUtilityH > 0 ? cssUtilityH : 40;
+        }
+    }
+    const isPlayHidden = hideButton?.dataset.hidden === 'true';
+    const playH = isPlayHidden ? 0 : (playEl ? playEl.getBoundingClientRect().height : 150);
+    const height = Math.max(1, appRect.height - top - playH);
+    return {
+        left: 0,
+        top,
+        width: Math.max(1, appRect.width),
+        height,
+        appLeft: appRect.left,
+        appTop: appRect.top,
+    };
+}
+
+function applyPanelSwapState() {
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const swapped = Boolean(settings.panelSwapped);
+
+    document.body.classList.toggle('layout-vertical', isVertical);
+    document.body.classList.toggle('panels-swapped', swapped);
+
+    if (panelSplitter) {
+        panelSplitter.classList.toggle('orientation-vertical', isVertical);
+        panelSplitter.classList.toggle('orientation-horizontal', !isVertical);
+    }
+    if (splitterSwapBtn) {
+        const swapIcon = splitterSwapBtn.querySelector('.splitter-swap-icon');
+        if (swapIcon) {
+            swapIcon.textContent = isVertical ? 'swap_vert' : 'swap_horiz';
+        }
+    }
+}
+
+function updateSplitterToolbarDock() {
+    if (!panelSplitter || !panelSplitterToolbar) return;
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const swapped = Boolean(settings.panelSwapped);
+    const ws = getWorkspaceRect();
+    const viewportSizePx = isVertical ? ws.height : ws.width;
+    if (!viewportSizePx) return;
+
+    const splitterCenterPx = canvasSnapped
+        ? (swapped ? viewportSizePx - 5 : 5)
+        : getSplitterPositionRatio({ splitRatio: settings.splitRatio ?? 0.5, swapped }) * viewportSizePx;
+
+    const toolbarCrossSizePx = isVertical
+        ? (panelSplitterToolbar.offsetHeight || 48)
+        : (panelSplitterToolbar.offsetWidth || 48);
+
+    const { dockedSide, offsetPx } = computeFloatingToolbarDock({
+        splitterCenterPx,
+        viewportSizePx,
+        toolbarCrossSizePx,
+        edgePadding: 0,
+    });
+
+    panelSplitter.style.setProperty('--toolbar-dock-offset', `${offsetPx}px`);
+    panelSplitterToolbar.classList.toggle('docked-start', dockedSide === 'start');
+    panelSplitterToolbar.classList.toggle('docked-end', dockedSide === 'end');
+}
+
+function applySnappedEditorLayout() {
+    const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
+    const swapped = Boolean(settings.panelSwapped);
+
+    if (isVertical) {
+        editorContainer.style.left = '';
+        editorContainer.style.width = '';
+        editorContainer.style.marginLeft = '';
+        editorContainer.style.marginRight = '';
+        editorContainer.style.top = 'var(--workspace-top)';
+        editorContainer.style.height = 'calc(var(--workspace-height) - 10px)';
+        editorContainer.style.marginTop = swapped ? '0' : '10px';
+        editorContainer.style.marginBottom = swapped ? '10px' : '0';
+    } else {
+        editorContainer.style.top = '';
+        editorContainer.style.height = '';
+        editorContainer.style.marginTop = '';
+        editorContainer.style.marginBottom = '';
+        editorContainer.style.left = '0';
+        editorContainer.style.width = 'calc(100% - 10px)';
+        editorContainer.style.marginLeft = swapped ? '0' : '10px';
+        editorContainer.style.marginRight = swapped ? '10px' : '0';
+    }
+}
+
+function clearSnappedEditorLayout() {
+    editorContainer.style.left = '';
+    editorContainer.style.width = '';
+    editorContainer.style.marginLeft = '';
+    editorContainer.style.marginRight = '';
+    editorContainer.style.top = '';
+    editorContainer.style.height = '';
+    editorContainer.style.marginTop = '';
+    editorContainer.style.marginBottom = '';
+}
+
+function applyCanvasContainerAspectRatio() {
+    if (!canvasContainer) return;
+    const ratioVal = settings?.canvasAspectRatio || 'auto';
+    if (!parseCanvasAspectRatio(ratioVal)) {
+        canvasContainer.classList.remove('aspect-ratio-constrained');
+        canvasContainer.style.left = '';
+        canvasContainer.style.top = '';
+        canvasContainer.style.width = '';
+        canvasContainer.style.height = '';
+        return;
+    }
+    const ws = getWorkspaceRect();
+    const editorHidden = document.body.classList.contains('editor-hidden');
+    const rect = computeCanvasAnimationRect({
+        direction: normalizeLayoutDirection(settings.layoutDirection),
+        swapped: Boolean(settings.panelSwapped),
+        visible: !editorHidden,
+        splitRatio: settings.splitRatio ?? 0.5,
+        workspaceRect: ws,
+        aspectRatio: ratioVal,
+    });
+    canvasContainer.classList.add('aspect-ratio-constrained');
+    canvasContainer.style.left = rect.left;
+    canvasContainer.style.top = rect.top;
+    canvasContainer.style.width = rect.width;
+    canvasContainer.style.height = rect.height;
+}
 
 function applySplitRatio(ratio) {
+    applyPanelSwapState();
     document.documentElement.style.setProperty('--split-ratio', ratio);
+    applyCanvasContainerAspectRatio();
+    updateSplitterToolbarDock();
 }
 
 let canvasSnapped = false, noRender = false;
@@ -350,13 +685,13 @@ function snapHideCanvas() {
     canvasSnapped = true;
     noRender = true;
     canvasContainer.style.display = 'none';
-    editorContainer.style.left = '0';
-    editorContainer.style.width = '100%';
-    editorContainer.style.marginLeft = '10px';
+    applyPanelSwapState();
+    applySnappedEditorLayout();
     if (panelSplitter) {
         panelSplitter.style.display = 'block';
         panelSplitter.classList.add('snapped');
     }
+    updateSplitterToolbarDock();
     resize(true);
     settings.canvasSnapped = true;
     saveSettingsDebounce();
@@ -366,9 +701,7 @@ function snapRestoreCanvas() {
     canvasSnapped = false;
     noRender = false;
     canvasContainer.style.display = '';
-    editorContainer.style.left = '';
-    editorContainer.style.width = '';
-    editorContainer.style.marginLeft = '';
+    clearSnappedEditorLayout();
     if (panelSplitter) {
         panelSplitter.classList.remove('snapped');
     }
@@ -406,7 +739,13 @@ if (fullscreenButton) {
         if (iconSpan) {
             iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
         }
-        fullscreenButton.title = isFullscreen ? '退出全螢幕' : '全螢幕';
+        const i18nKey = isFullscreen ? 'menu.exitFullscreen' : 'menu.fullscreen';
+        const labelText = t(i18nKey);
+        fullscreenButton.setAttribute('data-i18n-title', i18nKey);
+        fullscreenButton.setAttribute('data-i18n-aria-label', i18nKey);
+        fullscreenButton.title = labelText;
+        fullscreenButton.setAttribute('aria-label', labelText);
+        emitViewModeChanged();
     };
 
     document.addEventListener('fullscreenchange', updateFullscreenIcon);
@@ -415,487 +754,98 @@ if (fullscreenButton) {
 }
 
 // ==========================================
-// 1. 切換 Break (bk) 與 EX (ex) 音符旗標邏輯
+// 1. 切換 Break (bk) 與 EX (ex) 音符旗標
 // ==========================================
-export function toggleNoteFlag(inputStr, flagType) {
-    if (!inputStr) return inputStr;
-
-    const slideSymbolRegex = /(?:pp)|(?:qq)|[-<>^vpqszVw]/;
-
-    function toggleSinglePart(part) {
-        let note = part.trim();
-        if (!note) return part;
-
-        // 1. Touch 音符不適用 (如 C, Cf, A1, E8f)
-        if (/^(?:[ABCDE][1-8]|C)/.test(note)) {
-            return part;
-        }
-
-        // 2. 雙打縮寫音符 (如 35, 42, 81)
-        if (/^[1-8]{2}$/.test(note)) {
-            const pos1 = note[0];
-            const pos2 = note[1];
-            if (flagType === 'bk') {
-                return `${pos1}b/${pos2}b`;
-            } else if (flagType === 'ex') {
-                return `${pos1}x/${pos2}x`;
-            }
-        }
-
-        const isSlide = slideSymbolRegex.test(note);
-
-        if (flagType === 'bk') {
-            if (isSlide) {
-                const headHasB = /^\d+b|\*\d+b/.test(note);
-                // 第一個 slide 符號後的所有內容
-                const firstSlideMatch = note.match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
-                const slideBody = firstSlideMatch ? note.slice(firstSlideMatch.index) : '';
-                const endHasB = /b/.test(slideBody);
-
-                let nextHeadB = false;
-                let nextEndB = false;
-
-                if (!headHasB && !endHasB) {
-                    // 全無 -> 轉全有
-                    nextHeadB = true;
-                    nextEndB = true;
-                } else if (headHasB && endHasB) {
-                    // 全有 -> 轉全無
-                    nextHeadB = false;
-                    nextEndB = false;
-                } else if (headHasB && !endHasB) {
-                    // 僅星頭 -> 轉僅路徑尾
-                    nextHeadB = false;
-                    nextEndB = true;
-                } else {
-                    // 僅路徑尾 -> 轉僅星頭
-                    nextHeadB = true;
-                    nextEndB = false;
-                }
-
-                let res = note.replace(/b/g, '');
-                if (nextHeadB) {
-                    res = res.replace(/^(\d+)/, '$1b');
-                    res = res.replace(/\*(\d+)/g, '*$1b');
-                }
-                if (nextEndB) {
-                    res = res.replace(/(\[[^\]]+\])/g, '$1b');
-                }
-                return res;
-            } else {
-                const hasB = /b/.test(note);
-                if (hasB) {
-                    return note.replace(/b/g, '');
-                } else {
-                    if (/\[[^\]]+\]/.test(note)) {
-                        return note.replace(/(\[[^\]]+\])/, '$1b');
-                    } else {
-                        return note.replace(/^(\d+)/, '$1b');
-                    }
-                }
-            }
-        } else if (flagType === 'ex') {
-            if (isSlide) {
-                const hasStarX = /^\d+b?x|\*\d+b?x/.test(note);
-                if (hasStarX) {
-                    let res = note;
-                    res = res.replace(/^(\d+b?)x/, '$1');
-                    res = res.replace(/\*(\d+b?)x/g, '*$1');
-                    return res;
-                } else {
-                    let res = note;
-                    res = res.replace(/^(\d+b?)/, '$1x');
-                    res = res.replace(/\*(\d+b?)/g, '*$1x');
-                    return res;
-                }
-            } else {
-                const hasX = /x/.test(note);
-                if (hasX) {
-                    return note.replace(/x/g, '');
-                } else {
-                    if (/\[[^\]]+\]/.test(note)) {
-                        if (/\[[^\]]+\]b/.test(note)) {
-                            return note.replace(/(\[[^\]]+\]b)/, '$1x');
-                        }
-                        return note.replace(/(\[[^\]]+\])/, '$1x');
-                    } else {
-                        if (/^\d+b/.test(note)) {
-                            return note.replace(/^(\d+b)/, '$1x');
-                        }
-                        return note.replace(/^(\d+)/, '$1x');
-                    }
-                }
-            }
-        }
-
-        return part;
-    }
-
-    function processCodeToken(codeToken) {
-        if (!codeToken.trim()) return codeToken;
-
-        const tagMatch = codeToken.match(/^((?:\([^\)]*\)|\{[^\}]*\}|\s+)*)([\s\S]*)$/);
-        if (!tagMatch) return toggleSinglePart(codeToken);
-
-        const prefixTags = tagMatch[1];
-        const noteContent = tagMatch[2];
-
-        // 如果只有前導標籤而無音符內容 (例如 (240){2})，直接返回 prefixTags
-        if (!noteContent.trim()) {
-            return prefixTags;
-        }
-
-        const parts = noteContent.split('/');
-
-        // 檢查雙壓帶旗標還原情況 (如 4b/8b -> 48 或 4x/8x -> 48)
-        if (parts.length === 2) {
-            const p1 = parts[0].trim();
-            const p2 = parts[1].trim();
-
-            if (flagType === 'bk') {
-                const match1 = p1.match(/^([1-8])b$/);
-                const match2 = p2.match(/^([1-8])b$/);
-                if (match1 && match2) {
-                    return prefixTags + match1[1] + match2[1];
-                }
-            } else if (flagType === 'ex') {
-                const match1 = p1.match(/^([1-8])x$/);
-                const match2 = p2.match(/^([1-8])x$/);
-                if (match1 && match2) {
-                    return prefixTags + match1[1] + match2[1];
-                }
-            }
-        }
-
-        const newParts = parts.map(part => toggleSinglePart(part));
-        return prefixTags + newParts.join('/');
-    }
-
-    const tokens = inputStr.split(',');
-    const newTokens = tokens.map(token => {
-        if (token.includes('||')) {
-            const parts = token.split('||');
-            const codePart = parts[0];
-            const commentPart = parts.slice(1).join('||');
-            return processCodeToken(codePart) + '||' + commentPart;
-        }
-        return processCodeToken(token);
-    });
-
-    return newTokens.join(',');
-}
-
-function handleToggleBkEx(flagType) {
-    if (!editorInput) return;
-    const start = editorInput.selectionStart;
-    const end = editorInput.selectionEnd;
-    const val = editorInput.value;
-
-    let newVal = '';
-    let isSelection = false;
-
-    if (start !== undefined && end !== undefined && start !== end) {
-        isSelection = true;
-        const selectedText = val.slice(start, end);
-        const transformed = toggleNoteFlag(selectedText, flagType);
-        newVal = val.slice(0, start) + transformed + val.slice(end);
-    } else {
-        newVal = toggleNoteFlag(val, flagType);
-    }
-
-    if (newVal !== val) {
-        editorInput.value = newVal;
-        editorInput.dispatchEvent(new Event('input'));
-
-        if (isSelection) {
-            editorInput.setSelectionRange(start, start + (newVal.length - val.length + (end - start)));
-        }
-
-        const toastKey = flagType === 'bk'
-            ? (isSelection ? 'findReplace.toastToggleBkSelection' : 'findReplace.toastToggleBkFull')
-            : (isSelection ? 'findReplace.toastToggleExSelection' : 'findReplace.toastToggleExFull');
-        simpleToast({ content: t(toastKey), type: 'success', timeout: 1500 });
-    }
-}
-
 if (toggleBkButton) {
-    toggleBkButton.addEventListener('click', () => handleToggleBkEx('bk'));
+    toggleBkButton.addEventListener('click', () => handleToggleBkEx('bk', { editorInput }));
 }
 if (toggleExButton) {
-    toggleExButton.addEventListener('click', () => handleToggleBkEx('ex'));
+    toggleExButton.addEventListener('click', () => handleToggleBkEx('ex', { editorInput }));
 }
 
 // ==========================================
-// 2. 尋找與取代 (Find & Replace) 浮動面板與導覽邏輯
+// 2. 尋找與取代 (Find & Replace)
 // ==========================================
-let findMatches = [];
-let currentMatchIndex = -1;
-
-function updateFindMatches() {
-    findMatches = [];
-    currentMatchIndex = -1;
-
-    const searchText = findInput ? findInput.value : '';
-    if (!searchText || !editorInput) {
-        if (findMatchCount) findMatchCount.textContent = '0/0';
-        return;
-    }
-
-    const text = editorInput.value;
-    const searchLower = searchText.toLowerCase();
-    const textLower = text.toLowerCase();
-    let pos = 0;
-
-    while ((pos = textLower.indexOf(searchLower, pos)) !== -1) {
-        findMatches.push({ start: pos, end: pos + searchText.length });
-        pos += Math.max(1, searchText.length);
-    }
-
-    if (findMatches.length > 0) {
-        const cursor = editorInput.selectionStart || 0;
-        let idx = findMatches.findIndex(m => m.start >= cursor);
-        currentMatchIndex = idx !== -1 ? idx : 0;
-    }
-
-    updateFindCountUI();
-}
-
-function updateFindCountUI() {
-    if (!findMatchCount) return;
-    if (findMatches.length === 0) {
-        findMatchCount.textContent = '0/0';
-    } else {
-        findMatchCount.textContent = `${currentMatchIndex + 1}/${findMatches.length}`;
-    }
-}
-
-function jumpToMatch(index, autoFocusEditor = true) {
-    if (findMatches.length === 0) return;
-    currentMatchIndex = (index + findMatches.length) % findMatches.length;
-    const m = findMatches[currentMatchIndex];
-
-    const applyFocusAndScroll = () => {
-        if (!editorInput) return;
-        if (autoFocusEditor) {
-            editorInput.focus();
-        }
-        editorInput.setSelectionRange(m.start, m.end);
-
-        const lineCount = editorInput.value.slice(0, m.start).split('\n').length;
-        const totalLines = editorInput.value.split('\n').length;
-        if (totalLines > 0) {
-            const scrollPct = (lineCount - 1) / totalLines;
-            editorInput.scrollTop = scrollPct * editorInput.scrollHeight;
-        }
-    };
-
-    applyFocusAndScroll();
-    if (autoFocusEditor) {
-        requestAnimationFrame(applyFocusAndScroll);
-    }
-
-    updateFindCountUI();
-}
-
-function openFindBar(showReplace = false) {
-    if (!findReplaceBar) return;
-    findReplaceBar.style.display = 'flex';
-    if (replaceRow) {
-        replaceRow.style.display = showReplace ? 'flex' : 'none';
-    }
-
-    const selStart = editorInput.selectionStart;
-    const selEnd = editorInput.selectionEnd;
-    if (selStart !== selEnd && (selEnd - selStart) < 100) {
-        const selText = editorInput.value.slice(selStart, selEnd);
-        if (selText && !selText.includes('\n')) {
-            findInput.value = selText;
-        }
-    }
-
-    updateFindMatches();
-    findInput.focus();
-    findInput.select();
-}
-
-function closeFindBar() {
-    if (findReplaceBar) {
-        findReplaceBar.style.display = 'none';
-    }
-    if (editorInput) {
-        editorInput.focus();
-    }
-}
-
-if (findReplaceButton) {
-    findReplaceButton.addEventListener('click', () => openFindBar(true));
-}
-
-if (findInput) {
-    findInput.addEventListener('input', () => {
-        updateFindMatches();
-        if (findMatches.length > 0) {
-            jumpToMatch(0, false);
-        }
-    });
-
-    findInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            if (e.shiftKey) {
-                jumpToMatch(currentMatchIndex - 1, true);
-            } else {
-                jumpToMatch(currentMatchIndex + 1, true);
-            }
-        } else if (e.key === 'Escape') {
-            closeFindBar();
-        }
-    });
-}
-
-if (replaceInput) {
-    replaceInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeFindBar();
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            executeReplaceOne();
-        }
-    });
-}
-
-const bindNavBtn = (btn, action) => {
-    if (!btn) return;
-    btn.addEventListener('mousedown', (e) => e.preventDefault());
-    btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        action();
-    });
-};
-
-bindNavBtn(findPrevBtn, () => jumpToMatch(currentMatchIndex - 1, true));
-bindNavBtn(findNextBtn, () => jumpToMatch(currentMatchIndex + 1, true));
-if (findCloseBtn) findCloseBtn.addEventListener('click', closeFindBar);
-
-function executeReplaceOne() {
-    if (findMatches.length === 0 || currentMatchIndex === -1) return;
-    const m = findMatches[currentMatchIndex];
-    const repText = replaceInput ? replaceInput.value : '';
-    const val = editorInput.value;
-
-    const newVal = val.slice(0, m.start) + repText + val.slice(m.end);
-    editorInput.value = newVal;
-    editorInput.dispatchEvent(new Event('input'));
-
-    updateFindMatches();
-    if (findMatches.length > 0) {
-        jumpToMatch(currentMatchIndex % findMatches.length);
-    }
-}
-
-function executeReplaceAll() {
-    const searchText = findInput ? findInput.value : '';
-    if (!searchText || !editorInput) return;
-
-    const repText = replaceInput ? replaceInput.value : '';
-    const val = editorInput.value;
-
-    const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    const newVal = val.replace(regex, repText);
-
-    if (newVal !== val) {
-        editorInput.value = newVal;
-        editorInput.dispatchEvent(new Event('input'));
-        updateFindMatches();
-        simpleToast({ content: t('findReplace.replaceAll'), type: 'success', timeout: 1200 });
-    }
-}
-
-if (replaceOneBtn) replaceOneBtn.addEventListener('click', executeReplaceOne);
-if (replaceAllBtn) replaceAllBtn.addEventListener('click', executeReplaceAll);
-
-// ==========================================
-// 3. 尋找與取代 (Find & Replace) 面板自由拖曳移動邏輯
-// ==========================================
-if (findReplaceBar) {
-    let isDraggingBar = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let initialLeft = 0;
-    let initialTop = 0;
-
-    findReplaceBar.addEventListener('pointerdown', (e) => {
-        // 當點擊輸入框、按鈕時不觸發拖曳
-        if (['INPUT', 'BUTTON', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-            return;
-        }
-
-        isDraggingBar = true;
-        findReplaceBar.classList.add('dragging');
-        findReplaceBar.setPointerCapture(e.pointerId);
-
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-
-        const rect = findReplaceBar.getBoundingClientRect();
-        const containerRect = editorContainer ? editorContainer.getBoundingClientRect() : { left: 0, top: 0 };
-
-        initialLeft = rect.left - containerRect.left;
-        initialTop = rect.top - containerRect.top;
-
-        findReplaceBar.style.left = `${initialLeft}px`;
-        findReplaceBar.style.top = `${initialTop}px`;
-        findReplaceBar.style.right = 'auto';
-
-        e.preventDefault();
-    });
-
-    findReplaceBar.addEventListener('pointermove', (e) => {
-        if (!isDraggingBar) return;
-
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-
-        let newLeft = initialLeft + dx;
-        let newTop = initialTop + dy;
-
-        if (editorContainer) {
-            const containerW = editorContainer.clientWidth;
-            const containerH = editorContainer.clientHeight;
-            const barW = findReplaceBar.offsetWidth;
-            const barH = findReplaceBar.offsetHeight;
-
-            newLeft = Math.max(0, Math.min(containerW - barW, newLeft));
-            newTop = Math.max(0, Math.min(containerH - barH, newTop));
-        }
-
-        findReplaceBar.style.left = `${newLeft}px`;
-        findReplaceBar.style.top = `${newTop}px`;
-    });
-
-    const stopDraggingBar = (e) => {
-        if (!isDraggingBar) return;
-        isDraggingBar = false;
-        findReplaceBar.classList.remove('dragging');
-        try {
-            findReplaceBar.releasePointerCapture(e.pointerId);
-        } catch (err) { }
-    };
-
-    findReplaceBar.addEventListener('pointerup', stopDraggingBar);
-    findReplaceBar.addEventListener('pointercancel', stopDraggingBar);
-}
+initFindReplace({
+    findReplaceBar,
+    findInput,
+    replaceInput,
+    findMatchCount,
+    findPrevBtn,
+    findNextBtn,
+    findCloseBtn,
+    replaceRow,
+    replaceOneBtn,
+    replaceAllBtn,
+    findReplaceButton,
+    editorInput,
+    editorContainer,
+});
 
 if (panelSplitter) {
     let isDraggingSplitter = false;
-    let dragStartX = 0;
+    let hasDraggedDistance = false;
+    let dragStartCoord = 0;
     let dragStartRatio = 0.5;
+    let dragStartTarget = null;
+    let lastHandleTapTime = 0;
+    let pendingRatio = null;
     let resizeRafId = null;
+
+    if (splitterDirectionBtn) {
+        splitterDirectionBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        splitterDirectionBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
+            settings.layoutDirection = isVertical ? LAYOUT_DIRECTIONS.HORIZONTAL : LAYOUT_DIRECTIONS.VERTICAL;
+            applyPanelSwapState();
+            if (canvasSnapped) {
+                applySnappedEditorLayout();
+            }
+            updateSplitterToolbarDock();
+            saveSettingsDebounce();
+            resize(true);
+        });
+    }
+
+    if (splitterSwapBtn) {
+        splitterSwapBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        splitterSwapBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settings.panelSwapped = !settings.panelSwapped;
+            applyPanelSwapState();
+            if (canvasSnapped) {
+                applySnappedEditorLayout();
+            }
+            updateSplitterToolbarDock();
+            saveSettingsDebounce();
+            resize(true);
+        });
+    }
+
+    panelSplitter.addEventListener('pointerenter', (e) => {
+        if (document.body.classList.contains('editor-pointer-active') || (e.buttons !== 0 && !isDraggingSplitter)) {
+            return;
+        }
+        updateSplitterToolbarDock();
+    });
+
+    panelSplitter.addEventListener('pointerleave', () => {
+        panelSplitter.classList.remove('suppress-toolbar');
+    });
 
     panelSplitter.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
+        panelSplitter.classList.remove('suppress-toolbar');
+        const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
         isDraggingSplitter = true;
-        dragStartX = e.clientX;
+        hasDraggedDistance = false;
+        dragStartTarget = e.target;
+        dragStartCoord = isVertical ? e.clientY : e.clientX;
 
         if (canvasSnapped) {
             // 從 snap 狀態開始拖動：先還原 canvas，從 0 開始計算 ratio
@@ -903,9 +853,10 @@ if (panelSplitter) {
             dragStartRatio = 0;
         } else {
             dragStartRatio = settings.splitRatio ?? 0.5;
-            canvasContainer.style.width = '';
+            applyCanvasContainerAspectRatio();
         }
 
+        document.body.classList.add('resizing-panels');
         panelSplitter.classList.add('dragging');
         panelSplitter.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -913,23 +864,32 @@ if (panelSplitter) {
 
     panelSplitter.addEventListener('pointermove', (e) => {
         if (!isDraggingSplitter) return;
-        const windowWidth = window.innerWidth;
-        if (windowWidth <= 0) return;
-        const deltaX = e.clientX - dragStartX;
-        let newRatio = dragStartRatio + (deltaX / windowWidth);
-        if (newRatio < 0.15) {
-            newRatio = 0;
-        } else {
-            newRatio = Math.min(0.85, newRatio);
+        const isVertical = normalizeLayoutDirection(settings.layoutDirection) === LAYOUT_DIRECTIONS.VERTICAL;
+        const ws = getWorkspaceRect();
+        const containerSizePx = isVertical ? ws.height : ws.width;
+        if (containerSizePx <= 0) return;
+
+        const currentCoord = isVertical ? e.clientY : e.clientX;
+        const deltaPx = currentCoord - dragStartCoord;
+        if (Math.abs(deltaPx) >= 4) {
+            hasDraggedDistance = true;
         }
 
-        settings.splitRatio = newRatio;
-        applySplitRatio(newRatio);
+        pendingRatio = computeDraggedSplitRatio({
+            dragStartRatio,
+            deltaPx,
+            containerSizePx,
+            swapped: Boolean(settings.panelSwapped),
+        });
 
         if (!resizeRafId) {
             resizeRafId = requestAnimationFrame(() => {
                 resizeRafId = null;
-                resize(true);
+                if (pendingRatio !== null) {
+                    settings.splitRatio = pendingRatio;
+                    applySplitRatio(pendingRatio);
+                    resize(false);
+                }
             });
         }
     });
@@ -937,9 +897,19 @@ if (panelSplitter) {
     const stopDraggingSplitter = (e) => {
         if (!isDraggingSplitter) return;
         isDraggingSplitter = false;
+        document.body.classList.remove('resizing-panels');
         panelSplitter.classList.remove('dragging');
+        if (resizeRafId) {
+            cancelAnimationFrame(resizeRafId);
+            resizeRafId = null;
+        }
         if (e.pointerId !== undefined && panelSplitter.hasPointerCapture(e.pointerId)) {
             try { panelSplitter.releasePointerCapture(e.pointerId); } catch (_) { }
+        }
+        if (pendingRatio !== null) {
+            settings.splitRatio = pendingRatio;
+            applySplitRatio(pendingRatio);
+            pendingRatio = null;
         }
         if ((settings.splitRatio ?? 0.5) < 0.15) {
             snapHideCanvas();
@@ -947,10 +917,70 @@ if (panelSplitter) {
             saveSettingsDebounce();
             resize(true);
         }
+
+        // 未拖曳僅點擊分割線時：手把雙擊置中，單擊切換浮動工具列顯示狀態
+        if (!hasDraggedDistance && e.type === 'pointerup') {
+            const clickedHandle = Boolean(dragStartTarget?.closest?.('#splitterDragHandle'));
+            if (clickedHandle) {
+                const now = performance.now();
+                if (now - lastHandleTapTime < 350) {
+                    lastHandleTapTime = 0;
+                    if (canvasSnapped) {
+                        snapRestoreCanvas();
+                    }
+                    settings.splitRatio = 0.5;
+                    applySplitRatio(0.5);
+                    saveSettingsDebounce();
+                    resize(true);
+                    dragStartTarget = null;
+                    return;
+                }
+                lastHandleTapTime = now;
+            } else {
+                lastHandleTapTime = 0;
+            }
+            updateSplitterToolbarDock();
+            panelSplitter.classList.toggle('toolbar-active');
+        }
+        dragStartTarget = null;
     };
 
     panelSplitter.addEventListener('pointerup', stopDraggingSplitter);
     panelSplitter.addEventListener('pointercancel', stopDraggingSplitter);
+
+    document.addEventListener('pointerdown', (e) => {
+        if (!panelSplitter.contains(e.target)) {
+            panelSplitter.classList.remove('toolbar-active');
+        }
+        if (e.target === editorInput || editorContainer?.contains?.(e.target)) {
+            document.body.classList.add('editor-pointer-active');
+        }
+    });
+
+    const clearEditorPointerActive = (e) => {
+        if (!document.body.classList.contains('editor-pointer-active')) return;
+        document.body.classList.remove('editor-pointer-active');
+        if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+            const rect = panelSplitter.getBoundingClientRect();
+            if (
+                e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom
+            ) {
+                panelSplitter.classList.add('suppress-toolbar');
+            }
+        }
+    };
+
+    window.addEventListener('pointerup', clearEditorPointerActive);
+    window.addEventListener('pointercancel', clearEditorPointerActive);
+    window.addEventListener('blur', () => {
+        document.body.classList.remove('editor-pointer-active');
+        panelSplitter.classList.remove('suppress-toolbar');
+    });
+
+    window.addEventListener('resize', () => {
+        updateSplitterToolbarDock();
+    });
 }
 
 function updateTimebase() {
@@ -972,64 +1002,446 @@ timebaseButton.addEventListener('input', function () {
     draw();
 });
 
-const gridDivisionBtn = document.querySelector('.utilityButton[data-buttonAction="gridDivision"]');
-const gridDivisionSelect = gridDivisionBtn ? gridDivisionBtn.querySelector('select[name="gridDivision"]') : null;
-
-const visualToolModeBtn = document.querySelector('.utilityButton[data-buttonAction="visualToolMode"]');
-const visualToolModeSelect = visualToolModeBtn ? visualToolModeBtn.querySelector('select[name="visualToolMode"]') : null;
-
 function updateGridDivisionVisibility() {
     const isVis = isVisualMode();
-    if (gridDivisionBtn) {
-        gridDivisionBtn.style.display = isVis ? '' : 'none';
-    }
     if (visualToolModeBtn) {
         visualToolModeBtn.style.display = isVis ? '' : 'none';
     }
+    if (visualToolBarEl) {
+        visualToolBarEl.style.display = isVis ? 'inline-flex' : 'none';
+        if (!isVis) {
+            VisualSubMenu.hideAllPalettes();
+        }
+    }
+}
+
+function ensureDivisionOption(val) {
+    // 保持 BPM 子面板僅有 BPM 與 {...}，不向面板動態插入多餘按鈕
 }
 
 function setGridDivisionUI(val) {
-    if (!gridDivisionSelect) return;
-    const strVal = String(val);
-    let opt = Array.from(gridDivisionSelect.options).find(o => o.value === strVal);
-    if (!opt && val > 0) {
-        const customOpt = document.createElement('option');
-        customOpt.value = strVal;
-        customOpt.textContent = `1/${val}`;
-        const lastOpt = gridDivisionSelect.options[gridDivisionSelect.options.length - 1];
-        if (lastOpt && lastOpt.value === 'custom') {
-            gridDivisionSelect.insertBefore(customOpt, lastOpt);
-        } else {
-            gridDivisionSelect.appendChild(customOpt);
+    const numVal = parseInt(val, 10);
+    if (!isNaN(numVal) && numVal > 0) {
+        settings.gridDivision = numVal;
+        if (settings.visualSelectedTiming !== 'bpm') {
+            divisionSubMenu?.setValue('custom', true);
         }
     }
-    gridDivisionSelect.value = strVal;
 }
 
-if (gridDivisionSelect) {
-    gridDivisionSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'custom') {
-            const input = prompt('請輸入切分數值 (正整數，例如 7, 14, 42 等)：', settings.gridDivision || 4);
-            if (input === null) {
-                setGridDivisionUI(settings.gridDivision || 4);
-                return;
+if (displayModeSelect) {
+    displayModeSelect.addEventListener('change', (e) => {
+        settings.displayMode = e.target.value;
+        updateGridDivisionVisibility();
+        visualEditorRenderer?.setZoom(settings.visualZoom);
+        previewRender?.setZoom(settings.visualZoom);
+        saveSettingsDebounce();
+        setEditorCss(editorContainer.dataset.hidden !== 'true');
+        draw();
+    });
+}
+
+// 視覺工具切換 (place / select / eraser)
+visualToolRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            const tool = e.target.value;
+            const editMode = (tool === 'place') ? 'edit' : tool;
+            settings.visualToolMode = editMode;
+            if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+                visualEditorRenderer.setEditMode(editMode);
             }
-            const val = parseInt(input.trim(), 10);
-            if (!isNaN(val) && val > 0) {
-                settings.gridDivision = val;
-                setGridDivisionUI(val);
-                saveSettingsDebounce();
-                draw();
-            } else {
-                alert('請輸入有效的正整數切分數值。');
-                setGridDivisionUI(settings.gridDivision || 4);
+            if (tool !== 'place' && tool !== 'modifier') {
+                VisualSubMenu.closeAll();
             }
-        } else {
-            const val = parseInt(e.target.value, 10) || 4;
-            settings.gridDivision = val;
             saveSettingsDebounce();
             draw();
         }
+    });
+});
+
+// --- 可復用子選單組件 (音符種類、效果附加、BPM與網格切分) ---
+const noteTypeSubMenu = new VisualSubMenu({
+    id: 'noteType',
+    triggerEl: toolPlaceLabel,
+    paletteEl: visualNotePaletteEl,
+    iconContainerEl: currentNoteIconContainer || toolPlaceLabel,
+    defaultValue: 'tap',
+    isEnabled: () => (settings.visualLayerMode !== 'bpm'),
+    itemDefinitions: {
+        tap: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/TapSkins/tap.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        hold: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/HoldSkins/hold.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        slide: { render: () => `<img id="currentNoteIcon" src="./Skin/Default/StarSkins/star.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        touch: { render: () => `<img id="currentNoteIcon" src="./Skin/Shared/TouchSkins/touch.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` },
+        touchhold: { render: () => `<img id="currentNoteIcon" src="./Skin/Shared/TouchHoldSkins/touchhold_1.png" alt="${t('visualToolbar.currentNote')}" class="current-note-img" style="width: 20px; height: 20px; object-fit: contain;">` }
+    },
+    onSelect: (noteType) => {
+        settings.visualSelectedNoteType = noteType;
+        const placeRadio = document.getElementById('tool-mode-place');
+        if (placeRadio && !placeRadio.checked) {
+            placeRadio.checked = true;
+            placeRadio.dispatchEvent(new Event('change'));
+        }
+        saveSettingsDebounce();
+    }
+});
+
+const modifierSubMenu = new VisualSubMenu({
+    id: 'modifier',
+    triggerEl: toolModifierLabel,
+    paletteEl: visualModifierPaletteEl,
+    iconContainerEl: currentModifierIcon,
+    defaultValue: 'none',
+    highlightNonDefault: false,
+    itemDefinitions: {
+        none: { render: () => '<span class="material-symbols-outlined" translate="no" style="font-size: 20px;">block</span>' },
+        ex: { render: () => '<span class="modifier-text-btn" translate="no">EX</span>' },
+        break: { render: () => '<img src="./Skin/Default/TapSkins/tap_break.png" alt="Break" style="width: 20px; height: 20px; object-fit: contain;">' },
+        mine: { render: () => `<img src="./Skin/Default/TapSkins/tap_mine.png" alt="${t('visualToolbar.modMine')}" style="width: 20px; height: 20px; object-fit: contain;">` },
+        firework: { render: () => '<span class="modifier-text-btn" translate="no">FW</span>' }
+    },
+    onSelect: (modType) => {
+        settings.visualSelectedModifier = modType;
+        saveSettingsDebounce();
+    }
+});
+
+const divisionSubMenu = new VisualSubMenu({
+    id: 'division',
+    triggerEl: toolPlaceLabel,
+    paletteEl: visualDivisionPaletteEl,
+    iconContainerEl: currentNoteIconContainer || toolPlaceLabel,
+    defaultValue: 'custom',
+    itemValueAttr: 'divisionVal',
+    highlightNonDefault: false,
+    isEnabled: () => (settings.visualLayerMode === 'bpm'),
+    itemDefinitions: {
+        bpm: {
+            render: () => '<span class="modifier-text-btn" translate="no" style="font-size: 11px; font-weight: 800; color: #ffffff;">BPM</span>'
+        },
+        custom: {
+            render: () => '<span class="division-text-btn" translate="no" style="font-size: 11px; font-weight: 800; color: #ffffff;">{...}</span>'
+        }
+    },
+    onSelect: (divVal) => {
+        if (divVal === 'bpm') {
+            settings.visualSelectedTiming = 'bpm';
+        } else {
+            settings.visualSelectedTiming = 'custom';
+        }
+        const placeRadio = document.getElementById('tool-mode-place');
+        if (placeRadio && !placeRadio.checked) {
+            placeRadio.checked = true;
+            placeRadio.dispatchEvent(new Event('change'));
+        }
+        saveSettingsDebounce();
+    }
+});
+
+const setVisualLayerUI = (mode, showNotice = false) => {
+    const isBpm = (mode === 'bpm');
+    settings.visualLayerMode = mode;
+    if (visualEditorRenderer && typeof visualEditorRenderer.setLayerMode === 'function') {
+        visualEditorRenderer.setLayerMode(mode);
+    }
+    if (visualToolBarEl) {
+        visualToolBarEl.classList.toggle('layer-mode-bpm', isBpm);
+    }
+    if (visualLayerBtn) {
+        visualLayerBtn.classList.toggle('active-bpm', isBpm);
+        visualLayerBtn.title = isBpm ? (t('visualToolbar.switchToNoteLayer') || '切換至音符圖層') : (t('visualToolbar.switchToBpmLayer') || '切換至 BPM 與時值圖層');
+        visualLayerBtn.setAttribute('aria-label', visualLayerBtn.title);
+    }
+    const layerIconEl = document.getElementById('visualLayerCurrentIcon');
+    if (layerIconEl) {
+        if (isBpm) {
+            // 目前為 BPM 圖層，顯示目標（音符）圖示 Tap (20px，與放置按鈕完全一致)
+            layerIconEl.innerHTML = '<img src="./Skin/Default/TapSkins/tap.png" alt="Tap" class="layer-tap-img" width="20" height="20" style="width: 20px; height: 20px; object-fit: contain; display: block;">';
+        } else {
+            // 目前為音符圖層，顯示目標（BPM）文字圖示 (白色粗體)
+            layerIconEl.innerHTML = '<span class="modifier-text-btn layer-bpm-text" translate="no" style="color: #ffffff; font-size: 11px; font-weight: 800;">BPM</span>';
+        }
+    }
+    if (toolPlaceLabel) {
+        toolPlaceLabel.title = isBpm ? (t('visualToolbar.toolPlaceTiming') || '放置 BPM / 時值') : (t('visualToolbar.toolPlace') || '放置音符');
+        toolPlaceLabel.setAttribute('aria-label', toolPlaceLabel.title);
+    }
+    if (currentNoteIconContainer) {
+        if (isBpm) {
+            const activeTiming = (settings.visualSelectedTiming === 'bpm') ? 'bpm' : 'custom';
+            divisionSubMenu?.setValue(activeTiming, true);
+        } else {
+            noteTypeSubMenu?.setValue(settings.visualSelectedNoteType || 'tap', true);
+        }
+    }
+    const toolModifierLabel = document.getElementById('toolModifierLabel');
+    const toolModifierRadio = document.getElementById('tool-mode-modifier');
+    const visualModifierPalette = document.getElementById('visualModifierPalette');
+    if (toolModifierLabel) {
+        toolModifierLabel.style.display = isBpm ? 'none' : '';
+    }
+    if (toolModifierRadio) {
+        toolModifierRadio.style.display = 'none';
+    }
+    if (visualModifierPalette && isBpm) {
+        visualModifierPalette.style.display = 'none';
+    }
+
+    if (isBpm) {
+        VisualSubMenu.closeAll();
+        if (toolModifierRadio && toolModifierRadio.checked) {
+            const placeRadio = document.getElementById('tool-mode-place');
+            if (placeRadio) {
+                placeRadio.checked = true;
+                placeRadio.dispatchEvent(new Event('change'));
+            }
+        }
+    }
+    saveSettingsDebounce();
+    draw();
+    if (showNotice) {
+        simpleToast({
+            content: isBpm ? (t('visualEditor.switchedToBpmLayer') || '已切換至 BPM 與時值圖層 (左側放置 BPM，右側放置時值)') : (t('visualEditor.switchedToNoteLayer') || '已切換至音符圖層'),
+            type: 'info',
+            timeout: 1800
+        });
+    }
+};
+
+if (visualLayerBtn) {
+    visualLayerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const nextMode = (settings.visualLayerMode === 'bpm') ? 'note' : 'bpm';
+        setVisualLayerUI(nextMode, true);
+    });
+}
+
+// 根據目前設定初始化子選單項目與主按鈕外觀
+const syncVisualSubMenus = () => {
+    if (settings.visualSelectedNoteType === 'break' || settings.visualSelectedNoteType === 'bpm') {
+        settings.visualSelectedNoteType = 'tap';
+    }
+    if (settings.visualSelectedNoteType) {
+        noteTypeSubMenu.setValue(settings.visualSelectedNoteType, true);
+    }
+    if (settings.visualSelectedModifier) {
+        modifierSubMenu.setValue(settings.visualSelectedModifier, true);
+    }
+    const activeTiming = (settings.visualSelectedTiming === 'bpm') ? 'bpm' : 'custom';
+    divisionSubMenu.setValue(activeTiming, true);
+    setVisualLayerUI(settings.visualLayerMode || 'note', false);
+};
+syncVisualSubMenus();
+
+// 縮放按鈕 (+ / -)
+const handleVisualZoom = (factor) => {
+    const MIN_ZOOM = 50, MAX_ZOOM = 1000;
+    const currentZoom = (visualEditorRenderer && visualEditorRenderer.zoom) || settings.visualZoom || 100;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom * factor));
+    settings.visualZoom = newZoom;
+    if (visualEditorRenderer && typeof visualEditorRenderer.setZoom === 'function') {
+        visualEditorRenderer.setZoom(newZoom);
+    }
+    saveSettingsDebounce();
+    draw();
+};
+
+if (visualZoomInBtn) {
+    visualZoomInBtn.addEventListener('click', () => handleVisualZoom(1.25));
+}
+if (visualZoomOutBtn) {
+    visualZoomOutBtn.addEventListener('click', () => handleVisualZoom(1 / 1.25));
+}
+
+// 復原 / 重作按鈕 (Undo / Redo)
+if (visualUndoBtn) {
+    visualUndoBtn.addEventListener('click', () => {
+        if (undoButton && !undoButton.classList.contains('disabled')) {
+            undoButton.click();
+        }
+    });
+}
+if (visualRedoBtn) {
+    visualRedoBtn.addEventListener('click', () => {
+        if (redoButton && !redoButton.classList.contains('disabled')) {
+            redoButton.click();
+        }
+    });
+}
+
+// 最底端展開/收納按鈕 (通用控制所有 .visual-tool-group 群組，支援按住固定)
+let isVisualToolPinned = false;
+let collapseHoldTimer = null;
+let isHoldTriggered = false;
+let holdPointerStartX = 0;
+let holdPointerStartY = 0;
+const HOLD_DURATION = 500; // 按住 500ms 觸發固定
+
+function updateVisualCollapseBtnTooltip() {
+    if (!visualToolCollapseBtn) return;
+    if (isVisualToolPinned) {
+        visualToolCollapseBtn.setAttribute('data-i18n-title', 'visualToolbar.unpinToolbar');
+        visualToolCollapseBtn.setAttribute('data-i18n-aria-label', 'visualToolbar.unpinToolbar');
+        const text = t('visualToolbar.unpinToolbar');
+        visualToolCollapseBtn.title = text;
+        visualToolCollapseBtn.setAttribute('aria-label', text);
+    } else if (visualToolCollapseBtn.classList.contains('collapsed')) {
+        visualToolCollapseBtn.setAttribute('data-i18n-title', 'visualToolbar.expandToolbar');
+        visualToolCollapseBtn.setAttribute('data-i18n-aria-label', 'visualToolbar.expandToolbar');
+        const text = t('visualToolbar.expandToolbar');
+        visualToolCollapseBtn.title = text;
+        visualToolCollapseBtn.setAttribute('aria-label', text);
+    } else {
+        visualToolCollapseBtn.setAttribute('data-i18n-title', 'visualToolbar.collapseToolbar');
+        visualToolCollapseBtn.setAttribute('data-i18n-aria-label', 'visualToolbar.collapseToolbar');
+        const text = t('visualToolbar.collapseToolbar');
+        visualToolCollapseBtn.title = text;
+        visualToolCollapseBtn.setAttribute('aria-label', text);
+    }
+}
+
+function setVisualToolPinned(pinned) {
+    isVisualToolPinned = pinned;
+    if (visualToolCollapseBtn) {
+        visualToolCollapseBtn.classList.toggle('pinned', pinned);
+        const icon = visualToolCollapseBtn.querySelector('.material-symbols-outlined');
+        if (pinned) {
+            visualToolCollapseBtn.style.setProperty('background', '#ffffff', 'important');
+            visualToolCollapseBtn.style.setProperty('color', '#000000', 'important');
+            if (icon) {
+                icon.style.setProperty('color', '#000000', 'important');
+            }
+        } else {
+            visualToolCollapseBtn.style.removeProperty('background');
+            visualToolCollapseBtn.style.removeProperty('color');
+            if (icon) {
+                icon.style.removeProperty('color');
+            }
+        }
+        updateVisualCollapseBtnTooltip();
+    }
+}
+
+function setVisualToolCollapsed(isCollapsed) {
+    if (!visualToolCollapseBtn) return;
+    if (isCollapsed) {
+        setVisualToolPinned(false);
+    }
+    visualToolCollapseBtn.classList.toggle('collapsed', isCollapsed);
+    document.querySelectorAll('.visual-tool-group').forEach(group => {
+        group.classList.toggle('collapsed', isCollapsed);
+    });
+    if (isCollapsed) {
+        VisualSubMenu.closeAll();
+    }
+    updateVisualCollapseBtnTooltip();
+}
+
+function clearCollapseHoldTimer() {
+    if (collapseHoldTimer) {
+        clearTimeout(collapseHoldTimer);
+        collapseHoldTimer = null;
+    }
+}
+
+if (visualToolCollapseBtn) {
+    // 防止右鍵選單干擾長按
+    visualToolCollapseBtn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+
+    visualToolCollapseBtn.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        clearCollapseHoldTimer();
+        isHoldTriggered = false;
+        holdPointerStartX = e.clientX;
+        holdPointerStartY = e.clientY;
+
+        collapseHoldTimer = setTimeout(() => {
+            isHoldTriggered = true;
+            if (visualToolCollapseBtn.classList.contains('collapsed')) {
+                setVisualToolCollapsed(false);
+            }
+            setVisualToolPinned(true);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(40);
+            }
+        }, HOLD_DURATION);
+    });
+
+    visualToolCollapseBtn.addEventListener('pointermove', (e) => {
+        if (!collapseHoldTimer) return;
+        const dx = e.clientX - holdPointerStartX;
+        const dy = e.clientY - holdPointerStartY;
+        if (Math.hypot(dx, dy) > 10) {
+            clearCollapseHoldTimer();
+        }
+    });
+
+    const cancelHold = () => {
+        clearCollapseHoldTimer();
+    };
+
+    visualToolCollapseBtn.addEventListener('pointerup', cancelHold);
+    visualToolCollapseBtn.addEventListener('pointercancel', cancelHold);
+    visualToolCollapseBtn.addEventListener('pointerleave', cancelHold);
+
+    visualToolCollapseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearCollapseHoldTimer();
+
+        // 若剛觸發長按固定，放開時忽略 click 事件
+        if (isHoldTriggered) {
+            isHoldTriggered = false;
+            return;
+        }
+
+        // 若處於固定狀態，再輕點一下解除固定並收起面板
+        if (isVisualToolPinned) {
+            setVisualToolPinned(false);
+            setVisualToolCollapsed(true);
+            return;
+        }
+
+        // 一般點擊切換展開/收納
+        const willCollapse = !visualToolCollapseBtn.classList.contains('collapsed');
+        setVisualToolCollapsed(willCollapse);
+    });
+
+    // 鍵盤無障礙支援 (Enter / 空白鍵)
+    visualToolCollapseBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (isVisualToolPinned) {
+                setVisualToolPinned(false);
+                setVisualToolCollapsed(true);
+            } else {
+                const willCollapse = !visualToolCollapseBtn.classList.contains('collapsed');
+                setVisualToolCollapsed(willCollapse);
+            }
+        }
+    });
+
+    // 點擊到工具欄外的地方時把工具欄收起來 (固定狀態時不收起)
+    document.addEventListener('pointerdown', (e) => {
+        if (!visualToolBarEl || visualToolBarEl.style.display === 'none') return;
+        if (visualToolCollapseBtn.classList.contains('collapsed')) return;
+        if (isVisualToolPinned) return;
+
+        // 若點擊目標在 visualToolBarEl 之內，不收合
+        if (visualToolBarEl.contains(e.target)) return;
+
+        // 若點擊目標為彈窗或上下文選單相關元素，避免誤關閉
+        if (e.target.closest && (e.target.closest('.wmc-floating-note-menu') || e.target.closest('.wmc-box-floating-menu') || e.target.closest('.popup-container') || e.target.closest('.popup-window'))) {
+            return;
+        }
+
+        setVisualToolCollapsed(true);
+    }, true);
+
+    // 監聽語言切換
+    onLanguageChange(() => {
+        updateVisualCollapseBtnTooltip();
     });
 }
 
@@ -1037,6 +1449,7 @@ if (visualToolModeSelect) {
     visualToolModeSelect.addEventListener('change', (e) => {
         const mode = e.target.value;
         settings.visualToolMode = mode;
+        setVisualToolUI(mode);
         if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
             visualEditorRenderer.setEditMode(mode);
         }
@@ -1045,260 +1458,74 @@ if (visualToolModeSelect) {
     });
 }
 
-window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
-
-    // 支援 Ctrl+Z / Cmd+Z (復原) 與 Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (重做)
-    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        const key = e.key.toLowerCase();
-        if (key === 'z') {
-            if (isVisualMode() || e.target !== editorInput) {
-                e.preventDefault();
-                if (e.shiftKey) {
-                    redoButton.click();
-                } else {
-                    undoButton.click();
-                }
-                return;
-            }
-        } else if (key === 'y') {
-            if (isVisualMode() || e.target !== editorInput) {
-                e.preventDefault();
-                redoButton.click();
-                return;
-            }
-        }
+function switchVisualTool(mode, persist = true) {
+    settings.visualToolMode = mode;
+    setVisualToolUI(mode);
+    if (visualToolModeSelect) visualToolModeSelect.value = mode;
+    if (visualEditorRenderer && typeof visualEditorRenderer.setEditMode === 'function') {
+        visualEditorRenderer.setEditMode(mode);
     }
-
-    if (e.target.tagName === 'TEXTAREA') return;
-
-    if (isVisualMode()) {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (visualEditorRenderer && visualEditorRenderer.selectedNotes && visualEditorRenderer.selectedNotes.size > 0) {
-                const selectedList = Array.from(visualEditorRenderer.selectedNotes);
-                visualDeleteNote(selectedList);
-                visualEditorRenderer.clearSelection();
-            }
-        } else if (e.key === 'Escape') {
-            if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
-                visualEditorRenderer.clearSelection();
-            }
-        } else if (e.key === 'e' || e.key === 'E') {
-            if (visualToolModeSelect) {
-                visualToolModeSelect.value = 'edit';
-                visualToolModeSelect.dispatchEvent(new Event('change'));
-            }
-        } else if (e.key === 'v' || e.key === 'V' || e.key === 's' || e.key === 'S') {
-            if (visualToolModeSelect) {
-                visualToolModeSelect.value = 'select';
-                visualToolModeSelect.dispatchEvent(new Event('change'));
-            }
-        }
+    if (persist) {
+        saveSettingsDebounce();
+        draw();
     }
-});
+}
 
 let notes = [], endTime = 1, musicDelay = 0, rawData = [], dataIndexToTime = [];
+let rawCharOffsets = new Int32Array(0);
+
+const updateRawCharOffsets = () => {
+    const len = rawData.length;
+    if (rawCharOffsets.length !== len + 1) {
+        rawCharOffsets = new Int32Array(len + 1);
+    }
+    let acc = 0;
+    rawCharOffsets[0] = 0;
+    for (let i = 0; i < len; i++) {
+        acc += (rawData[i]?.length || 0);
+        rawCharOffsets[i + 1] = acc;
+        acc += 1;
+    }
+};
+
+const getCharOffsetAtIndex = (idx) => {
+    if (idx < 0) return 0;
+    const target = idx + 1;
+    if (target < rawCharOffsets.length) {
+        return rawCharOffsets[target];
+    }
+    return rawData.slice(0, idx + 1).join(',').length;
+};
+
+const getNoteRangeAtIndex = (idx) => {
+    if (idx < 0 || rawData.length === 0) return { start: 0, end: 0 };
+    const safeIdx = Math.min(idx, rawData.length - 1);
+    const start = safeIdx === 0 ? 0 : (rawCharOffsets[safeIdx] ?? 0) + 1;
+    const end = rawCharOffsets[safeIdx + 1] ?? start;
+    return { start, end };
+};
 
 let ctx = canvas.getContext('2d');
 
 //-----Quick panel-----
-
-let isCtrlShiftPressed = false;
-
-let directionOfPointer = '0'; // middle, left, right, up, down
-let positionOfQuickPanel = { x: 0, y: 0 };
-let positionOfPointer = { x: 0, y: 0, moved: false };
-let dirBuffer = '';
-
-// 1. 滑鼠移動事件：同時負責「更新位置」與「計算方向」
-document.addEventListener('mousemove', function (event) {
-    positionOfPointer.moved = true;
-    positionOfPointer.x = event.clientX;
-    positionOfPointer.y = event.clientY;
-
-    // 只有當 Ctrl+Shift 被按住時，才計算相對方向
-    if (isCtrlShiftPressed && quickPanel) {
-        const dx = positionOfPointer.x - positionOfQuickPanel.x;
-        const dy = positionOfPointer.y - positionOfQuickPanel.y;
-        const distanceSq = dx * dx + dy * dy;
-
-        let currentDirection = "";
-
-        if (distanceSq < 900) {
-            currentDirection = "middle";
-        } else {
-            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-            if (angle > -22.5 && angle <= 22.5) {
-                currentDirection = "right";
-            } else if (angle > 22.5 && angle <= 67.5) {
-                currentDirection = "down-right";
-            } else if (angle > 67.5 && angle <= 112.5) {
-                currentDirection = "down";
-            } else if (angle > 112.5 && angle <= 157.5) {
-                currentDirection = "down-left";
-            } else if (angle > 157.5 || angle <= -157.5) {
-                currentDirection = "left";
-            } else if (angle > -157.5 && angle <= -112.5) {
-                currentDirection = "up-left";
-            } else if (angle > -112.5 && angle <= -67.5) {
-                currentDirection = "up";
-            } else if (angle > -67.5 && angle <= -22.5) {
-                currentDirection = "up-right";
-            }
-        }
-
-        // 當方向改變時才更新，避免效能浪費
-        if (dirBuffer !== currentDirection) {
-            dirBuffer = currentDirection;
-            directionOfPointer = currentDirection;
-            quickPanel.setAttribute('data-active-dir', directionOfPointer);
-        }
-    }
+initQuickPanel({
+    quickPanel,
+    settings,
+    getSettings: () => settings,
+    isInitComplete: () => isInitComplete,
+    onRotateSelection: (dir) => rotateSelection(dir),
+    onFlipVertical: () => flipVertical(),
+    onFlipHorizontal: () => flipHorizontal(),
+    redoButton,
+    undoButton,
+    getCursorNoteIndex
 });
 
-// 2. 鍵盤按下事件：只負責啟用狀態、鎖定中心點
-window.addEventListener('keydown', (e) => {
-    if (!isInitComplete || !settings.enableQuickPanel || !quickPanel) return;
-
-    // 檢查是否同時按下 Ctrl 和 Shift，且目前還沒被標記為按下
-    if (e.ctrlKey && e.shiftKey && !isCtrlShiftPressed) {
-        if (!positionOfPointer.moved) {
-            simpleToast({
-                content: t("toast.moveMouseToOpen"),
-                type: "info",
-            });
-            return;
-        }
-
-        isCtrlShiftPressed = true;
-
-        // 鎖定當前滑鼠位置為 QuickPanel 的中心點
-        positionOfQuickPanel.x = positionOfPointer.x;
-        positionOfQuickPanel.y = positionOfPointer.y;
-
-        // 顯示並定位面板
-        quickPanel.style.left = positionOfPointer.x + 'px';
-        quickPanel.style.top = positionOfPointer.y + 'px';
-        quickPanel.style.display = 'grid';
-
-        // 初始化狀態為 middle
-        dirBuffer = 'middle';
-        directionOfPointer = 'middle';
-        quickPanel.setAttribute('data-active-dir', 'middle');
-    } else if (isCtrlShiftPressed && e.key !== 'Control' && e.key !== 'Shift') {
-        isCtrlShiftPressed = false;
-        quickPanel.style.display = 'none';
-        quickPanel.removeAttribute('data-active-dir');
-        directionOfPointer = 'middle';
-        dirBuffer = 'middle';
-    }
-});
-
-// 3. 鍵盤放開事件：精準解除狀態
-window.addEventListener('keyup', (e) => {
-    // 💡 改用 e.key 判斷：只要放開的是 Control 或 Shift 鍵，就關閉面板
-    if ((e.key === 'Control' || e.key === 'Shift') && isCtrlShiftPressed) {
-        isCtrlShiftPressed = false;
-        if (directionOfPointer === 'right') {
-            applySelectedRotation(1);
-        } else if (directionOfPointer === 'left') {
-            applySelectedRotation(-1);
-        } else if (directionOfPointer === 'up') {
-            applyVerticalFlip();
-        } else if (directionOfPointer === 'down') {
-            applyHorizontalFlip();
-        } else if (directionOfPointer === 'up-left') {
-            applySelectedRotation(4);
-        } else if (directionOfPointer === 'up-right') {
-            redoButton.click();
-        } else if (directionOfPointer === 'down-left') {
-            getCursorNoteIndex.click();
-        } else if (directionOfPointer === 'down-right') {
-            undoButton.click();
-        }
-        dirBuffer = ''; // 清空緩衝
-
-        if (quickPanel) {
-            quickPanel.style.display = 'none';
-            quickPanel.removeAttribute('data-active-dir');
-        }
-    }
-});
-
-// -----
 const scale = 0.98;
 const
     MAX_ZOOM = 1000,
     MIN_ZOOM = 15,
     ZOOM_STEP = 10;
-
-export const defaultSettings = {
-    // Game
-    speed: 6.5,
-    touchSpeed: 7,
-    slideSpeed: 0,
-    middleDisplay: 1, // 0: 關閉, 1: COMBO, 2: 分數(101%+), 3: 分數(101%-)
-    moviebrightness: -3,
-    showSensor: true,
-    rotateStars: true,
-    pinkStars: false,
-    // Misc
-    displayMode: 'simai', // simai 或 visual
-    middleDistance: 0.25,
-    effectDecayTime: 0.4,
-    hanabiEffectDecayTime: 1.1,
-    noteBaseSize: 11,
-    maxSlideCount: 500, // on screen,
-    inputDebounceTime: 800, // ms
-    showSensorTextWhenPaused: true,
-    hideBackgroundWhenPaused: false,
-    disableVideo: false, // 關閉影片背景（如果有的話）
-    renderSurroundingAuxiliaryText: true,
-    visualZoom: 200, // 視覺模式下的縮放倍率
-    gridDivision: 4, // SimaiVisualEditor 的網格切分 (4, 8, 12, 16, 24, 32...)
-    visualToolMode: 'edit', // SimaiVisualEditor 工具模式: 'edit' (編輯) 或 'select' (選擇)
-    splitRatio: 0.5, // 左右面板分割比例
-    canvasSnapped: false, // Canvas 是否被 snap 隱藏
-    slideIllegalRed: false,
-    slideArrowHideBySensor: true, // 滑星依感應器消失
-    hideOutline: false, // 隱藏判定圈
-    showCoverWhenPaused: false, // 暫停時顯示封面圖
-    lowRes: false, // 低解析度模式
-    majdataWsUrl: 'ws://127.0.0.1:8083/majdata',
-    autoConnectMajdataView: false,
-    showUI: false,
-    enableQuickPanel: false,
-    fancyTouchEffect: false,
-    // Sound & Playback
-    notPlayHoldEnd: false,
-    playbackSpeed: 1, // 播放速度，1 是正常速度
-    globalVolume: 0.65, // 全局音量，0 到 1 之間
-    musicVolume: 0.8, // 音樂音量，0 到 1 之間
-    SfxVolume: 1, // 音效音量，0 到 1 之間
-    sfxVolumes: {
-        'clock': 0.8,
-        'answer': 1,
-        'judge': 0.4,
-        'judge_ex': 0.4,
-        'judge_break': 0.4,
-        'judge_break_slide': 0.4,
-        'break': 0.4,
-        'slide': 0.4,
-        'break_slide_start': 0.4,
-        'touch': 0.4,
-        'touchHold_riser': 0.6,
-        'hanabi': 0.6,
-    },
-    autoPauseOnScroll: true, // 滾動時自動暫停
-    autocomplete: true, // 編輯器自動補齊括號
-    cursorFollow: true, // 游標跟隨
-    globalTimeline: true, // 全局時間軸
-    drawHitEffect: true,
-    drawHanabiEffect: true,
-    restoreDefaults: function () {
-        settings = { ...defaultSettings };
-    }
-};
 
 function applyAudioSettings(s) {
     if (!audioManager || !s) return;
@@ -1308,6 +1535,7 @@ function applyAudioSettings(s) {
     if (s.sfxVolumes) audioManager.setSFXVolumes(s.sfxVolumes);
 }
 
+<<<<<<< HEAD
 const settingsConfig = [
     {
         label: 'settings.tabs.general',
@@ -1517,29 +1745,19 @@ const settingsConfig = [
         ]
     }
 ];
+=======
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function applyMovieBrightness(val) {
-    if (backgroundImage) editorBackgroundImage.style.filter = `brightness(${1 + 0.1875 * val})`;
-    if (backgroundVideo) editorBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * val})`;
+    const raw = (val !== undefined && val !== null) ? val : settings.moviebrightness;
+    const num = parseFloat(raw);
+    const b = Math.max(0, 1 + 0.1875 * (isNaN(num) ? -3 : num));
+    if (editorBackgroundImage) editorBackgroundImage.style.filter = `brightness(${b})`;
+    if (editorBackgroundVideo) editorBackgroundVideo.style.filter = `brightness(${b})`;
+    if (secondCtx && externalWindow && typeof syncSecondWindowBackground === 'function') {
+        syncSecondWindowBackground();
+    }
 }
-
-let globalTime = 0, realTime = 0;
-let lastTimestamp = null;
-let playStartTimestamp = null;
-let playStartRealTime = 0;
-let secondCtx = null;
-let externalWindow = null;
-let timeControlSliding = false; // 新增滑動狀態標記
-let keepRenderingWhilePause = false; // 是否在暫停時繼續渲染（保持畫面更新）
-let nowIndex = 0;
-let lastCursorIndex = -1;
-let visualCtx = null;
-let warnings = [], warningPositions = [], warningPositionsConst = [];
-let decodedTags = [];
-let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
-
-let lastCanvasSize = { w: 0, h: 0 };
-let lastVisualEditorSize = { w: 0, h: 0 };
 
 // 上次對影片進行 seek 的時間（秒），用來避免頻繁設定 currentTime
 let lastVideoSeekTime = 0;
@@ -1548,34 +1766,82 @@ const VIDEO_SEEK_THRESHOLD = 0.3; // 當差距超過此值才執行 seek（秒�
 
 let clockBpm = 60;
 
-const isVisualMode = () => settings.displayMode === 'visual';
-const previewVisible = () => (previewContainer.style.display !== 'none' && document.getElementById('playControls').style.display !== 'none');
+const playControlsElement = document.getElementById('playControls');
+const previewVisible = () => (previewContainer.style.display !== 'none' && playControlsElement?.style.display !== 'none');
 
-const saveSettingsDebounce = debounce(() => {
-    if (majdataWs.isConnected()) {
-        majdataWs.sendSetting(settings);
+let cachedTimelineMin = 0;
+let cachedTimelineMax = 100;
+let cachedTimelineWidth = 300;
+let lastSliderRatio = -1;
+let lastSliderValue = -1;
+let lastSliderUpdateTime = 0;
+
+const updateCachedTimelineWidth = () => {
+    if (timeline && timeline.style.display !== 'none') {
+        cachedTimelineWidth = timeline.clientWidth || 300;
     }
-    idbSet('simai_settings', JSON.stringify(settings)).catch((error) => {
-        console.error('儲存設定到 IndexedDB 失敗:', error);
-    });
-}, 300);
+};
+window.addEventListener('resize', updateCachedTimelineWidth, { passive: true });
 
 const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
-    timeline.max = endTime + musicDelay;
-    updateSlider(realTime);
+    cachedTimelineMax = endTime + musicDelay;
+    timeline.max = cachedTimelineMax;
+    updateCachedTimelineWidth();
+    updateSlider(realTime, true);
 };
 
-const updateSlider = (time) => {
-    const min = parseFloat(timeline.min) || 0;
-    const max = parseFloat(timeline.max) || 100;
+let lastTimeCapsuleText = '';
+
+/**
+ * 更新播放控制器上方懸浮時間膠囊文字，僅於內容變化時寫入 DOM。
+ * @param {number} time
+ */
+let lastTimeCapsuleUpdateTime = 0;
+const updateTimeCapsule = (time, force = false) => {
+    if (!timeDisplayCapsule || settings.timeDisplayCapsule === false) return;
+    const now = performance.now();
+    if (!force && now - lastTimeCapsuleUpdateTime < 33) return;
+    lastTimeCapsuleUpdateTime = now;
+    const clampedCurrent = Math.max(cachedTimelineMin, Math.min(cachedTimelineMax, Number(time) || 0));
+    const text = `${formatCapsuleTime(clampedCurrent)} / ${formatCapsuleTime(cachedTimelineMax)}`;
+    if (text !== lastTimeCapsuleText) {
+        lastTimeCapsuleText = text;
+        timeDisplayCapsule.textContent = text;
+    }
+};
+
+/**
+ * 更新播放控制器上方懸浮倍率膠囊文字。
+ * @param {number} speed
+ */
+let lastSpeedCapsuleText = '';
+const updateSpeedCapsule = (speed) => {
+    if (!speedDisplayCapsule) return;
+    const numericSpeed = Number(speed);
+    const validSpeed = Number.isFinite(numericSpeed) && numericSpeed > 0 ? numericSpeed : 1;
+    const text = `${validSpeed.toFixed(2)}x`;
+    if (text !== lastSpeedCapsuleText) {
+        lastSpeedCapsuleText = text;
+        speedDisplayCapsule.textContent = text;
+    }
+    speedDisplayCapsule.classList.toggle('is-modified', text !== '1.00x');
+};
+
+let isTimelineDragging = false;
+
+const syncTimelineProgress = (time) => {
+    if (!timeline) return;
+    const min = Number(timeline.min) || 0;
+    const max = Number(timeline.max) || cachedTimelineMax;
     const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
-    timeline.value = time;
     const thumbWidth = 16;
     const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
     timeline.style.setProperty('--timeline-progress', stopPos);
+    return ratio;
 };
 
+<<<<<<< HEAD
 async function openResourceManager() {
     async function getSize() {
         // open a fresh readonly transaction each time so it won't be closed already
@@ -1939,630 +2205,107 @@ class BgmEditorWaveformCanvas {
 editMusicButton.addEventListener('click', () => {
     if (!audioManager.bgmBuffer) {
         simpleToast({ content: t('toast.needBgm'), type: 'warning' });
+=======
+const updateSlider = (time, force = false) => {
+    updateTimeCapsule(time, force);
+    if (!timeline || timeline.style.display === 'none') {
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         return;
     }
-
-    const bufferManager = new BgmEditorBufferManager(audioManager);
-    let offsetTime = musicDelay;
-    let isPreviewing = false;
-    let previewInterval;
-    let editTaps = [];
-
-    // 用來記錄拖曳前是不是正在播放，拖曳時要先閉嘴
-    let wasPreviewingBeforeDrag = false;
-
-    // 建立 UI 容器與元素
-    const container = document.createElement('div');
-    container.className = 'popup-waveform-container';
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 120;
-    canvas.className = 'popup-waveform-canvas';
-    container.appendChild(canvas);
-
-    const wfCanvas = new BgmEditorWaveformCanvas(canvas, bufferManager);
-
-    const controls = document.createElement('div');
-    controls.className = 'popup-waveform-controls';
-    controls.innerHTML = `
-        <!-- 第一排: BPM 敲擊與第一拍偏移 -->
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
-            <!-- BPM 區塊 -->
-            <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px;">
-                <span style="font-weight:bold; color:#00a2ff; font-size:12px;">BPM & Tap Estimator</span>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="number" id="editBpmInput" value="${clockBpm}" style="width:70px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
-                    <button id="editTapBpmBtn" type="button" style="padding:6px 14px; background:#0055ff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px; user-select:none; transition:background 0.2s;">Tap</button>
-                    <button id="editTapResetBtn" type="button" style="padding:6px 8px; background:#333; color:#ccc; border:1px solid #444; border-radius:4px; cursor:pointer; font-size:11px;">${t('popup.tapBpm.btnReset')}</button>
-                </div>
-                <span id="editTapBpmStatus" style="font-size:11px; color:#888;">${t('popup.tapBpm.msgNotStarted')}</span>
-            </div>
-
-            <!-- 第一拍偏移區塊 -->
-            <div style="background:#1a1a1a; padding:10px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; gap:6px; justify-content:space-between;">
-                <div>
-                    <span style="font-weight:bold; color:#00a2ff; font-size:12px;">${t('popup.editMusic.firstBeatOffset')}</span>
-                    <div style="display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
-                        <input type="number" id="editOffsetInput" value="${musicDelay.toFixed(2)}" step="0.01" style="width:85px; background:#111; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; font-weight:bold; text-align:center; font-size:13px;">
-                        <span style="color:#aaa; font-size:12px; margin-right:4px;">s</span>
-                        <button id="shiftDecBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#ff4d4d; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">-1 拍</button>
-                        <button id="shiftIncBeatBtn" type="button" style="padding:6px 10px; background:#2a2a2a; color:#22c55e; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; font-size:11px; user-select:none; transition:background 0.2s;">+1 拍</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 第二排: Waveform Zoom & BGM Vol -->
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; background:#1a1a1a; padding:12px; border-radius:6px; border:1px solid #333;">
-            <div style="display:flex; flex-direction:column; gap:6px; justify-content:center;">
-                <span style="font-weight:bold; color:#00a2ff; font-size:12px;">Zoom Waveform</span>
-                <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
-                    <button id="zoomOutBtn" type="button" style="width:30px; height:30px; background:#333; color:#fff; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; user-select:none;">-</button>
-                    <input type="range" id="editZoomSlider" min="1" max="20" step="0.5" value="1" style="flex:1; cursor:pointer; margin:0; height:6px;">
-                    <button id="zoomInBtn" type="button" style="width:30px; height:30px; background:#333; color:#fff; border:1px solid #444; border-radius:4px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; user-select:none;">+</button>
-                    <span id="zoomValLabel" style="font-size:11px; color:#ccc; min-width:32px; text-align:right; font-weight:bold;">1.0x</span>
-                </div>
-            </div>
-
-            <div style="display:flex; flex-direction:column; gap:8px; justify-content:center;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-weight:bold; color:#aaa; font-size:12px;">BGM Volume</span>
-                    <input type="number" id="editBgmVolumeInput" value="0.75" min="0" max="1" step="0.05" style="width:65px; background:#111; color:#fff; border:1px solid #444; padding:5px 8px; border-radius:4px; text-align:center; font-size:13px; font-weight:bold;">
-                </div>
-            </div>
-        </div>
-
-        <!-- 第三排: 節拍器預覽與精準 Shift 偏移 -->
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px;">
-            <button id="playClockBtn" type="button" style="width:100%; height:44px; background:#222; color:#00a2ff; border:1px solid #00a2ff; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s;">
-                <span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.previewMetronome')}
-            </button>
-        </div>
-    `;
-    container.appendChild(controls);
-
-    // 快捷 DOM 查詢
-    const bpmInput = controls.querySelector('#editBpmInput');
-    const offsetInputNode = controls.querySelector('#editOffsetInput');
-    const bgmVolumeInput = controls.querySelector('#editBgmVolumeInput');
-
-    const editTapBpmBtn = controls.querySelector('#editTapBpmBtn');
-    const editTapResetBtn = controls.querySelector('#editTapResetBtn');
-    const editTapBpmStatus = controls.querySelector('#editTapBpmStatus');
-
-    const zoomSlider = controls.querySelector('#editZoomSlider');
-    const zoomInBtn = controls.querySelector('#zoomInBtn');
-    const zoomOutBtn = controls.querySelector('#zoomOutBtn');
-    const zoomValLabel = controls.querySelector('#zoomValLabel');
-
-    const playClockBtn = controls.querySelector('#playClockBtn');
-    const shiftDecBeatBtn = controls.querySelector('#shiftDecBeatBtn');
-    const shiftIncBeatBtn = controls.querySelector('#shiftIncBeatBtn');
-
-    // 建立首拍對齊 UI 卡片 (使用者體驗優化)
-    const alignCard = document.createElement('div');
-    alignCard.className = 'popup-align-card';
-
-    const alignHeader = document.createElement('div');
-    alignHeader.className = 'popup-align-header';
-    alignHeader.innerHTML = `<span>${t('popup.editMusic.alignmentTitle')}</span><span id="currentBeatsSpan" style="color:#aaa;"></span>`;
-
-    const alignBody = document.createElement('div');
-    alignBody.className = 'popup-align-body';
-    alignBody.innerHTML = `
-        <span>${t('popup.editMusic.alignmentPrefix')}</span>
-        <input type="number" id="alignBeatsInput" value="4" style="width:55px; background:#111; color:#fff; border:1px solid #444; padding:5px; border-radius:4px; text-align:center; font-weight:bold; font-size:12px;">
-        <span>${t('popup.editMusic.alignmentSuffix')}</span>
-        <button id="alignBeatsBtn" type="button" style="padding:6px 14px; background:#006400; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">${t('popup.editMusic.alignmentBtn')}</button>
-    `;
-
-    const alignFooter = document.createElement('div');
-    alignFooter.className = 'popup-align-footer';
-    alignFooter.textContent = t('popup.editMusic.alignmentDesc');
-
-    alignCard.appendChild(alignHeader);
-    alignCard.appendChild(alignBody);
-    alignCard.appendChild(alignFooter);
-    container.appendChild(alignCard);
-
-    const alignBeatsInput = alignBody.querySelector('#alignBeatsInput');
-    const alignBeatsBtn = alignBody.querySelector('#alignBeatsBtn');
-    const currentBeatsSpan = alignHeader.querySelector('#currentBeatsSpan');
-
-    const updateAlignmentUI = () => {
-        const bpm = parseFloat(bpmInput.value) || clockBpm;
-        const secPerBeat = 60 / bpm;
-        const curBeats = offsetTime / secPerBeat;
-        currentBeatsSpan.textContent = t('popup.editMusic.alignmentCurrent', { beats: curBeats.toFixed(2) });
-
-        // 自動推薦下一個 4 的倍數拍數（除非使用者正在輸入）
-        if (document.activeElement !== alignBeatsInput) {
-            const suggested = Math.max(4, Math.ceil(curBeats / 4) * 4);
-            alignBeatsInput.value = suggested;
+    const now = performance.now();
+    if (!force) {
+        if (now - lastSliderUpdateTime < 33) {
+            return;
         }
-    };
-
-    // 封裝重繪快取方法
-    const triggerRedraw = () => {
-        wfCanvas.draw(offsetTime, parseFloat(zoomSlider.value));
-        updateAlignmentUI();
-    };
-
-    const startPreview = () => {
-        stopPreview(); // 確保乾淨
-        const bpm = parseFloat(bpmInput.value) || clockBpm;
-        const msPerBeat = 60000 / bpm;
-
-        // 1. 播放音樂
-        audioManager.playBGM(offsetTime, parseFloat(bgmVolumeInput.value) || 0.75);
-
-        // 2. 啟動同步節拍器
-        let expectedTickTime = performance.now() + msPerBeat;
-        previewInterval = setInterval(() => {
-            const now = performance.now();
-            if (now >= expectedTickTime) {
-                audioManager.play('clock');
-                expectedTickTime += msPerBeat;
-            }
-        }, 10);
-
-        playClockBtn.innerHTML = `<span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.stopPreview')}`;
-        isPreviewing = true;
-    };
-
-    const stopPreview = () => {
-        if (isPreviewing || previewInterval) {
-            clearInterval(previewInterval);
-            previewInterval = null;
-            audioManager.stopBGM();
-            playClockBtn.innerHTML = `<span style="font-size:16px;">⏱️</span> ${t('popup.editMusic.previewMetronome')}`;
-            isPreviewing = false;
+        if (Math.abs(time - lastSliderValue) < 0.02) {
+            return;
         }
-    };
+    }
+    lastSliderUpdateTime = now;
+    lastSliderValue = time;
+    const min = cachedTimelineMin;
+    const max = cachedTimelineMax;
+    const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
 
-    // --- Zoom 操作與人因優化 ---
-    const updateZoom = (val) => {
-        val = Math.max(1, Math.min(30, parseFloat(val) || 1));
-        zoomSlider.value = val;
-        zoomValLabel.textContent = `${val.toFixed(1)}x`;
-        triggerRedraw();
-    };
-    zoomSlider.addEventListener('input', () => updateZoom(zoomSlider.value));
-    zoomInBtn.addEventListener('click', () => updateZoom(parseFloat(zoomSlider.value) + 1));
-    zoomOutBtn.addEventListener('click', () => updateZoom(parseFloat(zoomSlider.value) - 1));
-
-    // --- Tap BPM 估算器邏輯 ---
-    const updateTapDisplay = () => {
-        if (editTaps.length === 0) {
-            editTapBpmStatus.textContent = t('popup.tapBpm.msgNotStarted');
-        } else if (editTaps.length === 1) {
-            editTapBpmStatus.textContent = t('popup.tapBpm.msgOneMore');
-        } else {
-            const intervals = [];
-            for (let i = 1; i < editTaps.length; i++) {
-                intervals.push(editTaps[i] - editTaps[i - 1]);
-            }
-            const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
-            const bpm = 60000 / avg;
-            if (isFinite(bpm) && bpm > 0) {
-                bpmInput.value = bpm.toFixed(1);
-                editTapBpmStatus.textContent = `${bpm.toFixed(1)} BPM (${editTaps.length} taps)`;
-                updateAlignmentUI();
-            }
+    // 使用快取寬度，避免在修改 DOM 後立即讀取 clientWidth 引發強制同步重排 (Forced Layout)
+    const roundedRatio = Math.round(ratio * cachedTimelineWidth);
+    if (force || roundedRatio !== lastSliderRatio) {
+        lastSliderRatio = roundedRatio;
+        if (!isTimelineDragging) {
+            timeline.value = time;
         }
-    };
-    editTapBpmBtn.addEventListener('click', () => {
-        editTaps.push(performance.now());
-        if (editTaps.length > 12) editTaps.shift();
-        updateTapDisplay();
+        syncTimelineProgress(isTimelineDragging ? parseFloat(timeline.value) : time);
+    }
+};
+
+if (manageResourcesButton) {
+    manageResourcesButton.addEventListener('click', () => {
+        openResourceManager();
     });
-    editTapResetBtn.addEventListener('click', () => {
-        editTaps = [];
-        updateTapDisplay();
-    });
+}
 
-    // --- UI 事件監聽與跨平台觸控綁定 ---
-    bpmInput.addEventListener('input', updateAlignmentUI);
-    offsetInputNode.addEventListener('change', (e) => {
-        offsetTime = parseFloat(e.target.value) || 0;
-        triggerRedraw();
-    });
-
-    const adjustOffsetByBeat = (direction) => {
-        const bpm = parseFloat(bpmInput.value) || clockBpm;
-        if (bpm <= 0) return;
-        const secPerBeat = 60 / bpm;
-
-        const wasPlaying = isPreviewing;
-        if (wasPlaying) {
-            stopPreview();
-        }
-
-        offsetTime = Math.max(0, offsetTime + direction * secPerBeat);
-        offsetInputNode.value = offsetTime.toFixed(2);
-        triggerRedraw();
-
-        if (wasPlaying) {
-            startPreview();
-        }
-    };
-
-    shiftDecBeatBtn.addEventListener('click', () => adjustOffsetByBeat(-1));
-    shiftIncBeatBtn.addEventListener('click', () => adjustOffsetByBeat(1));
-
-    // --- 核心優化：重新整理跨平台拖曳互動 ---
-    let isDragging = false;
-    let startX = 0;
-    let startOffset = 0;
-
-    const handleStart = (clientX) => {
-        isDragging = true;
-        startX = clientX;
-        startOffset = offsetTime;
-
-        // 【優化點 1】按下的瞬間，如果正在預覽，先暫停聲音，避免鬼畜爆音
-        wasPreviewingBeforeDrag = isPreviewing;
-        if (isPreviewing) {
-            audioManager.stopBGM(); // 僅停止聲音，不清除計時器大架構，或者直接調 stopPreview()
-            clearInterval(previewInterval); // 暫停節拍器
-        }
-
-        const rect = canvas.getBoundingClientRect();
-        const x = clientX - rect.left;
-        const zoom = parseFloat(zoomSlider.value) || 1;
-        const duration = bufferManager.duration;
-        const viewLength = Math.max(0.1, duration / zoom);
-        const viewCenter = Math.min(duration, Math.max(0, offsetTime));
-
-        let viewStart = viewCenter - viewLength / 2;
-        if (viewStart < 0) viewStart = 0;
-        if (viewStart + viewLength > duration) viewStart = Math.max(0, duration - viewLength);
-
-        offsetTime = Math.max(0, Math.min(duration, viewStart + (x / rect.width) * viewLength));
-        offsetInputNode.value = offsetTime.toFixed(2);
-        startOffset = offsetTime;
-        triggerRedraw();
-    };
-
-    const handleMove = (clientX) => {
-        if (!isDragging) return;
-        const rect = canvas.getBoundingClientRect();
-        const deltaX = clientX - startX;
-        const zoom = parseFloat(zoomSlider.value) || 1;
-        const duration = bufferManager.duration;
-        const viewLength = Math.max(0.1, duration / zoom);
-        const deltaTime = (deltaX / rect.width) * viewLength;
-
-        // 這裡維持你原本的拖曳方向邏輯
-        offsetTime = Math.max(0, Math.min(duration, startOffset - deltaTime));
-        offsetInputNode.value = offsetTime.toFixed(2);
-        triggerRedraw(); // 純重繪，絕對不跑音訊播放！
-    };
-
-    const handleEnd = () => {
-        if (!isDragging) return;
-        isDragging = false;
-
-        // 【優化點 2】手放開、拖曳結束了，才一次性重啟音樂與節拍器
-        if (wasPreviewingBeforeDrag) {
-            startPreview();
-        }
-    };
-
-    // --- 綁定事件 ---
-    playClockBtn.addEventListener('click', () => {
-        if (isPreviewing) stopPreview(); else startPreview();
-    });
-
-    const onWindowMouseMove = (e) => handleMove(e.clientX);
-    const onWindowMouseUp = () => handleEnd();
-    const onWindowTouchMove = (e) => {
-        if (e.touches.length > 0) {
-            handleMove(e.touches[0].clientX);
-        }
-    };
-    const onWindowTouchEnd = () => handleEnd();
-
-    canvas.addEventListener('mousedown', (e) => handleStart(e.clientX));
-    window.addEventListener('mousemove', onWindowMouseMove);
-    window.addEventListener('mouseup', onWindowMouseUp);
-
-    canvas.addEventListener('touchstart', (e) => {
-        if (e.touches.length > 0) {
-            handleStart(e.touches[0].clientX);
-        }
-    }, { passive: true });
-    window.addEventListener('touchmove', onWindowTouchMove, { passive: true });
-    window.addEventListener('touchend', onWindowTouchEnd);
-
-    // 首拍對齊執行按鈕監聽
-    alignBeatsBtn.addEventListener('click', () => {
-        stopPreview();
-        const bpm = parseFloat(bpmInput.value) || clockBpm;
-        const secPerBeat = 60 / bpm;
-        const targetBeats = parseFloat(alignBeatsInput.value) || 4;
-        const targetDuration = targetBeats * secPerBeat;
-        const padDuration = targetDuration - offsetTime;
-
-        if (padDuration > 0) {
-            bufferManager.padStart(padDuration);
-            offsetTime = targetDuration;
-            offsetInputNode.value = offsetTime.toFixed(2);
-            triggerRedraw();
-            simpleToast({
-                content: t('toast.padBeatsSuccess', {
-                    seconds: padDuration.toFixed(3),
-                    beats: targetBeats
-                }),
-                type: 'success'
-            });
-        } else {
-            simpleToast({ content: t('toast.padBeatsInvalid'), type: 'warning' });
-        }
-    });
-
-    // --- 功能性按鈕箱配置 ---
-    const actionBox = document.createElement('div');
-    actionBox.className = 'popup-action-box';
-
-    // 按鈕 1：裁切
-    const cropBtn = document.createElement('button');
-    cropBtn.id = 'cropBtn';
-    cropBtn.type = 'button';
-    cropBtn.innerHTML = `✂️ ${t('popup.editMusic.cropBefore')}`;
-    cropBtn.className = 'popup-crop-btn';
-    cropBtn.addEventListener('click', () => {
-        if (offsetTime <= 0) return;
-        if (!confirm(t('popup.editMusic.confirmCropBefore'))) return;
-
-        stopPreview();
-        if (bufferManager.cropStart(offsetTime)) {
-            offsetTime = 0;
-            offsetInputNode.value = "0.00";
-            triggerRedraw();
-            simpleToast({ content: t('toast.cropSuccess'), type: 'success' });
-        }
-    });
-
-    // 按鈕 2：依 BPM 補白
-    const padBtn = document.createElement('button');
-    padBtn.id = 'padBtn';
-    padBtn.type = 'button';
-    padBtn.innerHTML = `➕ ${t('popup.editMusic.padOneBeat')}`;
-    padBtn.className = 'popup-pad-btn';
-    padBtn.addEventListener('click', () => {
-        stopPreview();
-        const bpm = parseFloat(bpmInput.value) || clockBpm;
-        const secPerBeat = 60 / bpm;
-
-        bufferManager.padStart(secPerBeat);
-        offsetTime += secPerBeat;
-        offsetInputNode.value = offsetTime.toFixed(2);
-        triggerRedraw();
-        simpleToast({ content: t('toast.padSuccess'), type: 'success' });
-    });
-
-    // ✨ 按鈕 4：緊急安全備份還原
-    const restoreBtn = document.createElement('button');
-    restoreBtn.id = 'restoreBtn';
-    restoreBtn.type = 'button';
-    restoreBtn.innerHTML = `🔄 ${t('popup.editMusic.restoreOriginal')}`;
-    restoreBtn.className = 'popup-restore-btn';
-    restoreBtn.addEventListener('click', () => {
-        if (!confirm(t('popup.editMusic.confirmRestore'))) return;
-        stopPreview();
-        bufferManager.restoreOriginal();
-        offsetTime = musicDelay;
-        offsetInputNode.value = offsetTime.toFixed(2);
-        triggerRedraw();
-        simpleToast({ content: t('toast.restoreSuccess'), type: 'info' });
-    });
-
-    actionBox.appendChild(cropBtn);
-    actionBox.appendChild(padBtn);
-    actionBox.appendChild(restoreBtn);
-    container.appendChild(actionBox);
-
-    // 初始化第一次繪製
-    setTimeout(triggerRedraw, 100);
-
-    // 彈出視窗配置
-    popupWindow({
-        title: t('popup.editMusic.title'),
-        customContent: container,
-        width: 'max-content',
-        buttons: [
-            {
-                text: t('popup.apply'),
-                onClick: async (ctx) => {
-                    const bpm = parseFloat(bpmInput.value) || clockBpm;
-                    musicDelay = parseFloat(offsetTime.toFixed(2));
-
-                    // 連動更新外部編輯器控制項數值
-                    if (typeof offsetInput !== 'undefined') offsetInput.value = musicDelay.toFixed(2);
-                    editorInput.value += `\n(${bpm})`;
-
-                    if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
-                    if (typeof inputDebounce === 'function') inputDebounce();
-                    if (typeof offsetInputDebounce === 'function') offsetInputDebounce();
-
-                    stopPreview();
-
-                    // ✨ 核心功能：將修改後的音訊儲存至 IndexedDB
-                    simpleToast({ content: t('toast.savingMusic'), type: 'info' });
-
-                    try {
-                        const wavBlob = audioBufferToWav(audioManager.bgmBuffer);
-                        let fileName = 'bgm.wav';
-                        if (audioManager.bgmFile && audioManager.bgmFile.name) {
-                            fileName = audioManager.bgmFile.name;
-                            // 確保檔名尾碼是 .wav
-                            if (!fileName.toLowerCase().endsWith('.wav')) {
-                                const lastDotIdx = fileName.lastIndexOf('.');
-                                if (lastDotIdx !== -1) {
-                                    fileName = fileName.substring(0, lastDotIdx) + '.wav';
-                                } else {
-                                    fileName = fileName + '.wav';
-                                }
-                            }
-                        }
-                        const editedFile = new File([wavBlob], fileName, { type: 'audio/wav' });
-                        audioManager.bgmFile = editedFile;
-
-                        await projSet('resource_bgm', editedFile);
-                        simpleToast({ content: t('toast.saveMusicSuccess'), type: 'success' });
-                    } catch (err) {
-                        console.error('Failed to save BGM:', err);
-                        simpleToast({ content: t('toast.saveMusicError'), type: 'error' });
-                    }
-
-                    ctx.close();
-                }
-            },
-            {
-                text: t('popup.cancel'),
-                hideOnClick: true,
-                onClick: () => {
-                    stopPreview();
-                    // 💥 使用者點取消，直接自動還原成點開前的狀態，不污染原始資料
-                    bufferManager.restoreOriginal();
-                }
-            }
-        ],
-        onClose: () => {
-            stopPreview();
-            window.removeEventListener('mousemove', onWindowMouseMove);
-            window.removeEventListener('mouseup', onWindowMouseUp);
-            window.removeEventListener('touchmove', onWindowTouchMove, { passive: true });
-            window.removeEventListener('touchend', onWindowTouchEnd);
-        }
+editMusicButton.addEventListener('click', () => {
+    openBgmEditor({
+        audioManager,
+        getMusicDelay: () => musicDelay,
+        setMusicDelay: (val) => { musicDelay = val; },
+        getClockBpm: () => clockBpm,
+        offsetInput,
+        editorInput,
+        applyHighlight,
+        inputDebounce,
+        offsetInputDebounce,
+        projSet,
     });
 });
 
 tapBpmButton.addEventListener('click', () => {
-    let taps = [];
-
-    const container = document.createElement('div');
-    container.className = 'popup-tap-container';
-
-    const hint = document.createElement('div');
-    hint.innerText = t('popup.tapBpm.hint');
-    container.appendChild(hint);
-
-    const stats = document.createElement('div');
-    stats.className = 'popup-tap-stats';
-    stats.innerHTML = `
-            <div>${t('popup.tapBpm.count')}<strong id="tapBpmCount">0</strong></div>
-            <div>${t('popup.tapBpm.bpm')}<strong id="tapBpmValue">--</strong></div>
-        `;
-    container.appendChild(stats);
-
-    const tapButton = document.createElement('button');
-    tapButton.type = 'button';
-    tapButton.innerText = t('popup.tapBpm.btnTap');
-    tapButton.className = 'popup-tap-btn';
-    container.appendChild(tapButton);
-
-    const resetButton = document.createElement('button');
-    resetButton.type = 'button';
-    resetButton.innerText = t('popup.tapBpm.btnReset');
-    resetButton.className = 'popup-tap-reset-btn';
-    container.appendChild(resetButton);
-
-    const message = document.createElement('div');
-    message.className = 'popup-tap-message';
-    message.innerText = t('popup.tapBpm.msgNotStarted');
-    container.appendChild(message);
-
-    const updateDisplay = () => {
-        const countElem = container.querySelector('#tapBpmCount');
-        const bpmElem = container.querySelector('#tapBpmValue');
-        if (countElem) countElem.innerText = taps.length.toString();
-
-        if (taps.length < 2) {
-            if (bpmElem) bpmElem.innerText = '--';
-            message.innerText = taps.length === 0 ? t('popup.tapBpm.msgNotStarted') : t('popup.tapBpm.msgOneMore');
-            return;
-        }
-
-        const intervals = [];
-        for (let i = 1; i < taps.length; i++) {
-            intervals.push(taps[i] - taps[i - 1]);
-        }
-        const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
-        const bpm = 60000 / avg;
-        if (bpmElem) bpmElem.innerText = isFinite(bpm) ? bpm.toFixed(1) : '--';
-        message.innerText = t('popup.tapBpm.msgIntervals', { count: intervals.length });
-    };
-
-    tapButton.addEventListener('click', () => {
-        taps.push(performance.now());
-        if (taps.length > 12) taps.shift();
-        updateDisplay();
-    });
-
-    resetButton.addEventListener('click', () => {
-        taps = [];
-        updateDisplay();
-    });
-
-    popupWindow({
-        title: t('popup.tapBpm.title'),
-        customContent: container,
-        buttons: [
-            {
-                text: t('popup.tapBpm.btnSave'),
-                onClick: (ctx) => {
-                    if (taps.length < 2) {
-                        simpleToast({ content: t('toast.tapBpmWarning'), type: 'warning', timeout: 1800 });
-                        return;
-                    }
-
-                    const intervals = [];
-                    for (let i = 1; i < taps.length; i++) {
-                        intervals.push(taps[i] - taps[i - 1]);
-                    }
-                    const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
-                    const bpm = 60000 / avg;
-                    if (!isFinite(bpm) || bpm <= 0) {
-                        simpleToast({ content: t('toast.tapBpmError'), type: 'error', timeout: 1800 });
-                        return;
-                    }
-                    editorInput.value += `(${bpm.toFixed(1)})`;
-
-                    setEditorCss();
-                    applyHighlight(editorInput.value);
-
-                    inputDebounce();
-                    simpleToast({ content: t('toast.tapBpmSuccess', { bpm: bpm.toFixed(1) }), type: 'success', timeout: 1800 });
-                    ctx.close();
-                },
-                hideOnClick: true
-            },
-            {
-                text: t('popup.close'),
-                hideOnClick: true
-            }
-        ]
+    openTapBpm({
+        audioManager,
+        settings,
+        getMusicDelay: () => musicDelay,
+        setMusicDelay: (val) => { musicDelay = val; },
+        getClockBpm: () => clockBpm,
+        getTimebase: () => ({
+            tb1: Number(timebaseButton?.querySelector('input[name="tb1"]')?.value) || 4,
+            tb2: Number(timebaseButton?.querySelector('input[name="tb2"]')?.value) || 4
+        }),
+        getDecodedTags: () => decodedTags,
+        getDataIndexToTime: () => dataIndexToTime,
+        findCommaCharIndex: (...args) => findCommaCharIndex(...args),
+        updateEditorAndSave: (content) => updateEditorAndSave(content),
+        offsetInput,
+        offsetInputDebounce,
+        editorInput,
+        applyHighlight,
+        inputDebounce,
+        setEditorCss,
+        draw,
     });
 });
 
-function setDataEmpty() {
-    playButton.dataset.playing = 'false';
-    playButton.children[0].innerText = "play_arrow";
-    playStartTimestamp = null;
+function setDataEmpty(skipPersist = false) {
+    if (playbackEngine) {
+        playbackEngine.stop();
+    } else {
+        playButton.dataset.playing = 'false';
+        playButton.children[0].innerText = "play_arrow";
+        playStartTimestamp = null;
+    }
     maidata = {};
+    cachedChartSnapshot = null;
     nowDifficulty = 5;
     backgroundImage = null;
     backgroundVideo = null;
+    revokeBlobUrls();
+    getres('');
     applyHighlight('');
     musicDelay = 0;
-    realTime = 0;
-    globalTime = 0;
-    timeline.max = 1;
+    playbackEngine?.setTime(0);
+    cachedTimelineMax = 1;
+    timeline.max = cachedTimelineMax;
     timeline.value = 0;
-    updateSlider(0);
+    updateSlider(0, true);
     offsetInput.value = 0;
     editorInput.value = '';
     // 清除編輯歷史（新譜面應該重新開始）
@@ -2573,119 +2316,234 @@ function setDataEmpty() {
     updateUndoRedoUI();
     audioManager.removeBackgroundMusic().catch(() => { });
     changeDifficulty.value = nowDifficulty;
+    updateDifficultyIndicators();
     editorBackgroundImage.src = "";
     editorBackgroundImage.style.display = 'none';
     editorBackgroundVideo.src = "";
     editorBackgroundVideo.style.display = 'none';
     applyMovieBrightness(settings.moviebrightness);
-    inputDebounce();
-    saveMaidata();
-
-    //projSet('background_image', null).catch(() => { });
-    //projSet('background_video', null).catch(() => { });
-    //projSet('now_difficulty', nowDifficulty).catch(() => { });
-    //projSet('resource_bgm', null).catch(() => { });
-    //projSet('timeControl', 0).catch(() => { });
+    if (!skipPersist) {
+        inputDebounce();
+        saveMaidata();
+    }
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
 }
 
-fetchFromMainoteButton.addEventListener('click', async () => {
-    let mainctx = null;
-    await ensureSupabase();
+fetchFromMainoteButton.addEventListener('click', () => {
+    openMainoteFetcher({
+        audioManager,
+        getMaidata: () => maidata,
+        setMaidata: (val) => {
+            maidata = val;
+            updateDifficultyIndicators();
+        },
+        setNowDifficulty: (val) => { nowDifficulty = val; },
+        changeDifficulty,
+        editorInput,
+        getCurrentProjectId: () => currentProjectId,
+        setCurrentProjectId: (val) => { currentProjectId = val; },
+        setDataEmpty,
+        getres,
+        applyHighlight,
+        saveMaidata,
+        resetHistory: () => {
+            undoStack = [];
+            redoStack = [];
+            historyMap = {};
+            lastEditorValue = editorInput.value || '';
+            updateUndoRedoUI();
+        },
+        projSet,
+    });
+});
 
-    // 以 globalThis 取得 Supabase，避免在 module/非 module 環境中直接存取未宣告的全域變數導致錯誤
-    const createClient = globalThis.supabase?.createClient;
-    if (typeof createClient !== 'function') {
-        console.warn('Supabase client not found on globalThis.');
-        simpleToast({ content: t('toast.supabaseWarning'), type: 'warning', timeout: 4000 });
+// 以逗號切分，支援 Simai 新語法（多行註解、單行註解、屬性標籤 <SIZE*(1.5,2)> 等內部的逗號不分割，且完整保留所有字元）
+const splitSimaiPreservingAll = (text) => {
+    if (!text) return [];
+    const out = [];
+    let cur = '';
+    let inBracket = 0;
+    let inParen = 0;
+    let inBrace = 0;
+    const len = text.length;
+
+    for (let i = 0; i < len;) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        // 1. 單行註解 ||：保留直到行尾（註解內逗號不分割）
+        if (c === '|' && next === '|') {
+            cur += '||';
+            i += 2;
+            while (i < len && text[i] !== '\n' && text[i] !== '\r') {
+                cur += text[i++];
+            }
+            if (i < len && text[i] === '\r') {
+                cur += '\r';
+                i++;
+                if (i < len && text[i] === '\n') { cur += '\n'; i++; }
+            } else if (i < len && text[i] === '\n') {
+                cur += '\n';
+                i++;
+            }
+            continue;
+        }
+
+        // 2. 多行註解 |* ... *|：保留完整內容（註解內逗號不分割）
+        if (c === '|' && next === '*') {
+            cur += '|*';
+            i += 2;
+            while (i < len) {
+                if (text[i] === '*' && text[i + 1] === '|') {
+                    cur += '*|';
+                    i += 2;
+                    break;
+                }
+                cur += text[i++];
+            }
+            continue;
+        }
+
+        // 3. 屬性標籤 <[A-Za-z]+\*[^>]*> (例如 <SIZE*(1.5,2)>, <HS*1.25>, <COLOR*...>)：原子消費（內含逗號不分割）
+        if (c === '<') {
+            const rest = text.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                cur += propMatch[0];
+                i += propMatch[0].length;
+                continue;
+            }
+        }
+
+        // 4. 括號巢狀層級追蹤
+        if (c === '[') inBracket++;
+        else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (c === '(') inParen++;
+        else if (c === ')') inParen = Math.max(0, inParen - 1);
+        else if (c === '{') inBrace++;
+        else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+        // 5. 頂層逗號分隔符
+        if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
+            out.push(cur);
+            cur = '';
+            i++;
+            continue;
+        }
+
+        cur += c;
+        i++;
+    }
+
+    out.push(cur);
+    return out;
+};
+
+/**
+ * 套用解碼結果至主線程狀態與渲染器
+ */
+function applyDecodeResult(result, simaiDataValue) {
+    if (!result || result._isStale) return;
+    if (result.failed) {
+        simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
         return;
     }
 
-    const SUPABASE_CONFIG = {
-        url: "https://tntzyagdhlrdeswyrsjw.supabase.co",
-        key: "sb_publishable_eoR0itFK2HCrDAMd-6Jbxg_OYCkGWTJ"
+    notes = result.notes;
+    decodedTags = result.tags || [];
+    cachedChartSnapshot = null;
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
+
+    setEndtime(result.endTime);
+    clockBpm = result.bpm;
+
+    dataIndexToTime = result.indexToTime || [];
+
+    playScoreRes = {
+        ...result.notesCounts,
+        score: result.score,
     };
-    const client = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+    playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
+    playScoreRes.invScore = 1 / playScoreRes.score;
+    rawData = splitSimaiPreservingAll(simaiDataValue);
+    updateRawCharOffsets();
+    lastCursorIndex = -1;
 
-    async function getLevelCharts({
-        level = "",
-        version = "",
-        difficulty = "",
-        category = "",
-        songTitle = "",
-    } = {}) {
-        try {
-            // 使用 !inner 確保過濾 songs 時，不符合的 charts 會直接被排除
-            let query = client
-                .from('charts')
-                .select('*, songs!inner(*)') // 保持 !inner
+    // 預先計算二分搜尋結構與前綴和，確保播放無冷啟動延遲
+    simaiLogicControler.prepare(notes, playScoreRes);
 
-            // 篩選條件
-            if (level) query = query.eq('level', level);
-            if (difficulty) query = query.eq('difficulty', difficulty);
-            if (version) query = query.eq('songs.version', version);
-            if (category) query = query.eq('songs.genre', category);
+    const syntaxCheckEnabled = settings.enableSyntaxCheck !== false;
+    errors = syntaxCheckEnabled ? (result.errors || []) : [];
+    errorPositions = syntaxCheckEnabled ? (result.errorPositions || []) : [];
+    errorItems = syntaxCheckEnabled ? (result.errorItems || []) : [];
+    warnings = syntaxCheckEnabled ? (result.warnings || []) : [];
+    warningPositions = syntaxCheckEnabled ? (result.warningPositions || result.errpositions || []) : [];
+    warningPositionsConst = warningPositions;
+    warningItems = syntaxCheckEnabled ? (result.warningItems || []) : [];
 
-            if (songTitle) {
-                // 建議：將關鍵字切開做多重模糊搜尋，手感會更好
-                const words = songTitle.trim().split(/\s+/);
-                words.forEach(word => {
-                    query = query.ilike('songs.title', `%${word}%`);
-                });
-            }
+    updateDiagnosticBadge(errors.length, warnings.length);
+    /*if (syntaxCheckEnabled) {
+        if (errors.length > 0) console.error('Decode dangerous:', errors);
+        if (warnings.length > 0) console.warn('Decode warnings:', warnings);
+    }*/
+    draw();
+    // 立即以 Worker/同步解析出的最新 errorPositions / warningPositions 重新繪製編輯器紅/橘底線
+    applyHighlight(editorInput.value, true);
+    eventBus.emit(EVENTS.CHART_DECODED, {
+        difficulty: nowDifficulty,
+        noteCount: Array.isArray(notes) ? notes.length : 0
+    });
+}
 
-            // --- 修正解構錯誤：一定要用 { data, error } ---
-            const { data, error } = await query
-                .order('level', { ascending: false });
+function updateDiagnosticBadge(errCount, warnCount) {
+    if (!warnEl) return;
+    const errGroup = warnEl.querySelector('.errGroup');
+    const warnGroup = warnEl.querySelector('.warnGroup');
+    const errCountEl = warnEl.querySelector('.errCount');
+    const warnCountEl = warnEl.querySelector('.warnCount');
 
-            console.log('Supabase 查詢結果:', data, '錯誤訊息:', error);
-
-            if (error) throw error;
-
-            // 因為用了 !inner，data 裡面的東西一定都帶有符合條件的 songs
-            simpleToast({ content: t('toast.chartsFound', { count: data.length }), type: 'success', timeout: 1500 });
-            return data;
-
-        } catch (err) {
-            console.error('查詢失敗:', err);
-            simpleToast({ content: t('toast.chartQueryError', { message: err.message }), type: 'error', timeout: 2000 });
-        }
+    if (errGroup && errCountEl) {
+        errGroup.style.display = errCount > 0 ? 'inline-flex' : 'none';
+        errCountEl.textContent = errCount;
+    }
+    if (warnGroup && warnCountEl) {
+        warnGroup.style.display = warnCount > 0 ? 'inline-flex' : 'none';
+        warnCountEl.textContent = warnCount;
     }
 
-    const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:12px;font-size:13px;width:100%;min-width:250px;';
+    warnEl.classList.toggle('has-error', errCount > 0);
+    warnEl.style.visibility = (errCount > 0 || warnCount > 0) ? 'visible' : 'hidden';
+}
 
-    // 輔助函式：建立輸入框
-    const createInput = (label, placeholder = '') => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
-        row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.placeholder = placeholder;
-        input.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;';
-        row.appendChild(input);
-        return { row, input };
-    };
+function escapeDiagHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
 
-    // 輔助函式：建立下拉選單
-    const createSelect = (label, options) => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
-        row.innerHTML = `<label style="font-weight:500;color:#ddd;">${label}</label>`;
-        const select = document.createElement('select');
-        select.style.cssText = 'background:#222;color:#fff;border:1px solid #555;padding:6px;border-radius:4px;cursor:pointer;';
+function formatDiagnosticItem(item, fallbackText) {
+    if (!item || !item.code) return fallbackText || '';
+    const params = { ...(item.params || {}) };
+    if (item.reasonCode) {
+        params.reason = t(item.reasonCode, item.reasonParams || {});
+    }
+    return t(item.code, params);
+}
 
-        options.forEach(opt => {
-            const el = document.createElement('option');
-            el.value = opt.value;
-            el.textContent = opt.text;
-            select.appendChild(el);
-        });
+/**
+ * 譜面解析進入點：支援 Web Worker 背景非同步解析與主線程同步降級
+ */
+const getres = async (simaiDataValue, options = {}) => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
 
-        row.appendChild(select);
-        return { row, select };
-    };
+    const decodeOpts = { enableSyntaxCheck: settings.enableSyntaxCheck !== false, ...options };
 
+<<<<<<< HEAD
     // 定義選項清單
     const levelOptions = [{ value: '', text: t('popup.fetchMainote.allLevels') }];
     for (let i = 1; i <= 6; i++) levelOptions.push({ value: i.toString(), text: `Level ${i}` });
@@ -3039,110 +2897,106 @@ fetchFromMainoteButton.addEventListener('click', async () => {
 
 const getres = ((simaiDataValue) => {
     const result = (() => {
+=======
+    // 若指定同步或 Worker 不可用，直接同步解析 (維持最高相容性)
+    if (options.sync || !decodeWorkerManager.isAvailable()) {
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         try {
-            return simaiDecode(simaiDataValue, 0);
+            const result = decodeWorkerManager.decodeSync(simaiDataValue, 0, decodeOpts);
+            applyDecodeResult(result, simaiDataValue);
+            return result;
         } catch (e) {
             console.error("解析失敗", e);
             return null;
         }
-    })();
-    if (result) {
-        if (result.failed) {
-            simpleToast({ content: '解析譜面失敗，請檢查格式是否正確', type: 'error', timeout: 2000 });
-        } else {
-            notes = result.notes;
-            decodedTags = result.tags || [];
+    }
 
-            setEndtime(result.endTime);
-            clockBpm = result.bpm;
-            // 以逗號切分，但忽略落在以 '||' 開頭的單行註解內的逗號（同時保留註解文字）
-            const splitRespectingLineComments = (text) => {
-                const out = [];
-                let cur = '';
-                for (let i = 0; i < text.length;) {
-                    const a = text[i];
-                    const b = text[i + 1];
-
-                    // 若遇到單行註解開頭 '||'，將註解整行當成一般文字加入（註解內的逗號不分割）
-                    if (a === '|' && b === '|') {
-                        cur += '||';
-                        i += 2;
-                        while (i < text.length && text[i] !== '\n' && text[i] !== '\r') {
-                            cur += text[i++];
-                        }
-                        // 保留換行符（支援 CRLF 與 LF）
-                        if (i < text.length && text[i] === '\r') {
-                            cur += '\r';
-                            i++;
-                            if (i < text.length && text[i] === '\n') { cur += '\n'; i++; }
-                        } else if (i < text.length && text[i] === '\n') {
-                            cur += '\n';
-                            i++;
-                        }
-                        continue;
-                    }
-
-                    // 正常逗號：作為分隔符
-                    if (a === ',') {
-                        out.push(cur);
-                        cur = '';
-                        i++;
-                        continue;
-                    }
-
-                    // 其他字元
-                    cur += a;
-                    i++;
-                }
-                out.push(cur);
-                // 移除因尾端逗號或連續逗號產生的空字串項
-                return out;
-            };
-            dataIndexToTime = result.indexToTime || [];
-
-            playScoreRes = {
-                ...result.notesCounts,
-                score: result.score,
-            };
-            playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
-            playScoreRes.invScore = 1 / playScoreRes.score;
-            rawData = splitRespectingLineComments(simaiDataValue);
-            lastCursorIndex = -1;
-
-            warnings = result.warnings || [];
-            warningPositions = result.errpositions || [];
-            warningPositionsConst = warningPositions;
-            if (result.warnings && result.warnings.length > 0) {
-                warnEl.style.visibility = 'visible';
-                warnEl.querySelector('.warnCount').textContent = result.warnings.length;
-                console.warn('Decode warnings:', result.warnings);
-            } else {
-                warnEl.style.visibility = 'hidden';
-            }
-            draw();
+    // 預設採用背景 Worker 非同步解析，主線程 0 卡頓
+    try {
+        const result = await decodeWorkerManager.decodeAsync(simaiDataValue, 0, decodeOpts);
+        applyDecodeResult(result, simaiDataValue);
+        return result;
+    } catch (e) {
+        console.error("Worker 解析失敗，降級同步解析", e);
+        try {
+            const fallbackResult = decodeWorkerManager.decodeSync(simaiDataValue, 0, decodeOpts);
+            applyDecodeResult(fallbackResult, simaiDataValue);
+            return fallbackResult;
+        } catch (err) {
+            console.error("同步解析降級亦失敗", err);
+            return null;
         }
     }
-});
+};
 
 warnEl.addEventListener('click', () => {
-    console.log(dataIndexToTime);
-    const contentHTML = warnings.map((w, i) => {
-        const errpos = warningPositionsConst[i];
-        console.log(warningPositionsConst, i, errpos);
-        if (errpos !== undefined) {
-            return `<div class="warning-item" style="cursor: pointer; color: #ccc; text-decoration: underline; margin-bottom: 8px; font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif; font-size: 13px;" data-errpos="${errpos}">• ${w}</div>`;
+    const buildDiagnosticRows = (items, fallbackList, posList, level, emptyKey) => {
+        const len = Math.max(items.length, fallbackList.length);
+        if (len === 0) {
+            return `<div class="diagnostic-empty">${escapeDiagHtml(t(emptyKey))}</div>`;
         }
-        return `<div style="margin-bottom: 8px; color: #ccc; font-family: sans-serif; font-size: 13px;">• ${w}</div>`;
-    }).join('');
+        const rows = [];
+        for (let i = 0; i < len; i++) {
+            const item = items[i];
+            const errpos = item?.errpos !== undefined ? item.errpos : posList[i];
+            const text = escapeDiagHtml(formatDiagnosticItem(item, fallbackList[i]));
+            const cls = level === 'error' ? 'warning-item is-error' : 'warning-item is-warning';
+            if (errpos !== undefined && errpos !== null) {
+                rows.push(`<div class="${cls} is-clickable" data-errpos="${errpos}">• ${text}</div>`);
+            } else {
+                rows.push(`<div class="${cls}">• ${text}</div>`);
+            }
+        }
+        return rows.join('');
+    };
+
+    const defaultTab = errors.length > 0 ? 'error' : 'warning';
+    const errorsTabLabel = escapeDiagHtml(t('popup.warning.errorsTab', { count: errors.length }));
+    const warningsTabLabel = escapeDiagHtml(t('popup.warning.warningsTab', { count: warnings.length }));
+    const errorRowsHTML = buildDiagnosticRows(errorItems, errors, errorPositions, 'error', 'popup.warning.emptyErrors');
+    const warningRowsHTML = buildDiagnosticRows(warningItems, warnings, warningPositionsConst, 'warning', 'popup.warning.emptyWarnings');
+
+    const contentHTML =
+        `<div class="diagnostic-popup">` +
+        `<div class="pm-tab-bar diagnostic-tabs" role="tablist">` +
+        `<button type="button" class="pm-tab-btn diagnostic-tab is-error${defaultTab === 'error' ? ' pm-tab-btn--active' : ''}" data-tab="error" role="tab" aria-selected="${defaultTab === 'error'}">` +
+        `<span class="material-symbols-outlined errIcon" translate="no">dangerous</span>` +
+        `<span>${errorsTabLabel}</span>` +
+        `</button>` +
+        `<button type="button" class="pm-tab-btn diagnostic-tab is-warning${defaultTab === 'warning' ? ' pm-tab-btn--active' : ''}" data-tab="warning" role="tab" aria-selected="${defaultTab === 'warning'}">` +
+        `<span class="material-symbols-outlined warnIcon" translate="no">warning</span>` +
+        `<span>${warningsTabLabel}</span>` +
+        `</button>` +
+        `</div>` +
+        `<div class="diagnostic-tab-panels">` +
+        `<div class="diagnostic-panel${defaultTab === 'error' ? ' active' : ''}" data-panel="error" role="tabpanel">${errorRowsHTML}</div>` +
+        `<div class="diagnostic-panel${defaultTab === 'warning' ? ' active' : ''}" data-panel="warning" role="tabpanel">${warningRowsHTML}</div>` +
+        `</div>` +
+        `</div>`;
 
     const popupCtx = popupWindow({
         title: t('popup.warning.title'),
         content: contentHTML,
+        width: 380,
     });
 
     popupCtx.elements.content.addEventListener('click', (e) => {
-        console.log(e.target);
-        const item = e.target.closest('.warning-item');
+        const tabBtn = e.target.closest('.diagnostic-tab');
+        if (tabBtn) {
+            const targetTab = tabBtn.dataset.tab;
+            const root = popupCtx.elements.content;
+            root.querySelectorAll('.diagnostic-tab').forEach(btn => {
+                const isActive = btn.dataset.tab === targetTab;
+                btn.classList.toggle('pm-tab-btn--active', isActive);
+                btn.setAttribute('aria-selected', String(isActive));
+            });
+            root.querySelectorAll('.diagnostic-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.panel === targetTab);
+            });
+            return;
+        }
+
+        const item = e.target.closest('.warning-item.is-clickable');
         if (item) {
             const errpos = parseInt(item.dataset.errpos, 10);
             if (!isNaN(errpos)) {
@@ -3157,7 +3011,8 @@ warnEl.addEventListener('click', () => {
 });
 
 const offsetInputDebounce = debounce(() => {
-    timeline.max = endTime + musicDelay;
+    cachedTimelineMax = endTime + musicDelay;
+    timeline.max = cachedTimelineMax;
     updateSlider(realTime);
 
     globalTime = realTime - musicDelay;
@@ -3171,10 +3026,8 @@ const offsetInputDebounce = debounce(() => {
     draw();
 }, 500);
 
-const saveMaidata = debounce(() => {
-    projSet('maidata', maidata).catch((error) => {
-        console.error("儲存maidata到IndexedDB失敗:", error);
-    });
+function saveMaidataImmediate() {
+    if (!maidata) return Promise.resolve();
     if (currentProjectId) {
         const name = maidata?.title || null;
         projectTouch(currentProjectId).catch(() => { });
@@ -3201,8 +3054,10 @@ const saveMaidata = debounce(() => {
 
     // 更新 Discord RPC 狀態
     updateDiscordRPC(maidata, nowDifficulty);
-}, 2000);
+    cachedChartSnapshot = null;
+    eventBus.emit(EVENTS.MAIDATA_CHANGED, { ...maidata });
 
+<<<<<<< HEAD
 /**
  * 載入或匯入專案檔案時，全量同步推送至 Google Drive (含即時進度條與清空舊檔支援)
  */
@@ -3243,42 +3098,265 @@ const inputDebounce = debounce(() => {
     maidata["inote_" + nowDifficulty] = value;
     saveMaidata();
 }, settings.inputDebounceTime || 500);
+=======
+    return projSet('maidata', maidata).catch((error) => {
+        console.error("儲存maidata到IndexedDB失敗:", error);
+    });
+}
+
+const saveMaidata = debounce(() => {
+    saveMaidataImmediate();
+}, 500);
+
+const inputDebounce = (() => {
+    let timer = null;
+    const runInputUpdate = () => {
+        // 記錄歷史 (diff)
+        recordEditorHistory();
+        const value = editorInput.value;
+        // 解析 Note 邏輯
+        getres(value);
+        applyHighlight(value);
+        maidata["inote_" + nowDifficulty] = value;
+        updateDifficultyIndicators();
+        saveMaidata();
+    };
+
+    const debounced = () => {
+        if (timer) clearTimeout(timer);
+        const parsedDelay = Number(settings.inputDebounceTime);
+        const delay = Number.isFinite(parsedDelay) ? Math.max(0, parsedDelay) : 800;
+        timer = setTimeout(() => {
+            timer = null;
+            runInputUpdate();
+        }, delay);
+    };
+
+    debounced.cancel = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    };
+
+    debounced.flush = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+            runInputUpdate();
+        }
+    };
+
+    return debounced;
+})();
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function setElementDisplay(element, visible, value = 'block') {
     element.style.display = visible ? value : 'none';
 }
 
-function animateCanvasWidth(visible) {
+let currentCanvasAnimation = null;
+let currentCanvasSyncRafId = null;
+
+function stopCanvasSyncResize() {
+    if (currentCanvasSyncRafId !== null) {
+        cancelAnimationFrame(currentCanvasSyncRafId);
+        currentCanvasSyncRafId = null;
+    }
+}
+
+function animateCanvasWidth(visible, prevCanvasRect = null, wasCanvasHidden = false) {
+    stopCanvasSyncResize();
+    if (currentCanvasAnimation) {
+        currentCanvasAnimation.cancel();
+        currentCanvasAnimation = null;
+    }
+
+    if (!isInitComplete) {
+        applyCanvasContainerAspectRatio();
+        resize(true);
+        return;
+    }
+
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const swapped = Boolean(settings.panelSwapped);
     const targetRatio = settings.splitRatio ?? 0.5;
-    const targetWidth = visible ? `${targetRatio * 100}%` : '100%';
+    const effectiveRatio = (visible && canvasSnapped) ? 0 : targetRatio;
+    const aspectRatio = settings?.canvasAspectRatio || 'auto';
+    const ws = getWorkspaceRect();
+
+    const startFrame = (!wasCanvasHidden && prevCanvasRect && prevCanvasRect.width > 0 && prevCanvasRect.height > 0)
+        ? {
+            left: `${prevCanvasRect.left - ws.appLeft}px`,
+            top: `${prevCanvasRect.top - ws.appTop}px`,
+            width: `${prevCanvasRect.width}px`,
+            height: `${prevCanvasRect.height}px`,
+        }
+        : computeCanvasAnimationRect({
+            direction,
+            swapped,
+            visible: true,
+            splitRatio: 0,
+            workspaceRect: ws,
+            aspectRatio,
+        });
+
+    const endFrame = computeCanvasAnimationRect({
+        direction,
+        swapped,
+        visible,
+        splitRatio: effectiveRatio,
+        workspaceRect: ws,
+        aspectRatio,
+    });
+
     const canvasAnimation = canvasContainer.animate(
-        [{ width: targetWidth }],
+        [startFrame, endFrame],
         { duration: 400, fill: 'forwards', easing: 'ease' }
     );
+    currentCanvasAnimation = canvasAnimation;
 
     let animationRunning = true;
-    const throttledResize = throttle(() => resize(true), 16); // 限制每 16ms 最多调用一次（约 60fps）
+    const throttledResize = throttle(() => resize(false), 16); // 限制每 16ms 最多调用一次（约 60fps）
+
+    const stopSync = () => {
+        animationRunning = false;
+        stopCanvasSyncResize();
+    };
 
     function syncResize() {
-        if (animationRunning) {
-            throttledResize();
-            requestAnimationFrame(syncResize);
+        if (!animationRunning || currentCanvasAnimation !== canvasAnimation) return;
+        throttledResize();
+        if (animationRunning && currentCanvasAnimation === canvasAnimation) {
+            currentCanvasSyncRafId = requestAnimationFrame(syncResize);
         }
     }
 
+    canvasAnimation.oncancel = () => {
+        stopSync();
+        if (currentCanvasAnimation === canvasAnimation) {
+            currentCanvasAnimation = null;
+        }
+    };
+
     canvasAnimation.onfinish = () => {
-        animationRunning = false;
+        stopSync();
+        if (currentCanvasAnimation === canvasAnimation) {
+            currentCanvasAnimation = null;
+        }
         canvasAnimation.cancel();
-        if (visible) {
-            canvasContainer.style.width = '';
-        } else {
-            canvasContainer.style.width = '100%';
+        applyCanvasContainerAspectRatio();
+        if (visible && canvasSnapped) {
+            noRender = true;
+            canvasContainer.style.display = 'none';
         }
         resize(true);
     };
 
     syncResize();
 }
+let currentEditorAnimation = null;
+let currentSplitterAnimation = null;
+
+function animateEditorContainer(visible) {
+    if (!editorContainer) return;
+
+    let interruptedEditorTransform = null;
+    if (currentEditorAnimation) {
+        const computed = window.getComputedStyle(editorContainer).transform;
+        if (computed && computed !== 'none') {
+            interruptedEditorTransform = computed;
+        }
+        currentEditorAnimation.cancel();
+        currentEditorAnimation = null;
+    }
+
+    let interruptedSplitterTransform = null;
+    if (currentSplitterAnimation) {
+        if (panelSplitter) {
+            const computedS = window.getComputedStyle(panelSplitter).transform;
+            if (computedS && computedS !== 'none') {
+                interruptedSplitterTransform = computedS;
+            }
+        }
+        currentSplitterAnimation.cancel();
+        currentSplitterAnimation = null;
+    }
+
+    // 初始化尚未完成時，不播放過渡動畫，直接靜態設定
+    if (!isInitComplete) {
+        setElementDisplay(editorContainer, visible);
+        if (panelSplitter) {
+            setElementDisplay(panelSplitter, visible);
+            panelSplitter.style.transform = '';
+        }
+        editorContainer.style.transform = '';
+        return;
+    }
+
+    setElementDisplay(editorContainer, true);
+    if (panelSplitter) {
+        setElementDisplay(panelSplitter, true);
+    }
+
+    const direction = normalizeLayoutDirection(settings.layoutDirection);
+    const isVertical = direction === LAYOUT_DIRECTIONS.VERTICAL;
+    const ws = getWorkspaceRect();
+    const effectiveRatio = canvasSnapped ? 0 : (settings.splitRatio ?? 0.5);
+    const fallbackSize = (isVertical ? ws.height : ws.width) * (1 - effectiveRatio);
+    const editorSizePx = (isVertical ? editorContainer.offsetHeight : editorContainer.offsetWidth) || fallbackSize;
+
+    const slideAnim = computeEditorSlideAnimation({
+        direction,
+        swapped: Boolean(settings.panelSwapped),
+        visible,
+        editorSizePx,
+    });
+
+    const editorStart = interruptedEditorTransform ?? slideAnim.editorStart;
+    const splitterStart = interruptedSplitterTransform ?? slideAnim.splitterStart;
+    const editorEnd = slideAnim.editorEnd;
+    const splitterEnd = slideAnim.splitterEnd;
+
+    currentEditorAnimation = editorContainer.animate(
+        [
+            { transform: editorStart },
+            { transform: editorEnd }
+        ],
+        { duration: 400, fill: 'forwards', easing: 'ease' }
+    );
+
+    if (panelSplitter) {
+        currentSplitterAnimation = panelSplitter.animate(
+            [
+                { transform: splitterStart },
+                { transform: splitterEnd }
+            ],
+            { duration: 400, fill: 'forwards', easing: 'ease' }
+        );
+    }
+
+    currentEditorAnimation.onfinish = () => {
+        currentEditorAnimation?.cancel();
+        currentEditorAnimation = null;
+        if (!visible) {
+            setElementDisplay(editorContainer, false);
+        }
+        editorContainer.style.transform = '';
+    };
+
+    if (panelSplitter) {
+        currentSplitterAnimation.onfinish = () => {
+            currentSplitterAnimation?.cancel();
+            currentSplitterAnimation = null;
+            if (!visible) {
+                setElementDisplay(panelSplitter, false);
+            }
+            panelSplitter.style.transform = '';
+        };
+    }
+}
+
 
 function getDPR(win = window) {
     return settings?.lowRes ? 1 : (win.devicePixelRatio || 1);
@@ -3305,29 +3383,16 @@ function resizePreviewCanvas(force = false) {
     return previewRender.resize(previewContainer.clientWidth, previewContainer.clientHeight, dpr, force);
 }
 
-playbackSpeedInput.addEventListener('change', () => {
-    const speed = parseFloat(playbackSpeedInput.value);
-    if (isNaN(speed) || speed <= 0) {
-        simpleToast({ content: '請輸入有效的播放速度', type: 'warning', timeout: 1800 });
-        playbackSpeedInput.value = 1;
-        return;
-    }
-    setPlaybackSpeed(speed);
-    simpleToast({ content: `已設定播放速度：${speed}x`, type: 'success', timeout: 1800 });
-});
-
-playbackReset.addEventListener('click', () => {
-    setPlaybackSpeed(1);
-    simpleToast({ content: '重置播放速度', type: 'success', timeout: 1800 });
-});
-
 function setPlaybackSpeed(speed) {
     typeof speed === 'string' && (speed = parseFloat(speed));
     speed = clamp(speed, 0.01, 4); // 限制速度在 0.01x 到 4x 之間
     const playing = playButton.dataset.playing === 'true';
 
     settings.playbackSpeed = speed;
-    playbackSpeedInput.value = speed.toFixed(2);
+    if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
+        speedPopoverInput.value = `${speed.toFixed(2)}x`;
+    }
+    updateSpeedCapsule(speed);
 
     audioManager.setPlaybackRate(speed);
     if (playing) {
@@ -3352,6 +3417,7 @@ function syncHighlightLayerScroll() {
     requestAnimationFrame(() => {
         highlightLayer.scrollTop = editorInput.scrollTop;
         highlightLayer.scrollLeft = editorInput.scrollLeft;
+        editorHighlightOverlay.render();
         _highlightSyncPending = false;
     });
 }
@@ -3361,37 +3427,93 @@ const setEditorCss = (visible = null) => {
     syncHighlightLayerScroll();
 
     timeline.style.display = settings.globalTimeline ? 'block' : 'none';
-    if (visible === null) return;
+    if (playCapsulesContainer) {
+        const pos = settings.timeDisplayCapsulePosition;
+        playCapsulesContainer.dataset.position = (pos === 'left' || pos === 'right') ? pos : 'center';
+        const showCapsule = hideButton.dataset.hidden !== 'true' && settings.timeDisplayCapsule !== false;
+        playCapsulesContainer.style.display = showCapsule ? '' : 'none';
+        if (showCapsule) {
+            updateTimeCapsule(playbackEngine?.realTime ?? realTime);
+            updateSpeedCapsule(settings.playbackSpeed);
+        }
+    }
+    if (visible === null) {
+        if (hideButton.dataset.hidden !== 'true') {
+            const shouldHidePreview = isVisualMode() || settings.showMiniPreview === false;
+            const prevDisplay = previewContainer.style.display;
+            const targetDisplay = shouldHidePreview ? 'none' : 'block';
+            const rootComputed = window.getComputedStyle(document.documentElement);
+            const targetHeight = shouldHidePreview
+                ? rootComputed.getPropertyValue('--const-collapsed-playControls-height')
+                : rootComputed.getPropertyValue('--const-max-playControls-height');
+            previewContainer.style.display = targetDisplay;
+            document.documentElement.style.setProperty('--playControls-height', targetHeight);
+            if (prevDisplay !== targetDisplay) {
+                resize();
+            }
+        }
+        return;
+    }
 
     const visualMode = isVisualMode();
     const editorVisible = visible && !visualMode;
     const visualVisible = visible && visualMode;
     const isHidden = hideButton.dataset.hidden === 'true';
 
-    setElementDisplay(editorContainer, visible);
-    setElementDisplay(editorInput, editorVisible);
-    setElementDisplay(highlightLayer, editorVisible);
-    setElementDisplay(visualEditor, visualVisible);
+    // 必須在修改 body class、canvas display 與 playControls 高度前擷取畫布目前幾何尺寸，供動畫 startFrame 使用
+    const wasCanvasHidden = canvasContainer.style.display === 'none';
+    const prevCanvasRect = !wasCanvasHidden ? canvasContainer.getBoundingClientRect() : null;
+
+    if (visible) {
+        setElementDisplay(editorInput, editorVisible);
+        setElementDisplay(highlightLayer, editorVisible);
+        setElementDisplay(editorHighlightCanvas, editorVisible);
+        setElementDisplay(visualEditor, visualVisible);
+        if (editorVisible) {
+            editorHighlightOverlay.invalidateLayout();
+            editorHighlightOverlay.render();
+        }
+        if (visualToolBarEl) {
+            visualToolBarEl.style.display = visualVisible ? 'inline-flex' : 'none';
+            if (!visualVisible && visualNotePaletteEl) {
+                visualNotePaletteEl.style.display = 'none';
+            }
+        }
+    } else {
+        if (visualToolBarEl) {
+            visualToolBarEl.style.display = 'none';
+            if (visualNotePaletteEl) {
+                visualNotePaletteEl.style.display = 'none';
+            }
+        }
+    }
 
     if (!visible) {
         // 當隱藏 Editor 時：Editor 隱藏，Canvas 必須顯示，分割線隱藏 (保留 canvasSnapped 狀態)
         canvasContainer.style.display = '';
         noRender = false;
-        setElementDisplay(panelSplitter, false);
+        showPlayControlsBtn?.classList.add('editor-hidden');
+        document.body.classList.add('editor-hidden');
     } else {
+        showPlayControlsBtn?.classList.remove('editor-hidden');
+        document.body.classList.remove('editor-hidden');
         // 當顯示 Editor 時：還原到目前的 Snap 狀態
         if (canvasSnapped) {
-            noRender = true;
-            canvasContainer.style.display = 'none';
-            editorContainer.style.left = '0';
-            editorContainer.style.width = '100%';
+            applySnappedEditorLayout();
             setElementDisplay(panelSplitter, true);
             if (panelSplitter) panelSplitter.classList.add('snapped');
+            if (!isInitComplete) {
+                noRender = true;
+                canvasContainer.style.display = 'none';
+            } else {
+                // 動畫期間保持畫布可見以便平滑收合，動畫結束後再隱藏
+                noRender = false;
+                canvasContainer.style.display = '';
+            }
         } else {
             noRender = false;
             canvasContainer.style.display = '';
-            editorContainer.style.left = '';
-            editorContainer.style.width = '';
+            clearSnappedEditorLayout();
             setElementDisplay(panelSplitter, true);
             if (panelSplitter) panelSplitter.classList.remove('snapped');
         }
@@ -3399,9 +3521,11 @@ const setEditorCss = (visible = null) => {
 
     updatePlaycontrol(visualVisible, !isHidden);
 
-    animateCanvasWidth(visible);
+    animateCanvasWidth(visible, prevCanvasRect, wasCanvasHidden);
+    animateEditorContainer(visible);
 };
 
+<<<<<<< HEAD
 function openSettings(initialTabIndex = 0) {
     const container = document.createElement('div');
     container.className = 'popup-setting-container';
@@ -3904,231 +4028,14 @@ function openSettings(initialTabIndex = 0) {
 
 settingsButton.addEventListener('click', () => {
     openSettings(0);
+=======
+settingsButton.addEventListener('click', () => {
+    openSettingsModal();
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 });
 
 chartInfoButton.addEventListener('click', () => {
-    const tempData = { ...(maidata || {}) };
-    const inputRefs = {};
-
-    /**
-     * 核心邏輯：處理音訊 Metadata 並更新 tempData 與 UI
-     * @param {File} file 音訊檔案
-     */
-    const processAudioMetadata = async (file) => {
-        if (!file) {
-            simpleToast({ content: t('toast.noAudioFile'), type: "error" });
-            return;
-        }
-
-        const applyData = (title, artist) => {
-            if (title) {
-                tempData.title = title;
-                if (inputRefs.title) inputRefs.title.value = title;
-            }
-            if (artist) {
-                tempData.artist = artist;
-                if (inputRefs.artist) inputRefs.artist.value = artist;
-            }
-        };
-
-        // 1. 優先嘗試使用 jsmediatags 讀取 ID3 標籤
-        let parsed = false;
-        try {
-            await ensureJsMediaTags();
-            if (window.jsmediatags) {
-                parsed = true;
-                window.jsmediatags.read(file, {
-                    onSuccess: (tag) => {
-                        const { title, artist } = tag.tags;
-                        applyData(title, artist);
-                        simpleToast({ content: t('toast.tagReadSuccess', { title: title || t('popup.chartInfo.noTitle') }), type: "success" });
-                    },
-                    onError: (error) => {
-                        console.warn("jsmediatags 讀取失敗，改用檔名解析:", error);
-                        fallbackToFileName(file);
-                    }
-                });
-            }
-        } catch (err) {
-            console.warn("載入 jsmediatags 失敗，改用檔名解析:", err);
-        }
-        if (!parsed) {
-            fallbackToFileName(file);
-        }
-
-        // 2. 備案：從檔名解析 (格式預期為 "作者 - 標題")
-        function fallbackToFileName(f) {
-            const fileName = f.name.replace(/\.[^/.]+$/, ""); // 去除副檔名
-            if (fileName.includes(" - ")) {
-                const parts = fileName.split(" - ");
-                applyData(parts.slice(1).join(" - ").trim(), parts[0].trim());
-            } else {
-                applyData(fileName, null);
-            }
-            simpleToast({ content: t('toast.fileNameParsed'), type: "info" });
-        }
-    };
-
-    const createPopupContent = () => {
-        const container = document.createElement('div');
-        container.className = 'chart-info-container';
-        const createButton = (text, eventHandler) => {
-            const btn = document.createElement('button');
-            btn.className = 'chart-info-btn';
-            btn.textContent = text;
-            if (eventHandler) {
-                btn.addEventListener('click', eventHandler);
-            }
-            return btn;
-        };
-        // 左側：圖片更換
-        const imgContainer = document.createElement('div');
-        imgContainer.className = 'chart-info-img-container';
-        const img = document.createElement('img');
-        img.className = 'chart-info-img';
-        img.src = backgroundImage ? URL.createObjectURL(backgroundImage) : images['no_image'].src;
-
-        const imgWrapper = document.createElement('div');
-        imgWrapper.className = 'chart-info-img-wrapper';
-
-        const overlay = document.createElement('div');
-        overlay.className = 'chart-info-overlay';
-        overlay.textContent = t('popup.chartInfo.clickToChangeImage');
-
-        imgWrapper.appendChild(img);
-        imgWrapper.appendChild(overlay);
-        imgWrapper.addEventListener('click', () => {
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = 'image/*';
-            fileInput.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const objectUrl = URL.createObjectURL(file);
-                    img.src = objectUrl;
-                    backgroundImage = file;
-                    editorBackgroundImage.src = objectUrl;
-                    editorBackgroundImage.style.display = 'block';
-                    projSet('background_image', file);
-                }
-            };
-            fileInput.click();
-        });
-        imgContainer.appendChild(imgWrapper);
-        imgContainer.appendChild(createButton(t('popup.chartInfo.readFromTrack'), () => {
-            processAudioMetadata(audioManager.bgmFile);
-        }));
-        imgContainer.appendChild(createButton(t('popup.chartInfo.readOtherMetadata'), () => {
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = 'audio/*';
-            fileInput.onchange = (e) => processAudioMetadata(e.target.files[0]);
-            fileInput.click();
-        }));
-
-        // 右側：輸入欄位
-        const diffContainer = document.createElement('div');
-        diffContainer.className = 'chart-info-diff-container';
-
-        // 建立主要欄位並存入 inputRefs (使用 createLabeledInput1)
-        const titleField = createLabeledInput1({ value: tempData.title, labelText: t('popup.chartInfo.titleLabel'), type: 'text', assign: "title", data: tempData, ref: inputRefs });
-        const artistField = createLabeledInput1({ value: tempData.artist, labelText: t('popup.chartInfo.artistLabel'), type: 'text', assign: "artist", data: tempData, ref: inputRefs });
-        const descField = createLabeledInput1({ value: tempData.des, labelText: t('popup.chartInfo.designerLabel'), type: 'text', assign: "des", data: tempData, ref: inputRefs });
-
-        diffContainer.append(titleField.wrapper, artistField.wrapper, descField.wrapper);
-
-        // 難度選擇與等級 (使用 createLabeledInput1 的 select)
-        const dropdownField = createLabeledInput1({
-            value: nowDifficulty || "5",
-            labelText: t('popup.chartInfo.diffLabel'),
-            type: 'select',
-            assign: 'difficulty',
-            data: tempData,
-            ref: inputRefs,
-            options: [
-                { value: "7", label: "ORIGINAL" }, { value: "6", label: "RE:MASTER" },
-                { value: "5", label: "MASTER" }, { value: "4", label: "EXPERT" },
-                { value: "3", label: "ADVANCED" }, { value: "2", label: "BASIC" }, { value: "1", label: "EASY" }
-            ]
-        });
-
-        // 難度選擇與等級 (使用 createLabeledInput1 的 select)
-        dropdownField.input.addEventListener('change', (e) => {
-            tempData.difficulty = e.target.value;
-            updateDiffFields(e.target.value);
-        });
-
-        const infoText = document.createElement('div');
-        const updateDiffFields = (diff) => {
-            infoText.innerHTML = "";
-            const lv = createLabeledInput1({ value: tempData[`lv_${diff}`], labelText: t('popup.chartInfo.levelLabel'), type: 'text', assign: `lv_${diff}`, data: tempData, ref: inputRefs });
-            const des = createLabeledInput1({ value: tempData[`des_${diff}`], labelText: t('popup.chartInfo.designerDiffLabel'), type: 'text', assign: `des_${diff}`, data: tempData, ref: inputRefs });
-            infoText.append(lv.wrapper, des.wrapper);
-        };
-
-        // 🌟 關鍵修正：這裡改塞整個 wrapper，灰色小字才會出來
-        diffContainer.appendChild(dropdownField.wrapper);
-        diffContainer.appendChild(infoText);
-
-        // 初始觸發一次，帶入目前的 select 值
-        updateDiffFields(dropdownField.input.value);
-
-        // 自訂指令[cite: 1]
-        const excludedKeys = new Set(["title", "artist", "des", "first", "difficulty"]);
-        const insVal = Object.keys(tempData)
-            .filter(key => !excludedKeys.has(key) && !key.startsWith('lv_') && !key.startsWith('des_') && !key.startsWith('inote_'))
-            .map(key => `&${key} = ${tempData[key]}`)
-            .join("\n");
-        const customIns = createLabeledInput1({ value: insVal, labelText: t('popup.chartInfo.customLabel'), type: 'textarea', assign: "custom", data: tempData, ref: inputRefs });
-        diffContainer.appendChild(customIns.wrapper);
-
-        container.appendChild(imgContainer);
-        container.appendChild(diffContainer);
-        return container;
-    };
-
-    popupWindow({
-        title: t('popup.chartInfo.title'),
-        customContent: createPopupContent(),
-        buttons: [
-            {
-                text: t('popup.ok'),
-                onClick: (closePopup) => {
-                    if (!maidata) maidata = {};
-                    // 將 tempData 寫回 maidata
-                    Object.assign(maidata, tempData);
-
-                    // 處理自訂指令解析
-                    if (typeof tempData.custom === 'string') {
-                        tempData.custom.split(/\n/).forEach(line => {
-                            const match = line.trim().match(/^&?([^=]+)=(.*)$/);
-                            if (match) maidata[match[1].trim()] = match[2].trim();
-                        });
-                    }
-
-                    if (tempData.difficulty) {
-                        nowDifficulty = tempData.difficulty;
-                        if (typeof changeDifficulty !== 'undefined') changeDifficulty.value = nowDifficulty;
-                    }
-                    saveMaidata();
-                    closePopup();
-                },
-                hideOnClick: true
-            },
-            { text: t('popup.cancel'), hideOnClick: true }
-        ]
-    });
-});
-
-readyBeatCheckbox.checked = readyBeat;
-readyBeatCheckbox.addEventListener('change', () => {
-    readyBeat = readyBeatCheckbox.checked;
-    projSet('ready_beat', readyBeatCheckbox.checked).then(() => {
-        console.log("已儲存預備拍狀態到 IndexedDB:", readyBeatCheckbox.checked);
-    }).catch((error) => {
-        console.error("儲存預備拍狀態到 IndexedDB 失敗:", error);
-    });
-    inputDebounce();
+    openChartInfoModal();
 });
 
 // --- Undo/Redo 系統 ---
@@ -4168,15 +4075,23 @@ const invertChange = (change) => {
 };
 
 function updateUndoRedoUI() {
+    const canUndo = Array.isArray(undoStack) && undoStack.length > 0;
+    const canRedo = Array.isArray(redoStack) && redoStack.length > 0;
     if (undoButton) {
-        const canUndo = Array.isArray(undoStack) && undoStack.length > 0;
         undoButton.classList.toggle('disabled', !canUndo);
         undoButton.setAttribute('aria-disabled', String(!canUndo));
     }
     if (redoButton) {
-        const canRedo = Array.isArray(redoStack) && redoStack.length > 0;
         redoButton.classList.toggle('disabled', !canRedo);
         redoButton.setAttribute('aria-disabled', String(!canRedo));
+    }
+    if (visualUndoBtn) {
+        visualUndoBtn.classList.toggle('disabled', !canUndo);
+        visualUndoBtn.setAttribute('aria-disabled', String(!canUndo));
+    }
+    if (visualRedoBtn) {
+        visualRedoBtn.classList.toggle('disabled', !canRedo);
+        visualRedoBtn.setAttribute('aria-disabled', String(!canRedo));
     }
 }
 
@@ -4267,6 +4182,7 @@ redoButton.addEventListener('click', () => {
 // 初始化按鈕禁用狀態
 updateUndoRedoUI();
 
+<<<<<<< HEAD
 // 支援幫助說明的 Markdown 渲染與更新日誌快取
 let changelogCache = null;
 async function getChangelogContent() {
@@ -4555,27 +4471,52 @@ helpButton.addEventListener('click', () => {
                 });
             }
         }
+=======
+if (helpBasicButton) {
+    helpBasicButton.addEventListener('click', () => {
+        openHelpModal('basic');
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     });
-});
+}
+
+if (helpShortcutsButton) {
+    helpShortcutsButton.addEventListener('click', () => {
+        openHelpModal('shortcuts');
+    });
+}
+
+if (changelogButton) {
+    changelogButton.addEventListener('click', () => {
+        openChangelogModal();
+    });
+}
+
+if (aboutButton) {
+    aboutButton.addEventListener('click', () => {
+        openAboutModal();
+    });
+}
 
 function getGridSlots(maxTime) {
     const slots = [];
-    let gridDiv = parseInt(settings.gridDivision, 10);
-    if (isNaN(gridDiv) || gridDiv <= 0) gridDiv = 4;
+    let toolbarGridDiv = parseInt(settings.gridDivision, 10);
+    if (isNaN(toolbarGridDiv) || toolbarGridDiv <= 0) toolbarGridDiv = 4;
 
     if (maxTime === null || maxTime === undefined || isNaN(maxTime) || !isFinite(maxTime) || maxTime < 0) {
         maxTime = (endTime && isFinite(endTime) && endTime > 0) ? endTime + 2.0 : 100.0;
     }
 
     const limitMaxTime = Math.min(maxTime, 7200.0);
+    const lastCommaTime = (dataIndexToTime && dataIndexToTime.length > 0) ? (dataIndexToTime[dataIndexToTime.length - 1] || 0) : 0;
+    const fallbackEndTime = Math.max(endTime || 0, limitMaxTime, lastCommaTime + 10.0);
 
     if (!decodedTags || decodedTags.length === 0) {
         const bpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
-        const beatPeriod = (240 / bpm) / gridDiv;
+        const beatPeriod = (240 / bpm) / toolbarGridDiv;
         if (!isFinite(beatPeriod) || beatPeriod <= 0.0001) return [0];
 
         let count = 0;
-        for (let t = 0; t <= limitMaxTime + 0.001 && count < 20000; t += beatPeriod) {
+        for (let t = 0; t <= fallbackEndTime + 0.001 && count < 20000; t += beatPeriod) {
             slots.push(t);
             count++;
         }
@@ -4583,41 +4524,77 @@ function getGridSlots(maxTime) {
     }
 
     const bpmTags = decodedTags.filter(t => t.type === 'bpm' && t.value > 0).sort((a, b) => a.time - b.time);
-    if (bpmTags.length === 0) {
-        bpmTags.push({ time: 0, value: (clockBpm && clockBpm > 0) ? clockBpm : 60 });
+    const splitTags = decodedTags.filter(t => t.type === 'split' && t.value > 0).sort((a, b) => a.time - b.time);
+
+    const boundarySet = new Set([0]);
+    boundarySet.add(fallbackEndTime);
+    for (const tag of bpmTags) {
+        if (tag.time <= fallbackEndTime) boundarySet.add(tag.time);
+    }
+    for (const tag of splitTags) {
+        if (tag.time <= fallbackEndTime) boundarySet.add(tag.time);
     }
 
-    const fallbackEndTime = (endTime && isFinite(endTime) && endTime > 0) ? Math.max(endTime, limitMaxTime) : limitMaxTime;
+    const boundaries = Array.from(boundarySet).sort((a, b) => a - b);
 
-    for (let i = 0; i < bpmTags.length; i++) {
-        const tag = bpmTags[i];
-        const nextTag = bpmTags[i + 1];
-        let endTimeForTag = nextTag ? nextTag.time : fallbackEndTime;
+    let currentBpm = (clockBpm && clockBpm > 0) ? clockBpm : 60;
+    let currentSplit = 4;
 
-        if (!isFinite(endTimeForTag) || isNaN(endTimeForTag) || endTimeForTag > fallbackEndTime) {
-            endTimeForTag = fallbackEndTime;
+    for (let k = 0; k < boundaries.length - 1; k++) {
+        const tStart = boundaries[k];
+        const tEnd = boundaries[k + 1];
+        if (tEnd <= tStart) continue;
+
+        const effectiveBpmTag = bpmTags.filter(t => t.time <= tStart + 0.001).sort((a, b) => b.time - a.time)[0];
+        if (effectiveBpmTag) currentBpm = effectiveBpmTag.value;
+
+        const effectiveSplitTag = splitTags.filter(t => t.time <= tStart + 0.001).sort((a, b) => b.time - a.time)[0];
+        if (effectiveSplitTag) currentSplit = effectiveSplitTag.value;
+
+        const splitPeriod = (240 / currentBpm) / currentSplit;
+        if (isFinite(splitPeriod) && splitPeriod > 0.0001) {
+            let t = tStart;
+            let count = 0;
+            while (t < tEnd - 0.0001 && count < 20000) {
+                slots.push(t);
+                t += splitPeriod;
+                count++;
+            }
         }
 
-        const bpmVal = (tag.value && tag.value > 0) ? tag.value : 60;
-        const beatPeriod = (240 / bpmVal) / gridDiv;
-
-        if (!isFinite(beatPeriod) || beatPeriod <= 0.0001) continue;
-
-        let t = tag.time;
-        let count = 0;
-        while (t < endTimeForTag - 0.001 && count < 20000) {
-            slots.push(t);
-            t += beatPeriod;
-            count++;
+        if (toolbarGridDiv && toolbarGridDiv !== currentSplit) {
+            const gridPeriod = (240 / currentBpm) / toolbarGridDiv;
+            if (isFinite(gridPeriod) && gridPeriod > 0.0001) {
+                let t = tStart;
+                let count = 0;
+                while (t < tEnd - 0.0001 && count < 20000) {
+                    slots.push(t);
+                    t += gridPeriod;
+                    count++;
+                }
+            }
         }
-        if (slots.length > 50000) break;
     }
 
-    if (slots.length === 0 || slots[slots.length - 1] < fallbackEndTime - 0.001) {
-        slots.push(fallbackEndTime);
+    if (dataIndexToTime && dataIndexToTime.length > 0) {
+        for (let i = 0; i < dataIndexToTime.length; i++) {
+            const t = dataIndexToTime[i];
+            if (t !== undefined && t !== null && isFinite(t) && t <= fallbackEndTime) {
+                slots.push(t);
+            }
+        }
     }
 
-    return slots;
+    slots.sort((a, b) => a - b);
+    const uniqueSlots = [];
+    for (let i = 0; i < slots.length; i++) {
+        const val = slots[i];
+        if (uniqueSlots.length === 0 || Math.abs(val - uniqueSlots[uniqueSlots.length - 1]) > 0.0005) {
+            uniqueSlots.push(val);
+        }
+    }
+
+    return uniqueSlots;
 }
 
 const quantizeTime = (time) => {
@@ -4625,136 +4602,23 @@ const quantizeTime = (time) => {
     const slots = getGridSlots(time + 2.0);
     if (!slots || slots.length === 0) return null;
 
-    let closestTime = 0;
-    let minDiff = Infinity;
-    for (const t of slots) {
-        const diff = Math.abs(t - time);
-        if (diff < minDiff) {
-            minDiff = diff;
-            closestTime = t;
-        }
+    let low = 0;
+    let high = slots.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (slots[mid] === time) return slots[mid];
+        if (slots[mid] < time) low = mid + 1;
+        else high = mid - 1;
     }
-    if (minDiff > 2.0) return null;
-    return closestTime;
+
+    const idx1 = Math.max(0, high);
+    const idx2 = Math.min(slots.length - 1, low);
+    const diff1 = Math.abs(slots[idx1] - time);
+    const diff2 = Math.abs(slots[idx2] - time);
+    const closest = (diff1 <= diff2) ? slots[idx1] : slots[idx2];
+    if (Math.abs(closest - time) > 2.0) return null;
+    return closest;
 };
-
-const getOrCreateCommaIndex = (snappedTime) => {
-    if (!dataIndexToTime || dataIndexToTime.length === 0) {
-        rawData = [""];
-        dataIndexToTime = [0];
-        return 0;
-    }
-
-    // 1. 檢查是否有現成的拍點可以直接使用 (誤差在 0.02 秒內)
-    for (let idx = 0; idx < dataIndexToTime.length; idx++) {
-        if (Math.abs(dataIndexToTime[idx] - snappedTime) < 0.02) {
-            return idx;
-        }
-    }
-
-    const lastIndex = dataIndexToTime.length - 1;
-    const lastTime = dataIndexToTime[lastIndex];
-
-    // 2. 如果點擊的時間在現有音符之後，在尾端擴充逗號
-    if (snappedTime > lastTime + 0.02) {
-        const currentBpm = clockBpm || 60;
-        const currentGrid = settings.gridDivision || 4;
-        const timeStep = (240 / currentBpm) / currentGrid;
-
-        const numCommas = Math.round((snappedTime - lastTime) / timeStep);
-        if (numCommas > 0) {
-            for (let k = 0; k < numCommas; k++) {
-                rawData.push("");
-            }
-            for (let k = 1; k <= numCommas; k++) {
-                dataIndexToTime[lastIndex + k] = lastTime + k * timeStep;
-            }
-            return lastIndex + numCommas;
-        }
-        return null;
-    }
-
-    // 3. 如果點擊的時間在現有音符中間 (中間插拍/細分拍數)
-    let k = -1;
-    for (let i = 0; i < dataIndexToTime.length - 1; i++) {
-        if (snappedTime > dataIndexToTime[i] + 0.005 && snappedTime < dataIndexToTime[i + 1] - 0.005) {
-            k = i;
-            break;
-        }
-    }
-
-    if (k !== -1) {
-        const tK = dataIndexToTime[k];
-        const tKNext = dataIndexToTime[k + 1];
-
-        // 尋找在 tK 時刻有效的 BPM
-        let currentBpm = clockBpm || 60;
-        if (decodedTags) {
-            const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= tK + 0.001).sort((a, b) => b.time - a.time)[0];
-            if (bpmTag) currentBpm = bpmTag.value;
-        }
-
-        const origDuration = tKNext - tK;
-        if (origDuration <= 0.001) return null;
-        const origDiv = Math.round((240 / currentBpm) / origDuration);
-
-        const duration1 = snappedTime - tK;
-        const duration2 = tKNext - snappedTime;
-        if (duration1 <= 0.001 || duration2 <= 0.001) return null;
-
-        const newDiv1 = Math.round((240 / currentBpm) / duration1);
-        const newDiv2 = Math.round((240 / currentBpm) / duration2);
-
-        if (isNaN(newDiv1) || newDiv1 <= 0 || isNaN(newDiv2) || newDiv2 <= 0) return null;
-
-        // 1. 更新 rawData[k]: 將其拍號/切分標籤替換為 {newDiv1}
-        let segK = rawData[k] ? rawData[k].trim() : "";
-        if (segK.includes('{')) {
-            segK = segK.replace(/\{[^\}]*\}/g, `{${newDiv1}}`);
-        } else {
-            const match = segK.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
-            if (match) {
-                segK = match[1] + `{${newDiv1}}` + match[2];
-            } else {
-                segK = `{${newDiv1}}` + segK;
-            }
-        }
-        rawData[k] = segK;
-
-        // 2. 插入新的段落至 k + 1 位置
-        // 若 newDiv2 !== newDiv1，填入 {newDiv2} 標籤以補足至下一個音符之間的殘餘時間
-        let newSegKNext1 = "";
-        if (newDiv2 !== newDiv1) {
-            newSegKNext1 = `{${newDiv2}}`;
-        }
-        rawData.splice(k + 1, 0, newSegKNext1);
-
-        // 3. 處理原本在 k+1 的段落 (現移至 k+2)
-        // 若 k+2 本身沒有獨立的 {} 標籤，則幫它補上 {origDiv} 以維持原有拍速
-        let segKNext2 = rawData[k + 2] ? rawData[k + 2].trim() : "";
-        if (!segKNext2.includes('{') && origDiv > 0) {
-            const match = segKNext2.match(/^((?:\([^\)]*\)|<[^>]*>)*)(.*)/);
-            if (match) {
-                segKNext2 = match[1] + `{${origDiv}}` + match[2];
-            } else {
-                segKNext2 = `{${origDiv}}` + segKNext2;
-            }
-            rawData[k + 2] = segKNext2;
-        }
-
-        // 重新更新編輯器與解碼資料
-        const newContent = rawData.join(',');
-        updateEditorAndSave(newContent);
-
-        return k + 1;
-    }
-
-    return null;
-};
-
-function stripLeadingTags(str) {
-    return str.replace(/^(?:(?:\([^\)]*\))|(?:\{[^\}]*\})|(?:<[^>]*>))+/, '');
-}
 
 function updateEditorAndSave(newContent) {
     recordEditorHistory();
@@ -4768,219 +4632,137 @@ function updateEditorAndSave(newContent) {
     saveMaidata();
 }
 
-const visualPlaceNote = (lane, clickTime) => {
-    const snappedTime = quantizeTime(clickTime);
-    if (snappedTime === null || snappedTime === undefined) {
-        simpleToast({ content: '點擊位置離最近的節拍線太遠，無法放置音符', type: 'warning', timeout: 1500 });
+const {
+    getOrCreateCommaIndex,
+    visualPlaceNote,
+    visualPlaceHoldNote,
+    visualDeleteNote,
+    visualChangeNote,
+    getNoteCurrentProperties,
+    visualUpdateNoteProperty,
+    getNoteTouchGroup,
+    visualUpdateTouchGroup,
+    visualPlaceTimingTag,
+    visualDeleteTag,
+    visualEditTag,
+    visualUpdateHoldDuration
+} = createVisualNoteCallbacks({
+    quantizeTime,
+    getRawData: () => rawData,
+    setRawData: (v) => { rawData = v; updateRawCharOffsets(); },
+    getDataIndexToTime: () => dataIndexToTime,
+    setDataIndexToTime: (v) => { dataIndexToTime = v; },
+    getClockBpm: () => clockBpm,
+    getSettings: () => settings,
+    getDecodedTags: () => decodedTags,
+    updateEditorAndSave
+});
+
+const onVisualTagSelect = (tag, screenPos) => {
+    hideFloatingMenu();
+    if (!tag || !screenPos) {
+        visualEditorRenderer?.clearSelectedTag();
         return;
     }
-
-    const closestIndex = getOrCreateCommaIndex(snappedTime);
-    if (closestIndex === null || closestIndex === undefined) {
-        simpleToast({ content: '無法定位或擴充該時間位置的拍子', type: 'warning', timeout: 1500 });
-        return;
-    }
-
-    const segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
-    if (segment.startsWith("||")) {
-        simpleToast({ content: '無法在註解行內放置音符', type: 'warning', timeout: 1500 });
-        return;
-    }
-
-    const parts = segment === "" ? [] : segment.split('/');
-    const alreadyOccupied = parts.some(p => {
-        const clean = stripLeadingTags(p);
-        return clean.startsWith(String(lane));
+    visualEditorRenderer?.setSelectedTag(tag);
+    showTagFloatingMenu(tag, screenPos, {
+        onEdit: (t) => {
+            visualEditTag(t);
+        },
+        onDelete: (t) => {
+            visualDeleteTag(t);
+            visualEditorRenderer?.clearSelectedTag();
+        },
+        onClose: () => {
+            visualEditorRenderer?.clearSelectedTag();
+        }
     });
-
-    if (alreadyOccupied) {
-        return;
-    }
-
-    const cleanNotePart = stripLeadingTags(segment);
-    let newSegment = "";
-    if (cleanNotePart === "") {
-        newSegment = segment + String(lane);
-    } else {
-        newSegment = segment + "/" + String(lane);
-    }
-
-    rawData[closestIndex] = newSegment;
-    const newContent = rawData.join(',');
-    updateEditorAndSave(newContent);
-
-    simpleToast({ content: `已在軌道 ${lane} 放置 Tap 音符`, type: 'success', timeout: 1000 });
 };
 
-const visualPlaceHoldNote = (lane, clickTime, durationTime, originalNote = null) => {
-    const snappedTime = quantizeTime(clickTime);
-    if (snappedTime === null || snappedTime === undefined) return;
-
-    const closestIndex = getOrCreateCommaIndex(snappedTime);
-    if (closestIndex === null || closestIndex === undefined) return;
-
-    // 尋找在 snappedTime 時刻有效的 BPM
-    let currentBpm = clockBpm || 60;
-    if (decodedTags) {
-        const bpmTag = decodedTags.filter(t => t.type === 'bpm' && t.time <= snappedTime + 0.001).sort((a, b) => b.time - a.time)[0];
-        if (bpmTag) currentBpm = bpmTag.value;
-    }
-
-    const gridDiv = settings.gridDivision || 4;
-    const tickPeriod = (240 / currentBpm) / gridDiv;
-
-    let numTicks = Math.max(0, Math.round(durationTime / tickPeriod));
-
-    let noteStr = `${lane}h[${gridDiv}:${numTicks}]`;
-
-    if (numTicks == 0) {
-        noteStr = `${lane}h`;
-    }
-
-    if (originalNote) {
-        if (originalNote.isBreak) {
-            noteStr = `${lane}bh[${gridDiv}:${numTicks}]`;
-            if (numTicks == 0) {
-                noteStr = `${lane}bh`;
+const onVisualSelectionChange = (selectedNotes) => {
+    // 1. 若處於框選模式且有作用中大框
+    const boxRect = visualEditorRenderer?.getBoxScreenRect();
+    if (boxRect && selectedNotes && selectedNotes.size > 0) {
+        hideFloatingMenu();
+        showBoxFloatingMenu(boxRect, selectedNotes.size, {
+            onDelete: () => {
+                visualDeleteNote(Array.from(selectedNotes));
+                visualEditorRenderer?.clearActiveBox();
+                draw();
             }
-        }
-    }
-
-    const segment = rawData[closestIndex] ? rawData[closestIndex].trim() : "";
-    if (segment.startsWith("||")) return;
-
-    let parts = segment === "" ? [] : segment.split('/');
-
-    const existingIndex = parts.findIndex(p => {
-        const clean = stripLeadingTags(p);
-        return clean.startsWith(String(lane));
-    });
-
-    if (existingIndex !== -1) {
-        const targetPart = parts[existingIndex];
-        const clean = stripLeadingTags(targetPart);
-        const leadingTags = targetPart.substring(0, targetPart.length - clean.length);
-        parts[existingIndex] = leadingTags + noteStr;
-    } else {
-        const cleanNotePart = stripLeadingTags(segment);
-        if (cleanNotePart === "") {
-            parts = [segment + noteStr];
-        } else {
-            parts.push(noteStr);
-        }
-    }
-
-    rawData[closestIndex] = parts.join('/');
-    const newContent = rawData.join(',');
-    updateEditorAndSave(newContent);
-
-    simpleToast({ content: `已將軌道 ${lane} 設定為 Hold [${gridDiv}:${numTicks}]`, type: 'success', timeout: 1000 });
-};
-
-const visualDeleteNote = (noteOrNotes) => {
-    const list = Array.isArray(noteOrNotes) ? noteOrNotes : (noteOrNotes instanceof Set ? Array.from(noteOrNotes) : (noteOrNotes ? [noteOrNotes] : []));
-    if (list.length === 0) return;
-
-    let deletedCount = 0;
-    for (const note of list) {
-        if (!note) continue;
-        const commaIndex = note.index;
-        if (commaIndex === undefined || commaIndex === null) continue;
-        const lane = note.pos;
-        if (!lane) continue;
-
-        const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
-        if (segment === "" || segment.startsWith("||")) continue;
-
-        const parts = segment.split('/');
-        const partIndex = parts.findIndex(p => {
-            const clean = stripLeadingTags(p);
-            return clean.startsWith(String(lane));
         });
-
-        if (partIndex === -1) continue;
-
-        const targetPart = parts[partIndex];
-        const clean = stripLeadingTags(targetPart);
-        const leadingTags = targetPart.substring(0, targetPart.length - clean.length);
-
-        if (leadingTags) {
-            if (parts.length === 1) {
-                parts[0] = leadingTags;
-            } else if (partIndex + 1 < parts.length) {
-                parts[partIndex + 1] = leadingTags + parts[partIndex + 1];
-                parts.splice(partIndex, 1);
-            } else if (partIndex > 0) {
-                parts[partIndex - 1] = leadingTags + parts[partIndex - 1];
-                parts.splice(partIndex, 1);
-            }
-        } else {
-            parts.splice(partIndex, 1);
-        }
-
-        rawData[commaIndex] = parts.join('/');
-        deletedCount++;
+        return;
     }
+    hideBoxFloatingMenu();
 
-    if (deletedCount > 0) {
-        const newContent = rawData.join(',');
-        updateEditorAndSave(newContent);
-        if (deletedCount === 1) {
-            const firstLane = list[0]?.pos;
-            simpleToast({ content: `已刪除軌道 ${firstLane || ''} 的音符`, type: 'info', timeout: 1000 });
-        } else {
-            simpleToast({ content: `已刪除 ${deletedCount} 個音符`, type: 'info', timeout: 1000 });
+    // 2. 單一音符選取 (支援 Tap、Hold、Slide、Touch 等所有單選音符選單與刪除)
+    if (selectedNotes && selectedNotes.size === 1) {
+        const note = Array.from(selectedNotes)[0];
+        const props = getNoteCurrentProperties(note) || {};
+        const screenPos = visualEditorRenderer?.getNoteScreenPos(note);
+        if (screenPos) {
+            showFloatingMenu(note, screenPos, props, {
+                onChangeDuration: () => {
+                    hideFloatingMenu();
+                    openNoteDurationModal({
+                        note,
+                        currentDuration: props.duration || '',
+                        isSlide: props.isSlide,
+                        onApply: (newDurationStr) => {
+                            visualUpdateNoteProperty(note, { duration: newDurationStr });
+                            draw();
+                        }
+                    });
+                },
+                onChangePattern: () => {
+                    hideFloatingMenu();
+                    openSlideEditorModal({
+                        note,
+                        rawPart: props.part,
+                        renderer,
+                        settings,
+                        images,
+                        onApply: (newSlideStr) => {
+                            visualUpdateNoteProperty(note, { fullSlideString: newSlideStr });
+                            draw();
+                        }
+                    });
+                },
+                onEditTouchGroup: () => {
+                    hideFloatingMenu();
+                    const groupData = getNoteTouchGroup(note);
+                    if (!groupData) {
+                        simpleToast({ content: t('visualEditor.touchGroupLoadFailed'), type: 'error', timeout: 1500 });
+                        return;
+                    }
+                    openTouchGroupModal({
+                        note,
+                        touchGroupData: groupData,
+                        renderer,
+                        settings,
+                        images,
+                        bpm: clockBpm,
+                        onApply: ({ touchNotes }) => {
+                            visualUpdateTouchGroup(groupData.commaIndex, {
+                                leadingTags: groupData.leadingTags,
+                                nonTouchParts: groupData.nonTouchParts,
+                                touchNotes
+                            });
+                            draw();
+                        }
+                    });
+                },
+                onDelete: () => {
+                    hideFloatingMenu();
+                    visualDeleteNote(note);
+                    visualEditorRenderer?.clearSelection();
+                    draw();
+                }
+            });
+            return;
         }
     }
-};
-
-function getNextNoteClean(clean, L) {
-    const slide = clean.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-    const hold = clean.includes('h');
-    const touch = clean.match(/^([ABCDE])(\d+)|C/)
-
-    const isBreak = clean.includes('b');
-    const isEx = clean.includes('x');
-
-    console.log(`isBreak=${isBreak}, isEx=${isEx}, slide=${slide}, hold=${hold}, touch=${touch}`)
-
-    return String(clean);
-
-}
-
-const visualChangeNote = (note) => {
-    const commaIndex = note.index;
-    if (commaIndex === undefined || commaIndex === null) return;
-    const lane = note.pos;
-    if (!lane) return;
-
-    const segment = rawData[commaIndex] ? rawData[commaIndex].trim() : "";
-    if (segment === "" || segment.startsWith("||")) return;
-
-    const parts = segment.split('/');
-    const partIndex = parts.findIndex(p => {
-        const clean = stripLeadingTags(p);
-        return clean.startsWith(String(lane));
-    });
-
-    if (partIndex === -1) return;
-
-    const originalPart = parts[partIndex];
-    const clean = stripLeadingTags(originalPart);
-
-    const prefix = originalPart.substring(0, originalPart.length - clean.length);
-
-    const nextClean = getNextNoteClean(clean, lane);
-    const newPart = prefix + nextClean;
-
-    parts[partIndex] = newPart;
-    const newSegment = parts.join('/');
-    rawData[commaIndex] = newSegment;
-
-    const newContent = rawData.join(',');
-    updateEditorAndSave(newContent);
-
-    simpleToast({ content: `已改變音符類型: ${nextClean}`, type: 'success', timeout: 1000 });
+    hideFloatingMenu();
 };
 
 function recordEditorHistory() {
@@ -5005,14 +4787,15 @@ document.addEventListener('selectionchange', () => {
         const previewVisibleFlag = previewVisible();
         const isVisualModeFlag = isVisualMode();
         const visualHeight = (() => {
-            if (!previewVisibleFlag) {
-                return visualEditorRenderer.getCanvasWH().height;
-            } else {
-                return previewRender.getCanvasWH().width / 2;
+            if (isVisualModeFlag) {
+                return visualEditorRenderer?.getCanvasWH()?.height || 0;
+            } else if (previewVisibleFlag) {
+                return (previewRender?.getCanvasWH()?.width || 0) / 2;
             }
+            return 0;
         })();
         const visualBuckets = { slide: [], tapnhold: [], touch: [], tags: [] };
-        const V = visualHeight / settings.visualZoom;
+        const V = (visualHeight || 0) / (settings.visualZoom || 1);
 
         for (let i = notes.length - 1; i >= 0; i--) {
             const note = notes[i];
@@ -5053,12 +4836,16 @@ document.addEventListener('selectionchange', () => {
                 offset: musicDelay,
                 indexTime: dataIndexToTime[nowIndex],
                 cursorIndexTime: cursorLastIndexTime,
+                isPlaying: Boolean(playing),
             });
         }
     }
+    updateUnfocusedSelectionHighlight();
 });
 
 editorInput.addEventListener('input', () => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
     const value = editorInput.value;
     isContextEdited = true;
 
@@ -5067,6 +4854,7 @@ editorInput.addEventListener('input', () => {
 
     // 立即更新顏色高亮 (視覺上達到打字立刻出現)
     applyHighlight(value);
+    updateDifficultyIndicators();
 
     // 延遲處理重解析與存檔 (避免打字時解析幾萬行導致卡頓)
     inputDebounce();
@@ -5121,6 +4909,7 @@ function maidataProcess(e) {
     }
     getres(editorInput.value);
     applyHighlight(editorInput.value);
+    updateDifficultyIndicators();
     // 載入譜面時，重置編輯歷史與 lastEditorValue
     undoStack = [];
     redoStack = [];
@@ -5129,6 +4918,7 @@ function maidataProcess(e) {
     updateUndoRedoUI();
 }
 
+<<<<<<< HEAD
 async function handleFolderInput(files, onProgress) {
     const entries = await normalizeFiles(files, (pct, name) => {
         if (typeof onProgress === 'function') {
@@ -5296,6 +5086,38 @@ if (readZipButton) {
         }
     });
 }
+=======
+initFileHandlers({
+    readMaidataButton,
+    addMusicButton,
+    addVideoButton,
+    importFromVideoButton,
+    downloadButton,
+    audioManager,
+    getMaidata: () => maidata,
+    setMaidata: (val) => {
+        maidata = val;
+        updateDifficultyIndicators();
+    },
+    maidataProcess,
+    setDataEmpty,
+    draw,
+    resize,
+    setEndtime,
+    getEndTime: () => endTime,
+    getCurrentProjectId: () => currentProjectId,
+    setCurrentProjectId: (val) => { currentProjectId = val; },
+    getBackgroundImage: () => backgroundImage,
+    setBackgroundImage: (val) => { backgroundImage = val; },
+    editorBackgroundImage,
+    getBackgroundVideo: () => backgroundVideo,
+    setBackgroundVideo: (val) => { backgroundVideo = val; },
+    editorBackgroundVideo,
+    getSettings: () => settings,
+    applyMovieBrightness,
+    projSet
+});
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 hideEditorButton.addEventListener('click', () => {
     // 檢查目前是否為隱藏狀態
@@ -5309,10 +5131,14 @@ hideEditorButton.addEventListener('click', () => {
         console.error("儲存編輯器顯示狀態到 IndexedDB 失敗:", error);
     });
 
+    if (currentlyHidden) {
+        delete editorContainer.dataset.hidden;
+    } else {
+        editorContainer.dataset.hidden = 'true';
+    }
     setEditorCss(currentlyHidden);
-    editorContainer.dataset.hidden = currentlyHidden ? 'false' : 'true';
-    resize();
-    console.log(`編輯器已${currentlyHidden === 'true' ? '顯示' : '隱藏'}`);
+    emitViewModeChanged();
+    console.log(`編輯器已${currentlyHidden ? '顯示' : '隱藏'}`);
 });
 
 const difficultyInputDebounce = debounce(() => {
@@ -5324,7 +5150,16 @@ const difficultyInputDebounce = debounce(() => {
     });
 }, 500);
 
+function updateDifficultyIndicators() {
+    syncDifficultySelectIndicators(changeDifficulty, maidata, nowDifficulty, editorInput?.value);
+}
+
+changeDifficulty.addEventListener('pointerdown', updateDifficultyIndicators);
+changeDifficulty.addEventListener('focus', updateDifficultyIndicators);
+
 changeDifficulty.addEventListener('change', (e) => {
+    renderer?.clearJudgeEffects();
+    renderer?.clearHitEffects();
     console.log("難度變更為:", e.target.value);
     const oldDiff = nowDifficulty;
     const nowEditorContent = editorInput.value;
@@ -5349,30 +5184,22 @@ changeDifficulty.addEventListener('change', (e) => {
     const newContent = maidata['inote_' + nowDifficulty] ?? "";
     editorInput.value = newContent;
     applyHighlight(editorInput.value);
+    editorAutocomplete?.close(false);
 
     // 載入新難度的歷史（若有）並同步 lastEditorValue
     loadHistoryForDifficulty(nowDifficulty);
 
     inputDebounce();
     difficultyInputDebounce();
+<<<<<<< HEAD
     if (editorSync && editorSync.isConnected()) {
         editorSync.pushCurrentChart();
     }
+=======
+    updateDifficultyIndicators();
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 });
 
-switchBoxRadios.forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            settings.displayMode = (e.target.value === 'keyboard') ? 'simai' : 'visual';
-            updateGridDivisionVisibility();
-            visualEditorRenderer.setZoom(settings.visualZoom);
-            previewRender.setZoom(settings.visualZoom);
-            saveSettingsDebounce();
-            setEditorCss(editorContainer.dataset.hidden !== 'true');
-            draw();
-        }
-    });
-});
 
 function setupZoomButton(button, isZoomIn) {
     let timeoutId = null;
@@ -5446,6 +5273,7 @@ setupZoomButton(previewZoomInButton, true);
 setupZoomButton(previewZoomOutButton, false);
 
 
+<<<<<<< HEAD
 let utilityBtnsAnim = null;
 
 hideUtilityButton.addEventListener('click', () => {
@@ -5508,12 +5336,702 @@ hideUtilityButton.addEventListener('click', () => {
         editorContainer.classList.add('expanded');
         if (panelSplitter) panelSplitter.classList.add('expanded');
         utilityContainer.classList.add('expanded');
+=======
+const topUtilityBtnsEl = document.getElementById('topUtilityBtns');
+const utilityContainerEl = document.getElementById('utilityContainer');
+
+function getUtilityRowHeight() {
+    const val = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--utility-row-height'));
+    return Number.isFinite(val) && val > 0 ? val : 40;
+}
+
+function getExpectedUtilityRows() {
+    const val = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--utility-rows'));
+    return Number.isFinite(val) && val > 0 ? val : 1;
+}
+
+function calculateUtilityRows() {
+    const rowHeight = getUtilityRowHeight();
+    if (!topUtilityBtnsEl || topUtilityBtnsEl.offsetHeight <= 0) {
+        return getExpectedUtilityRows();
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     }
-    hideUtilityButton.innerText = isHidden ? '▲' : '▼';
-    hideUtilityButton.dataset.hidden = isHidden ? 'false' : 'true';
+    return Math.max(1, Math.round(topUtilityBtnsEl.offsetHeight / rowHeight));
+}
+
+<<<<<<< HEAD
+
+=======
+function updateUtilityHeight() {
+    const rowHeight = getUtilityRowHeight();
+    const rows = calculateUtilityRows();
+    const expectedRows = getExpectedUtilityRows();
+
+    if (rows > expectedRows) {
+        document.documentElement.style.setProperty('--utility-rows', rows);
+    } else {
+        document.documentElement.style.removeProperty('--utility-rows');
+        document.documentElement.style.removeProperty('--utility-height');
+    }
+
+    return rows * rowHeight;
+}
+
+if (window.ResizeObserver && topUtilityBtnsEl) {
+    let lastObservedRows = getExpectedUtilityRows();
+    const utilityObserver = new ResizeObserver(() => {
+        const isHidden = utilityContainerEl?.classList.contains('expanded');
+
+        if (!isHidden && topUtilityBtnsEl.style.display !== 'none') {
+            const currentRows = calculateUtilityRows();
+            if (currentRows !== lastObservedRows) {
+                lastObservedRows = currentRows;
+                updateUtilityHeight();
+                resize();
+            }
+        }
+    });
+
+    utilityObserver.observe(topUtilityBtnsEl);
+}
+
+/**
+ * 增強工具列水平滑動體驗 (支援滑鼠滾輪直接橫向滾動、滑鼠拖曳滑動、觸控防誤觸與邊界陰影指示)
+ */
+function setupUtilityHorizontalScroll() {
+    if (!topUtilityBtnsEl) return;
+
+    const utilityContainer = utilityContainerEl || document.getElementById('utilityContainer');
+    const rows = Array.from(topUtilityBtnsEl.querySelectorAll('.utility-row'));
+
+    // 取得當前真正具有橫向滾動能力的容器
+    function getScrollContainer(target) {
+        if (target) {
+            const row = target.closest('.utility-row');
+            if (row && window.getComputedStyle(row).display !== 'contents') {
+                return row;
+            }
+        }
+        return topUtilityBtnsEl;
+    }
+
+    // 更新邊界陰影指示器與可拖曳樣式
+    function updateScrollIndicators() {
+        const isMobile = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+        let canLeft = false;
+        let canRight = false;
+
+        const checkEl = (el) => {
+            if (!el || window.getComputedStyle(el).display === 'contents') return;
+            const maxScroll = el.scrollWidth - el.clientWidth;
+            if (maxScroll > 1) {
+                el.classList.add('is-draggable');
+                if (el.scrollLeft > 2) canLeft = true;
+                if (el.scrollLeft < maxScroll - 2) canRight = true;
+            } else {
+                el.classList.remove('is-draggable');
+            }
+        };
+
+        if (isMobile && rows.length > 0) {
+            rows.forEach(checkEl);
+        } else {
+            checkEl(topUtilityBtnsEl);
+        }
+
+        if (utilityContainer) {
+            utilityContainer.classList.toggle('can-scroll-left', canLeft);
+            utilityContainer.classList.toggle('can-scroll-right', canRight);
+        }
+    }
+
+    // 1. 滑鼠滾輪直接橫向滾動 (Wheel to Horizontal Scroll)
+    topUtilityBtnsEl.addEventListener('wheel', (e) => {
+        const container = getScrollContainer(e.target);
+        if (!container) return;
+
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        if (maxScroll <= 0) return;
+
+        // 若垂直 deltaY 佔主導，將其轉換為水平滾動；若本身就是橫向 deltaX 則直接使用
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (delta === 0) return;
+
+        // 單位標準化 (處理 line deltaMode)
+        const step = (e.deltaMode === 1) ? delta * 33 : (e.deltaMode === 2 ? delta * 100 : delta);
+
+        const canScrollLeft = container.scrollLeft > 0;
+        const canScrollRight = container.scrollLeft < maxScroll - 1;
+
+        if ((step < 0 && canScrollLeft) || (step > 0 && canScrollRight)) {
+            e.preventDefault();
+            container.scrollLeft += step;
+            updateScrollIndicators();
+        }
+    }, { passive: false });
+
+    // 2. 滑鼠拖曳滑動 (Mouse Drag-to-Scroll)
+    let isMouseDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+    let activeDragContainer = null;
+
+    topUtilityBtnsEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        // 若點擊的是輸入框或下拉選單，不觸發拖曳以保證正常輸入/選取
+        if (e.target.closest('input, select')) return;
+
+        const container = getScrollContainer(e.target);
+        if (!container || container.scrollWidth <= container.clientWidth) return;
+
+        isMouseDown = true;
+        hasDragged = false;
+        activeDragContainer = container;
+        startX = e.clientX;
+        startScrollLeft = container.scrollLeft;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isMouseDown || !activeDragContainer) return;
+
+        const dx = e.clientX - startX;
+        if (!hasDragged && Math.abs(dx) > 4) {
+            hasDragged = true;
+            activeDragContainer.classList.add('is-dragging');
+            topUtilityBtnsEl.classList.add('is-dragging');
+        }
+
+        if (hasDragged) {
+            e.preventDefault();
+            activeDragContainer.scrollLeft = startScrollLeft - dx;
+            updateScrollIndicators();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (!isMouseDown) return;
+        isMouseDown = false;
+
+        if (activeDragContainer) {
+            activeDragContainer.classList.remove('is-dragging');
+            topUtilityBtnsEl.classList.remove('is-dragging');
+            activeDragContainer = null;
+        }
+
+        if (hasDragged) {
+            // 在 capture 階段阻斷下一個 click 事件，防止拖曳放開時誤點按鈕
+            const suppressClick = (ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+            };
+            window.addEventListener('click', suppressClick, { capture: true, once: true });
+            setTimeout(() => {
+                window.removeEventListener('click', suppressClick, { capture: true });
+                hasDragged = false;
+            }, 60);
+        }
+    });
+
+    // 3. 觸控滑動防誤觸 (Touch swipe click suppression)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchHasMoved = false;
+
+    topUtilityBtnsEl.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            touchHasMoved = false;
+        }
+    }, { passive: true });
+
+    topUtilityBtnsEl.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches.length === 1) {
+            const dx = Math.abs(e.touches[0].clientX - touchStartX);
+            if (dx > 7) {
+                touchHasMoved = true;
+            }
+        }
+    }, { passive: true });
+
+    topUtilityBtnsEl.addEventListener('touchend', () => {
+        if (touchHasMoved) {
+            const suppressClick = (ev) => {
+                ev.stopPropagation();
+                ev.preventDefault();
+            };
+            window.addEventListener('click', suppressClick, { capture: true, once: true });
+            setTimeout(() => {
+                window.removeEventListener('click', suppressClick, { capture: true });
+                touchHasMoved = false;
+            }, 80);
+        }
+    }, { passive: true });
+
+    // 監聽滾動以即時更新陰影指示器
+    topUtilityBtnsEl.addEventListener('scroll', updateScrollIndicators, { passive: true });
+    rows.forEach(r => r.addEventListener('scroll', updateScrollIndicators, { passive: true }));
+    window.addEventListener('resize', updateScrollIndicators, { passive: true });
+
+    // 初始化與變更觀察
+    updateScrollIndicators();
+    if (window.ResizeObserver) {
+        new ResizeObserver(updateScrollIndicators).observe(topUtilityBtnsEl);
+    }
+}
+
+setupUtilityHorizontalScroll();
+
+function toggleTopUtilityBar(forceExpand = null) {
+    const utilityBtns = topUtilityBtnsEl;
+    const utilityContainer = utilityContainerEl;
+    if (!utilityBtns || !utilityContainer) return;
+
+    const isHidden = utilityContainer.classList.contains('expanded');
+    const shouldExpand = forceExpand !== null ? Boolean(forceExpand) : isHidden;
+
+    if (shouldExpand) {
+        if (showUtilityButton) showUtilityButton.style.display = 'none';
+        utilityBtns.style.display = 'flex';
+        utilityBtns.style.height = 'auto';
+
+        const targetHeight = updateUtilityHeight();
+
+        utilityBtns.animate([
+            { opacity: 0, height: '0px', minHeight: '0px', padding: '0 5px' },
+            { opacity: 1, height: `${targetHeight}px`, minHeight: '0px', padding: '5px' }
+        ], {
+            duration: 200,
+            easing: 'ease'
+        }).onfinish = () => {
+            utilityBtns.style.height = '';
+        };
+
+        canvasContainer.classList.remove('expanded');
+        editorContainer.classList.remove('expanded');
+        panelSplitter?.classList.remove('expanded');
+        utilityContainer.classList.remove('expanded');
+    } else {
+        const currentHeight = updateUtilityHeight();
+
+        utilityBtns.animate([
+            { opacity: 1, height: `${currentHeight}px`, minHeight: '0px', padding: '5px' },
+            { opacity: 0, height: '0px', minHeight: '0px', padding: '0 5px' }
+        ], {
+            duration: 200,
+            easing: 'ease'
+        }).onfinish = () => {
+            utilityBtns.style.display = 'none';
+            utilityBtns.style.height = '';
+            if (showUtilityButton && utilityContainer.classList.contains('expanded')) {
+                showUtilityButton.style.display = 'flex';
+            }
+        };
+
+        canvasContainer.classList.add('expanded');
+        editorContainer.classList.add('expanded');
+        panelSplitter?.classList.add('expanded');
+        utilityContainer.classList.add('expanded');
+    }
+
     resize();
+}
+
+hideUtilityButton?.addEventListener('click', () => toggleTopUtilityBar(false));
+showUtilityButton?.addEventListener('click', () => toggleTopUtilityBar(true));
+
+const utilityDropdowns = document.querySelectorAll('.utilityDropdown');
+const DROPDOWN_VIEWPORT_MARGIN = 8;
+
+function getDropdownViewportSize() {
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const vh = window.visualViewport
+        ? Math.min(window.innerHeight, window.visualViewport.height)
+        : (document.documentElement.clientHeight || window.innerHeight);
+    return { vw, vh };
+}
+
+function getSubmenuElement(menuTitle) {
+    if (!menuTitle) return null;
+    if (!menuTitle._submenu) {
+        menuTitle._submenu = menuTitle.querySelector('.utilitySubmenu');
+    }
+    return menuTitle._submenu;
+}
+
+function closeSubmenu(menuTitle) {
+    if (!menuTitle) return;
+    if (menuTitle._hoverCloseTimer) {
+        clearTimeout(menuTitle._hoverCloseTimer);
+        menuTitle._hoverCloseTimer = null;
+    }
+    menuTitle.classList.remove('open');
+    delete menuTitle.dataset.hoverOpen;
+    const submenu = getSubmenuElement(menuTitle);
+    if (submenu) {
+        // 保留在 utilityContainerEl 中，避免搬移 DOM 中斷關閉動畫
+        submenu.classList.remove('open');
+    }
+}
+
+function closeSubmenusInContent(content, exceptMenuTitle = null) {
+    if (!content) return;
+    content.querySelectorAll('.utilityMenuTitle').forEach((m) => {
+        if (m !== exceptMenuTitle) {
+            closeSubmenu(m);
+        }
+    });
+}
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
+
+function ensureScrollIndicators(container) {
+    if (!container) return null;
+    let topInd = container._scrollTopIndicator;
+    let bottomInd = container._scrollBottomIndicator;
+    if (!topInd || !topInd.isConnected || topInd.parentElement !== container) {
+        topInd = container.querySelector(':scope > .utility-scroll-indicator-top');
+        if (!topInd) {
+            topInd = document.createElement('div');
+            topInd.className = 'utility-scroll-indicator utility-scroll-indicator-top';
+            topInd.setAttribute('aria-hidden', 'true');
+            const icon = document.createElement('span');
+            icon.className = 'material-symbols-outlined';
+            icon.setAttribute('translate', 'no');
+            icon.textContent = 'keyboard_arrow_up';
+            topInd.appendChild(icon);
+            topInd.addEventListener('click', (event) => {
+                event.stopPropagation();
+                container.scrollBy({ top: -96, behavior: 'smooth' });
+            });
+            container.prepend(topInd);
+        }
+        container._scrollTopIndicator = topInd;
+    }
+    if (!bottomInd || !bottomInd.isConnected || bottomInd.parentElement !== container) {
+        bottomInd = container.querySelector(':scope > .utility-scroll-indicator-bottom');
+        if (!bottomInd) {
+            bottomInd = document.createElement('div');
+            bottomInd.className = 'utility-scroll-indicator utility-scroll-indicator-bottom';
+            bottomInd.setAttribute('aria-hidden', 'true');
+            const icon = document.createElement('span');
+            icon.className = 'material-symbols-outlined';
+            icon.setAttribute('translate', 'no');
+            icon.textContent = 'keyboard_arrow_down';
+            bottomInd.appendChild(icon);
+            bottomInd.addEventListener('click', (event) => {
+                event.stopPropagation();
+                container.scrollBy({ top: 96, behavior: 'smooth' });
+            });
+            container.append(bottomInd);
+        }
+        container._scrollBottomIndicator = bottomInd;
+    }
+    return { topInd, bottomInd };
+}
+
+function updateScrollIndicatorState(container) {
+    if (!container || !container.classList.contains('is-scrollable')) {
+        container?.classList.remove('can-scroll-up', 'can-scroll-down');
+        return;
+    }
+    const canUp = container.scrollTop > 2;
+    const canDown = container.scrollTop + container.clientHeight < container.scrollHeight - 2;
+    container.classList.toggle('can-scroll-up', canUp);
+    container.classList.toggle('can-scroll-down', canDown);
+}
+
+function syncScrollableState(container) {
+    if (!container) return;
+    if (container.id === 'extensionsDropdownContent' || getComputedStyle(container).overflowY === 'hidden') {
+        container.classList.remove('is-scrollable', 'can-scroll-up', 'can-scroll-down');
+        container._scrollTopIndicator?.remove();
+        container._scrollTopIndicator = null;
+        container._scrollBottomIndicator?.remove();
+        container._scrollBottomIndicator = null;
+        return;
+    }
+    ensureScrollIndicators(container);
+    container.classList.remove('is-scrollable', 'can-scroll-up', 'can-scroll-down');
+    const needsScroll = container.scrollHeight > container.clientHeight + 1;
+    if (needsScroll) {
+        container.classList.add('is-scrollable');
+        updateScrollIndicatorState(container);
+    }
+}
+
+function positionSubmenu(menuTitle) {
+    const submenu = getSubmenuElement(menuTitle);
+    if (!menuTitle || !submenu) return;
+
+    const { vw, vh } = getDropdownViewportSize();
+    const isPortrait = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+    const titleRect = menuTitle.getBoundingClientRect();
+
+    const submenuWidth = submenu.offsetWidth || 155;
+    let top = isPortrait ? titleRect.bottom : titleRect.top;
+    let left = isPortrait ? titleRect.left : titleRect.right;
+
+    if (!isPortrait) {
+        if (left + submenuWidth > vw - DROPDOWN_VIEWPORT_MARGIN) {
+            const leftSide = titleRect.left - submenuWidth;
+            if (leftSide >= DROPDOWN_VIEWPORT_MARGIN) {
+                left = leftSide;
+            } else {
+                left = Math.max(DROPDOWN_VIEWPORT_MARGIN, vw - submenuWidth - DROPDOWN_VIEWPORT_MARGIN);
+            }
+        }
+    } else if (left + submenuWidth > vw - DROPDOWN_VIEWPORT_MARGIN) {
+        left = Math.max(DROPDOWN_VIEWPORT_MARGIN, vw - submenuWidth - DROPDOWN_VIEWPORT_MARGIN);
+    }
+
+    const minVisibleHeight = Math.min(120, vh - DROPDOWN_VIEWPORT_MARGIN * 2);
+    if (top + minVisibleHeight > vh - DROPDOWN_VIEWPORT_MARGIN) {
+        top = Math.max(DROPDOWN_VIEWPORT_MARGIN, vh - minVisibleHeight - DROPDOWN_VIEWPORT_MARGIN);
+    }
+
+    const maxAvailableHeight = Math.max(80, vh - top - DROPDOWN_VIEWPORT_MARGIN);
+    submenu.style.top = `${top}px`;
+    submenu.style.left = `${left}px`;
+    submenu.style.maxHeight = `${maxAvailableHeight}px`;
+    syncScrollableState(submenu);
+}
+
+function ensureSubmenuListeners(menuTitle, submenu) {
+    if (!submenu || submenu._listenersBound) return;
+    submenu._listenersBound = true;
+
+    submenu.addEventListener('click', (event) => {
+        if (!event.target.closest('.utilityButton')) {
+            event.stopPropagation();
+        }
+    });
+
+    submenu.addEventListener('scroll', () => {
+        updateScrollIndicatorState(submenu);
+    }, { passive: true });
+
+    submenu.addEventListener('mouseenter', () => {
+        if (menuTitle._hoverCloseTimer) {
+            clearTimeout(menuTitle._hoverCloseTimer);
+            menuTitle._hoverCloseTimer = null;
+        }
+    });
+
+    submenu.addEventListener('mouseleave', () => {
+        const isPortrait = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+        if (isPortrait || !window.matchMedia('(hover: hover)').matches) return;
+        if (menuTitle._hoverCloseTimer) clearTimeout(menuTitle._hoverCloseTimer);
+        menuTitle._hoverCloseTimer = setTimeout(() => {
+            closeSubmenu(menuTitle);
+        }, 100);
+    });
+}
+
+function openSubmenu(menuTitle, content, byHover = false) {
+    const submenu = getSubmenuElement(menuTitle);
+    if (!menuTitle || !submenu) return;
+    if (menuTitle._hoverCloseTimer) {
+        clearTimeout(menuTitle._hoverCloseTimer);
+        menuTitle._hoverCloseTimer = null;
+    }
+
+    closeSubmenusInContent(content, menuTitle);
+    ensureSubmenuListeners(menuTitle, submenu);
+
+    if (byHover && !menuTitle.classList.contains('open')) {
+        menuTitle.dataset.hoverOpen = 'true';
+    }
+    menuTitle.classList.add('open');
+    if (utilityContainerEl && submenu.parentElement !== utilityContainerEl) {
+        utilityContainerEl.appendChild(submenu);
+        // 剛搬移進 portal 容器時需強制重排，確保初始隱藏樣式生效後再觸發過渡動畫
+        void submenu.offsetWidth;
+    }
+    positionSubmenu(menuTitle);
+    submenu.classList.add('open');
+}
+
+function closeAllDropdowns() {
+    utilityDropdowns.forEach((d) => {
+        d.classList.remove('open');
+        const content = d._dropdownContent || d.querySelector('.utilityDropdown-content');
+        if (content) {
+            closeSubmenusInContent(content);
+            // 保留在 utilityContainerEl 中，避免搬回工具列導致關閉過渡動畫被強制中斷或裁切
+            content.classList.remove('open');
+        }
+    });
+}
+
+function positionDropdownContent(dropdown) {
+    const btn = dropdown.querySelector('.utilityDropdown-btn');
+    const content = dropdown._dropdownContent || dropdown.querySelector('.utilityDropdown-content');
+    if (!btn || !content) return;
+
+    const { vw, vh } = getDropdownViewportSize();
+    const btnRect = btn.getBoundingClientRect();
+    const top = btnRect.bottom;
+    content.style.top = `${top}px`;
+
+    let left = btnRect.left;
+    const contentWidth = content.offsetWidth || 120;
+    if (left + contentWidth > vw - DROPDOWN_VIEWPORT_MARGIN) {
+        left = Math.max(DROPDOWN_VIEWPORT_MARGIN, vw - contentWidth - DROPDOWN_VIEWPORT_MARGIN);
+    }
+    content.style.left = `${left}px`;
+
+    const maxAvailableHeight = Math.max(80, vh - top - DROPDOWN_VIEWPORT_MARGIN);
+    content.style.maxHeight = `${maxAvailableHeight}px`;
+    if (content.id === 'extensionsDropdownContent') {
+        content.style.overflowY = 'hidden';
+        const extList = content.querySelector('#extensionsMenuList');
+        if (extList) {
+            extList.style.flex = '0 1 auto';
+            extList.style.minHeight = '0';
+            extList.style.overflowY = 'auto';
+            extList.style.overflowX = 'hidden';
+        }
+    }
+    syncScrollableState(content);
+
+    content.querySelectorAll('.utilityMenuTitle.open').forEach((menuTitle) => {
+        positionSubmenu(menuTitle);
+    });
+}
+
+function updateOpenDropdownPositions() {
+    utilityDropdowns.forEach((d) => {
+        if (d.classList.contains('open')) {
+            positionDropdownContent(d);
+        }
+    });
+}
+
+function handleUtilityBarScroll() {
+    if (document.querySelector('.utilityDropdown.open')) {
+        closeAllDropdowns();
+    }
+}
+
+topUtilityBtnsEl?.addEventListener('scroll', handleUtilityBarScroll, { passive: true });
+topUtilityBtnsEl?.querySelectorAll('.utility-row').forEach(r => r.addEventListener('scroll', handleUtilityBarScroll, { passive: true }));
+window.addEventListener('resize', updateOpenDropdownPositions, { passive: true });
+window.visualViewport?.addEventListener('resize', updateOpenDropdownPositions, { passive: true });
+
+utilityDropdowns.forEach((utilityDropdown) => {
+    const utilityDropdownBtn = utilityDropdown.querySelector('.utilityDropdown-btn');
+    const content = utilityDropdown.querySelector('.utilityDropdown-content');
+    if (!utilityDropdownBtn || !content) return;
+
+    utilityDropdown._dropdownContent = content;
+
+    // 初始化時即掛載到外層 utilityContainerEl（避免開關當下搬移 DOM 導致 CSS transition 失效）
+    if (utilityContainerEl && content.parentElement !== utilityContainerEl) {
+        utilityContainerEl.appendChild(content);
+    }
+
+    content.querySelectorAll('.utilityMenuTitle').forEach((menuTitle) => {
+        const sub = getSubmenuElement(menuTitle);
+        if (utilityContainerEl && sub && sub.parentElement !== utilityContainerEl) {
+            utilityContainerEl.appendChild(sub);
+        }
+    });
+
+    utilityDropdownBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const isOpen = utilityDropdown.classList.contains('open');
+        // 關閉所有其他 dropdown 及子選單
+        closeAllDropdowns();
+        if (!isOpen) {
+            utilityDropdown.classList.add('open');
+            if (utilityContainerEl && content.parentElement !== utilityContainerEl) {
+                utilityContainerEl.appendChild(content);
+                void content.offsetWidth;
+            }
+            positionDropdownContent(utilityDropdown);
+            content.classList.add('open');
+        }
+    });
+
+    const updateOpenSubmenus = () => {
+        content.querySelectorAll('.utilityMenuTitle.open').forEach((menuTitle) => {
+            positionSubmenu(menuTitle);
+        });
+    };
+
+    content.addEventListener('scroll', () => {
+        updateScrollIndicatorState(content);
+        updateOpenSubmenus();
+    }, { passive: true });
+
+    content.querySelector('#extensionsMenuList')?.addEventListener('scroll', () => {
+        updateOpenSubmenus();
+    }, { passive: true });
+
+    content.addEventListener('click', (event) => {
+        if (event.target.closest('.utilitySubmenu .utilityButton')) {
+            return;
+        }
+        const menuTitle = event.target.closest('.utilityMenuTitle');
+        if (!menuTitle || !content.contains(menuTitle)) {
+            if (!event.target.closest('.utilityButton')) {
+                event.stopPropagation();
+            }
+            return;
+        }
+        event.stopPropagation();
+        const isOpen = menuTitle.classList.contains('open');
+        if (isOpen && menuTitle.dataset.hoverOpen === 'true') {
+            delete menuTitle.dataset.hoverOpen;
+            positionSubmenu(menuTitle);
+            return;
+        }
+        if (isOpen) {
+            closeSubmenu(menuTitle);
+        } else {
+            openSubmenu(menuTitle, content, false);
+        }
+    });
+
+    content.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target.closest('.utilitySubmenu .utilityButton')) return;
+        const menuTitle = event.target.closest('.utilityMenuTitle');
+        if (!menuTitle || !content.contains(menuTitle)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (menuTitle.classList.contains('open')) {
+            closeSubmenu(menuTitle);
+        } else {
+            openSubmenu(menuTitle, content, false);
+        }
+    });
+
+    content.addEventListener('mouseover', (event) => {
+        const isPortrait = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+        if (isPortrait || !window.matchMedia('(hover: hover)').matches) return;
+        const menuTitle = event.target.closest('.utilityMenuTitle');
+        if (!menuTitle || !content.contains(menuTitle)) return;
+        openSubmenu(menuTitle, content, true);
+    });
+
+    content.addEventListener('mouseout', (event) => {
+        const isPortrait = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+        if (isPortrait || !window.matchMedia('(hover: hover)').matches) return;
+        const menuTitle = event.target.closest('.utilityMenuTitle');
+        if (!menuTitle || !content.contains(menuTitle)) return;
+        if (menuTitle.contains(event.relatedTarget)) return;
+        if (menuTitle._hoverCloseTimer) clearTimeout(menuTitle._hoverCloseTimer);
+        menuTitle._hoverCloseTimer = setTimeout(() => {
+            closeSubmenu(menuTitle);
+        }, 100);
+    });
 });
 
+document.addEventListener('click', () => {
+    closeAllDropdowns();
+});
 
 
 quickGenerateButton.addEventListener('click', () => {
@@ -5546,210 +6064,75 @@ ${t('popup.quickGenerate.beatLabel')} <input type="number" id="quickBeat" value=
 editorInput.addEventListener('scroll', () => {
     syncHighlightLayerScroll();
 });
+editorInput.addEventListener('wheel', () => {
+    cancelEditorAutoScroll();
+}, { passive: true });
+editorInput.addEventListener('pointerdown', () => {
+    cancelEditorAutoScroll();
+}, { passive: true });
 editorInput.addEventListener('touchmove', () => {
     syncHighlightLayerScroll();
 }, { passive: true });
 editorInput.addEventListener('touchstart', () => {
+    cancelEditorAutoScroll();
     syncHighlightLayerScroll();
 }, { passive: true });
-
-/**
- * 1. 狀態管理
- */
-const visualScroller = {
-    isActive: false,
-    startX: 0, startY: 0,
-    lastX: 0, lastY: 0,
-    startTime: 0,
-    lastTime: 0,
-    velocity: 0, // 每毫秒移動的像素量 (px/ms)
-    axis: 'vertical',
-    momentumFrame: null,
-    frictionCoeff: 0.01,
-
-    pxToSec(px) {
-        // 確保相容主 Scroller 或 PreviewScroller 的縮放基準
-        const currentRenderer = this.axis === 'vertical' ? visualEditorRenderer : previewRender;
-        const zoom = currentRenderer ? currentRenderer.zoom : 100;
-        return px / zoom;
-    }
-};
 
 /**
  * 2. 核心更新與慣性邏輯 (Unified Time & Scroller Pipeline)
  */
 const updateVisualTime = (newTime) => {
-    const min = parseFloat(timeline.min) || 0;
-    const max = parseFloat(timeline.max) || 0;
+    hideFloatingMenu();
+    const min = cachedTimelineMin;
+    const max = cachedTimelineMax;
     const clampedTime = Math.max(min, Math.min(max, newTime));
 
-    timeControlSliding = true;
-    updateSlider(clampedTime);
-    realTime = clampedTime;
-    globalTime = clampedTime - musicDelay;
-
-    audioManager.stopAllLongSounds();
-    videoSeekDebounce(realTime);
-
-    if (playButton.dataset.playing === 'true') {
-        const currentBgmTime = audioManager.getBGMTime();
-        if (currentBgmTime === null || Math.abs(currentBgmTime - realTime) > 0.2) {
-            audioManager.playBGM(realTime);
-            syncPlayTimer();
-        }
-    } else {
-        audioManager.clearSoundQueue();
-        audioManager.stopBGM();
-        draw();
-        if (settings.cursorFollow) {
-            const point = rawData.slice(0, nowIndex + 1).join(',').length;
-            editorInput.selectionStart = point;
-            editorInput.selectionEnd = point;
-            cursorLastIndexTime = dataIndexToTime[nowIndex] ?? 0;
-        }
+    playbackEngine.seekToRealTime(clampedTime);
+    const hasSelection = editorInput && editorInput.selectionStart !== editorInput.selectionEnd;
+    if (settings.cursorFollow && !playbackEngine.isPlaying && !hasSelection) {
+        const point = getCharOffsetAtIndex(nowIndex);
+        editorInput.selectionStart = point;
+        editorInput.selectionEnd = point;
+        cursorLastIndexTime = dataIndexToTime[nowIndex] ?? 0;
     }
-    slideInputDebounce();
 };
 
-const startMomentum = () => {
-    cancelAnimationFrame(visualScroller.momentumFrame);
-    let vel = visualScroller.velocity;
-    let lastFrameTime = performance.now();
-    const directionMult = visualScroller.axis === 'vertical' ? 1 : -1;
+const smoothBpmLauncher = initSmoothBpmLauncher({
+    smoothBpmBtn,
+    getRealTime: () => playbackEngine.realTime,
+    getDecodedTags: () => decodedTags,
+    getClockBpm: () => clockBpm,
+    getDataIndexToTime: () => dataIndexToTime,
+    getAudioBuffer: () => audioManager.bgmBuffer,
+    getMusicDelay: () => musicDelay,
+    editorInput,
+    findCommaCharIndex,
+    updateEditorAndSave,
+    simpleToast,
+    t
+});
 
-    const step = (now) => {
-        const dt = now - lastFrameTime;
-        lastFrameTime = now;
-
-        const clampedDt = Math.min(100, dt);
-
-        // 速度極微小時停止慣性，並排程清除 sliding 標記與儲存 IDB
-        if (Math.abs(vel) < 0.04) {
-            visualScroller.momentumFrame = null;
-            slideInputDebounce();
-            return;
-        }
-
-        const deltaPx = vel * clampedDt * directionMult;
-        const deltaSec = visualScroller.pxToSec(deltaPx);
-
-        updateVisualTime(realTime + deltaSec);
-
-        vel *= Math.exp(-visualScroller.frictionCoeff * clampedDt);
-
-        visualScroller.momentumFrame = requestAnimationFrame(step);
-    };
-    visualScroller.momentumFrame = requestAnimationFrame(step);
-};
-
-/**
- * 3. 通用拖拽處理器 (工廠函式)
- */
-const bindScrollerEvents = (element, axis = 'vertical') => {
-    element.style.touchAction = 'none';
-    element.style.cursor = 'grab';
-
-    element.addEventListener('pointerdown', (e) => {
-        // 如果正在播放則暫停
-        if (playButton.dataset.playing === 'true' && settings.autoPauseOnScroll) {
-            playButton.click(); // 觸發全域暫停邏輯，確保狀態同步
-        }
-        if (e.button !== 0) return;
-        cancelAnimationFrame(visualScroller.momentumFrame);
-
-        visualScroller.isActive = true;
-        visualScroller.axis = axis;
-        visualScroller.lastTime = performance.now();
-        visualScroller.startTime = realTime;
-        visualScroller.velocity = 0;
-
-        if (axis === 'vertical') {
-            visualScroller.startY = e.clientY;
-            visualScroller.lastY = e.clientY;
-        } else {
-            visualScroller.startX = e.clientX;
-            visualScroller.lastX = e.clientX;
-        }
-
-        element.setPointerCapture(e.pointerId);
-        element.style.cursor = 'grabbing';
-    });
-
-    element.addEventListener('pointermove', (e) => {
-        if (!visualScroller.isActive) return;
-
-        const now = performance.now();
-        const dt = now - visualScroller.lastTime;
-
-        if (axis === 'vertical') {
-            const currentY = e.clientY;
-            if (dt > 0) {
-                const instantVel = (currentY - visualScroller.lastY) / dt;
-                visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
-            }
-            const deltaSec = visualScroller.pxToSec(visualScroller.startY - currentY);
-            updateVisualTime(visualScroller.startTime - deltaSec);
-            visualScroller.lastY = currentY;
-        } else {
-            const currentX = e.clientX;
-            if (dt > 0) {
-                const instantVel = (currentX - visualScroller.lastX) / dt;
-                visualScroller.velocity = visualScroller.velocity * 0.3 + instantVel * 0.7;
-            }
-            const deltaSec = visualScroller.pxToSec(visualScroller.startX - currentX);
-            updateVisualTime(visualScroller.startTime + deltaSec);
-            visualScroller.lastX = currentX;
-        }
-        visualScroller.lastTime = now;
-    });
-
-    const handlePointerUp = (e) => {
-        if (!visualScroller.isActive) return;
-        visualScroller.isActive = false;
-        element.releasePointerCapture(e.pointerId);
-        element.style.cursor = 'grab';
-
-        if (Math.abs(visualScroller.velocity) > 0.05) {
-            startMomentum();
-        } else {
-            slideInputDebounce();
-        }
-    };
-
-    element.addEventListener('pointerup', handlePointerUp);
-    element.addEventListener('pointercancel', handlePointerUp);
-
-    // 滾輪處理
-    element.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const renderer = axis === 'vertical' ? visualEditorRenderer : previewRender;
-        if (!renderer) return;
-
-        if (e.ctrlKey) {
-            const factor = e.deltaY > 0 ? (1 / 1.15) : 1.15;
-            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, settings.visualZoom * factor));
-            settings.visualZoom = newZoom;
-            renderer.setZoom(newZoom);
-            saveSettingsDebounce();
-            draw();
-        } else {
-            const scrollDelta = visualScroller.pxToSec(e.deltaY * (e.deltaMode === 1 ? 20 : 1));
-            updateVisualTime(realTime + scrollDelta);
-        }
-    }, { passive: false });
-};
-
-/**
- * 4. 最終綁定
- */
-bindScrollerEvents(visualEditor, 'vertical');
-bindScrollerEvents(previewCanvas, 'horizontal');
+const { visualScroller, startMomentum, stopSmoothWheel, bindScrollerEvents } = initVisualScroller({
+    visualEditor,
+    previewCanvas,
+    getVisualEditorRenderer: () => visualEditorRenderer,
+    getPreviewRender: () => previewRender,
+    getRealTime: () => playbackEngine.realTime,
+    updateVisualTime,
+    slideInputDebounce: (...args) => slideInputDebounce(...args),
+    getSettings: () => settings,
+    saveSettingsDebounce: (...args) => saveSettingsDebounce(...args),
+    draw,
+    getPlayButton: () => playButton,
+    getPlaybackEngine: () => playbackEngine
+});
 
 const pairs = { '(': ')', '{': '}', '[': ']' };
 const closingChars = new Set(Object.values(pairs));
 
 // 🔴 新增一個全域防重疊鎖
 let isBracketProcessing = false;
+let editorAutocomplete = null;
 
 // 括號補齊／跳過
 editorInput.addEventListener('beforeinput', (e) => {
@@ -5783,6 +6166,7 @@ editorInput.addEventListener('beforeinput', (e) => {
             // 3. 觸發業務邏輯更新
             if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
             if (typeof inputDebounce === 'function') inputDebounce();
+            editorAutocomplete?.refresh();
 
             // 🔴 釋放防護鎖
             isBracketProcessing = false;
@@ -5791,6 +6175,7 @@ editorInput.addEventListener('beforeinput', (e) => {
     } else if (closingChars.has(char) && start === end && value[start] === char) { // 閉括號：跳過
         e.preventDefault();
         editorInput.selectionStart = editorInput.selectionEnd = start + 1;
+        editorAutocomplete?.refresh();
     }
 });
 
@@ -5806,220 +6191,103 @@ editorInput.addEventListener('keydown', (e) => {
 
         if (typeof applyHighlight === 'function') applyHighlight(editorInput.value);
         if (typeof inputDebounce === 'function') inputDebounce();
+        editorAutocomplete?.refresh();
     }
 });
 
-addMusicButton.addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'audio/*';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const url = URL.createObjectURL(file);
-            await audioManager.setBackgroundMusic(url, file);
-            setEndtime(endTime);
-            projSet('resource_bgm', file);
-        }
-    };
-    input.click();
+let _highlightRafId = null;
+let _pendingHighlightText = null;
+let _lastRenderedHighlightText = null;
+let _lastRenderedWarningKey = null;
+
+const editorHighlightOverlay = new EditorHighlightOverlay({
+    canvas: editorHighlightCanvas,
+    highlightLayer,
+    getDPR,
 });
 
-addVideoButton.addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'video/*';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            backgroundVideo = file;
-            editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-            editorBackgroundVideo.style.display = 'none';
-            projSet('background_video', file).then(() => {
-                simpleToast({ content: '已儲存背景影片', type: 'success' });
-            }).catch((error) => {
-                console.error('儲存背景影片失敗:', error);
-            });
-            applyMovieBrightness(settings.moviebrightness);
-        }
-    };
-    input.click();
+editorAutocomplete = initEditorAutocomplete({
+    editorInput,
+    editorContainer,
+    highlightLayer,
+    editorHighlightOverlay,
+    getSettings: () => settings,
+    getMaidata: () => maidata,
+    isVisualMode,
+    applyHighlight,
+    inputDebounce,
+    recordEditorHistory,
+    openSettings: () => openSettingsModal({ initialTab: 'operation' }),
 });
+let _lastHighlightedNoteIndex = -1;
+let _lastHighlightedText = null;
+let _lastHighlightedEnabled = null;
+let _lastAutoScrollEnabled = null;
+let _editorAutoScrollRafId = null;
+let _editorAutoScrollTarget = null;
+let _lastUnfocusedSelKey = '';
 
-importFromVideoButton.addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'video/*';
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            // 1. 載入背景影片
-            backgroundVideo = file;
-            editorBackgroundVideo.src = URL.createObjectURL(backgroundVideo);
-            editorBackgroundVideo.style.display = 'none';
-            await projSet('background_video', file);
-
-            // 2. 載入背景音樂 (直接使用影片檔案作為音訊來源解碼)
-            const url = URL.createObjectURL(file);
-            await audioManager.setBackgroundMusic(url, file);
-            setEndtime(endTime);
-            await projSet('resource_bgm', file);
-            applyMovieBrightness(settings.moviebrightness);
-
-            simpleToast({ content: t('toast.videoImportSuccess'), type: 'success' });
-        }
-    };
-    input.click();
-});
-
-downloadButton.addEventListener('click', () => {
-    // 1. 內部工具：提取檔案主名稱 (不含副檔名)
-    const getBaseName = (file) => {
-        if (!file || !file.name) return null;
-        return file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-    };
-
-    // 2. 計算預填名稱優先級：maidata.title > bgm filename > simai_package
-    const defaultName = (maidata && maidata.title)
-        || getBaseName(audioManager.bgmFile)
-        || 'simai_package';
-
-    const container = document.createElement('div');
-    const textEl = document.createElement('label');
-    textEl.textContent = t('popup.download.fileName');
-    textEl.style.cssText = "display:block;margin-bottom:5px;font-size:12px;color: lightgray;";
-    container.appendChild(textEl);
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.placeholder = t('popup.download.placeholder');
-    nameInput.value = defaultName; // --- 這裡預填名稱 ---
-    nameInput.style.cssText = "width:calc(100% - 20px);padding:8px;font-size:12px;margin-bottom:10px;background:#151515;color:white;border:1px solid #444;border-radius:4px;";
-
-    // 選取文字以便使用者快速覆蓋
-    setTimeout(() => nameInput.select(), 100);
-    container.appendChild(nameInput);
-
-    // 3. 核心邏輯：最終取得的檔名 (處理使用者手動刪減為空的情況)[cite: 4]
-    const getFinalName = () => {
-        const val = nameInput.value.trim();
-        // 如果輸入框被刪到全空，則依照 bgm filename > simai_package 的順序 fallback
-        return val || getBaseName(audioManager.bgmFile) || 'simai_package';
-    };
-
-    const sanitize = (name) => name.replace(/[\\/:*?"<>|]/g, '_');
-
-    popupWindow({
-        title: t('popup.download.title'),
-        customContent: container,
-        buttons: [
-            {
-                text: t('popup.download.downloadMaidata'),
-                onClick: () => {
-                    const content = typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : "";
-                    const blob = new Blob([content], { type: 'text/plain' });
-                    const fileName = sanitize(getFinalName());
-
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `${fileName}.txt`;
-                    a.click();
-                }
-            },
-            {
-                text: t('popup.download.packZip'),
-                onClick: async (ctx) => {
-                    ctx.setProgress(5);
-                    await ensureJSZip();
-                    ctx.setProgress(10);
-                    const zip = new JSZip();
-                    const fileName = sanitize(getFinalName());
-
-                    // 寫入檔案[cite: 4]
-                    zip.file("maidata.txt", typeof getSimaiDataString === 'function' ? getSimaiDataString(maidata) : "");
-
-                    if (backgroundImage) {
-                        const bgExt = backgroundImage.name?.split('.').pop() || 'png';
-                        zip.file(`bg.${bgExt}`, backgroundImage);
-                    }
-
-                    if (audioManager.haveBGM()) {
-                        const bgm = audioManager.bgmFile;
-                        const bgmExt = bgm.name?.split('.').pop() || 'mp3';
-                        if (bgm instanceof Blob) {
-                            zip.file(`track.${bgmExt}`, bgm);
-                        } else if (typeof bgm === 'string') {
-                            try {
-                                const resp = await fetch(bgm);
-                                zip.file(`track.${bgmExt}`, await resp.blob());
-                            } catch (e) { console.error("BGM 下載失敗", e); }
-                        }
-                    }
-
-                    if (backgroundVideo) {
-                        const videoExt = backgroundVideo.name?.split('.').pop() || 'mp4';
-                        zip.file(`pv.${videoExt}`, backgroundVideo);
-                    }
-
-                    ctx.setProgress(40);
-                    const content = await zip.generateAsync({ type: "blob" }, (m) => ctx.setProgress(40 + m.percent * 0.6));
-
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(content);
-                    a.download = `${fileName}.zip`;
-                    a.click();
-                    ctx.close();
-                }
-            },
-            { text: t('popup.cancel'), hideOnClick: true }
-        ]
-    });
-});
-
-function applyHighlight(text) {
-    const warningRanges = warningPositions.map(index => {
-        const start = rawData.slice(0, index).join(',').length + 1;
-        const end = rawData.slice(0, index + 1).join(',').length;
-        return { start, end };
-    });
-    highlightLayer.innerHTML = getHighlight(text, warningRanges);
-    warningPositions = []; // 重置警告位置，等待下一次解析更新
+function cancelEditorAutoScroll() {
+    if (_editorAutoScrollRafId !== null) {
+        cancelAnimationFrame(_editorAutoScrollRafId);
+        _editorAutoScrollRafId = null;
+    }
+    _editorAutoScrollTarget = null;
 }
 
-const slideInputDebounce = debounce(() => {
-    timeControlSliding = false;
-    // 嘗試將背景影片定位到播放時間並播放；若尚未載入則在可播放時再嘗試
-    if (editorBackgroundVideo && editorBackgroundVideo.src) {
-        const setTimeAndTryPlay = () => {
-            try {
-                editorBackgroundVideo.currentTime = realTime;
-            } catch (e) {
-                // 在某些瀏覽器於 metadata 尚未就緒前 set currentTime 會拋錯，忽略並等待 canplay
-                console.warn('設定背景影片時間失敗，將在 canplay 時重試', e);
-            }
+function smoothScrollEditorTo(targetTop) {
+    const viewH = editorInput.clientHeight;
+    const maxScroll = Math.max(0, editorInput.scrollHeight - viewH);
+    const clamped = Math.max(0, Math.min(maxScroll, targetTop));
+    if (Math.abs(clamped - editorInput.scrollTop) < 1) return;
 
-            const p = editorBackgroundVideo.play();
-            if (p && typeof p.catch === 'function') {
-                p.catch((err) => {
-                    // play 失敗時，等候 canplay 再重試一次
-                    const onCanPlay = () => {
-                        editorBackgroundVideo.removeEventListener('canplay', onCanPlay);
-                        editorBackgroundVideo.play().catch(() => { });
-                    };
-                    editorBackgroundVideo.addEventListener('canplay', onCanPlay, { once: true });
-                });
-            }
-        };
+    _editorAutoScrollTarget = clamped;
+    if (_editorAutoScrollRafId !== null) return;
 
-        if (playButton.dataset.playing === 'true') {
-            if (editorBackgroundVideo.readyState >= 1) {
-                // metadata 已就緒，可以立刻設定時間並嘗試播放
-                setTimeAndTryPlay();
-            } else {
-                // 等待 metadata/canplay
-                editorBackgroundVideo.addEventListener('loadedmetadata', setTimeAndTryPlay, { once: true });
+    const step = () => {
+        _editorAutoScrollRafId = null;
+        if (_editorAutoScrollTarget === null) return;
+        const cur = editorInput.scrollTop;
+        const diff = _editorAutoScrollTarget - cur;
+        if (Math.abs(diff) <= 1.2) {
+            editorInput.scrollTop = _editorAutoScrollTarget;
+            highlightLayer.scrollTop = editorInput.scrollTop;
+            editorHighlightOverlay.render();
+            _editorAutoScrollTarget = null;
+            return;
+        }
+        const factor = Math.abs(diff) > editorInput.clientHeight ? 0.35 : 0.22;
+        editorInput.scrollTop = cur + diff * factor;
+        highlightLayer.scrollTop = editorInput.scrollTop;
+        editorHighlightOverlay.render();
+        _editorAutoScrollRafId = requestAnimationFrame(step);
+    };
+    _editorAutoScrollRafId = requestAnimationFrame(step);
+}
+
+function getTrimmedNoteRange(text, start, end) {
+    let s = Math.max(0, start);
+    let e = Math.min(text.length, end);
+    while (s < e) {
+        if (/\s/.test(text[s])) {
+            s++;
+        } else if (text[s] === '|' && text[s + 1] === '|') {
+            s += 2;
+            while (s < e && text[s] !== '\n' && text[s] !== '\r') s++;
+        } else if (text[s] === '|' && text[s + 1] === '*') {
+            s += 2;
+            while (s < e) {
+                if (text[s] === '*' && text[s + 1] === '|') {
+                    s += 2;
+                    break;
+                }
+                s++;
             }
+        } else {
+            break;
         }
     }
+<<<<<<< HEAD
     if (editorSync && editorSync.isConnected()) {
         editorSync.sendSeek(realTime);
     }
@@ -6033,75 +6301,208 @@ const videoSeekDebounce = debounce((time) => {
         if (Math.abs(editorBackgroundVideo.currentTime - time) > 0.05) {
             try { editorBackgroundVideo.currentTime = time; } catch (_) { }
         }
+=======
+    while (e > s && /\s/.test(text[e - 1])) {
+        e--;
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     }
-}, 50);
+    return { start: s, end: e };
+}
 
-timeline.addEventListener('input', () => {
-    updateVisualTime(parseFloat(timeline.value));
+function clearCurrentNoteHighlight() {
+    editorHighlightOverlay.clearCurrentNoteRects();
+    _lastHighlightedNoteIndex = -1;
+}
+
+function updateUnfocusedSelectionHighlight(force = false) {
+    const editorShown = editorContainer && editorContainer.style.display !== 'none' && !isVisualMode();
+    const isEditorFocused = document.activeElement === editorInput && (typeof document.hasFocus !== 'function' || document.hasFocus());
+    const selStart = editorInput?.selectionStart ?? 0;
+    const selEnd = editorInput?.selectionEnd ?? 0;
+    const shouldShow = Boolean(editorShown && !isEditorFocused && selStart < selEnd);
+
+    if (!shouldShow) {
+        if (_lastUnfocusedSelKey !== '') {
+            editorHighlightOverlay.clearSelectionRects();
+            _lastUnfocusedSelKey = '';
+        }
+        return;
+    }
+
+    const key = `${selStart}:${selEnd}:${editorHighlightOverlay.textIndex.length}:${editorInput.value.length}`;
+    if (!force && key === _lastUnfocusedSelKey) return;
+    _lastUnfocusedSelKey = key;
+
+    const rects = editorHighlightOverlay.measureContentRects(selStart, selEnd, 1, false);
+    editorHighlightOverlay.setSelectionRects(rects);
+}
+
+editorInput.addEventListener('focus', () => updateUnfocusedSelectionHighlight(true));
+editorInput.addEventListener('blur', () => updateUnfocusedSelectionHighlight(true));
+window.addEventListener('focus', () => updateUnfocusedSelectionHighlight(true));
+window.addEventListener('blur', () => updateUnfocusedSelectionHighlight(true));
+
+function updateCurrentNoteHighlight(force = false) {
+    const highlightEnabled = settings.highlightCurrentNote !== false;
+    const autoScrollEnabled = settings.editorAutoScroll !== false && Boolean(playbackEngine?.isPlaying);
+    const editorShown = editorContainer && editorContainer.style.display !== 'none' && !isVisualMode();
+    if ((!highlightEnabled && !autoScrollEnabled) || !editorShown || notes.length === 0 || rawData.length === 0) {
+        if (_lastHighlightedEnabled !== false || _lastAutoScrollEnabled !== false || _lastHighlightedNoteIndex !== -1) {
+            clearCurrentNoteHighlight();
+            cancelEditorAutoScroll();
+            _lastHighlightedEnabled = false;
+            _lastAutoScrollEnabled = false;
+        }
+        return;
+    }
+
+    const text = editorInput.value;
+    if (
+        !force &&
+        _lastHighlightedEnabled === highlightEnabled &&
+        _lastAutoScrollEnabled === autoScrollEnabled &&
+        nowIndex === _lastHighlightedNoteIndex &&
+        text === _lastHighlightedText
+    ) {
+        return;
+    }
+
+    _lastHighlightedEnabled = highlightEnabled;
+    _lastAutoScrollEnabled = autoScrollEnabled;
+    _lastHighlightedNoteIndex = nowIndex;
+    _lastHighlightedText = text;
+
+    const rawRange = getNoteRangeAtIndex(nowIndex);
+    const rangeOffsets = getTrimmedNoteRange(text, rawRange.start, rawRange.end);
+    const rects = editorHighlightOverlay.measureContentRects(rangeOffsets.start, rangeOffsets.end, 2, true);
+
+    if (highlightEnabled) {
+        editorHighlightOverlay.setCurrentNoteRects(rects);
+    } else {
+        editorHighlightOverlay.clearCurrentNoteRects();
+    }
+
+    if (autoScrollEnabled && rects && rects.length > 0) {
+        const firstRect = rects[0];
+        const noteTop = firstRect.y;
+        const noteBottom = noteTop + firstRect.h;
+        const viewTop = _editorAutoScrollTarget !== null ? _editorAutoScrollTarget : editorInput.scrollTop;
+        const viewH = editorInput.clientHeight;
+        if (viewH > 0) {
+            const topSafe = viewH * 0.15;
+            const bottomSafe = viewH * 0.65;
+            if (noteTop < viewTop + topSafe || noteBottom > viewTop + bottomSafe) {
+                smoothScrollEditorTo(noteTop - viewH * 0.35);
+            }
+        }
+    }
+}
+
+function renderHighlightNow(text) {
+    const diagnosticRanges = settings.enableSyntaxCheck === false ? [] : [
+        ...errorPositions.map(index => {
+            const range = getNoteRangeAtIndex(index);
+            return { start: range.start, end: range.end, level: 'error' };
+        }),
+        ...warningPositions.map(index => {
+            const range = getNoteRangeAtIndex(index);
+            return { start: range.start, end: range.end, level: 'warning' };
+        })
+    ];
+    const warningKey = diagnosticRanges.map(r => `${r.level}:${r.start}:${r.end}`).join(',');
+
+    // 若文字與錯誤/警告範圍完全未變，直接跳過 DOM 重構以杜絕不必要的 Reflow
+    if (text === _lastRenderedHighlightText && warningKey === _lastRenderedWarningKey) {
+        return;
+    }
+
+    _lastRenderedHighlightText = text;
+    _lastRenderedWarningKey = warningKey;
+    highlightLayer.innerHTML = getHighlight(text, diagnosticRanges);
+    editorHighlightOverlay.invalidateText();
+    updateCurrentNoteHighlight(true);
+    updateUnfocusedSelectionHighlight(true);
+}
+
+function applyHighlight(text, immediate = false) {
+    _pendingHighlightText = text;
+
+    if (immediate) {
+        if (_highlightRafId !== null) {
+            cancelAnimationFrame(_highlightRafId);
+            _highlightRafId = null;
+        }
+        renderHighlightNow(text);
+        return;
+    }
+
+    if (_highlightRafId !== null) return;
+
+    _highlightRafId = requestAnimationFrame(() => {
+        _highlightRafId = null;
+        if (_pendingHighlightText !== null) {
+            renderHighlightNow(_pendingHighlightText);
+        }
+    });
+}
+
+// === 實例化中央播放引擎 (PlaybackEngine) ===
+const playbackEngine = new PlaybackEngine({
+    appContext,
+    audioManager,
+    majdataWs,
+    getSettings: () => settings,
+    getRenderer: () => renderer,
+    getNotes: () => notes,
+    getEndTime: () => endTime,
+    getMusicDelay: () => musicDelay,
+    getNowIndex: () => nowIndex,
+    getRawData: () => rawData,
+    getDataIndexToTime: () => dataIndexToTime,
+    getCharOffsetAtIndex,
+    getSecondaryWindow: () => secondaryWindow,
+    getSecondCtx: () => secondCtx,
+    getBackgroundImage: () => backgroundImage,
+    getBackgroundVideo: () => backgroundVideo,
+    editorBackgroundImage,
+    editorBackgroundVideo,
+    editorInput,
+    changeDifficulty,
+    getMaidata: () => maidata,
+    draw: (dt) => draw(dt),
+    updateSlider: (time, force = false) => updateSlider(time, force),
+    projSet,
+    t,
+    simpleToast,
+    getIsImagesLoaded: () => isImagesLoaded,
+    stopSmoothWheel: () => stopSmoothWheel(),
+    onTimeUpdate: (rt, gt, lst) => {
+        realTime = rt;
+        globalTime = gt;
+        if (lst !== undefined) lastStartTime = lst;
+    }
 });
 
-let bgmUpdateTimer = null;
+appContext.register('playbackEngine', playbackEngine);
+appContext.register('getIsImagesLoaded', () => isImagesLoaded);
+appContext.register('getIsInitComplete', () => isInitComplete);
 
-if (keepRenderingWhilePause) requestAnimationFrame(update);
-
-function updatePauseBackgroundDisplay() {
-    const hideBg = !!settings.hideBackgroundWhenPaused;
-    const showCover = !!settings.showCoverWhenPaused;
-
-    const hasVideo = !!(backgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1);
-    const hasImage = !!(backgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
-
-    if (hideBg) {
-        // [v] 暫停時隱藏背景 -> 以隱藏為優先
-        editorBackgroundImage.style.display = 'none';
-        editorBackgroundVideo.style.display = 'none';
-    } else if (showCover) {
-        // [ ] 隱藏 + [v] 顯示封面圖 -> 優先顯示封面圖
-        editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
-        editorBackgroundVideo.style.display = 'none';
+// 監聽播放狀態變更，自動同步按鈕 UI
+eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying, realTime }) => {
+    hideFloatingMenu();
+    playButton.dataset.playing = isPlaying ? 'true' : 'false';
+    playButton.children[0].innerText = isPlaying ? 'pause' : 'play_arrow';
+    updateSlider(realTime ?? playbackEngine.realTime, true);
+    if (isPlaying) {
+        updateCurrentNoteHighlight(true);
     } else {
-        // [ ] 隱藏 + [ ] 顯示封面圖 -> 顯示影片，無影片直接全部隱藏
-        editorBackgroundImage.style.display = 'none';
-        editorBackgroundVideo.style.display = hasVideo ? 'block' : 'none';
+        cancelEditorAutoScroll();
     }
-}
+});
 
-let lastStartTime = 0;
-
-function sendMajdataPlay() {
-    if (!majdataWs.isConnected()) return;
-
-    // 確保 MajdataViewX 的 _state 進入 ViewStatus.Loaded
-    majdataWs.sendLoad({
-        trackPath: '',
-        imagePath: '',
-        videoPath: ''
-    });
-
-    const fumenText = editorInput.value || '';
-    const diffVal = changeDifficulty ? changeDifficulty.value : '3';
-    const diffIdx = isNaN(parseInt(diffVal)) ? 3 : Math.max(0, parseInt(diffVal) - 1);
-    const titleStr = (maidata && maidata.title) ? maidata.title : '';
-    const artistStr = (maidata && maidata.artist) ? maidata.artist : '';
-    const designerStr = (maidata && maidata['des_' + diffVal]) ? maidata['des_' + diffVal] : '';
-    const levelStr = (maidata && maidata['lv_' + diffVal]) ? maidata['lv_' + diffVal] : '';
-    const offsetVal = (typeof musicDelay !== 'undefined') ? musicDelay : 0;
-
-    majdataWs.play({
-        mode: 0,
-        startAt: realTime || 0,
-        speed: settings.playbackSpeed || 1,
-        title: titleStr,
-        artist: artistStr,
-        offset: offsetVal,
-        designer: designerStr,
-        level: levelStr,
-        fumen: fumenText,
-        difficulty: diffIdx
-    });
-}
-
+// UI 控制按鈕綁定
 playButton.addEventListener('click', () => {
+<<<<<<< HEAD
     bgmUpdateTimer = null; // 重置 BGM 更新計時器
     if (playButton.dataset.playing === 'true') {
         updatePauseBackgroundDisplay();
@@ -6152,9 +6553,32 @@ playButton.addEventListener('click', () => {
         }
 
         update(lastTimestamp);
+=======
+    if (!isImagesLoaded) {
+        simpleToast({ content: t('toast.loadingAssetsWait') || '素材載入中，請稍候...', type: 'warning' });
+        return;
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     }
+    playbackEngine.toggle();
+});
+resetButton.addEventListener('click', () => playbackEngine.reset());
+stopButton.addEventListener('click', () => playbackEngine.stop());
+
+timeline.addEventListener('pointerdown', () => {
+    isTimelineDragging = true;
+    playbackEngine.timeControlSliding = true;
+    if (playbackEngine.isPlaying) {
+        audioManager?.stopBGM();
+    }
+});
+timeline.addEventListener('input', () => {
+    playbackEngine.timeControlSliding = true;
+    const val = parseFloat(timeline.value);
+    syncTimelineProgress(val);
+    updateVisualTime(val);
     slideInputDebounce();
 });
+<<<<<<< HEAD
 
 resetButton.addEventListener('click', () => {
     updatePauseBackgroundDisplay();
@@ -6184,35 +6608,53 @@ resetButton.addEventListener('click', () => {
     }
 
     draw(); // 立即更新畫布，反映停止狀態
+=======
+timeline.addEventListener('pointerup', () => {
+    isTimelineDragging = false;
+    slideInputDebounce();
+});
+timeline.addEventListener('pointercancel', () => {
+    isTimelineDragging = false;
+    syncTimelineProgress(parseFloat(timeline.value));
+    slideInputDebounce();
+});
+timeline.addEventListener('change', () => {
+    isTimelineDragging = false;
+    const val = parseFloat(timeline.value);
+    syncTimelineProgress(val);
+    slideInputDebounce();
+    projSet('timeControl', playbackEngine.realTime).catch(() => { });
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 });
 
-stopButton.addEventListener('click', () => {
-    updatePauseBackgroundDisplay();
-    editorBackgroundVideo.pause();
-    playButton.dataset.playing = 'false';
-    playButton.children[0].innerText = "play_arrow";
-    bgmUpdateTimer = null;
-    lastTimestamp = null;
-    playStartTimestamp = null;
-    realTime = lastStartTime || 0;
-    globalTime = realTime - musicDelay;
-    updateSlider(realTime);
+// 保持既有輔助函式簽名向後相容
+function updatePauseBackgroundDisplay() {
+    playbackEngine.updatePauseBackgroundDisplay();
+}
 
-    // --- 停止音效與 BGM ---
-    audioManager.stopAllLongSounds();
-    audioManager.stopBGM();
+function updateVideoBackgroundDisplay() {
+    playbackEngine.updateVideoBackgroundDisplay();
+}
 
-    notes.forEach(n => n._riserActive = false); // 強制重置標記
+function requestNextFrame(callback) {
+    playbackEngine.requestNextFrame(callback);
+}
 
+<<<<<<< HEAD
     if (majdataWs.isConnected()) {
         majdataWs.stop();
     }
     if (editorSync && editorSync.isConnected()) {
         editorSync.sendRestart();
     }
+=======
+function cancelNextFrame() {
+    playbackEngine.cancelNextFrame();
+}
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
-    draw(); // 立即更新畫布，反映停止狀態
-});
+const slideInputDebounce = () => playbackEngine.slideInputDebounce();
+const videoSeekDebounce = (time) => playbackEngine.videoSeekDebounce(time);
 
 if (connectMajdataViewButton) {
     connectMajdataViewButton.addEventListener('click', () => {
@@ -6221,6 +6663,7 @@ if (connectMajdataViewButton) {
     });
 }
 
+<<<<<<< HEAD
 // 初始化編輯器端 WebRTC 同步管理器 (與 _play 雙向連動)
 editorSync.init({
     editorInput,
@@ -6274,6 +6717,95 @@ editorSync.init({
 keyboardButton.addEventListener('click', () => {
     editorInput.focus();
 });
+=======
+const formatSpeedPopoverValue = (speed) => {
+    const numericSpeed = Number(speed);
+    const validSpeed = Number.isFinite(numericSpeed) && numericSpeed > 0 ? numericSpeed : 1;
+    return `${validSpeed.toFixed(2)}x`;
+};
+
+const setSpeedPopoverOpen = (open) => {
+    if (!speedPopover || !speedControlButton) return;
+    const isOpen = Boolean(open);
+    speedPopover.classList.toggle('is-open', isOpen);
+    speedControlButton.classList.toggle('is-active', isOpen);
+    speedControlButton.setAttribute('aria-expanded', String(isOpen));
+    speedPopover.setAttribute('aria-hidden', String(!isOpen));
+    if (isOpen && speedPopoverInput) {
+        speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+    }
+};
+
+if (speedControlButton && speedPopover) {
+    speedControlButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSpeedPopoverOpen(!speedPopover.classList.contains('is-open'));
+    });
+
+    speedPopover.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    speedPopoverMinus?.addEventListener('click', () => {
+        const sp = Math.max(0.25, (Number(settings.playbackSpeed) || 1) - 0.25);
+        setPlaybackSpeed(sp);
+    });
+
+    speedPopoverAdd?.addEventListener('click', () => {
+        const sp = Math.min(2.0, (Number(settings.playbackSpeed) || 1) + 0.25);
+        setPlaybackSpeed(sp);
+    });
+
+    speedPopoverReset?.addEventListener('click', () => {
+        setPlaybackSpeed(1);
+        simpleToast({ content: t('toast.resetPlaybackSpeed'), type: 'success', timeout: 1800 });
+    });
+
+    if (speedPopoverInput) {
+        speedPopoverInput.addEventListener('focus', () => {
+            speedPopoverInput.select();
+        });
+
+        speedPopoverInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                speedPopoverInput.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+                speedPopoverInput.blur();
+                setSpeedPopoverOpen(false);
+            }
+        });
+
+        speedPopoverInput.addEventListener('change', () => {
+            const raw = speedPopoverInput.value.trim().replace(/x$/i, '');
+            const speed = parseFloat(raw);
+            if (isNaN(speed) || speed <= 0) {
+                simpleToast({ content: t('toast.invalidPlaybackSpeed'), type: 'warning', timeout: 1800 });
+                speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+                return;
+            }
+            setPlaybackSpeed(speed);
+            speedPopoverInput.value = formatSpeedPopoverValue(settings.playbackSpeed);
+            simpleToast({ content: t('toast.setPlaybackSpeed', { speed: settings.playbackSpeed }), type: 'success', timeout: 1800 });
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!speedPopover.classList.contains('is-open')) return;
+        if (!speedPopover.contains(e.target) && !speedControlButton.contains(e.target)) {
+            setSpeedPopoverOpen(false);
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && speedPopover.classList.contains('is-open')) {
+            setSpeedPopoverOpen(false);
+        }
+    });
+}
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
 function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const c = window.getComputedStyle(document.documentElement);
@@ -6284,19 +6816,29 @@ function updatePlaycontrol(visualVisible = false, isHidden = false) {
     const maxPlayControlsHeight = c.getPropertyValue('--const-max-playControls-height');
     const collapsedPlayControlsHeight = c.getPropertyValue('--const-collapsed-playControls-height');
     if (!isHidden) {
+        setSpeedPopoverOpen(false);
         timeline.style.display = 'none';
         mc.style.display = 'none';
         pc.style.display = 'none';
+        if (playCapsulesContainer) playCapsulesContainer.style.display = 'none';
         hideButton.dataset.hidden = 'true';
         d.setProperty('--playControls-height', '0px');
-        showPlayControlsBtn.style.display = 'block';
+        showPlayControlsBtn.style.display = 'flex';
     } else {
         showPlayControlsBtn.style.display = 'none';
+        if (playCapsulesContainer) {
+            const showCapsule = settings.timeDisplayCapsule !== false;
+            playCapsulesContainer.style.display = showCapsule ? '' : 'none';
+            if (showCapsule) {
+                updateTimeCapsule(playbackEngine?.realTime ?? realTime);
+                updateSpeedCapsule(settings.playbackSpeed);
+            }
+        }
         hideButton.dataset.hidden = 'false';
         timeline.style.display = settings.globalTimeline ? 'block' : 'none';
         mc.style.display = 'block';
         pc.style.display = 'flex';
-        if (visualVisible) {
+        if (visualVisible || settings.showMiniPreview === false) {
             previewContainer.style.display = 'none';
             d.setProperty('--playControls-height', collapsedPlayControlsHeight);
         } else {
@@ -6318,265 +6860,238 @@ hideButton.addEventListener('click', () => {
     resize();
 });
 
+/**
+ * 選取指定索引音符並將編輯器捲動至對應位置（同步高亮層與誤差 fallback）。
+ * @param {number} noteIdx
+ */
+function scrollEditorToIndex(noteIdx) {
+    const range = getNoteRangeAtIndex(noteIdx);
+    const text = editorInput.value;
+    const trimmed = getTrimmedNoteRange(text, range.start, range.end);
+
+    editorInput.focus({ preventScroll: true });
+    editorInput.setSelectionRange(range.start, range.end);
+
+    const viewH = editorInput.clientHeight;
+    if (viewH <= 0) return;
+
+    let noteTop = null;
+    let rects = editorHighlightOverlay.measureContentRects(trimmed.start, trimmed.end, 2, true);
+    if ((!rects || rects.length === 0) && text.length > 0) {
+        const anchor = Math.min(Math.max(0, range.start), text.length - 1);
+        rects = editorHighlightOverlay.measureContentRects(anchor, anchor + 1, 2, false);
+    }
+
+    if (rects && rects.length > 0) {
+        noteTop = rects[0].y;
+    } else {
+        const style = getComputedStyle(editorInput);
+        const lineHeight = parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.4) || 20;
+        const lineIdx = text.slice(0, range.start).split('\n').length - 1;
+        noteTop = lineIdx * lineHeight;
+    }
+
+    const maxScroll = Math.max(0, editorInput.scrollHeight - viewH);
+    const targetTop = Math.max(0, Math.min(maxScroll, noteTop - viewH * 0.35));
+    cancelEditorAutoScroll();
+    smoothScrollEditorTo(targetTop);
+}
+
 getNowNoteIndex.addEventListener('click', () => {
-    const point = rawData.slice(0, nowIndex + 1).join(',').length;
-    // 2. 設定游標位置
-    editorInput.selectionStart = point;
-    editorInput.selectionEnd = point;
-    editorInput.focus();
+    scrollEditorToIndex(nowIndex);
+});
+
+focusButton.addEventListener('click', () => {
+    getNowNoteIndex.click();
 });
 
 function seekToTime(targetTime) {
-    if (targetTime === undefined || isNaN(targetTime)) return;
-    const value = targetTime + musicDelay;
-    globalTime = targetTime;
-    realTime = value;
-    updateSlider(realTime);
-    slideInputDebounce();
-    audioManager.stopAllLongSounds();
-
-    if (playButton.dataset.playing === 'true') {
-        audioManager.playBGM(realTime);
-        syncPlayTimer();
-    } else {
-        draw();
-    }
+    playbackEngine.seekToTime(targetTime);
 }
 
 function findCommaCharIndex(text, commaIndex) {
+    if (!text || commaIndex <= 0) return 0;
     let count = 0;
     let i = 0;
-    while (i < text.length && count < commaIndex) {
-        const a = text[i];
-        const b = text[i + 1];
-        if (a === '|' && b === '|') {
+    let inBracket = 0;
+    let inParen = 0;
+    let inBrace = 0;
+    const len = text.length;
+
+    while (i < len && count < commaIndex) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        // 1. 單行註解 ||
+        if (c === '|' && next === '|') {
             i += 2;
-            while (i < text.length && text[i] !== '\n' && text[i] !== '\r') {
+            while (i < len && text[i] !== '\n' && text[i] !== '\r') i++;
+            if (i < len && text[i] === '\r') {
+                i++;
+                if (i < len && text[i] === '\n') i++;
+            } else if (i < len && text[i] === '\n') {
                 i++;
             }
             continue;
         }
-        if (a === ',') {
+
+        // 2. 多行註解 |* ... *|
+        if (c === '|' && next === '*') {
+            i += 2;
+            while (i < len) {
+                if (text[i] === '*' && text[i + 1] === '|') {
+                    i += 2;
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+
+        // 3. 屬性標籤 <[A-Za-z]+\*[^>]*> (例如 <SIZE*(1.5,2)>)
+        if (c === '<') {
+            const rest = text.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                i += propMatch[0].length;
+                continue;
+            }
+        }
+
+        // 4. 括號追蹤
+        if (c === '[') inBracket++;
+        else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (c === '(') inParen++;
+        else if (c === ')') inParen = Math.max(0, inParen - 1);
+        else if (c === '{') inBrace++;
+        else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+        // 5. 頂層逗號分隔符
+        if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
             count++;
         }
+
         i++;
     }
+
     return i;
 }
 
 function indexFromCursor(text, point) {
-    const textBefore = text.substring(0, point);
-    const cleanedText = textBefore.replace(/\|\|.*$/gm, "");
-    return (cleanedText.match(/,/g) || []).length;
+    if (!text || point <= 0) return 0;
+    const limit = Math.min(point, text.length);
+    let count = 0;
+    let inBracket = 0;
+    let inParen = 0;
+    let inBrace = 0;
+
+    for (let i = 0; i < limit;) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        // 1. 單行註解 ||
+        if (c === '|' && next === '|') {
+            i += 2;
+            while (i < limit && text[i] !== '\n' && text[i] !== '\r') i++;
+            if (i < limit && text[i] === '\r') {
+                i++;
+                if (i < limit && text[i] === '\n') i++;
+            } else if (i < limit && text[i] === '\n') {
+                i++;
+            }
+            continue;
+        }
+
+        // 2. 多行註解 |* ... *|
+        if (c === '|' && next === '*') {
+            i += 2;
+            while (i < limit) {
+                if (text[i] === '*' && text[i + 1] === '|') {
+                    i += 2;
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+
+        // 3. 屬性標籤 <[A-Za-z]+\*[^>]*>
+        if (c === '<') {
+            const rest = text.slice(i);
+            const propMatch = rest.match(/^<[A-Za-z]+\*[^>]*>/);
+            if (propMatch) {
+                i += propMatch[0].length;
+                continue;
+            }
+        }
+
+        // 4. 括號追蹤
+        if (c === '[') inBracket++;
+        else if (c === ']') inBracket = Math.max(0, inBracket - 1);
+        else if (c === '(') inParen++;
+        else if (c === ')') inParen = Math.max(0, inParen - 1);
+        else if (c === '{') inBrace++;
+        else if (c === '}') inBrace = Math.max(0, inBrace - 1);
+
+        // 5. 頂層逗號分隔符
+        if (c === ',' && inBracket === 0 && inParen === 0 && inBrace === 0) {
+            count++;
+        }
+
+        i++;
+    }
+
+    return count;
 }
 
 getCursorNoteIndex.addEventListener('click', () => {
     const point = editorInput.selectionStart;
-    const targetTime = dataIndexToTime[indexFromCursor(editorInput.value, point)];
+    const noteIdx = indexFromCursor(editorInput.value, point);
+    const targetTime = dataIndexToTime[noteIdx] ?? 0;
     seekToTime(targetTime);
     editorInput.focus();
 });
 
-const applySelectedRotation = (direction) => {
-    const fullText = editorInput.value;
-    if (!fullText) return;
+const rotateSelection = (dir) => applySelectedRotation(dir, { editorInput, applyHighlight, recordEditorHistory, inputDebounce });
+const flipVertical = () => applyVerticalFlip({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
+const flipHorizontal = () => applyHorizontalFlip({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
 
-    const start = editorInput.selectionStart;
-    const end = editorInput.selectionEnd;
-    const selected = start === end ? fullText : fullText.slice(start, end);
-    const rotated = contantRotate(selected, direction);
-    if (rotated === selected) return;
-
-    const newText = start === end
-        ? rotated
-        : `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
-
-    editorInput.value = newText;
-    editorInput.selectionStart = start;
-    editorInput.selectionEnd = start + rotated.length;
-    editorInput.setSelectionRange(start, start + rotated.length);
-    applyHighlight(newText);
-    recordEditorHistory();
-    inputDebounce();
-    editorInput.focus();
-};
-
-rCwiseButton.addEventListener('click', () => {
-    applySelectedRotation(1);
-});
-
-rCCwiseButton.addEventListener('click', () => {
-    applySelectedRotation(-1);
-});
-
-r180Button.addEventListener('click', () => {
-    applySelectedRotation(4);
-});
-
-function applyVerticalFlip() {
-    const start = editorInput.selectionStart;
-    const end = editorInput.selectionEnd;
-    if (start === end) return;
-
-    const fullText = editorInput.value;
-    const selected = fullText.slice(start, end);
-
-    const deMap = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1, 6: 8, 7: 7, 8: 6 };
-    const rotated = flipSelectedText(selected, deMap, (ch) => {
-        const n = parseInt(ch, 10);
-        return ((12 - n) % 8 + 1).toString();
-    }, {
-        p: 'q',
-        q: 'p'
-        // 🔴 這裡不放 < 和 >，因為上下反轉時順逆時針狀態不變
+rCwiseButton.addEventListener('click', () => rotateSelection(1));
+rCCwiseButton.addEventListener('click', () => rotateSelection(-1));
+r180Button.addEventListener('click', () => rotateSelection(4));
+fVerticalButton.addEventListener('click', flipVertical);
+fHorizontalButton.addEventListener('click', flipHorizontal);
+if (subdivisionButton) {
+    subdivisionButton.addEventListener('click', () => {
+        openSubdivisionModal({
+            editorInput,
+            applyHighlight,
+            recordEditorHistory,
+            inputDebounce
+        });
     });
-
-    const newText = `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
-    editorInput.value = newText;
-    editorInput.selectionStart = start;
-    editorInput.selectionEnd = start + rotated.length;
-    editorInput.setSelectionRange(start, start + rotated.length);
-    applyHighlight(newText);
-    recordEditorHistory();
-    inputDebounce();
-    editorInput.focus();
 }
-
-function applyHorizontalFlip() {
-    const start = editorInput.selectionStart;
-    const end = editorInput.selectionEnd;
-    if (start === end) return;
-
-    const fullText = editorInput.value;
-    const selected = fullText.slice(start, end);
-
-    const deMap = { 1: 1, 2: 8, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2 };
-    const rotated = flipSelectedText(selected, deMap, (ch) => {
-        const n = parseInt(ch, 10);
-        return ((8 - n) % 8 + 1).toString();
-    }, {
-        p: 'q',
-        q: 'p',
-        s: 'z',
-        z: 's',
-        '<': '>', // 🔴 左右反轉時，順逆時針會互換
-        '>': '<'
+if (smoothBpmMenuButton) {
+    smoothBpmMenuButton.addEventListener('click', () => {
+        smoothBpmLauncher?.openModal();
     });
-
-    const newText = `${fullText.slice(0, start)}${rotated}${fullText.slice(end)}`;
-    editorInput.value = newText;
-    editorInput.selectionStart = start;
-    editorInput.selectionEnd = start + rotated.length;
-    editorInput.setSelectionRange(start, start + rotated.length);
-    applyHighlight(newText);
-    recordEditorHistory();
-    inputDebounce();
-    editorInput.focus();
 }
-
-fVerticalButton.addEventListener('click', () => {
-    applyVerticalFlip();
-});
-
-fHorizontalButton.addEventListener('click', () => {
-    applyHorizontalFlip();
-});
+if (formatDocumentButton) {
+    formatDocumentButton.addEventListener('click', () => {
+        handleFormatDocument(editorInput, { simpleToast, t });
+    });
+}
 
 function syncPlayTimer() {
-    if (playButton.dataset.playing === 'true') {
-        playStartRealTime = realTime;
-        playStartTimestamp = performance.now();
-    }
+    playbackEngine.syncPlayTimer();
 }
 
 function update(timestamp) {
-    // 1. 基本時間計算
-    const bp = settings.playbackSpeed || 1;
-    if (lastTimestamp === null) lastTimestamp = timestamp;
-    const dt = (timestamp - lastTimestamp) / 1000; // 秒
-    lastTimestamp = timestamp;
-
-    const isPlaying = playButton.dataset.playing === 'true';
-
-    // 2. 邏輯更新區塊：僅在播放狀態且非使用者手動滑動/拖曳時推進時間
-    if (isPlaying) {
-        let timeUpdatedByBgm = false;
-        if (!timeControlSliding && audioManager.haveBGM()) {
-            const bgmTime = audioManager.getBGMTime();
-            if (bgmTime !== null) {
-                realTime = bgmTime;
-                globalTime = realTime - musicDelay;
-                timeUpdatedByBgm = true;
-                // 更新 playStart 以供 fallback 使用
-                playStartTimestamp = performance.now();
-                playStartRealTime = realTime;
-            }
-        }
-
-        if (!timeUpdatedByBgm && !timeControlSliding) {
-            if (playStartTimestamp === null) {
-                playStartTimestamp = performance.now();
-                playStartRealTime = realTime;
-            }
-            const elapsed = (performance.now() - playStartTimestamp) / 1000;
-            realTime = playStartRealTime + elapsed * bp;
-            globalTime = realTime - musicDelay;
-        }
-
-        if (settings.cursorFollow && nowIndex !== lastCursorIndex) {
-            lastCursorIndex = nowIndex;
-            cursorLastIndexTime = dataIndexToTime[nowIndex] || 0; // 更新游標對應的時間
-            const point = rawData.slice(0, nowIndex + 1).join(',').length;
-            // 2. 設定游標位置
-            editorInput.selectionStart = point;
-            editorInput.selectionEnd = point;
-        }
-
-        // 背景影片同步邏輯（每秒檢查一次）
-        if (bgmUpdateTimer === null || bgmUpdateTimer >= 1) {
-            if (editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 2) {
-                const nowSec = performance.now() / 1000;
-                const diff = Math.abs(editorBackgroundVideo.currentTime - realTime);
-                if (diff > VIDEO_SEEK_THRESHOLD && (nowSec - lastVideoSeekTime) >= VIDEO_MIN_SEEK_INTERVAL) {
-                    try {
-                        editorBackgroundVideo.currentTime = realTime;
-                        lastVideoSeekTime = nowSec;
-                    } catch (e) {
-                        console.warn('背景影片 seek 失敗', e);
-                    }
-                }
-            }
-            bgmUpdateTimer = 0;
-        }
-
-        bgmUpdateTimer = (bgmUpdateTimer || 0) + dt;
-        updateSlider(realTime);
-
-        // 結束播放判定[cite: 2]
-        if (globalTime >= endTime) {
-            playButton.dataset.playing = 'false';
-            playButton.children[0].innerText = "play_arrow";
-            globalTime = endTime;
-            updateSlider(endTime);
-            playStartTimestamp = null;
-        }
-    }
-
-    // 3. 渲染與循環區塊：解決重複渲染的核心
-    // 只要處於「播放中」或者「暫停但需持續渲染（如：顯示感應器或動畫）」的狀態
-    if (isPlaying || keepRenderingWhilePause) {
-        // 確保一幀只呼叫一次渲染
-        draw(dt);
-
-        // 確保一個循環只請求一次下一幀[cite: 2]
-        requestAnimationFrame(update);
-    } else {
-        // 暫停且不需持續渲染時，重置 timestamp 以免下次啟動時 dt 過大[cite: 2]
-        lastTimestamp = null;
-    }
+    playbackEngine.update(timestamp);
 }
 
 function resize(force = false) {
+    applyCanvasContainerAspectRatio();
     const dpr = getDPR();
 
     if (secondCtx) {
@@ -6590,7 +7105,16 @@ function resize(force = false) {
             }
         }
     } else if (canvasContainer && renderer) {
-        renderer.resize(canvasContainer.clientWidth, canvasContainer.clientHeight, dpr, force);
+        if (!renderer._isRenderingVideo && renderer.canvas === canvas) {
+            renderer.resize(canvasContainer.clientWidth, canvasContainer.clientHeight, dpr, force);
+        } else if (canvas) {
+            const w = Math.round(canvasContainer.clientWidth * dpr);
+            const h = Math.round(canvasContainer.clientHeight * dpr);
+            if (canvas.width !== w || canvas.height !== h) {
+                canvas.width = w;
+                canvas.height = h;
+            }
+        }
     }
 
     if (editorContainer && visualEditorRenderer) {
@@ -6602,620 +7126,170 @@ function resize(force = false) {
     }
 
     draw();
+    editorHighlightOverlay.invalidateLayout();
+    editorHighlightOverlay.refreshAccentColor();
+    updateCurrentNoteHighlight(true);
+    updateUnfocusedSelectionHighlight(true);
+    emitViewModeChanged();
 }
 
-popup.addEventListener('click', openSecondWindow);
-
-function openSecondWindow() {
-    if (externalWindow && !externalWindow.closed) {
-        externalWindow.focus();
-        return;
-    }
-    externalWindow = window.open("", "SecondaryCanvas", "width=800,height=800");
-
-    // 複製主視窗的 style 與 link 標籤（含字型定義）
-    Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach(node => {
-        externalWindow.document.head.appendChild(node.cloneNode(true));
+const secondaryWindow = new SecondaryWindowManager();
+popup.addEventListener('click', () => {
+    secondaryWindow.open({
+        canvas,
+        renderer,
+        backgroundContainer,
+        canvasOutline,
+        editorBackgroundImage,
+        editorBackgroundVideo,
+        playButton,
+        getSettings: () => settings,
+        getRealTime: () => realTime,
+        getDPR,
+        resize,
+        draw,
+        updatePauseBackgroundDisplay,
+        updateVideoBackgroundDisplay,
+        onClose: () => {
+            secondCtx = null;
+            externalWindow = null;
+            syncSecondWindowBackground = () => { };
+            if (typeof draw === 'function') draw();
+        }
     });
-
-    // 注入基礎樣式與 Canvas 結構
-    const style = externalWindow.document.createElement('style');
-    style.textContent = `
-        @font-face {
-            font-family: 'combo';
-            src: url('Fonts/Inter.ttf') format('truetype');
-            font-display: swap;
-        }
-        @font-face {
-            font-family: 'mono';
-            src: url('Fonts/ShareTechMono-Regular.ttf') format('truetype');
-            font-display: swap;
-        }
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #000;
-            font-family: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
-        }
-        #canvasContainer {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        #secOutline {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            object-fit: contain;
-            scale: 0.899;
-        }
-        #secondary {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        .backgroundContainer {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            overflow: hidden;
-            user-select: none;
-            -webkit-user-select: none;
-            z-index: 0;
-        }
-        .backgroundContainer img,
-        .backgroundContainer video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            pointer-events: none;
-            -webkit-touch-callout: none;
-        }
-    `;
-    externalWindow.document.head.appendChild(style);
-    externalWindow.document.body.innerHTML = `
-        <div id="canvasContainer">
-            <div class="backgroundContainer" id="secBackgroundContainer">
-                <img id="secBackgroundImage" src="" alt="" onerror="this.style.display='none'">
-                <video id="secBackgroundVideo" src="" alt="" onerror="this.style.display='none'" muted playsinline webkit-playsinline x5-playsinline disablePictureInPicture disableRemotePlayback></video>
-            </div>
-            <img src="./Skin/outline.png" alt="" id="secOutline" onerror="this.style.display='none'">
-            <canvas id="secondary"></canvas>
-        </div>
-    `;
-
-    const extCanvas = externalWindow.document.getElementById('secondary');
-    const secBgImg = externalWindow.document.getElementById('secBackgroundImage');
-    const secBgVideo = externalWindow.document.getElementById('secBackgroundVideo');
-    const secBgContainer = externalWindow.document.getElementById('secBackgroundContainer');
-
-    if (secBgVideo) {
-        secBgVideo.playsInline = true;
-        secBgVideo.defaultMuted = true;
-        secBgVideo.muted = true;
-        secBgVideo.setAttribute('playsinline', '');
-        secBgVideo.setAttribute('webkit-playsinline', '');
-        secBgVideo.setAttribute('x5-playsinline', '');
-        secBgVideo.setAttribute('disablePictureInPicture', '');
-        secBgVideo.setAttribute('disableRemotePlayback', '');
-        secBgVideo.addEventListener('webkitbeginfullscreen', (e) => {
-            e.preventDefault();
-            try {
-                if (typeof secBgVideo.webkitExitFullscreen === 'function') {
-                    secBgVideo.webkitExitFullscreen();
-                }
-            } catch (_) { }
-        });
-        secBgVideo.addEventListener('webkitpresentationmodechanged', () => {
-            if (secBgVideo.webkitPresentationMode === 'fullscreen' && typeof secBgVideo.webkitSetPresentationMode === 'function') {
-                secBgVideo.webkitSetPresentationMode('inline');
-            }
-        });
+    secondCtx = secondaryWindow.secondCtx;
+    externalWindow = secondaryWindow.externalWindow;
+    syncSecondWindowBackground = secondaryWindow.syncBackground;
+    if (playButton.dataset.playing === 'true' || keepRenderingWhilePause) {
+        requestNextFrame(update);
     }
+});
 
-    extCanvas.width = 800;
-    extCanvas.height = 800;
-    secondCtx = extCanvas.getContext('2d');
-
-    syncSecondWindowBackground = function () {
-        if (!externalWindow || externalWindow.closed) return;
-        const size = Math.min(externalWindow.innerWidth, externalWindow.innerHeight);
-        if (secBgContainer) {
-            secBgContainer.style.width = size + 'px';
-            secBgContainer.style.height = size + 'px';
-        }
-
-        const brightnessFilter = `brightness(${1 + 0.1875 * (settings.moviebrightness ?? -4)})`;
-
-        if (secBgImg && editorBackgroundImage) {
-            if (secBgImg.src !== editorBackgroundImage.src) {
-                secBgImg.src = editorBackgroundImage.src;
-            }
-            secBgImg.style.display = editorBackgroundImage.style.display;
-            secBgImg.style.filter = brightnessFilter;
-        }
-
-        if (secBgVideo && editorBackgroundVideo) {
-            if (secBgVideo.src !== editorBackgroundVideo.src) {
-                secBgVideo.src = editorBackgroundVideo.src;
-            }
-            secBgVideo.style.display = editorBackgroundVideo.style.display;
-            secBgVideo.style.filter = brightnessFilter;
-
-            if (editorBackgroundVideo.src) {
-                const playing = playButton.dataset.playing === 'true';
-
-                // 主視窗 Canvas 被隱藏或已開啟外部預覽視窗時，主視窗影片強制暫停以節省資源
-                if (!editorBackgroundVideo.paused) {
-                    try { editorBackgroundVideo.pause(); } catch (_) { }
-                }
-
-                // 獨立視窗影片時間與播放同步
-                if (Math.abs(secBgVideo.currentTime - realTime) > VIDEO_SEEK_THRESHOLD) {
-                    try { secBgVideo.currentTime = realTime; } catch (_) { }
-                }
-
-                if (playing && secBgVideo.paused) {
-                    secBgVideo.play().catch(() => { });
-                } else if (!playing && !secBgVideo.paused) {
-                    secBgVideo.pause();
-                }
-
-                secBgVideo.playbackRate = settings.playbackSpeed || 1;
-            }
-        }
-    };
-
-    // 隱藏主視窗的背景 Containers 與 Canvas Outline (Skin)
-    if (backgroundContainer) backgroundContainer.style.display = 'none';
-    if (canvasOutline) canvasOutline.style.display = 'none';
-    if (editorBackgroundVideo && !editorBackgroundVideo.paused) {
-        try { editorBackgroundVideo.pause(); } catch (_) { }
-    }
-
-    externalWindow.addEventListener('beforeunload', () => {
-        console.log("警告：外部視窗即將關閉");
-        syncSecondWindowBackground = () => { };
-        secondCtx = null;
-        ctx = canvas.getContext('2d'); // 切回主 Canvas 的上下文
-        renderer.setContext(ctx); // 告訴 renderer 使用主 Canvas 的上下文
-        if (backgroundContainer) backgroundContainer.style.display = '';
-        if (canvasOutline) canvasOutline.style.display = settings.hideOutline ? 'none' : '';
-        resize(true); // 重新調整主畫布尺寸與座標系統並重繪
-    });
-
-    renderer.setContext(secondCtx); // 告訴 renderer 使用第二個 Canvas 的上下文
-
-    const syncResize = () => {
-        const dpr = getDPR(externalWindow);
-        renderer.resize(externalWindow.innerWidth, externalWindow.innerHeight, dpr, true);
-        syncSecondWindowBackground();
-        draw();
-    };
-
-    syncResize();
-
-    externalWindow.addEventListener('resize', syncResize);
-    if (externalWindow.document.fonts) {
-        externalWindow.document.fonts.ready.then(() => {
-            syncResize();
-        });
-    }
-}
-
-recordVideoButton.addEventListener('click', async () => {
-    if (!window.Mediabunny) {
-        try {
-            await ensureMediabunny();
-        } catch (e) {
-            console.warn('載入 Mediabunny 失敗:', e);
-        }
-    }
-    if (!window.Mediabunny) {
-        simpleToast({ content: t('toast.mediabunnyMissing'), type: 'error' });
-        return;
-    }
-
-    // 注入雙向滑桿與自訂面板所需的專用 CSS（如果還沒注入過的話）
-    if (!document.getElementById('dual-range-style')) {
-        const style = document.createElement('style');
-        style.id = 'dual-range-style';
-        style.textContent = `
-            .dual-range-slider {
-                position: relative;
-                height: 24px;
-                margin: 8px 0 4px 0;
-            }
-            .dual-range-slider input[type=range] {
-                position: absolute;
-                width: 100%;
-                background: none;
-                pointer-events: none;
-                -webkit-appearance: none;
-                top: 50%;
-                transform: translateY(-50%);
-                margin: 0;
-            }
-            /* 讓滑桿本體穿透，只有按鈕可以點擊 */
-            .dual-range-slider input[type=range]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                pointer-events: auto;
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                background: #4a90e2;
-                cursor: pointer;
-                border: 2px solid #fff;
-                box-shadow: 0 0 5px rgba(0,0,0,0.5);
-                transition: transform 0.1s;
-            }
-            .dual-range-slider input[type=range]::-webkit-slider-thumb:active {
-                transform: scale(1.2);
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    const container = document.createElement('div');
-    container.style.cssText = 'display:flex;flex-direction:column;gap:8px;font-size:13px;';
-
-    const inputRefs = {};
-    const maxDuration = Number((endTime + musicDelay).toFixed(2)); // 總曲長
-
-    // ==========================================
-    // 1. 核心：建立【雙向時間範圍選取器】组件
-    // ==========================================
-    const timeWrapper = document.createElement('div');
-    timeWrapper.style.cssText = 'display:flex;flex-direction:column;margin-bottom:6px;';
-
-    const timeLabel = document.createElement('label');
-    timeLabel.style.cssText = 'font-size:12px;color:#888;margin-bottom:2px;';
-
-    const sliderContainer = document.createElement('div');
-    sliderContainer.className = 'dual-range-slider';
-
-    // 灰色底軌
-    const baseTrack = document.createElement('div');
-    baseTrack.style.cssText = 'position:absolute;top:50%;left:0;width:100%;height:6px;background:#333;transform:translateY(-50%);border-radius:3px;';
-
-    // 藍色進度條（代表被選中的範圍）
-    const highlightTrack = document.createElement('div');
-    highlightTrack.style.cssText = 'position:absolute;top:50%;height:6px;background:#4a90e2;transform:translateY(-50%);border-radius:3px;';
-
-    const startInput = document.createElement('input');
-    startInput.type = 'range'; startInput.min = '0'; startInput.max = String(maxDuration); startInput.step = '0.01'; startInput.value = '0';
-
-    const endInput = document.createElement('input');
-    endInput.type = 'range'; endInput.min = '0'; endInput.max = String(maxDuration); endInput.step = '0.01'; endInput.value = String(maxDuration);
-
-    sliderContainer.append(baseTrack, highlightTrack, startInput, endInput);
-    timeWrapper.append(timeLabel, sliderContainer);
-
-    // 更新雙向滑桿的視覺外觀與文字
-    const updateDualSlider = () => {
-        if (Number(startInput.value) > Number(endInput.value)) {
-            startInput.value = endInput.value;
-        }
-        const startVal = Number(startInput.value);
-        const endVal = Number(endInput.value);
-
-        const leftPercent = (startVal / maxDuration) * 100;
-        const widthPercent = ((endVal - startVal) / maxDuration) * 100;
-
-        highlightTrack.style.left = `${leftPercent}%`;
-        highlightTrack.style.width = `${widthPercent}%`;
-        timeLabel.textContent = `${t('popup.recordVideo.recordRange', { start: startVal, end: endVal, dur: (endVal - startVal).toFixed(2) })}`;
-    };
-
-    startInput.addEventListener('input', updateDualSlider);
-    endInput.addEventListener('input', updateDualSlider);
-    updateDualSlider(); // 初始渲染
-
-    // ==========================================
-    // 2. 解析度選單 + 自訂欄位
-    // ==========================================
-    const resField = createLabeledInput1({
-        value: '1280x720',
-        labelText: t('popup.recordVideo.resolution'),
-        type: 'select',
-        assign: 'record_res_select',
-        ref: inputRefs,
-        options: [
-            { value: '1920x1080', label: '1920 x 1080 (1080p 16:9)' },
-            { value: '1080x1080', label: '1080 x 1080 (1080p 1:1)' },
-            { value: '1280x720', label: '1280 x 720 (720p 16:9)' },
-            { value: '720x720', label: '720 x 720 (720p 1:1)' },
-            { value: '640x360', label: '640 x 360 (360p 16:9)' },
-            { value: 'custom', label: t('popup.recordVideo.custom') }
-        ]
-    });
-
-    const customResContainer = document.createElement('div');
-    customResContainer.style.cssText = 'display:none; gap:8px; margin-top:4px;';
-    const customWidth = createLabeledInput1({ value: 1080, labelText: t('popup.recordVideo.customWidth'), type: 'number', assign: 'custom_w', ref: inputRefs });
-    const customHeight = createLabeledInput1({ value: 720, labelText: t('popup.recordVideo.customHeight'), type: 'number', assign: 'custom_h', ref: inputRefs });
-    customWidth.wrapper.style.flex = '1';
-    customHeight.wrapper.style.flex = '1';
-    customResContainer.append(customWidth.wrapper, customHeight.wrapper);
-    resField.wrapper.appendChild(customResContainer);
-
-    resField.input.addEventListener('change', (e) => {
-        customResContainer.style.display = e.target.value === 'custom' ? 'flex' : 'none';
-    });
-
-    // ==========================================
-    // 3. FPS 選單 + 自訂欄位
-    // ==========================================
-    const fpsField = createLabeledInput1({
-        value: '30',
-        labelText: 'FPS:',
-        type: 'select',
-        assign: 'record_fps_select',
-        ref: inputRefs,
-        options: [
-            { value: '120', label: '120' },
-            { value: '60', label: '60' },
-            { value: '30', label: '30' },
-            { value: '24', label: '24' },
-            { value: 'custom', label: t('popup.recordVideo.custom') }
-        ]
-    });
-
-    const customFps = createLabeledInput1({ value: 30, labelText: t('popup.recordVideo.customFps'), type: 'number', assign: 'custom_fps', ref: inputRefs });
-    customFps.wrapper.style.cssText = 'display:none; margin-top:4px;';
-    fpsField.wrapper.appendChild(customFps.wrapper);
-
-    fpsField.input.addEventListener('change', (e) => {
-        customFps.wrapper.style.display = e.target.value === 'custom' ? 'block' : 'none';
-    });
-    // ==========================================
-    // 4. 音量與音訊控制項（改用自訂開關，徹底免疫卡死 Bug）
-    // ==========================================
-    const bgmVolField = createLabeledInput1({ value: settings.musicVolume, labelText: t('popup.recordVideo.bgmVolume'), type: 'number', assign: 'record_bgm_vol', ref: inputRefs });
-    const sfxVolField = createLabeledInput1({ value: settings.SfxVolume, labelText: t('popup.recordVideo.sfxVolume'), type: 'number', assign: 'record_sfx_vol', ref: inputRefs });
-
-    // 💡 封裝一個高質感自訂開關產生器
-    const createCustomSwitch = (labelText, defaultChecked) => {
-        const labelWrapper = document.createElement('label');
-        labelWrapper.style.cssText = 'display:flex;align-items:center;justify-content:between;gap:12px;cursor:pointer;margin-top:4px;user-select:none;width:fit-content;';
-
-        const span = document.createElement('span');
-        span.textContent = labelText;
-        span.style.cssText = 'color:#ddd;font-size:13px;width:110px;';
-
-        // 開關的外殼軌道
-        const switchTrack = document.createElement('div');
-        switchTrack.style.cssText = 'display:flex;align-items:center;width:36px;height:20px;background:#333;border-radius:10px;position:relative;transition:all 0.2s ease;border:1px solid #444;';
-
-        // 開關裡面的圓鈕
-        const switchThumb = document.createElement('div');
-        switchThumb.style.cssText = 'width:14px;height:14px;background:#fff;border-radius:50%;position:absolute;left:2px;transition:all 0.2s ease;';
-        switchTrack.appendChild(switchThumb);
-
-        // 內部狀態變數
-        let isChecked = defaultChecked;
-
-        // 刷新視覺外觀的函式
-        const refreshUI = () => {
-            if (isChecked) {
-                switchTrack.style.background = '#4a90e2';
-                switchTrack.style.borderColor = '#5fa4f5';
-                switchThumb.style.left = '18px';
-            } else {
-                switchTrack.style.background = '#1a1a1a';
-                switchTrack.style.borderColor = '#333';
-                switchThumb.style.left = '3px';
-            }
-        };
-        refreshUI(); // 初始渲染
-
-        // 點擊事件：手動切換狀態，並強制阻止任何可能卡死它的全域預設行為
-        labelWrapper.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            isChecked = !isChecked;
-            refreshUI();
-        });
-
-        labelWrapper.append(span, switchTrack);
-
-        return {
-            wrapper: labelWrapper,
-            // 讓外部可以用 .checked 隨時撈出當前布林值
-            get checked() { return isChecked; }
-        };
-    };
-
-    // 實體化帥氣的動態開關
-    const audioSwitch = createCustomSwitch(t('popup.recordVideo.includeAudio'), !!audioManager?.bgmBuffer);
-    const sfxSwitch = createCustomSwitch(t('popup.recordVideo.includeSfx'), true);
-    const introSwitch = createCustomSwitch(t('popup.recordVideo.includeIntro'), true);
-    const allPerfectSwitch = createCustomSwitch(t('popup.recordVideo.includeAllPerfect'), false);
-
-    // 全部塞進彈窗大容器
-    container.append(
-        timeWrapper,
-        resField.wrapper,
-        fpsField.wrapper,
-        bgmVolField.wrapper,
-        sfxVolField.wrapper,
-        audioSwitch.wrapper, // 塞入外殼
-        sfxSwitch.wrapper,  // 塞入外殼
-        introSwitch.wrapper, // 塞入載入動畫外殼
-        // allPerfectSwitch.wrapper // 塞入 ALL PERFECT 外殼
-    );
-
-    popupWindow({
-        title: t('popup.recordVideo.title'),
-        customContent: container,
-        width: '420px',
-        buttons: [
-            {
-                text: t('popup.start'),
-                onClick: async (pwCtx) => {
-                    const startVal = Number(startInput.value);
-                    const endVal = Number(endInput.value);
-
-                    let widthVal, heightVal;
-                    if (resField.input.value === 'custom') {
-                        widthVal = parseInt(inputRefs.custom_w?.value || 1080, 10);
-                        heightVal = parseInt(inputRefs.custom_h?.value || 720, 10);
-                    } else {
-                        [widthVal, heightVal] = resField.input.value.split('x').map(Number);
-                    }
-
-                    let fpsVal;
-                    if (fpsField.input.value === 'custom') {
-                        fpsVal = parseInt(inputRefs.custom_fps?.value || 30, 10);
-                    } else {
-                        fpsVal = parseInt(fpsField.input.value, 10);
-                    }
-
-                    const bgmVolValNum = Number(inputRefs.record_bgm_vol?.value || 1);
-                    const sfxVolValNum = Number(inputRefs.record_sfx_vol?.value || 1);
-                    const bgmLoaded = !!audioManager?.bgmBuffer;
-
-                    if (playButton.dataset.playing === 'true') playButton.click();
-
-                    videoRender(audioManager, canvas, renderer, {
-                        start: startVal,
-                        end: endVal,
-                        fps: fpsVal,
-                        width: widthVal,
-                        height: heightVal,
-                        bgmVolume: bgmVolValNum,
-                        sfxVolume: sfxVolValNum,
-                        includeBgm: audioSwitch.checked && bgmLoaded, // 讀取自訂狀態
-                        includeSfx: sfxSwitch.checked,                 // 讀取自訂狀態
-                        includeIntro: introSwitch.checked,             // 讀取 10 秒載入動畫開關
-                        includeAllPerfect: allPerfectSwitch.checked,   // 結尾 ALL PERFECT 開關
-                        musicDelay,
-                        editorBackgroundImage,
-                        editorBackgroundVideo,
-                        notes,
-                        playScoreRes,
-                        chartInfo: {
-                            title: maidata.title ?? '',
-                            artist: maidata.artist ?? '-',
-                            des: maidata["des_" + nowDifficulty] ?? '-',
-                            lv: maidata["lv_" + nowDifficulty] ?? '0',
-                            difficulty: nowDifficulty,
-                            bpm: maidata.wholebpm ?? 0,
-                        },
-                    });
-
-                    pwCtx.close();
-                },
-            },
-            { text: t('popup.cancel'), hideOnClick: true }
-        ]
+recordVideoButton.addEventListener('click', () => {
+    openRecordVideoModal({
+        audioManager,
+        canvas,
+        getRenderer: () => renderer,
+        playButton,
+        getEndTime: () => endTime,
+        getMusicDelay: () => musicDelay,
+        editorBackgroundImage,
+        editorBackgroundVideo,
+        getNotes: () => notes,
+        getPlayScoreRes: () => playScoreRes,
+        getMaidata: () => maidata,
+        getNowDifficulty: () => nowDifficulty,
+        getSettings: () => settings,
+        draw,
     });
 });
 
 window.addEventListener('resize', resize);
 
-getButton("playbackSpeedAdd", "utility").addEventListener("click", () => {
-    let sp = settings.playbackSpeed + 0.25;
-    if (sp >= 2.0) sp = 2.0;
-    setPlaybackSpeed(sp);
-});
-
-getButton("playbackSpeedMinus", "utility").addEventListener("click", () => {
-    let sp = settings.playbackSpeed - 0.25;
-    if (sp <= 0.25) sp = 0.25;
-    setPlaybackSpeed(sp);
-});
+const KEYBINDING_HANDLERS = {
+    'playback.toggle': () => playButton?.click(),
+    'playback.reset': () => resetButton?.click(),
+    'playback.stop': () => stopButton?.click(),
+    'playback.speedUp': () => {
+        const sp = Math.min(2.0, (settings.playbackSpeed || 1) + 0.25);
+        setPlaybackSpeed(sp);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    },
+    'playback.speedDown': () => {
+        const sp = Math.max(0.25, (settings.playbackSpeed || 1) - 0.25);
+        setPlaybackSpeed(sp);
+        simpleToast({ content: t('toast.setPlaybackSpeed', { speed: sp.toFixed(2) }), type: 'success', timeout: 1800 });
+    },
+    'playback.seekBackward': () => {
+        const rawStep = Number(settings.seekStepSeconds);
+        const step = (Number.isFinite(rawStep) && rawStep > 0) ? rawStep : 5;
+        const cur = playbackEngine?.realTime ?? realTime ?? 0;
+        updateVisualTime(cur - step);
+    },
+    'playback.seekForward': () => {
+        const rawStep = Number(settings.seekStepSeconds);
+        const step = (Number.isFinite(rawStep) && rawStep > 0) ? rawStep : 5;
+        const cur = playbackEngine?.realTime ?? realTime ?? 0;
+        updateVisualTime(cur + step);
+    },
+    'playback.jumpToCursor': () => getCursorNoteIndex?.click(),
+    'playback.cursorToPlayhead': () => getNowNoteIndex?.click(),
+    'edit.save': () => {
+        isContextEdited = false;
+        simpleToast({ content: t('toast.saved'), type: 'success', timeout: 1200 });
+        maidata['inote_' + nowDifficulty] = editorInput.value;
+        saveMaidata();
+    },
+    'edit.find': () => openFindBar(false),
+    'edit.replace': () => openFindBar(true),
+    'edit.undo': () => {
+        if (undoStack.length > 0) {
+            undoButton.click();
+            if (document.activeElement === editorInput) {
+                simpleToast({ content: t('toast.undoSuccess'), type: 'info', timeout: 1200 });
+            }
+        }
+    },
+    'edit.redo': () => {
+        if (redoStack.length > 0) {
+            redoButton.click();
+            if (document.activeElement === editorInput) {
+                simpleToast({ content: t('toast.redoSuccess'), type: 'info', timeout: 1200 });
+            }
+        }
+    },
+    'edit.format': () => handleFormatDocument(editorInput, { simpleToast, t }),
+    'edit.toggleBk': () => handleToggleBkEx('bk', { editorInput }),
+    'edit.toggleEx': () => handleToggleBkEx('ex', { editorInput }),
+    'edit.rotateClockwise': () => rotateSelection(1),
+    'edit.rotateCounterClockwise': () => rotateSelection(-1),
+    'edit.rotate180': () => rotateSelection(4),
+    'edit.flipVertical': () => flipVertical(),
+    'edit.flipHorizontal': () => flipHorizontal(),
+    'edit.subdivision': () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce }),
+    'edit.smoothBpm': () => smoothBpmLauncher?.openModal(),
+    'visual.toolPlace': () => switchVisualTool('edit'),
+    'visual.toolSelect': () => switchVisualTool('select', false),
+    'visual.toolBoxSelect': () => switchVisualTool('boxSelect'),
+    'visual.deleteSelected': () => {
+        if (visualEditorRenderer?.selectedNotes?.size > 0) {
+            const selectedList = Array.from(visualEditorRenderer.selectedNotes);
+            visualDeleteNote(selectedList);
+            visualEditorRenderer.clearSelection();
+        }
+    },
+    'visual.clearSelection': () => {
+        if (visualEditorRenderer && typeof visualEditorRenderer.clearSelection === 'function') {
+            visualEditorRenderer.clearSelection();
+        }
+    },
+    'view.toggleEditor': () => hideEditorButton?.click(),
+    'view.toggleMode': () => {
+        if (!displayModeSelect) return;
+        displayModeSelect.value = isVisualMode() ? 'simai' : 'visual';
+        displayModeSelect.dispatchEvent(new Event('change'));
+    },
+    'view.togglePlayControls': () => hideButton?.click(),
+    'view.fullscreen': () => fullscreenButton?.click(),
+    'view.openSettings': () => openSettingsModal(),
+};
 
 window.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey) {
-        // 🔴 修正：拿掉外面的 e.preventDefault()，改在需要攔截的 case 內個別加上
+    if (!isInitComplete || e.isComposing || e.defaultPrevented) return;
+    if (document.querySelector('[data-recording-keybinding="true"]')) return;
+    if (document.querySelector('.popup-backdrop, .popup-window, .wmc-welcome-overlay, [role="dialog"], dialog[open]')) return;
 
-        switch (e.key.toLowerCase()) {
-            case 'f':
-                e.preventDefault();
-                openFindBar(false);
-                break;
+    const match = resolveKeybindingMatch(e, settings.customKeybindings, {
+        isVisualMode: isVisualMode(),
+        editorInput
+    });
+    if (!match) return;
 
-            case 'h':
-                e.preventDefault();
-                openFindBar(true);
-                break;
+    const handler = KEYBINDING_HANDLERS[match.action.id];
+    if (!handler) return;
 
-            case 's':
-                e.preventDefault(); // 🟢 攔截瀏覽器預設的網頁另存新檔
-                isContextEdited = false;
-
-                simpleToast({ content: '已儲存！', type: 'success', timeout: 1200 });
-                maidata['inote_' + nowDifficulty] = editorInput.value;
-                saveMaidata();
-                break;
-
-            case 'o': {
-                e.preventDefault(); // 🟢 攔截瀏覽器預設的開啟檔案
-                let sp = settings.playbackSpeed - 0.25;
-                if (sp <= 0.25) sp = 0.25;
-                setPlaybackSpeed(sp);
-                simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
-                break;
-            }
-
-            case 'p': {
-                e.preventDefault();
-                let sp = settings.playbackSpeed + 0.25;
-                if (sp >= 2.0) sp = 2.0;
-                setPlaybackSpeed(sp);
-                simpleToast({ content: `已設定播放速度：${sp.toFixed(2)}x`, type: 'success', timeout: 1800 });
-                break;
-            }
-
-            case 'z': {
-                if (document.activeElement === editorInput) {
-                    e.preventDefault();
-                    if (undoStack.length > 0) {
-                        undoButton.click();
-                        simpleToast({ content: '復原譜面變更', type: 'info', timeout: 1200 });
-                    }
-                }
-                break;
-            }
-
-            case 'y': {
-                if (document.activeElement === editorInput) {
-                    e.preventDefault();
-                    if (redoStack.length > 0) {
-                        redoButton.click();
-                        simpleToast({ content: '重作譜面變更', type: 'info', timeout: 1200 });
-                    }
-                }
-                break;
-            }
-        }
-        switch (e.code) {
-            case 'Space': {
-                e.preventDefault();
-                playButton.click();
-                break;
-            }
-            case 'Backspace': {
-                e.preventDefault();
-                resetButton.click();
-                break;
-            }
-        }
-    }
+    e.preventDefault();
+    handler(e);
 });
 
 function closeExternalWindow() {
@@ -7240,8 +7314,7 @@ window.addEventListener("pagehide", closeExternalWindow);
 
 let playedClock = [false, false, false, false];
 
-import { SimaiLogicControler } from './helper.js';
-const simaiLogicControler = new SimaiLogicControler(audioManager);
+
 
 let syncSecondWindowBackground = () => { };
 
@@ -7272,27 +7345,30 @@ function drawMainCanvasOpenedInExternalWindow() {
 }
 
 function draw(dt = 0) {
-    if (!renderer) return;
+    if (!renderer || !isImagesLoaded) return;
+    frameProfiler.beginFrame();
     if (secondCtx && externalWindow) {
         syncSecondWindowBackground();
     }
 
     // 早期初始化：提取常用值避免重複計算
-    const playing = playButton.dataset.playing === 'true';
+    const playing = playbackEngine.isPlaying;
     const previewVisibleFlag = previewVisible();
     const isVisualModeFlag = isVisualMode();
-    const visualHeight = !previewVisibleFlag
-        ? visualEditorRenderer.getCanvasWH().height
-        : previewRender.getCanvasWH().width / 2;
+    const visualHeight = isVisualModeFlag
+        ? (visualEditorRenderer?.getCanvasWH()?.height || 0)
+        : (previewVisibleFlag ? ((previewRender?.getCanvasWH()?.width || 0) / 2) : 0);
 
+    frameProfiler.start('1. logicGet');
     const { buckets, playCombo, playScore, visualBuckets, noteQuantity, nowIndex: nowIndexRender } = simaiLogicControler.get({
         renderer,
         globalTime,
         realTime,
         musicDelay,
         playing,
-        timeControlSliding,
-        readyBeat,
+        timeControlSliding: playbackEngine.timeControlSliding,
+        readyBeat: !!settings.readyBeat,
+        clockBpm,
         playedClock,
         settings,
         visualHeight,
@@ -7302,10 +7378,13 @@ function draw(dt = 0) {
         nowIndex,
         audioManager,
     });
+    frameProfiler.end('1. logicGet');
 
     nowIndex = nowIndexRender;
+    updateCurrentNoteHighlight();
 
     // 渲染和更新
+    frameProfiler.start('2. rendererDraw');
     if (secondCtx !== null) {
         // 獨立外部視窗存在：在外部視窗 Context 上渲染遊戲圓盤，主視窗 Canvas 繪製 i18n 提示
         renderer.drawFrame({
@@ -7319,25 +7398,31 @@ function draw(dt = 0) {
             noteQuantity,
             playScoreRes,
             nowIndex,
+            isPlaying: playing,
         });
         drawMainCanvasOpenedInExternalWindow();
     } else if (!noRender) {
-        // 正常狀態：主視窗繪製遊戲圓盤
-        renderer.drawFrame({
-            globalTime,
-            buckets,
-            dt,
-            showSensor: settings.showSensor,
-            showSensorText: (settings.showSensorTextWhenPaused && !playing),
-            playCombo,
-            playScore,
-            noteQuantity,
-            playScoreRes,
-            nowIndex,
-        });
+        // 正常狀態：主視窗繪製遊戲圓盤 (若正在匯出影片則跳過對錄製畫布的干擾)
+        if (!renderer._isRenderingVideo) {
+            renderer.drawFrame({
+                globalTime,
+                buckets,
+                dt,
+                showSensor: settings.showSensor,
+                showSensorText: (settings.showSensorTextWhenPaused && !playing),
+                playCombo,
+                playScore,
+                noteQuantity,
+                playScoreRes,
+                nowIndex,
+                isPlaying: playing,
+            });
+        }
     }
+    frameProfiler.end('2. rendererDraw');
 
     if ((!isVisualModeFlag || editorContainer.style.display === 'none') && previewVisibleFlag) {
+        frameProfiler.start('3. previewDraw');
         previewRender.drawFrame({
             globalTime,
             visualBuckets,
@@ -7345,17 +7430,25 @@ function draw(dt = 0) {
             offset: musicDelay,
             indexTime: (lastStartTime ?? 0) - musicDelay,
             cursorIndexTime: cursorLastIndexTime,
+            isPlaying: Boolean(playing),
         });
+        frameProfiler.end('3. previewDraw');
     }
 
     audioManager.update(globalTime);
-    if (!isVisualModeFlag || editorContainer.style.display === 'none') return;
+    if (!isVisualModeFlag || editorContainer.style.display === 'none') {
+        frameProfiler.endFrame();
+        return;
+    }
+    frameProfiler.start('4. visualRender');
     visualEditorRenderer?.render(isVisualModeFlag, ensureVisualEditorContext, {
         globalTime,
         visualBuckets,
         audioBuffer: audioManager.bgmBuffer,
         offset: musicDelay,
     });
+    frameProfiler.end('4. visualRender');
+    frameProfiler.endFrame();
 }
 
 // ============================================================
@@ -7365,10 +7458,12 @@ function draw(dt = 0) {
 /**
  * 載入當前 currentProjectId 的專案資料到編輯器
  * @param {function} [step] - 進度回呼 (progress, message)
+ * @param {number|null} [expectedGen] - 預期的載入世代 (用於避免切換專案競爭)
  */
-async function loadProjectData(step) {
+async function loadProjectData(step, expectedGen = null) {
+    const myGen = expectedGen !== null ? expectedGen : loadGeneration;
     const s = step || (() => { });
-    s(84, "正在載入專案資料...");
+    s(84, t('popup.init.loadingProjectData'));
 
     const [
         savedTimeControl,
@@ -7378,7 +7473,6 @@ async function loadProjectData(step) {
         bg,
         bgVideo,
         hideEditor,
-        savedReadyBeat,
         tb1,
         tb2,
     ] = await Promise.all([
@@ -7389,23 +7483,15 @@ async function loadProjectData(step) {
         projGet('background_image'),
         projGet('background_video'),
         projGet('hide_editor'),
-        projGet('ready_beat'),
         projGet('tb1'),
         projGet('tb2'),
     ]);
 
+    if (myGen !== loadGeneration) return;
+
     restoreTimebase(tb1, tb2);
 
-    readyBeat = savedReadyBeat === true || savedReadyBeat === 'true';
-    readyBeatCheckbox.checked = readyBeat;
-
-    if (savedTimeControl && !isNaN(savedTimeControl)) {
-        realTime = savedTimeControl;
-        globalTime = realTime - musicDelay;
-    } else {
-        realTime = 0;
-        globalTime = -musicDelay;
-    }
+    const targetRealTime = (savedTimeControl && !isNaN(savedTimeControl)) ? Number(savedTimeControl) : 0;
 
     if (savedDifficulty) {
         nowDifficulty = savedDifficulty;
@@ -7413,8 +7499,13 @@ async function loadProjectData(step) {
     }
 
     if (savedMaiData) {
+<<<<<<< HEAD
         s(88, "還原編輯內容...");
         maidata = typeof savedMaiData === 'string' ? parseMaidata(savedMaiData) : (savedMaiData || {});
+=======
+        s(88, t('popup.init.restoringContent'));
+        maidata = savedMaiData;
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         editorInput.value = maidata["inote_" + nowDifficulty] || '';
         getres(editorInput.value);
         applyHighlight(editorInput.value);
@@ -7425,14 +7516,18 @@ async function loadProjectData(step) {
         historyMap = {};
         lastEditorValue = editorInput.value || '';
         updateUndoRedoUI();
+        updateDifficultyIndicators();
 
         musicDelay = parseFloat(maidata.first) || 0;
         offsetInput.value = musicDelay;
-        offsetInputDebounce();
+        cachedTimelineMax = endTime + musicDelay;
+        timeline.max = cachedTimelineMax;
+        globalTime = targetRealTime - musicDelay;
     } else {
         maidata = {};
         editorInput.value = '';
         applyHighlight('');
+        updateDifficultyIndicators();
         undoStack = [];
         redoStack = [];
         historyMap = {};
@@ -7440,11 +7535,17 @@ async function loadProjectData(step) {
         updateUndoRedoUI();
         musicDelay = 0;
         offsetInput.value = 0;
+        cachedTimelineMax = 1;
+        timeline.max = cachedTimelineMax;
+        globalTime = 0;
     }
+
+    revokeBlobUrls();
 
     if (bgVideo) {
         backgroundVideo = bgVideo;
-        editorBackgroundVideo.src = URL.createObjectURL(bgVideo);
+        currentBgVideoBlobUrl = URL.createObjectURL(bgVideo);
+        editorBackgroundVideo.src = currentBgVideoBlobUrl;
         editorBackgroundVideo.style.display = 'none';
     } else {
         backgroundVideo = null;
@@ -7454,19 +7555,24 @@ async function loadProjectData(step) {
 
     if (bg) {
         backgroundImage = bg;
-        editorBackgroundImage.src = URL.createObjectURL(bg);
-        editorBackgroundImage.style.display = settings.hideBackgroundWhenPaused ? 'none' : 'block';
+        currentBgBlobUrl = URL.createObjectURL(bg);
+        editorBackgroundImage.src = currentBgBlobUrl;
     } else {
         backgroundImage = null;
         editorBackgroundImage.src = "";
-        editorBackgroundImage.style.display = 'none';
     }
+    updatePauseBackgroundDisplay();
     applyMovieBrightness(settings.moviebrightness);
 
     if (savedBgm) {
-        s(95, "正在還原背景音樂...");
-        await audioManager.setBackgroundMusic(savedBgm);
-        setEndtime(endTime);
+        s(95, t('popup.init.restoringBgm'));
+        audioManager.setBackgroundMusic(savedBgm).then(() => {
+            if (myGen !== loadGeneration) return;
+            setEndtime(endTime);
+            draw();
+        }).catch((err) => {
+            console.warn('Failed to decode BGM:', err);
+        });
     } else {
         audioManager.removeBackgroundMusic().catch(() => { });
     }
@@ -7478,10 +7584,19 @@ async function loadProjectData(step) {
         hideEditorButton.children[0].textContent = "right_panel_close";
         delete editorContainer.dataset.hidden;
     }
+    if (isInitComplete) {
+        setEditorCss(!hideEditor);
+    }
+    emitViewModeChanged();
 
-    update();
+    if (myGen !== loadGeneration) return;
+
+    playbackEngine.setTime(targetRealTime);
+    playbackEngine.resetNotesPlaybackState(playbackEngine.globalTime);
+    cachedChartSnapshot = null;
     draw();
-    updateSlider(realTime);
+    updateSlider(playbackEngine.realTime, true);
+    eventBus.emit(EVENTS.PROJECT_LOADED);
 }
 
 /**
@@ -7489,34 +7604,55 @@ async function loadProjectData(step) {
  * @param {string} projectId
  */
 async function loadProject(projectId) {
+    const currentGen = ++loadGeneration;
+
     // 停止播放
-    if (playButton.dataset.playing === 'true') {
+    if (playbackEngine) {
+        playbackEngine.stop();
+    } else if (playButton.dataset.playing === 'true') {
         playButton.dataset.playing = 'false';
         playButton.children[0].innerText = "play_arrow";
         playStartTimestamp = null;
         audioManager.stopBGM();
     }
 
+<<<<<<< HEAD
     // 若連線同步中，通知對端停止播放並重置進度
     if (editorSync && editorSync.isConnected()) {
         editorSync.sendPause();
         editorSync.sendSeek(0);
     }
+=======
+    // 在切換 currentProjectId 前，先 flush 舊專案未寫入的修改，並取消任何未執行的防抖
+    saveMaidata.flush?.();
+    inputDebounce.cancel?.();
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 
     currentProjectId = projectId;
     localStorage.setItem('simai_lastProjectId', currentProjectId);
 
-    setDataEmpty();
+    // 清除狀態（傳入 skipPersist = true，避免覆蓋新選中的專案）
+    setDataEmpty(true);
 
-    // 載入專案資料
-    await loadProjectData();
+    // 載入專案資料與獲取專案清單平行化
+    const [, list] = await Promise.all([
+        loadProjectData(null, currentGen),
+        projectList()
+    ]);
 
+    if (currentGen !== loadGeneration) {
+        return null;
+    }
+
+<<<<<<< HEAD
     if (editorSync && editorSync.isConnected()) {
         editorSync.pushCurrentProject();
         await editorSync.pushCurrentProject();
     }
 
     const list = await projectList();
+=======
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     const proj = list.find(p => p.id === projectId);
     return proj;
 }
@@ -7524,6 +7660,7 @@ async function loadProject(projectId) {
 /**
  * 開啟專案總管 UI
  */
+<<<<<<< HEAD
 function openProjectManager() {
     openProjectManagerModal({
         currentProjectId,
@@ -7624,13 +7761,46 @@ function openProjectManager() {
 }
 
 // 綁定專案總管按鈕
+=======
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 const projectManagerButton = getButton("projectManager", "utility");
 if (projectManagerButton) {
     projectManagerButton.addEventListener('click', () => {
-        openProjectManager();
+        openProjectManager({
+            getCurrentProjectId: () => currentProjectId,
+            loadProject,
+            images,
+            getFileHandlerCtx: () => ({
+                audioManager,
+                getMaidata: () => maidata,
+                setMaidata: (val) => {
+                    maidata = val;
+                    updateDifficultyIndicators();
+                },
+                maidataProcess,
+                setDataEmpty,
+                draw,
+                resize,
+                setEndtime,
+                getEndTime: () => endTime,
+                getCurrentProjectId: () => currentProjectId,
+                setCurrentProjectId: (val) => { currentProjectId = val; },
+                getBackgroundImage: () => backgroundImage,
+                setBackgroundImage: (val) => { backgroundImage = val; },
+                editorBackgroundImage,
+                getBackgroundVideo: () => backgroundVideo,
+                setBackgroundVideo: (val) => { backgroundVideo = val; },
+                editorBackgroundVideo,
+                getSettings: () => settings,
+                settings,
+                applyMovieBrightness,
+                projSet
+            }),
+        });
     });
 }
 
+<<<<<<< HEAD
 function _init() {
     popupWindow({
         title: t('popup.init.title'),
@@ -7858,7 +8028,120 @@ function _init() {
                         });
                     }
                 }]);
+=======
+async function _init() {
+    await i18nReady;
+    runInitModal({
+        audioManager,
+        loadAllImages,
+        migrateFromLegacy,
+        projectList,
+        projectCreate,
+        getCurrentProjectId: () => currentProjectId,
+        setCurrentProjectId: (val) => { currentProjectId = val; },
+        idbGet,
+        idbSet,
+        defaultSettings,
+        setSettings: (val) => {
+            settings = val;
+            appContext.settings = val;
+            applyThemeSettings({
+                themeMode: val?.themeMode ?? DEFAULT_THEME_MODE,
+                accentColor: val?.accentColor ?? DEFAULT_ACCENT_COLOR,
+            });
+            if (val && val.skin) currentSkin = val.skin;
+            if (val && val.syntaxColors) applySyntaxColors(val.syntaxColors);
+            if (speedPopoverInput && document.activeElement !== speedPopoverInput) {
+                speedPopoverInput.value = formatSpeedPopoverValue(val?.playbackSpeed);
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
             }
+            syncVisualSubMenus();
+        },
+        syncVisualSubMenus,
+        applyAudioSettings,
+        loadProjectData,
+        majdataWs,
+        applySplitRatio,
+        snapHideCanvas,
+        setDisplayModeUI,
+        setVisualToolUI,
+        visualToolModeSelect,
+        setGridDivisionUI,
+        updateGridDivisionVisibility,
+        SimaiRenderer,
+        SimaiVisualEditor,
+        SimaiPreviewRenderer,
+        canvas,
+        visualEditor,
+        previewCanvas,
+        visualCtx,
+        visualPlaceNote,
+        visualDeleteNote,
+        visualChangeNote,
+        visualPlaceHoldNote,
+        visualUpdateHoldDuration,
+        visualPlaceTimingTag,
+        visualDeleteTag,
+        visualEditTag,
+        onVisualTagSelect,
+        onSelectionChange: onVisualSelectionChange,
+        quantizeTime,
+        timebaseButton,
+        setPlaybackSpeed,
+        canvasOutline,
+        applyMovieBrightness,
+        draw,
+        updateSlider,
+        updateVisualTime,
+        getRealTime: () => playbackEngine.realTime,
+        projGet,
+        setEditorCss,
+        resize,
+        setIsInitComplete: (val) => { isInitComplete = val; appContext.isInitComplete = val; },
+        setIsImagesLoaded: (val) => { isImagesLoaded = val; appContext.isImagesLoaded = val; },
+        getIsImagesLoaded: () => isImagesLoaded,
+        setIsDatabaseEmpty: (val) => { isDatabaseEmpty = val; },
+        getImages: () => images,
+        getRenderer: () => renderer,
+        getVisualEditorRenderer: () => visualEditorRenderer,
+        getPreviewRender: () => previewRender,
+        updateDiscordRPC,
+        getMaidata: () => maidata,
+        getNowDifficulty: () => nowDifficulty,
+        setImages: (val) => {
+            extensionOverrideRegistry.refreshImagesBase(val);
+            images = val;
+            appContext.state.images = val;
+        },
+        setRenderer: (val) => { renderer = val; },
+        setVisualEditorRenderer: (val) => {
+            visualEditorRenderer = val;
+            visualEditorRenderer?.setSelectionCallback(onVisualSelectionChange);
+        },
+        setPreviewRender: (val) => { previewRender = val; },
+        onInitFinished: () => {
+            checkAndHandleDriveOpenWith({
+                loadProject
+            });
+            const welcomeShown = showWelcomeModal({ isDatabaseEmpty });
+            if (!welcomeShown) {
+                showLegalUpdateModal();
+            }
+
+            window.settings = settings;
+            Object.defineProperty(window, 'globalTime', {
+                get() {
+                    return globalTime;
+                },
+                configurable: true
+            });
+
+            initExtensionMenu();
+            eventBus.emit(EVENTS.APP_READY);
+            extensionManager.activateAll();
+            loadStoredExtensions().catch((err) => {
+                console.error('[Extensions] 載入已安裝外掛失敗:', err);
+            });
         }
     });
 }
@@ -7872,3 +8155,397 @@ const unlockAudio = () => {
 window.addEventListener('click', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
 window.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+window.applyMovieBrightness = applyMovieBrightness;
+window.updateVideoBackgroundDisplay = updateVideoBackgroundDisplay;
+window.updatePauseBackgroundDisplay = updatePauseBackgroundDisplay;
+window.applySplitRatio = applySplitRatio;
+window.snapRestoreCanvas = snapRestoreCanvas;
+window.setEditorCss = setEditorCss;
+window.resize = resize;
+window.draw = draw;
+window.saveSettingsDebounce = saveSettingsDebounce;
+window.getRenderer = () => renderer;
+window.findCommaCharIndex = findCommaCharIndex;
+window.indexFromCursor = indexFromCursor;
+window.getNoteRangeAtIndex = getNoteRangeAtIndex;
+window.getCharOffsetAtIndex = getCharOffsetAtIndex;
+window.generateSmoothBpmByDuration = generateSmoothBpmByDuration;
+window.openSmoothBpmModal = openSmoothBpmModal;
+window.smoothBpmLauncher = smoothBpmLauncher;
+
+let currentSkin = settings?.skin || 'Default';
+let isSwitchingSkin = false;
+
+export async function switchSkin(newSkin) {
+    if (!newSkin || (newSkin === currentSkin && !isSwitchingSkin)) return;
+    if (isSwitchingSkin) return;
+    isSwitchingSkin = true;
+    try {
+        const newImages = await loadAllImages(null, newSkin);
+        extensionOverrideRegistry.refreshImagesBase(newImages);
+        images = newImages;
+        currentSkin = newSkin;
+        appContext.state.images = newImages;
+        if (renderer) renderer.setImages(newImages);
+        if (visualEditorRenderer) visualEditorRenderer.setImages(newImages);
+        if (previewRender && typeof previewRender.setImages === 'function') {
+            previewRender.setImages(newImages);
+        }
+        draw();
+        simpleToast({
+            content: t('skinChange.restart') || 'Skin changed successfully',
+            type: 'success',
+            timeout: 2000
+        });
+    } catch (err) {
+        console.error('Failed to switch skin:', err);
+        simpleToast({
+            content: 'Failed to load skin: ' + err.message,
+            type: 'error',
+            timeout: 3000
+        });
+    } finally {
+        isSwitchingSkin = false;
+    }
+}
+window.switchSkin = switchSkin;
+
+try {
+    Object.defineProperty(window, 'renderer', {
+        get: () => renderer,
+        configurable: true
+    });
+} catch (e) {
+    window.renderer = renderer;
+}
+
+// === 註冊核心服務到 appContext (解耦 Props Drilling) ===
+appContext.register('switchSkin', switchSkin);
+appContext.register('audioManager', audioManager);
+appContext.register('getRenderer', () => renderer);
+appContext.register('getVisualEditorRenderer', () => visualEditorRenderer);
+appContext.register('getPreviewRender', () => previewRender);
+appContext.register('draw', draw);
+appContext.register('resize', resize);
+appContext.register('generateSmoothBpmByDuration', generateSmoothBpmByDuration);
+appContext.register('smoothBpmLauncher', smoothBpmLauncher);
+appContext.register('saveSettingsDebounce', saveSettingsDebounce);
+appContext.register('setEditorCss', setEditorCss);
+appContext.register('applyMovieBrightness', applyMovieBrightness);
+appContext.register('updateVideoBackgroundDisplay', updateVideoBackgroundDisplay);
+appContext.register('updatePauseBackgroundDisplay', updatePauseBackgroundDisplay);
+appContext.register('applySplitRatio', applySplitRatio);
+appContext.register('snapRestoreCanvas', snapRestoreCanvas);
+appContext.register('getMaidata', () => maidata);
+appContext.register('setMaidata', (val) => {
+    maidata = val;
+    cachedChartSnapshot = null;
+    updateDifficultyIndicators();
+});
+appContext.register('getCurrentProjectId', () => currentProjectId);
+appContext.register('setCurrentProjectId', (val) => { currentProjectId = val; });
+appContext.register('projSet', projSet);
+appContext.register('projGet', projGet);
+appContext.register('getBackgroundImage', () => backgroundImage);
+appContext.register('setBackgroundImage', (val) => { backgroundImage = val; });
+appContext.register('getNowDifficulty', () => nowDifficulty);
+appContext.register('setNowDifficulty', (val) => { nowDifficulty = val; });
+appContext.register('images', () => images);
+appContext.register('editorBackgroundImage', editorBackgroundImage);
+appContext.register('changeDifficulty', changeDifficulty);
+appContext.register('saveMaidata', saveMaidata);
+appContext.register('simpleToast', simpleToast);
+appContext.register('commandRegistry', commandRegistry);
+appContext.register('extensionManager', extensionManager);
+appContext.register('seekToTime', (targetTime) => seekToTime(targetTime));
+appContext.register('getDuration', () => Number(timeline?.max) || 0);
+function getCurrentViewMode() {
+    const isEditorHidden = editorContainer?.dataset?.hidden === 'true';
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+    const w = document.documentElement.clientWidth || window.innerWidth || 1;
+    const h = document.documentElement.clientHeight || window.innerHeight || 1;
+    return {
+        isEditorHidden,
+        isFullscreen,
+        isVerticalMode: (w / h) <= 0.587,
+        showAuxiliaryText: Boolean(settings?.renderSurroundingAuxiliaryText)
+    };
+}
+
+let lastViewModeKey = '';
+function emitViewModeChanged(force = false) {
+    const mode = getCurrentViewMode();
+    const key = `${mode.isEditorHidden}|${mode.isFullscreen}|${mode.isVerticalMode}|${mode.showAuxiliaryText}`;
+    if (!force && key === lastViewModeKey) return;
+    lastViewModeKey = key;
+    eventBus.emit(EVENTS.VIEW_MODE_CHANGED, mode);
+}
+
+appContext.register('getViewMode', () => getCurrentViewMode());
+appContext.register('getChartSnapshot', () => {
+    const currentDuration = Number(timeline?.max) || 0;
+    if (cachedChartSnapshot &&
+        cachedChartSnapshot.difficulty === nowDifficulty &&
+        cachedChartSnapshot.duration === currentDuration) {
+        return cachedChartSnapshot;
+    }
+
+    const frozenMaidata = Object.freeze(maidata ? { ...maidata } : {});
+    const frozenNotes = Object.freeze(
+        Array.isArray(notes) ? notes.map((n) => Object.freeze({ ...n })) : []
+    );
+    const frozenTags = Object.freeze(
+        Array.isArray(decodedTags) ? decodedTags.map((tag) => Object.freeze({ ...tag })) : []
+    );
+
+    cachedChartSnapshot = Object.freeze({
+        difficulty: nowDifficulty,
+        maidata: frozenMaidata,
+        duration: currentDuration,
+        notes: frozenNotes,
+        tags: frozenTags
+    });
+    return cachedChartSnapshot;
+});
+appContext.register('getEditorText', () => (editorInput ? editorInput.value : ''));
+appContext.register('getEditorSelection', () => {
+    if (!editorInput) return { start: 0, end: 0, text: '' };
+    const start = editorInput.selectionStart ?? 0;
+    const end = editorInput.selectionEnd ?? 0;
+    return {
+        start,
+        end,
+        text: editorInput.value.slice(start, end)
+    };
+});
+appContext.register('replaceEditorSelection', (replacement, start, end) => {
+    if (!editorInput) return false;
+    const text = String(replacement ?? '');
+    const value = editorInput.value;
+    const selStart = typeof start === 'number' ? Math.max(0, Math.min(start, value.length)) : (editorInput.selectionStart ?? 0);
+    const selEnd = typeof end === 'number' ? Math.max(selStart, Math.min(end, value.length)) : (editorInput.selectionEnd ?? selStart);
+
+    editorInput.value = value.slice(0, selStart) + text + value.slice(selEnd);
+    const nextCursor = selStart + text.length;
+    editorInput.selectionStart = selStart;
+    editorInput.selectionEnd = nextCursor;
+    applyHighlight(editorInput.value);
+    recordEditorHistory();
+    inputDebounce();
+    return true;
+});
+appContext.register('onEditorEvent', (eventName, handler) => {
+    if (!editorInput || typeof handler !== 'function') return () => { };
+    const allowed = new Set(['input', 'keydown', 'blur', 'selectionchange']);
+    if (!allowed.has(eventName)) return () => { };
+
+    const buildSnapshot = () => ({
+        text: editorInput.value,
+        selectionStart: editorInput.selectionStart ?? 0,
+        selectionEnd: editorInput.selectionEnd ?? 0
+    });
+
+    if (eventName === 'selectionchange') {
+        const onSelectionChange = () => {
+            if (document.activeElement !== editorInput) return;
+            handler(buildSnapshot());
+        };
+        document.addEventListener('selectionchange', onSelectionChange);
+        return () => document.removeEventListener('selectionchange', onSelectionChange);
+    }
+
+    const listener = (e) => {
+        const payload = buildSnapshot();
+        if (eventName === 'keydown') {
+            payload.key = e.key;
+            payload.code = e.code;
+            payload.ctrlKey = e.ctrlKey;
+            payload.metaKey = e.metaKey;
+            payload.altKey = e.altKey;
+            payload.shiftKey = e.shiftKey;
+            payload.isComposing = e.isComposing;
+            payload.preventDefault = () => e.preventDefault();
+            payload.stopPropagation = () => e.stopPropagation();
+        }
+        handler(payload);
+    };
+    editorInput.addEventListener(eventName, listener);
+    return () => editorInput.removeEventListener(eventName, listener);
+});
+
+// === 全域 EventBus 事件訂閱 (解耦副作用與跨模組直接調用) ===
+eventBus.on(EVENTS.CANVAS_REDRAW, () => {
+    draw();
+});
+
+eventBus.on(EVENTS.CANVAS_RESIZE, ({ force } = {}) => {
+    resize(force);
+});
+
+eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
+    // 1. 同步到 Renderers
+    if (renderer && renderer.settings) {
+        renderer.settings[key] = value;
+    }
+    if (visualEditorRenderer && visualEditorRenderer.settings) {
+        visualEditorRenderer.settings[key] = value;
+    }
+    if (previewRender && previewRender.settings) {
+        previewRender.settings[key] = value;
+    }
+
+    // 2. 音效設定即時生效
+    if (key === 'globalVolume') audioManager?.setGlobalVolume(value);
+    if (key === 'musicVolume') audioManager?.setBGMVolume(value);
+    if (key === 'SfxVolume') audioManager?.setSFXVolume(value);
+    if (key === 'sfxVolumes') audioManager?.setSFXVolumes(value);
+
+    // 語法高亮自訂顏色與主題 / 主色同步
+    if (key === 'syntaxColors') applySyntaxColors(value);
+    if (key === 'themeMode') {
+        applyThemeSettings({ themeMode: value, accentColor: settings?.accentColor });
+    }
+    if (key === 'accentColor') {
+        applyThemeSettings({ themeMode: settings?.themeMode, accentColor: value });
+    }
+
+    // 3. 背景與影片設定即時生效
+    if (key === 'moviebrightness') applyMovieBrightness(value);
+    if (['enableVideo', 'showBackgroundWhenPaused', 'showCoverWhenPaused'].includes(key)) {
+        updateVideoBackgroundDisplay();
+    }
+    if (key === 'renderSurroundingAuxiliaryText') {
+        emitViewModeChanged();
+    }
+
+    // 4. 判定線顯示開關
+    if (key === 'showOutline') {
+        const canvasOutline = document.getElementById('canvasOutline');
+        if (canvasOutline) canvasOutline.style.display = value ? '' : 'none';
+    }
+
+    // 5. 低解析度模式與畫面比例
+    if (key === 'lowRes' || key === 'canvasAspectRatio') {
+        resize(true);
+    }
+
+    // 6. 需觸發畫布重繪與膠囊/編輯器版面同步的項目
+    if (['timeDisplayCapsule', 'timeDisplayCapsulePosition', 'globalTimeline', 'showMiniPreview'].includes(key)) {
+        setEditorCss();
+    }
+    const redrawKeys = [
+        'showOutline', 'showBorder', 'showUI', 'showUIPosition',
+        'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
+        'drawHitEffect', 'drawHanabiEffect', 'richHanabi',
+        'previewAudioVisualMode', 'previewWaveformColor',
+        'previewSpectrogramMinFreq', 'previewSpectrogramMaxFreq', 'previewSpectrogramBrightness',
+        'previewTagOpacity', 'previewBpmLineOpacity',
+        'enablePreviewWaveform', 'rotateStars', 'pinkStars',
+        'showSensor', 'showSensorTextWhenPaused', 'slideArrowHideBySensor',
+        'middleDisplay', 'speed', 'touchSpeed', 'slideSpeed',
+        'noteBaseSize', 'middleDistance'
+    ];
+    if (redrawKeys.includes(key)) {
+        draw();
+    }
+
+    // 7. 皮膚切換
+    if (key === 'skin') {
+        switchSkin(value);
+    }
+
+    // 8. 啟用語法檢查與目前音符高亮 / 自動捲動
+    if (key === 'highlightCurrentNote' || key === 'editorAutoScroll') {
+        if (key === 'editorAutoScroll' && !value) {
+            cancelEditorAutoScroll();
+        }
+        updateCurrentNoteHighlight(true);
+    }
+    if (key === 'enableSyntaxCheck') {
+        if (!value) {
+            errors = [];
+            errorPositions = [];
+            errorItems = [];
+            warnings = [];
+            warningPositions = [];
+            warningPositionsConst = [];
+            warningItems = [];
+            updateDiagnosticBadge(0, 0);
+            applyHighlight(editorInput.value);
+        } else {
+            getres(editorInput.value);
+            applyHighlight(editorInput.value);
+        }
+    }
+});
+
+eventBus.on(EVENTS.SETTINGS_SAVED, () => {
+    saveSettingsDebounce();
+    setEditorCss();
+    draw();
+});
+
+eventBus.on(EVENTS.LAYOUT_RESET, () => {
+    settings.splitRatio = 0.5;
+    settings.layoutDirection = LAYOUT_DIRECTIONS.HORIZONTAL;
+    settings.panelSwapped = false;
+    settings.canvasSnapped = false;
+    if (canvasSnapped) {
+        if (editorContainer?.dataset.hidden === 'true') {
+            canvasSnapped = false;
+            noRender = false;
+            canvasContainer.style.display = '';
+            clearSnappedEditorLayout();
+            if (panelSplitter) {
+                panelSplitter.classList.remove('snapped');
+            }
+            applySplitRatio(0.5);
+        } else {
+            snapRestoreCanvas();
+        }
+    } else {
+        applySplitRatio(0.5);
+    }
+    setEditorCss();
+    resize(true);
+    draw();
+    saveSettingsDebounce();
+});
+window.openWelcomeModal = () => showWelcomeModal(true);
+window.openLegalUpdateModal = () => showLegalUpdateModal(true);
+window.openSubdivisionModal = () => openSubdivisionModal({ editorInput, applyHighlight, recordEditorHistory, inputDebounce });
+window.formatDocument = () => handleFormatDocument(editorInput, { simpleToast, t });
+
+// 全域頁面卸載/重新整理保護：立即 flush 尚未寫入 IndexedDB 的 maidata 與 settings
+const flushPendingSaves = () => {
+    if (typeof saveMaidata !== 'undefined' && typeof saveMaidata.flush === 'function') {
+        saveMaidata.flush();
+    } else if (typeof saveMaidataImmediate === 'function') {
+        saveMaidataImmediate();
+    }
+    if (isInitComplete && settings && Object.keys(settings).length >= 5) {
+        if (typeof saveSettingsDebounce !== 'undefined' && typeof saveSettingsDebounce.flush === 'function') {
+            saveSettingsDebounce.flush();
+        }
+    }
+};
+
+window.addEventListener('beforeunload', flushPendingSaves);
+window.addEventListener('pagehide', flushPendingSaves);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        flushPendingSaves();
+    }
+});
+
+onThemeChange(() => {
+    try { applySyntaxColors(settings?.syntaxColors || defaultSyntaxColors); } catch (_) { }
+    try {
+        if (typeof editorHighlightOverlay !== 'undefined' && editorHighlightOverlay) {
+            editorHighlightOverlay.refreshAccentColor();
+            editorHighlightOverlay.render();
+        }
+    } catch (_) { }
+});
+
+_init();

@@ -5,5 +5,18 @@ languageIds:
 
 usageMatchRegex:
   - "[^\\w\\d]t\\(['\"`]({key})['\"`]"
+<<<<<<< HEAD
 
 monopoly: true
+=======
+  - "data-i18n(?:-[a-z0-9_-]+)?=['\"`]({key})['\"`]"
+
+monopoly: true
+
+locales:
+  - zh-TW
+  - zh-CN
+  - en
+  - ja
+  - ko
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c

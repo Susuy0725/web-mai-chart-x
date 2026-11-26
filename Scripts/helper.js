@@ -1,21 +1,55 @@
-import { idbGet, idbSet } from "./indexDB.js";
-export { audioManager } from "./audioManager.js";
+import { idbGet, idbSet, idbDelete } from "./indexDB.js";
+import { audioManager } from "./audioManager.js";
+import { getSkinCandidateUrls, skinAliases } from "./core/skinConfig.js";
+export { audioManager };
+export const GRADE_DETUNE = audioManager.GRADE_DETUNE;
 
-export const
-    scaleBase = 100,
-    innerCirleBase = (() => { const innerCirleScale = 0.889; return scaleBase * innerCirleScale / 2 })();
+import {
+    scaleBase,
+    innerCirleBase,
+    PathRecorder,
+    touchRefPos,
+    noteRefPos,
+    visualNoteRefPos,
+    isObject
+} from "./core/chartGeometry.js";
+export {
+    scaleBase,
+    innerCirleBase,
+    PathRecorder,
+    touchRefPos,
+    noteRefPos,
+    visualNoteRefPos,
+    isObject
+};
+
+import { SimaiLogicControler } from "./core/simaiLogicControler.js";
+export { SimaiLogicControler };
+
+import { videoRender } from "./features/videoRender.js";
+export { videoRender };
 
 export function imgNotExists(image) {
-    if (!image || !image.complete || image.naturalWidth === 0) {
-        return true;
+    if (!image) return true;
+    if ('complete' in image) {
+        return !image.complete || image.naturalWidth === 0;
     }
-    return false;
+    return (image.width || 0) <= 0 || (image.height || 0) <= 0;
 }
 
+<<<<<<< HEAD
 const baseURL = new URL('../Skin/', import.meta.url).href.replace(/\/?$/, '/'), coreImageKeys = [
+=======
+const baseURL = (typeof window !== 'undefined' && window.location.pathname.includes('/_play/')) ? '../Skin/' : './Skin/';
+
+// 核心渲染素材（首屏 Canvas 必備打擊元件，優先載入以大幅加速 LCP）
+const coreImageKeys = [
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
     'no_image',
+    'outline',
     'tap', 'tap_break', 'tap_each', 'tap_ex',
     'NormalArc', 'BreakArc', 'EachArc', 'SlideArc',
+    'EachLine1', 'EachLine2', 'EachLine3', 'EachLine4',
     'hold', 'hold_break', 'hold_each', 'hold_ex',
     'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
@@ -24,7 +58,20 @@ const baseURL = new URL('../Skin/', import.meta.url).href.replace(/\/?$/, '/'), 
     'star', 'star_pink', 'star_break', 'star_each', 'star_ex',
     'slide', 'slide_each', 'slide_break',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
-    'touch_just', 'touchhold_off'
+    'touch_just', 'touchhold_off',
+    'judge_text_good', 'judge_text_miss', 'judge_text_great',
+    'judge_text_perfect', 'judge_text_normal', 'judge_text_break',
+    'judge_text_cPerfect_break', 'judge_text_perfect_break',
+    'fast', 'late',
+    // Slide 專屬 JUST 判定素材
+    'just_curv_l', 'just_curv_l_p', 'just_curv_l_fast_gd', 'just_curv_l_fast_gr', 'just_curv_l_late_gd', 'just_curv_l_late_gr',
+    'just_curv_r', 'just_curv_r_p', 'just_curv_r_fast_gd', 'just_curv_r_fast_gr', 'just_curv_r_late_gd', 'just_curv_r_late_gr',
+    'just_str_l', 'just_str_l_p', 'just_str_l_fast_gd', 'just_str_l_fast_gr', 'just_str_l_late_gd', 'just_str_l_late_gr',
+    'just_str_r', 'just_str_r_p', 'just_str_r_fast_gd', 'just_str_r_fast_gr', 'just_str_r_late_gd', 'just_str_r_late_gr',
+    'just_wifi_d', 'just_wifi_d_p', 'just_wifi_d_fast_gd', 'just_wifi_d_fast_gr', 'just_wifi_d_late_gd', 'just_wifi_d_late_gr',
+    'just_wifi_u', 'just_wifi_u_p', 'just_wifi_u_fast_gd', 'just_wifi_u_fast_gr', 'just_wifi_u_late_gd', 'just_wifi_u_late_gr',
+    // Slide 專屬 MISS 判定素材
+    'miss_curv_l', 'miss_curv_r', 'miss_str_l', 'miss_str_r', 'miss_wifi_d', 'miss_wifi_u'
 ];
 
 // 次要/特殊素材（WiFi 連續動畫幀、地雷、雙押星等，由背景非同步載入不阻塞首屏）
@@ -34,7 +81,7 @@ const secondaryImageKeys = [
     'touch_mine', 'touch_point_mine', 'touch_border_2_mine', 'touch_border_3_mine',
     'star_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
     'slide_mine',
-    'ColorBall',
+    'ColorBall', 'HexEffect', 'HoldEffect', 'StarEffect', 'HoldEffect', 'TouchEffparts_01', 'TouchEffparts_02',
     'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine'
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
@@ -60,7 +107,7 @@ export function drawImgAtcenter(ctx, img, size, offsetX = 0, offsetY = 0, imgWid
     }
 }
 export function getButton(action, type = "control") {
-    return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#topUtilityBtns .utilityButton"}[data-buttonAction="${action}"]`);
+    return document.querySelector(`${type === "control" ? "#playControls .controlButton" : "#utilityContainer .utilityButton"}[data-buttonAction="${action}"]`);
 }
 /**
 * @param {Function} func - 要執行的函式
@@ -68,14 +115,47 @@ export function getButton(action, type = "control") {
 */
 export function debounce(func, delay = 300) {
     let timer = null;
+    let lastArgs = null;
+    let lastThis = null;
 
-    return function (...args) {
+    const debounced = function (...args) {
+        lastArgs = args;
+        lastThis = this;
         if (timer) clearTimeout(timer);
 
         timer = setTimeout(() => {
-            func.apply(this, args);
+            const a = lastArgs;
+            const t = lastThis;
+            timer = null;
+            lastArgs = null;
+            lastThis = null;
+            func.apply(t, a);
         }, delay);
     };
+
+    debounced.cancel = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        lastArgs = null;
+        lastThis = null;
+    };
+
+    debounced.flush = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+            const a = lastArgs;
+            const t = lastThis;
+            lastArgs = null;
+            lastThis = null;
+            return func.apply(t, a);
+        }
+    };
+
+    debounced.pending = () => timer !== null;
+    return debounced;
 }
 
 export function throttle(func, delay = 16) {
@@ -90,207 +170,7 @@ export function throttle(func, delay = 16) {
     };
 }
 
-export function parseTag(str, open, close, specialCase = false) {
-    const regex = new RegExp(`\\${open}([^\\${open}\\${close}]*)\\${close}`, 'g');
-    const matches = [...str.matchAll(regex)];
-    const residue = str.replace(regex, '');
-    if (residue.includes(open) || residue.includes(close)) {
-        return { error: `Invalid format: nested or unmatched ${open}${close}` };
-    }
-    let lastValue = null;
-    for (const match of matches) {
-        const val = match[1].trim();
-        if (val.startsWith('#') && specialCase) { // direct assign #duration
-            const duration = parseFloat(val.substring(1));
-            if (isNaN(duration) || duration < 0) {
-                return { error: `Invalid duration value in direct assign ${open}${close}: must be a non-negative number` };
-            }
-            return { residue: residue.trim(), value: duration, override: true };
-        }
-        if (val === '' || isNaN(val) || parseFloat(val) <= 0) {
-            return { error: `Invalid value in ${open}${close}: must be a positive number` };
-        }
-        lastValue = parseFloat(val);
-    }
-    return { residue: residue.trim(), value: lastValue };
-}
-export function parseBeats(str, bpm, slide = false) {
-    if (slide) {
-        if (str.includes("##")) {
-            const parts = str.split("##");
-            if (parts.length === 3) { // dt##bpm##t:b
-                const delay = parseFloat(parts[0]);
-                const overrideBpm = parseFloat(parts[1]);
-                if (isNaN(delay) || delay < 0 || isNaN(overrideBpm) || overrideBpm <= 0) {
-                    console.warn("Invalid delay or bpm value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                const [time, beat] = parts[2].split(":");
-                if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-                    console.warn("Invalid time or beat value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
-            } else if (parts.length === 2) { // dt##t:b dt##t
-                const delay = parseFloat(parts[0]);
-                if (isNaN(delay) || delay < 0) {
-                    console.warn("Invalid delay value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                if (parts[1].includes(":")) {
-                    const [time, beat] = parts[1].split(":");
-                    if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-                        console.warn("Invalid time or beat value in slide note:", str);
-                        return { time: -1, delay: -1 };
-                    }
-                    return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: delay };
-                }
-                const time = parseFloat(parts[1]);
-                if (isNaN(time) || time < 0) {
-                    console.warn("Invalid time value in slide note:", str);
-                    return { time: -1, delay: -1 };
-                }
-                return { time: time, delay: delay };
-            }
-        } else if (str.includes("#") && !str.includes(":")) { // bpm#t
-            const [bpmStr, timeStr] = str.split("#").map(s => s.trim());
-            const overrideBpm = parseFloat(bpmStr);
-            const time = parseFloat(timeStr);
-            if (isNaN(overrideBpm) || overrideBpm <= 0 || isNaN(time) || time < 0) {
-                console.warn("Invalid bpm or time value in slide note:", str);
-                return { time: -1, delay: -1 };
-            }
-            return { time: time, delay: (60 / overrideBpm) };
-        }
-    } else {
-        if (str.startsWith('#')) { // direct assign #duration
-            const duration = parseFloat(str.substring(1));
-            if (isNaN(duration) || duration < 0) {
-                console.warn("Invalid duration value in direct assign note:", str);
-                return { time: -1, delay: -1 };
-            }
-            return { time: duration, delay: 0 };
-        }
-    }
-    if (str.includes(":")) { // bpm#t:b or t:b
-        const [time, beat] = str.split(":");
-        if (isNaN(beat) || parseFloat(time) < 0 || parseFloat(beat) < 0) {
-            console.warn("Invalid time or beat value in hold note:", str);
-            return { time: -1, delay: -1 };
-        }
-        if (time.includes("#")) {
-            const [bpmStr, timeStr] = time.split("#");
-            const overrideBpm = parseFloat(bpmStr);
-            return { time: (240 / overrideBpm) * (parseFloat(beat) / parseFloat(timeStr)), delay: (60 / overrideBpm) };
-        } else {
-            return { time: (240 / bpm) * (parseFloat(beat) / parseFloat(time)), delay: (60 / bpm) };
-        }
-    }
-    console.warn("Invalid hold duration format or empty:", str);
-    return { time: -1, delay: -1 };
-}
-export class PathRecorder {
-    constructor() {
-        this.segments = [];
-        this.totalLength = 0;
-        this.currentPoint = { x: 0, y: 0 };
-    }
 
-    moveTo(x, y) {
-        this.currentPoint = { x, y };
-    }
-
-    lineTo(x, y) {
-        const x1 = this.currentPoint.x;
-        const y1 = this.currentPoint.y;
-        const length = Math.sqrt((x - x1) ** 2 + (y - y1) ** 2);
-
-        this.segments.push({
-            type: 'line',
-            start: { x: x1, y: y1 },
-            end: { x, y },
-            length: length,
-            cumLength: this.totalLength
-        });
-
-        this.totalLength += length;
-        this.currentPoint = { x, y };
-    }
-
-    // startAngle, endAngle 使用弧度 (Radian)
-    arc(cx, cy, r, startAngle, endAngle, anticlockwise = false, laps = 0) {
-        let diff = endAngle - startAngle;
-
-        // 1. 基礎處理：確保方向與角度差在 2*PI 以內
-        if (!anticlockwise && diff <= 0) diff += Math.PI * 2;
-        if (anticlockwise && diff >= 0) diff -= Math.PI * 2;
-
-        // 2. 加入額外的圈數
-        const extraRotation = Math.PI * 2 * laps;
-        if (anticlockwise) {
-            diff -= extraRotation; // 逆時針方向，角度差為負值
-        } else {
-            diff += extraRotation; // 順時針方向，角度差為正值
-        }
-
-        const length = Math.abs(diff * r);
-
-        this.segments.push({
-            type: 'arc',
-            cx, cy, r, startAngle, endAngle,
-            diff, // 這裡的 diff 現在包含了總旋轉量
-            length,
-            cumLength: this.totalLength
-        });
-
-        this.totalLength += length;
-
-        // 更新當前點位置
-        this.currentPoint = {
-            x: cx + r * Math.cos(endAngle),
-            y: cy + r * Math.sin(endAngle)
-        };
-    }
-
-    getPointAt(t) {
-        if (this.segments.length === 0) return { ...this.currentPoint, rot: 0 };
-
-        // 邊界處理
-        if (t <= 0) t = 0;
-        if (t >= 1) t = 1;
-
-        const targetLen = t * this.totalLength;
-        const seg = this.segments.find(s => targetLen >= s.cumLength && targetLen <= s.cumLength + s.length)
-            || this.segments[this.segments.length - 1];
-
-        const localT = seg.length === 0 ? 1 : (targetLen - seg.cumLength) / seg.length;
-
-        if (seg.type === 'line') {
-            // 直線的朝向就是起點到終點的角度
-            const rot = Math.atan2(seg.end.y - seg.start.y, seg.end.x - seg.start.x);
-            return {
-                x: seg.start.x + (seg.end.x - seg.start.x) * localT,
-                y: seg.start.y + (seg.end.y - seg.start.y) * localT,
-                rot: rot
-            };
-        } else if (seg.type === 'arc') {
-            const currentAngle = seg.startAngle + seg.diff * localT;
-            // 圓弧切線角度：當前圓心角 + (順時針 90度 或 逆時針 -90度)
-            const rot = currentAngle + (seg.diff > 0 ? Math.PI / 2 : -Math.PI / 2);
-            return {
-                x: seg.cx + seg.r * Math.cos(currentAngle),
-                y: seg.cy + seg.r * Math.sin(currentAngle),
-                rot: rot
-            };
-        }
-    }
-
-    lineToArc(cx, cy, r, startAngle) {
-        const x = cx + r * Math.cos(startAngle);
-        const y = cy + r * Math.sin(startAngle);
-        this.lineTo(x, y);
-    }
-}
 /*export function drawArrowShape(ctx) {
     const size = 2.5; // 箭頭大小
     ctx.beginPath();
@@ -301,54 +181,7 @@ export class PathRecorder {
     ctx.closePath();
     ctx.fill();
 }*/
-export const touchRefPos = {
-    A: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 1.5) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.833,
-            y: Math.sin(a) * innerCirleBase * 0.833,
-            rot: a + Math.PI / 2
-        };
-    }),
-    B: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 1.5) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.458,
-            y: Math.sin(a) * innerCirleBase * 0.458,
-            rot: a + Math.PI / 2
-        };
-    }),
-    C: [{ x: 0, y: 0 }],
-    D: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 2) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.854,
-            y: Math.sin(a) * innerCirleBase * 0.854,
-            rot: a + Math.PI / 2
-        };
-    }),
-    E: Array.from({ length: 8 }, (_, i) => {
-        const a = (i - 2) * Math.PI / 4;
-        return {
-            x: Math.cos(a) * innerCirleBase * 0.645,
-            y: Math.sin(a) * innerCirleBase * 0.645,
-            rot: a + Math.PI / 2
-        };
-    })
-};
-export const noteRefPos = Array.from({ length: 8 }, (_, i) => {
-    const a = (i - 1.5) * Math.PI / 4;
-    return {
-        x: Math.cos(a) * innerCirleBase,
-        y: Math.sin(a) * innerCirleBase,
-        rot: a + Math.PI / 2
-    };
-});
-export const visualNoteRefPos = Array.from({ length: 8 }, (_, i) => {
-    return {
-        x: (3.5 - i) * innerCirleBase / 4,
-    };
-});
+
 
 const touchPathConfigs = {
     A: { points: [[0.31, 1.0], [0.31, 0.65], [0.15, 0.6]] },
@@ -412,6 +245,175 @@ c2.lineTo(-(Math.cos(Math.PI * (-0.375 + 0.75)) * innerCirleBase * 0.205 * 1.135
 c2.closePath();
 touchPaths.push({ id: `C2`, type: 'C2', path: c2 });
 
+export const defaultSyntaxColors = {
+    note: '#d4d4d4',
+    comment: '#508564',
+    bpm: '#ffbf5f',
+    split: '#c97554',
+    time: '#b5cea8',
+    slide: '#7EBAF0',
+    customSlide: '#c492bf',
+    hold: '#9fd47b',
+    break: '#FF9707',
+    ex: '#d1c70f',
+    mine: '#c24e61',
+    hanabi: '#d092ef',
+    touch: '#7EBAF0',
+    comma: '#656b6d',
+};
+
+export const defaultLightSyntaxColors = {
+    note: '#1f2328',
+    comment: '#1a7f37',
+    bpm: '#b45309',
+    split: '#9a3412',
+    time: '#2f6f44',
+    slide: '#0369a1',
+    customSlide: '#7e22ce',
+    hold: '#15803d',
+    break: '#c2410c',
+    ex: '#a16207',
+    mine: '#be123c',
+    hanabi: '#9333ea',
+    touch: '#0284c7',
+    comma: '#6b7280',
+};
+
+export const syntaxColorPresets = {
+    default: {
+        name: 'default',
+        colors: { ...defaultSyntaxColors }
+    },
+    arcade: {
+        name: 'arcade',
+        colors: {
+            note: '#ffffff',
+            comment: '#667788',
+            bpm: '#00d2be',
+            split: '#ffb700',
+            time: '#a0e040',
+            slide: '#00a2ff',
+            customSlide: '#e060ff',
+            hold: '#ffcc00',
+            break: '#ff3344',
+            ex: '#ffe600',
+            mine: '#ff2255',
+            hanabi: '#ff66cc',
+            touch: '#00d8ff',
+            comma: '#556677',
+        }
+    },
+    vscode: {
+        name: 'vscode',
+        colors: {
+            note: '#d4d4d4',
+            comment: '#6a9955',
+            bpm: '#4ec9b0',
+            split: '#ce9178',
+            time: '#b5cea8',
+            slide: '#569cd6',
+            customSlide: '#c586c0',
+            hold: '#dcdcaa',
+            break: '#d7ba7d',
+            ex: '#4fc1ff',
+            mine: '#f44747',
+            hanabi: '#c586c0',
+            touch: '#9cdcfe',
+            comma: '#808080',
+        }
+    },
+    monokai: {
+        name: 'monokai',
+        colors: {
+            note: '#fcfcfa',
+            comment: '#727072',
+            bpm: '#ffd866',
+            split: '#fc9867',
+            time: '#a9dc76',
+            slide: '#78dce8',
+            customSlide: '#ab9df2',
+            hold: '#a9dc76',
+            break: '#ff6188',
+            ex: '#ffd866',
+            mine: '#ff6188',
+            hanabi: '#ab9df2',
+            touch: '#78dce8',
+            comma: '#939293',
+        }
+    },
+    tokyoNight: {
+        name: 'tokyoNight',
+        colors: {
+            note: '#c0caf5',
+            comment: '#565f89',
+            bpm: '#e0af68',
+            split: '#ff9e64',
+            time: '#73daca',
+            slide: '#7aa2f7',
+            customSlide: '#bb9af7',
+            hold: '#9ece6a',
+            break: '#ff7a93',
+            ex: '#2ac3de',
+            mine: '#db4b4b',
+            hanabi: '#b4f9f8',
+            touch: '#7dcfff',
+            comma: '#565f89',
+        }
+    },
+    cyberpunk: {
+        name: 'cyberpunk',
+        colors: {
+            note: '#00ffcc',
+            comment: '#525266',
+            bpm: '#ff007f',
+            split: '#ff7700',
+            time: '#ffff00',
+            slide: '#00ffff',
+            customSlide: '#bd00ff',
+            hold: '#39ff14',
+            break: '#ff073a',
+            ex: '#ffe600',
+            mine: '#ff0055',
+            hanabi: '#ff00d4',
+            touch: '#00f0ff',
+            comma: '#6e6e80',
+        }
+    }
+};
+
+/**
+ * 依據目前主題解析單一語法高亮色（若於淺色模式仍為暗色預設值，自動切換為可讀的淺色預設色）
+ * @param {string} key
+ * @param {string} [rawColor]
+ * @param {'dark'|'light'} [effectiveTheme]
+ * @returns {string}
+ */
+export function resolveSyntaxColor(key, rawColor, effectiveTheme = null) {
+    const baseDark = defaultSyntaxColors[key];
+    const color = rawColor || baseDark || '#d4d4d4';
+    const isLight = effectiveTheme
+        ? effectiveTheme === 'light'
+        : (typeof document !== 'undefined' && document.documentElement?.dataset?.theme === 'light');
+    if (isLight && baseDark && defaultLightSyntaxColors[key] && String(color).toLowerCase() === baseDark.toLowerCase()) {
+        return defaultLightSyntaxColors[key];
+    }
+    return color;
+}
+
+export function applySyntaxColors(syntaxColors = {}) {
+    const root = document.documentElement;
+    const highlightLayer = document.getElementById('highlight-layer');
+    const colors = { ...defaultSyntaxColors, ...(syntaxColors || {}) };
+    Object.entries(colors).forEach(([key, color]) => {
+        const resolved = resolveSyntaxColor(key, color);
+        const cssVar = `--hl-${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+        if (root) root.style.setProperty(cssVar, resolved);
+        if (highlightLayer) highlightLayer.style.setProperty(cssVar, resolved);
+    });
+}
+
+const COMBINED_HIGHLIGHT_REGEX = /(\|\*[\s\S]*?\*\||\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|(?:&amp;)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(m)|(([ABCDE])(\d+)|C|C(d+))/gm;
+
 export function getHighlight(text, errpos = []) {
     if (!text) {
         return '';
@@ -422,11 +424,15 @@ export function getHighlight(text, errpos = []) {
     const normalizeRanges = (pos) => {
         if (!Array.isArray(pos) || pos.length === 0) return [];
 
-        const normalizeRange = ({ start, end }) => {
+        const normalizeRange = ({ start, end, level = 'warning' }) => {
             const s = Number(start);
             const e = Number(end);
             if (!Number.isFinite(s) || !Number.isFinite(e) || s >= e) return null;
-            return { start: Math.max(0, Math.min(text.length, s)), end: Math.max(0, Math.min(text.length, e)) };
+            return {
+                start: Math.max(0, Math.min(text.length, s)),
+                end: Math.max(0, Math.min(text.length, e)),
+                level: level === 'error' ? 'error' : 'warning'
+            };
         };
 
         const mergeRanges = (validRanges) => {
@@ -438,6 +444,7 @@ export function getHighlight(text, errpos = []) {
                     const last = merged[merged.length - 1];
                     if (current.start <= last.end) {
                         last.end = Math.max(last.end, current.end);
+                        if (current.level === 'error') last.level = 'error';
                     } else {
                         merged.push(current);
                     }
@@ -470,32 +477,34 @@ export function getHighlight(text, errpos = []) {
 
     const ranges = normalizeRanges(errpos);
 
-    const combinedRegex = /(\|\*[\s\S]*?\*\||\|\|.*$)|((?:&lt;[A-Za-z][^&]*?&gt;)|(?:pp)|(?:qq)|(?:&amp;)|[-^vpqszVw]|(?:&lt;)|(?:&gt;))|(\([^()]*\))|(\{[^{}]*\})|(\[[^[\]]*\])|(\,)|(h)|(f)|(b)|(x)|(m)|(([ABCDE])(\d+)|C|C(d+))/gm;
-
     const highlightText = (segment) => {
         const escaped = escapeHTML(segment);
-        return escaped.replace(combinedRegex, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, mine, touch) => {
-            if (comment) return `<span style="color: #508564;">${comment}</span>`;
+        return escaped.replace(COMBINED_HIGHLIGHT_REGEX, (match, comment, slide, bpm, split, time, comm, hold, f, bk, ex, mine, touch) => {
+            if (comment) return `<span class="hl-comment" style="color: var(--hl-comment, #508564);">${comment}</span>`;
             if (slide) {
                 if (slide === '&amp;') return '&amp;';
                 if (slide.startsWith('&lt;') && slide.endsWith('&gt;')) {
-                    return `<span style="color: #c492bf;">${slide}</span>`;
+                    return `<span class="hl-custom-slide" style="color: var(--hl-custom-slide, #c492bf);">${slide}</span>`;
                 }
-                return `<span style="color: #7EBAF0;">${slide}</span>`;
+                return `<span class="hl-slide" style="color: var(--hl-slide, #7EBAF0);">${slide}</span>`;
             }
-            if (touch) return `<span style="color: #7EBAF0;">${touch}</span>`;
-            if (bpm) return `<span style="color: #ffbf5f; font-weight: bold;">${bpm}</span>`;
-            if (split) return `<span style="color: #c97554ff; font-weight: bold;">${split}</span>`;
-            if (time) return `<span style="color: #b5cea8;">${time}</span>`;
-            if (hold) return `<span style="color: #9fd47b;">${hold}</span>`;
-            if (bk) return `<span style="color: #FF9707;">${bk}</span>`;
-            if (ex) return `<span style="color: #d1c70f;">${ex}</span>`;
-            if (mine) return `<span style="color: #c24e61;">${mine}</span>`;
-            if (f) return `<span style="color: #d092ef;">${f}</span>`;
-            if (comm) return `<span style="color: #656b6d;">${comm}</span>`;
+            if (touch) return `<span class="hl-touch" style="color: var(--hl-touch, #7EBAF0);">${touch}</span>`;
+            if (bpm) return `<span class="hl-bpm" style="color: var(--hl-bpm, #ffbf5f); font-weight: bold;">${bpm}</span>`;
+            if (split) return `<span class="hl-split" style="color: var(--hl-split, #c97554); font-weight: bold;">${split}</span>`;
+            if (time) return `<span class="hl-time" style="color: var(--hl-time, #b5cea8);">${time}</span>`;
+            if (hold) return `<span class="hl-hold" style="color: var(--hl-hold, #9fd47b);">${hold}</span>`;
+            if (bk) return `<span class="hl-break" style="color: var(--hl-break, #FF9707);">${bk}</span>`;
+            if (ex) return `<span class="hl-ex" style="color: var(--hl-ex, #d1c70f);">${ex}</span>`;
+            if (mine) return `<span class="hl-mine" style="color: var(--hl-mine, #c24e61);">${mine}</span>`;
+            if (f) return `<span class="hl-hanabi" style="color: var(--hl-hanabi, #d092ef);">${f}</span>`;
+            if (comm) return `<span class="hl-comma" style="color: var(--hl-comma, #656b6d);">${comm}</span>`;
             return match;
         });
     };
+
+    if (ranges.length === 0) {
+        return highlightText(text) + (text.endsWith('\n') ? ' ' : '');
+    }
 
     let html = '';
     let cursor = 0;
@@ -503,7 +512,8 @@ export function getHighlight(text, errpos = []) {
         if (cursor < range.start) {
             html += highlightText(text.slice(cursor, range.start));
         }
-        html += `<span class="highlight-warning">${highlightText(text.slice(range.start, range.end))}</span>`;
+        const cls = range.level === 'error' ? 'highlight-error' : 'highlight-warning';
+        html += `<span class="${cls}">${highlightText(text.slice(range.start, range.end))}</span>`;
         cursor = range.end;
     }
     if (cursor < text.length) {
@@ -533,6 +543,80 @@ export function getSimaiDataString(maidata) {
         .map(([key, value]) => `${key}=${value}`)
         .join("\n&");
 }
+const _popupHistoryStack = [];
+let _popupHistorySeq = 0;
+let _pushedPopupDepth = 0;
+let _ignoringPopupPopstateCount = 0;
+let _popupReconcileQueued = false;
+let _popupPopstateBound = false;
+
+function ensurePopupPopstateListener() {
+    if (_popupPopstateBound || typeof window === 'undefined') return;
+    _popupPopstateBound = true;
+
+    window.addEventListener('popstate', (e) => {
+        const stateDepth = Math.max(0, Number(e.state?.wmcPopupDepth || 0));
+
+        if (_ignoringPopupPopstateCount > 0) {
+            _ignoringPopupPopstateCount--;
+            _pushedPopupDepth = stateDepth;
+            if (_popupHistoryStack.length > _pushedPopupDepth) {
+                schedulePopupHistoryReconcile();
+            }
+            return;
+        }
+
+        if (_popupHistoryStack.length === 0) {
+            _pushedPopupDepth = stateDepth;
+            return;
+        }
+
+        _pushedPopupDepth = Math.min(_pushedPopupDepth, stateDepth);
+        while (_popupHistoryStack.length > _pushedPopupDepth) {
+            const topEntry = _popupHistoryStack.pop();
+            if (topEntry && typeof topEntry.closeFromBack === 'function') {
+                topEntry.closeFromBack();
+            }
+        }
+    });
+}
+
+function schedulePopupHistoryReconcile() {
+    if (_popupReconcileQueued || typeof window === 'undefined' || !window.history) return;
+    _popupReconcileQueued = true;
+
+    queueMicrotask(() => {
+        _popupReconcileQueued = false;
+        const desiredDepth = _popupHistoryStack.length;
+
+        if (desiredDepth > _pushedPopupDepth) {
+            while (_pushedPopupDepth < desiredDepth) {
+                _pushedPopupDepth++;
+                const entry = _popupHistoryStack[_pushedPopupDepth - 1];
+                const baseState = (window.history.state && typeof window.history.state === 'object') ? window.history.state : {};
+                window.history.pushState(
+                    { ...baseState, wmcPopupId: entry.id, wmcPopupDepth: _pushedPopupDepth },
+                    ''
+                );
+            }
+        } else if (desiredDepth === _pushedPopupDepth && desiredDepth > 0) {
+            const topEntry = _popupHistoryStack[desiredDepth - 1];
+            if (window.history.state?.wmcPopupId !== topEntry.id) {
+                const baseState = (window.history.state && typeof window.history.state === 'object') ? window.history.state : {};
+                window.history.replaceState(
+                    { ...baseState, wmcPopupId: topEntry.id, wmcPopupDepth: desiredDepth },
+                    ''
+                );
+            }
+        } else if (desiredDepth < _pushedPopupDepth) {
+            const delta = _pushedPopupDepth - desiredDepth;
+            _pushedPopupDepth = desiredDepth;
+            _ignoringPopupPopstateCount += 1;
+            window.history.go(-delta);
+        }
+    });
+}
+
 /**
  * popupWindow
  *
@@ -553,8 +637,10 @@ export function popupWindow({
     width = 340,
     maxWidth = 600,
     height = undefined,
-    maxHeight = "100dvh",
+    maxHeight = undefined,
     unclosable = false,
+    isPage = undefined,
+    mode = undefined,
     onOpen,
     onClose,
     closeWhen,
@@ -562,15 +648,22 @@ export function popupWindow({
 } = {}) {
     const popupWidth = typeof width === 'number' ? `${width}px` : width;
     const popupHeight = height ? (typeof height === 'number' ? `${height}px` : height) : 'auto';
-    const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : '100vh';
+    const popupMaxHeight = maxHeight ? (typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight) : null;
+
+    // 判定是否為頁面模式 (Page Route) 或 對話框模式 (Dialog)
+    // 預設規則：有 customContent 且非手動指定則為 Page，純文字提示 (只有 content) 預設為 Dialog
+    const isPageRoute = (isPage !== undefined)
+        ? Boolean(isPage)
+        : (mode === 'page' ? true : (mode === 'dialog' ? false : Boolean(customContent)));
 
     const applyContent = (container, value) => {
         container.innerHTML = '';
+        container.style.display = '';
         if (!value) {
-            container.style.display = 'none';
+            container.classList.remove('has-content');
             return;
         }
-        container.style.display = 'block';
+        container.classList.add('has-content');
         if (value instanceof Node) {
             container.appendChild(value);
             return;
@@ -607,21 +700,63 @@ export function popupWindow({
 
     // 1. 建立背景 (Backdrop)
     const backdrop = document.createElement('div');
-    backdrop.className = 'popup-backdrop';
+    backdrop.className = isPageRoute ? 'popup-backdrop popup-backdrop-page' : 'popup-backdrop popup-backdrop-dialog';
 
     // 2. 建立彈窗主體 (Popup)
     const popup = document.createElement('div');
-    popup.className = 'popup-window';
+    popup.className = isPageRoute ? 'popup-window popup-page' : 'popup-window popup-dialog';
     popup.style.maxWidth = maxWidth ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : '90%';
     popup.style.width = title ? popupWidth : 'fit-content';
     popup.style.height = popupHeight;
-    popup.style.maxHeight = popupMaxHeight;
+    if (popupMaxHeight) {
+        popup.style.maxHeight = popupMaxHeight;
+    }
 
-    // 3. 內部組件
+    // 3. 建立頂部導覽列 (Header / AppBar)
+    const headerElem = document.createElement('div');
+    headerElem.className = 'popup-header';
+    if (!title) headerElem.classList.add('no-title');
+
+    let closeBtn = null;
+    if (!unclosable) {
+        let pointerDownOnBackdrop = false;
+        backdrop.addEventListener('pointerdown', (e) => {
+            pointerDownOnBackdrop = (e.target === backdrop);
+        });
+        backdrop.addEventListener('pointercancel', () => {
+            pointerDownOnBackdrop = false;
+        });
+        backdrop.addEventListener('click', (e) => {
+            // 必須從 backdrop 本身按下並於 backdrop 放開才關閉，避免彈窗內拖曳移出至背景時誤觸關閉
+            const startedOnBackdrop = pointerDownOnBackdrop;
+            pointerDownOnBackdrop = false;
+            if (startedOnBackdrop && e.target === backdrop) {
+                closePopup();
+            }
+        });
+        closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'popup-close-btn';
+        closeBtn.setAttribute('aria-label', isPageRoute ? 'Back' : 'Close');
+        closeBtn.innerHTML = isPageRoute
+            ? `
+                <span class="material-symbols-outlined popup-icon-close" translate="no">close_small</span>
+                <span class="material-symbols-outlined popup-icon-back" translate="no">arrow_back</span>
+              `
+            : `<span class="material-symbols-outlined popup-icon-close" translate="no">close_small</span>`;
+        closeBtn.onclick = () => closePopup();
+        headerElem.appendChild(closeBtn);
+    }
+
     const titleElem = document.createElement('h2');
     titleElem.className = 'popup-title';
     if (!title) titleElem.style.display = 'none';
     titleElem.innerText = title;
+    headerElem.appendChild(titleElem);
+
+    if (!title && unclosable) {
+        headerElem.style.display = 'none';
+    }
 
     const progressContainer = document.createElement('div');
     progressContainer.className = 'popup-progress-container';
@@ -648,19 +783,65 @@ export function popupWindow({
     // --- 功能函式 ---
 
     let closed = false;
-    const closePopup = () => {
+    const isMobileBreakpoint = () => window.innerWidth <= 440;
+    const historyEntry = (!unclosable && typeof window !== 'undefined' && window.history)
+        ? { id: ++_popupHistorySeq, closeFromBack: () => closePopupInternal(true) }
+        : null;
+
+    if (historyEntry) {
+        ensurePopupPopstateListener();
+        _popupHistoryStack.push(historyEntry);
+        schedulePopupHistoryReconcile();
+    }
+
+    const closePopup = () => closePopupInternal(false);
+
+    const closePopupInternal = (fromHistoryBack = false) => {
         if (closed) return;
         closed = true;
         ctx.isClosed = true;
+
+        if (historyEntry) {
+            const idx = _popupHistoryStack.indexOf(historyEntry);
+            if (idx !== -1) {
+                _popupHistoryStack.splice(idx, 1);
+            }
+            if (!fromHistoryBack) {
+                schedulePopupHistoryReconcile();
+            }
+        }
+
         backdrop.style.pointerEvents = 'none';
         backdrop.style.opacity = '0';
-        popup.animate([
-            { transform: 'rotateX(0deg)', opacity: 1 },
-            { transform: 'rotateX(30deg)', opacity: 0 }
-        ], { duration: 200, easing: 'ease-in' }).onfinish = () => {
-            backdrop.remove();
-            if (typeof onClose === 'function') onClose();
-        };
+
+        if (isMobileBreakpoint() && isPageRoute) {
+            // 移動端全螢幕 Page Route: 向右滑出
+            popup.animate([
+                { transform: 'translateX(0)', opacity: 1 },
+                { transform: 'translateX(100%)', opacity: 0.8 }
+            ], { duration: 240, easing: 'cubic-bezier(0.3, 0, 0.8, 0.15)' }).onfinish = () => {
+                backdrop.remove();
+                if (typeof onClose === 'function') onClose();
+            };
+        } else if (!isPageRoute) {
+            // Dialog 模式: 縮放淡出
+            popup.animate([
+                { transform: 'scale(1)', opacity: 1 },
+                { transform: 'scale(0.88)', opacity: 0 }
+            ], { duration: 150, easing: 'ease-in' }).onfinish = () => {
+                backdrop.remove();
+                if (typeof onClose === 'function') onClose();
+            };
+        } else {
+            // 桌面端 Page 彈窗: 3D 旋轉淡出
+            popup.animate([
+                { transform: 'rotateX(0deg)', opacity: 1 },
+                { transform: 'rotateX(30deg)', opacity: 0 }
+            ], { duration: 200, easing: 'ease-in' }).onfinish = () => {
+                backdrop.remove();
+                if (typeof onClose === 'function') onClose();
+            };
+        }
     };
 
     const setContent = (value) => {
@@ -693,9 +874,13 @@ export function popupWindow({
             progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
         },
         isClosed: false,
+        isPage: isPageRoute,
         elements: {
             backdrop,
             popup,
+            header: headerElem,
+            title: titleElem,
+            closeButton: closeBtn,
             body: bodyElem,
             content: contentElem,
             customContent: customContentElem,
@@ -707,6 +892,7 @@ export function popupWindow({
     const setButtons = (newBtns = []) => {
         btnContainer.innerHTML = '';
         btnContainer.style.display = newBtns.length ? 'flex' : 'none';
+        btnContainer.classList.toggle('popup-buttons-vertical', newBtns.length >= 3);
         newBtns.forEach(btn => {
             btnContainer.appendChild(createBtn(btn, ctx));
         });
@@ -714,16 +900,7 @@ export function popupWindow({
 
     // --- 初始化組合 ---
 
-    if (!unclosable) {
-        backdrop.onclick = (e) => e.target === backdrop && closePopup();
-        const closeX = document.createElement('div');
-        closeX.className = 'popup-close-btn';
-        closeX.innerHTML = '<span class="material-symbols-outlined" translate="no">close_small</span>';
-        closeX.onclick = closePopup;
-        popup.appendChild(closeX);
-    }
-
-    popup.append(titleElem, progressContainer, bodyElem, btnContainer);
+    popup.append(headerElem, progressContainer, bodyElem, btnContainer);
 
     if (customContent) {
         setCustomContent(customContent);
@@ -735,10 +912,25 @@ export function popupWindow({
     // 啟動動畫
     requestAnimationFrame(() => {
         backdrop.style.opacity = '1';
-        popup.animate([
-            { transform: 'rotateX(30deg) scaleY(0.75) scaleX(0.8)', opacity: 0 },
-            { transform: 'rotateX(0deg) scaleY(1) scaleX(1)', opacity: 1 }
-        ], { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+        if (isMobileBreakpoint() && isPageRoute) {
+            // 移動端全螢幕 Page: 自右側滑入
+            popup.animate([
+                { transform: 'translateX(100%)' },
+                { transform: 'translateX(0)' }
+            ], { duration: 280, easing: 'cubic-bezier(0.05, 0.7, 0.1, 1.0)' });
+        } else if (!isPageRoute) {
+            // Dialog 模式: 縮放彈入
+            popup.animate([
+                { transform: 'scale(0.85)', opacity: 0 },
+                { transform: 'scale(1)', opacity: 1 }
+            ], { duration: 180, easing: 'cubic-bezier(0.12, 0.8, 0.32, 1)' });
+        } else {
+            // 桌面端 Page: 3D 浮起彈入
+            popup.animate([
+                { transform: 'rotateX(30deg) scaleY(0.75) scaleX(0.8)', opacity: 0 },
+                { transform: 'rotateX(0deg) scaleY(1) scaleX(1)', opacity: 1 }
+            ], { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+        }
     });
 
     // 執行回調
@@ -760,134 +952,412 @@ export function popupWindow({
 
     return ctx;
 }
-export function simpleToast({
-    content = "",
-    timeout = 2000,
-    type = "info"
-} = {}) {
+function syncToastContainerPosition(container) {
+    if (!container) return;
+    const hasPageModal = Boolean(document.querySelector('.popup-backdrop-page, .popup-page'));
+    const hasAnyModal = hasPageModal || Boolean(document.querySelector('.popup-backdrop, .wmc-welcome-overlay.active, .popup-window, dialog[open]'));
+    container.classList.toggle('has-popup', hasAnyModal);
+    container.classList.toggle('has-popup-page', hasPageModal);
+}
 
-    const MAX_TOASTS = 3;
+export function simpleToast(options = {}) {
+    const opts = typeof options === 'string' ? { title: options } : (options || {});
+    const {
+        id = null,
+        extensionId = null,
+        title = "",
+        content = "",
+        detail = "",
+        timeout = 2500,
+        type = "info",
+        showProgress = true,
+        progress = null,
+        closable = null,
+        buttons = null,
+        onClose = null
+    } = opts;
+
+    const MAX_TOASTS = 4;
 
     let container = document.getElementById('hint-container');
-
     if (!container) {
         container = document.createElement('div');
         container.id = 'hint-container';
         document.body.appendChild(container);
     }
+    syncToastContainerPosition(container);
 
-    // =========================
-    // 限制最大 toast 數量
-    // =========================
+    // ==========================================
+    // 檢查現有同 ID 的 Toast，原地更新而非重複建立
+    // ==========================================
+    if (id) {
+        const existing = [...container.children].find(el => el._toastId === id && !el._isRemoving);
+        if (existing && existing._toastController) {
+            existing._toastController.update({
+                title,
+                content,
+                detail,
+                type,
+                showProgress,
+                progress,
+                closable,
+                buttons,
+                timeout,
+                onClose
+            });
+            return existing._toastController;
+        }
+    }
 
-    const activeToasts =
-        [...container.children]
-            .filter(v => !v._isRemoving);
-
+    // ==========================================
+    // 限制最大 toast 數量，平滑關閉最舊的 toast
+    // ==========================================
+    const activeToasts = [...container.children].filter(v => !v._isRemoving);
     if (activeToasts.length >= MAX_TOASTS) {
         const oldest = activeToasts[0];
         oldest?._triggerRemove?.();
     }
 
-    // =========================
-    // 建立 toast
-    // =========================
-
+    // ==========================================
+    // 建立 toast 元素與子結構
+    // ==========================================
     const popup = document.createElement('div');
     popup.className = `toast-item toast-${type}`;
+    if (id) {
+        popup._toastId = id;
+        popup.dataset.toastId = id;
+    }
+    if (extensionId) {
+        popup._extensionId = extensionId;
+        popup.dataset.extensionId = extensionId;
+    }
 
-    // 安全版
-    popup.textContent = content;
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'toast-content-wrapper';
+
+    // Header (Title & Close Button)
+    const headerRow = document.createElement('div');
+    headerRow.className = 'toast-header-row';
+
+    const titleEl = document.createElement('span');
+    titleEl.className = 'toast-title';
+    titleEl.textContent = title;
+    headerRow.appendChild(titleEl);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'toast-close-btn';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.textContent = '✕';
+    headerRow.appendChild(closeBtn);
+
+    contentWrapper.appendChild(headerRow);
+
+    // Body Text
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'toast-body-text';
+    bodyEl.textContent = content;
+    if (!content) bodyEl.style.display = 'none';
+    contentWrapper.appendChild(bodyEl);
+
+    // Detail Text
+    const detailEl = document.createElement('div');
+    detailEl.className = 'toast-detail-text';
+    detailEl.textContent = detail;
+    if (!detail) detailEl.style.display = 'none';
+    contentWrapper.appendChild(detailEl);
+
+    // Actions Row
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'toast-actions-row';
+    actionsRow.style.display = 'none';
+    contentWrapper.appendChild(actionsRow);
+
+    popup.appendChild(contentWrapper);
+
+    // Progress Track & Bar
+    const progressTrack = document.createElement('div');
+    progressTrack.className = 'toast-progress-track';
+    const progressBar = document.createElement('div');
+    progressBar.className = 'toast-progress-bar';
+    progressTrack.appendChild(progressBar);
+    popup.appendChild(progressTrack);
 
     container.appendChild(popup);
 
-    // =========================
-    // 出現動畫
-    // =========================
-
-    popup.animate(
-        [
-            {
-                transform: 'translateX(-40px)',
-                opacity: 0
-            },
-            {
-                transform: 'translateX(0)',
-                opacity: 1
+    // 觸發展開動畫 (Accordion)
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (!popup._isRemoving) {
+                popup.classList.add('toast-show');
             }
-        ],
-        {
-            duration: 300,
-            easing:
-                'cubic-bezier(0.58,0.18,0.34,1.41)'
-        }
-    );
+        });
+    });
 
-    // =========================
-    // 移除邏輯
-    // =========================
+    // ==========================================
+    // 狀態與計時器管理
+    // ==========================================
+    let timer = null;
+    let remainingTime = typeof timeout === 'number' ? timeout : 0;
+    let startTime = Date.now();
+    let isCountdownActive = false;
+    let currentOnClose = typeof onClose === 'function' ? onClose : null;
 
-    const removePopup = () => {
-
+    const removePopup = (isManualClose = false) => {
         if (popup._isRemoving) return;
-
         popup._isRemoving = true;
 
-        clearTimeout(timer);
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
 
-        popup.style.maxHeight = '0px';
+        if (isManualClose && typeof currentOnClose === 'function') {
+            try {
+                currentOnClose(controller);
+            } catch (err) {
+                console.error('[simpleToast] onClose error:', err);
+            }
+        }
 
-        popup.style.marginTop = '0px';
-        popup.style.marginBottom = '0px';
-
-        popup.style.paddingTop = '0px';
-        popup.style.paddingBottom = '0px';
-
-        popup.style.opacity = '0';
-
-        popup.style.transform =
-            'translateX(-40px)';
-
-        popup.style.pointerEvents = 'none';
-
-        // transitionend 有時不穩
-        // 直接 timeout 最穩
+        popup.classList.remove('toast-show');
+        popup.classList.add('toast-removing');
 
         setTimeout(() => {
-
             popup.remove();
-
-            if (
-                container &&
-                container.children.length === 0
-            ) {
+            if (container && container.children.length === 0) {
                 container.remove();
             }
-
-        }, 450);
+        }, 320);
     };
 
-    popup._triggerRemove = removePopup;
+    popup._triggerRemove = () => removePopup(false);
 
-    // =========================
-    // 自動關閉
-    // =========================
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removePopup(true);
+    });
 
-    const timer =
-        setTimeout(removePopup, timeout);
+    // 點擊關閉：除點擊操作按鈕外，點擊 Toast 任意區域皆可直接手動關閉
+    popup.addEventListener('click', (e) => {
+        if (e.target.closest('.toast-btn')) return;
+        removePopup(true);
+    });
 
-    // =========================
-    // 點擊關閉
-    // =========================
+    function setupCountdown(ms) {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        remainingTime = ms;
+        if (ms > 0) {
+            startTime = Date.now();
+            isCountdownActive = true;
+            timer = setTimeout(removePopup, ms);
+            if (showProgress !== false) {
+                progressTrack.style.display = 'block';
+                progressBar.classList.add('toast-progress-bar-countdown');
+                progressBar.style.animationDuration = `${ms}ms`;
+                progressBar.style.transform = '';
+            } else {
+                progressTrack.style.display = 'none';
+            }
+        } else {
+            isCountdownActive = false;
+            if (progress == null) {
+                progressTrack.style.display = 'none';
+            }
+        }
+    }
 
-    popup.onclick = removePopup;
+    // 滑鼠 Hover 暫停倒數與動畫
+    popup.addEventListener('mouseenter', () => {
+        if (isCountdownActive) {
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            const elapsed = Date.now() - startTime;
+            remainingTime = Math.max(0, remainingTime - elapsed);
+        }
+    });
+
+    popup.addEventListener('mouseleave', () => {
+        if (isCountdownActive && !popup._isRemoving) {
+            if (remainingTime > 0) {
+                startTime = Date.now();
+                timer = setTimeout(removePopup, remainingTime);
+            } else {
+                // 若停留在 Toast 期間已達倒數上限，滑鼠移開時立即關閉
+                removePopup();
+            }
+        }
+    });
+
+    // 備用保險：進度條動畫播畢後，若滑鼠不在上方則立即關閉
+    progressBar.addEventListener('animationend', () => {
+        if (isCountdownActive && !popup._isRemoving) {
+            if (!popup.matches(':hover')) {
+                removePopup();
+            } else {
+                remainingTime = 0;
+            }
+        }
+    });
+
+    function renderButtons(btnList, controller) {
+        actionsRow.innerHTML = '';
+        if (Array.isArray(btnList) && btnList.length > 0) {
+            actionsRow.style.display = 'flex';
+            for (const btnConf of btnList) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                const isPrimary = btnConf.primary !== false && (btnConf.primary === true || btnConf.type === 'primary');
+                btn.className = `toast-btn ${isPrimary ? 'toast-btn-primary' : 'toast-btn-secondary'}`;
+                btn.textContent = btnConf.text || '';
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (typeof btnConf.onClick === 'function') {
+                        const result = btnConf.onClick(controller);
+                        if (result !== false) {
+                            removePopup();
+                        }
+                    } else {
+                        removePopup();
+                    }
+                });
+                actionsRow.appendChild(btn);
+            }
+        } else {
+            actionsRow.style.display = 'none';
+        }
+    }
+
+    function applyState({
+        title: newTitle,
+        content: newContent,
+        detail: newDetail,
+        type: newType,
+        showProgress: newShowProgress,
+        progress: newProgress,
+        closable: newClosable,
+        buttons: newButtons,
+        timeout: newTimeout,
+        onClose: newOnClose
+    }) {
+        if (newOnClose !== undefined) {
+            currentOnClose = typeof newOnClose === 'function' ? newOnClose : null;
+        }
+        if (newType) {
+            popup.className = `toast-item toast-${newType} toast-show`;
+        }
+
+        const shouldShowClose = newClosable !== false && (newClosable === true || Boolean(newTitle) || (newButtons && newButtons.length > 0) || newTimeout === 0);
+        closeBtn.style.display = shouldShowClose ? 'flex' : 'none';
+
+        if (newTitle !== undefined) {
+            titleEl.textContent = newTitle;
+            headerRow.style.display = (newTitle || shouldShowClose) ? 'flex' : 'none';
+        }
+
+        if (newContent !== undefined) {
+            bodyEl.textContent = newContent;
+            bodyEl.style.display = newContent ? 'flex' : 'none';
+        }
+
+        if (newDetail !== undefined) {
+            detailEl.textContent = newDetail;
+            detailEl.style.display = newDetail ? 'block' : 'none';
+        }
+
+        if (newButtons !== undefined) {
+            renderButtons(newButtons, controller);
+        }
+
+        if (newProgress != null) {
+            // 手動進度模式
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            isCountdownActive = false;
+            progressTrack.style.display = 'block';
+            progressBar.classList.remove('toast-progress-bar-countdown');
+            const ratio = Math.max(0, Math.min(100, Number(newProgress))) / 100;
+            progressBar.style.transform = `scaleX(${ratio})`;
+        } else if (newTimeout !== undefined) {
+            setupCountdown(newTimeout);
+        }
+    }
+
+    const controller = {
+        id,
+        extensionId,
+        element: popup,
+        close: removePopup,
+        update: (newOpts) => {
+            applyState(newOpts);
+            syncToastContainerPosition(container);
+            return controller;
+        },
+        setProgress: (pct, detailText) => {
+            progressTrack.style.display = 'block';
+            progressBar.classList.remove('toast-progress-bar-countdown');
+            const ratio = Math.max(0, Math.min(100, Number(pct))) / 100;
+            progressBar.style.transform = `scaleX(${ratio})`;
+            if (detailText !== undefined) {
+                detailEl.textContent = detailText;
+                detailEl.style.display = detailText ? 'block' : 'none';
+            }
+            return controller;
+        },
+        setContent: (text) => {
+            bodyEl.textContent = text;
+            return controller;
+        },
+        setTitle: (text) => {
+            titleEl.textContent = text;
+            headerRow.style.display = (text || closeBtn.style.display !== 'none') ? 'flex' : 'none';
+            return controller;
+        },
+        setDetail: (text) => {
+            detailEl.textContent = text;
+            detailEl.style.display = text ? 'block' : 'none';
+            return controller;
+        },
+        setType: (newType) => {
+            popup.className = `toast-item toast-${newType} toast-show`;
+            return controller;
+        },
+        setButtons: (btnList) => {
+            renderButtons(btnList, controller);
+            return controller;
+        }
+    };
+
+    popup._toastController = controller;
+
+    // 初始渲染狀態
+    applyState({
+        title,
+        content,
+        detail,
+        type,
+        showProgress,
+        progress,
+        closable,
+        buttons,
+        timeout: (progress != null) ? 0 : timeout
+    });
+
+    return controller;
 }
 
 /**
  * 載入所有圖片素材，支援進度回報
  * @param {Function} onProgress - 回傳 (目前百分比, 當前 Key)
  */
-export async function loadAllImages(onProgress) {
+export async function loadAllImages(onProgress, skinName = 'Default') {
     const images = {};
 
     const totalCore = coreImageKeys.length;
@@ -898,13 +1368,23 @@ export async function loadAllImages(onProgress) {
         if (onProgress) onProgress((loadedCore / totalCore) * 100, key);
     };
 
+    const registerImgWithAliases = (key, img) => {
+        images[key] = img;
+        const alias = skinAliases[key];
+        if (alias && !images[alias]) images[alias] = img;
+    };
+
     // 1. 優先載入首屏必需的核心元件（大幅縮減 LCP 阻塞時間）
     const coreQueue = coreImageKeys.map(async key => {
+<<<<<<< HEAD
         const url = `${baseURL.replace(/\/?$/, '/')}${key}.png`;
+=======
+        const candidates = getSkinCandidateUrls(key, baseURL, skinName);
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
         try {
             try {
-                const img = await getImgWithCache(url, key);
-                if (img) images[key] = img;
+                const img = await getImgWithCandidates(candidates, key, skinName);
+                if (img) registerImgWithAliases(key, img);
             } catch (err) {
                 console.warn(`[資源缺失] 無法載入 ${key}:`, err);
             }
@@ -926,10 +1406,10 @@ export async function loadAllImages(onProgress) {
         for (let i = 0; i < secondaryKeys.length; i += batchSize) {
             const batch = secondaryKeys.slice(i, i + batchSize);
             await Promise.all(batch.map(async key => {
-                const url = `${baseURL}${key}.png`;
+                const candidates = getSkinCandidateUrls(key, baseURL, skinName);
                 try {
-                    const img = await getImgWithCache(url, key);
-                    if (img) images[key] = img;
+                    const img = await getImgWithCandidates(candidates, key, skinName);
+                    if (img) registerImgWithAliases(key, img);
                 } catch (err) {
                     console.warn(`[背景資源缺失] 無法載入 ${key}:`, err);
                 }
@@ -939,6 +1419,7 @@ export async function loadAllImages(onProgress) {
 
     return images;
 }
+<<<<<<< HEAD
 async function getImgWithCache(url, key) {
     const decodeBlobToImage = (blobData) => {
         return new Promise((resolve, reject) => {
@@ -958,10 +1439,58 @@ async function getImgWithCache(url, key) {
         } catch (decodeErr) {
             console.warn(`[快取損壞] key: ${key} 解碼失敗，自動清除並重新由網路拉取資源`);
             await idbSet(`img_cache_${key}`, null).catch(() => {});
+=======
+
+/**
+ * 載入指定 key 的圖片素材，依優先序回退：
+ * 1. 優先從 Skin/{skinName}/{type}/{fileName} 載入
+ * 2. 若指定皮膚不存在且非 Default，嘗試 Skin/Default/...
+ * 3. 嘗試 Skin/Shared/{type}/{fileName} (或 Skin/Shared/{fileName}) 載入
+ * 4. 降級保底原有的 Skin/{fileName} 載入
+ * @param {string[]} candidateUrls 候選 URL 陣列 (依優先序排列)
+ * @param {string} key 素材識別碼
+ * @param {string} [skinName='Default']
+ */
+async function getImgWithCandidates(candidateUrls, key, skinName = 'Default') {
+    const loadBlobAsImage = (b) => new Promise((resolve, reject) => {
+        const img = new Image();
+        const objUrl = URL.createObjectURL(b);
+        img.onload = () => {
+            // 注意：不要在 onload 立即 revokeObjectURL，因為 images[key] 是全域常駐字典，
+            // 其它 DOM 元件 (如專案總管封面、譜面資訊彈窗) 會直接讀取 img.src。
+            resolve(img);
+        };
+        img.onerror = async () => {
+            URL.revokeObjectURL(objUrl);
+            await idbDelete(`img_cache_skin_${skinName}_${key}`).catch(() => { });
+            reject(new Error(`Failed to decode image blob for key: ${key}`));
+        };
+        img.src = objUrl;
+    });
+
+    const cacheKey = `img_cache_skin_${skinName}_${key}`;
+
+    // 1. 嘗試從 IndexedDB 取得皮膚快取 (依 skinName 隔離快取，Default 支援向下相容舊 key)
+    let blob = await idbGet(cacheKey).catch(() => null);
+    if (!blob && skinName === 'Default') {
+        blob = await idbGet(`img_cache_skin_${key}`).catch(() => null);
+    }
+
+    if (blob && blob.type && !blob.type.startsWith('image/')) {
+        await idbDelete(cacheKey).catch(() => { });
+        blob = null;
+    }
+
+    if (blob) {
+        try {
+            return await loadBlobAsImage(blob);
+        } catch {
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
             blob = null;
         }
     }
 
+<<<<<<< HEAD
     // 2. 沒快取或快取損壞時，重新從網路抓取資料
     try {
         const response = await fetch(url);
@@ -977,6 +1506,31 @@ async function getImgWithCache(url, key) {
         console.error(`圖片載入失敗: ${url}`, e);
         throw e;
     }
+=======
+    // 2. 依候選路徑依序嘗試載入：優先指定皮膚 -> 其次 Default -> 再次 Shared -> 最後 Fallback
+    let lastError = null;
+    for (const url of candidateUrls) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) continue; // 404 或其他狀態碼，嘗試下一個候選
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) continue; // Vite SPA fallback
+            blob = await response.blob();
+            const img = await loadBlobAsImage(blob);
+            await idbSet(cacheKey, blob).catch(() => { });
+            return img;
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    throw lastError || new Error(`All candidate skin URLs failed for ${key}`);
+}
+
+async function getImgWithCache(url, key, skinName = 'Default') {
+    const candidates = [url, ...getSkinCandidateUrls(key, baseURL, skinName)];
+    return await getImgWithCandidates(candidates, key, skinName);
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 }
 export function generatePath(startPos, endPos) {
     console.warn("path missing, using straight line as fallback");
@@ -1134,6 +1688,136 @@ export function clearTintCache(img) {
     }
 }
 
+function createWorkCanvas(w, h) {
+    if (typeof OffscreenCanvas !== 'undefined') {
+        return new OffscreenCanvas(w, h);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+}
+
+/**
+ * 對圖像調整亮度 (1.0 為原始亮度，< 1 變暗，> 1 變亮，完整保留透明通道)
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} img
+ * @param {number} [brightness=1]
+ */
+function brightenImage(img, brightness = 1) {
+    const w = img.naturalWidth || img.width || 0;
+    const h = img.naturalHeight || img.height || 0;
+    if (w === 0 || h === 0) return null;
+
+    const canvas = createWorkCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(img, 0, 0, w, h);
+    if (Math.abs(brightness - 1) < 1e-4) return canvas;
+
+    // 調暗 (< 1)：使用 source-atop + 黑色遮罩，全程 GPU 加速且不受 CORS 或 Safari ctx.filter 限制
+    if (brightness < 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = '#000000';
+        ctx.globalAlpha = Math.max(0, Math.min(1, 1 - brightness));
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+        return canvas;
+    }
+
+    // 調亮 (> 1)：優先直接以像素運算等比放大 RGB (數學精準並相容 Safari/iOS)
+    try {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] === 0) continue;
+            data[i] = Math.min(255, Math.round(data[i] * brightness));
+            data[i + 1] = Math.min(255, Math.round(data[i + 1] * brightness));
+            data[i + 2] = Math.min(255, Math.round(data[i + 2] * brightness));
+        }
+        ctx.putImageData(imgData, 0, 0);
+        return canvas;
+    } catch (e) {
+        // 若遇跨域圖片無法讀取像素，降級嘗試 ctx.filter 或 lighter 疊加
+        try {
+            if ('filter' in ctx) {
+                ctx.clearRect(0, 0, w, h);
+                ctx.save();
+                ctx.filter = `brightness(${brightness})`;
+                ctx.drawImage(img, 0, 0, w, h);
+                ctx.restore();
+                return canvas;
+            }
+        } catch (_) { }
+
+        const extraPasses = Math.min(4, brightness - 1);
+        let remain = extraPasses;
+        while (remain > 0.01) {
+            const alpha = Math.min(1, remain);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(img, 0, 0, w, h);
+            ctx.restore();
+            remain -= alpha;
+        }
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.restore();
+    }
+
+    return canvas;
+}
+
+let _brightnessCache = new WeakMap();
+
+/**
+ * 取得調整亮度後的圖片 (具備 WeakMap 快取與 0.05 粒度量化機制)
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} img
+ * @param {number} [brightness=1] 亮度倍率 (0 = 全黑, 1 = 原圖, > 1 = 提亮)
+ * @returns {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas|null}
+ */
+export function getBrightenedImage(img, brightness = 1) {
+    if (!img) return null;
+
+    const safeBrightness = Number.isFinite(brightness) ? Math.max(0, brightness) : 1;
+    // 量化為 0.05 粒度，提高動畫期間快取命中率
+    const normalized = Math.round(safeBrightness * 20) / 20;
+
+    // 快速通道：若亮度為 1.0，直接回傳原圖
+    if (normalized === 1) return img;
+
+    let map = _brightnessCache.get(img);
+    if (!map) {
+        map = new Map();
+        _brightnessCache.set(img, map);
+    }
+
+    const key = `${normalized.toFixed(2)}`;
+    if (map.has(key)) return map.get(key);
+
+    const result = brightenImage(img, normalized);
+    if (!result) return img;
+
+    map.set(key, result);
+    return result;
+}
+
+/**
+ * 清除 brightness 快取
+ * 如果傳入 img 只清該圖的快取；不傳則清除全部快取
+ * @param {HTMLImageElement|HTMLCanvasElement|OffscreenCanvas} [img]
+ */
+export function clearBrightnessCache(img) {
+    if (img) {
+        _brightnessCache.delete(img);
+    } else {
+        _brightnessCache = new WeakMap();
+    }
+}
+
 async function cacheFontWithAPI(url) {
     const cache = await caches.open('font-assets-v1');
 
@@ -1168,9 +1852,7 @@ export const wSlideRatio = [
     571, 271, -5.2, -0.003,
     653, 313, -3.9, -0.003,
 ];
-export function isObject(val) {
-    return val instanceof Object;
-}
+
 export const contantRotate = (selected, direction) => {
     if (typeof selected !== 'string' || selected.length === 0) return selected;
 
@@ -1493,210 +2175,6 @@ export const createLabeledInput1 = ({
     return { wrapper, input };
 };
 
-export const createCustomSlider = (initialValue, min = 0, max = 1, step = 0.1, onInputCallback) => {
-    const thumbWidth = 4;
-    const thumbHeight = 34;
-    const trackHeight = 24;
-    const gap = 4; // 滑鈕兩側 4px 間隙
-    const halfThumb = thumbWidth / 2; // 2px
-
-    // 1. 主容器 (模擬 input[type="range"] 讓外部能夠讀取與賦值 .value)
-    const container = document.createElement('div');
-    container.className = 'custom-slider-container';
-    container.setAttribute('type', 'range');
-    container.type = 'range';
-    container.value = initialValue;
-    container.min = min;
-    container.max = max;
-    container.step = step;
-    container.style.cssText = `
-        width: 140px;
-        min-width: 120px;
-        flex-shrink: 0;
-        height: ${trackHeight}px;
-        margin-top: 14px;
-        margin-bottom: 4px;
-        display: flex;
-        align-items: center;
-        position: relative;
-        cursor: pointer;
-        user-select: none;
-        touch-action: none;
-        box-sizing: border-box;
-    `;
-
-    // 2. 軌道主體容器 (Track)
-    const track = document.createElement('div');
-    track.style.cssText = `
-        width: 100%;
-        height: ${trackHeight}px;
-        position: relative;
-        display: flex;
-        align-items: center;
-    `;
-
-    // 3. 填滿進度軌道 (Active Fill)
-    const fill = document.createElement('div');
-    fill.style.cssText = `
-        height: 100%;
-        background: var(--accent-color);
-        border-radius: 999px 4px 4px 999px;
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 0%;
-        pointer-events: none;
-        transition: width 0.15s ease-out;
-    `;
-
-    // 4. 未填滿軌道 (Inactive Track)
-    const unfill = document.createElement('div');
-    unfill.style.cssText = `
-        height: 100%;
-        background: rgba(255, 255, 255, 0.14);
-        border-radius: 4px 999px 999px 4px;
-        position: absolute;
-        right: 0;
-        top: 0;
-        left: 0%;
-        pointer-events: none;
-        transition: left 0.15s ease-out;
-    `;
-
-    // 5. 垂直膠囊滑鈕 (Vertical Capsule Thumb)
-    const thumb = document.createElement('div');
-    thumb.style.cssText = `
-        width: ${thumbWidth}px;
-        height: ${thumbHeight}px;
-        background: var(--accent-color);
-        border-radius: 999px;
-        position: absolute;
-        top: 50%;
-        left: 0%;
-        transform: translate(-50%, -50%);
-        box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
-        box-sizing: border-box;
-        pointer-events: none;
-        transition: left 0.15s ease-out, transform 0.15s ease-out, box-shadow 0.15s ease-out;
-    `;
-
-    // 6. 頂部浮動數值氣泡 (Value Bubble)
-    const bubble = document.createElement('div');
-    bubble.style.cssText = `
-        position: absolute;
-        left: 0%;
-        opacity: 0;
-        transform: translateX(-50%);
-        min-width: 22px;
-        height: 22px;
-        padding: 0 5px;
-        box-sizing: border-box;
-        border-radius: 4px;
-        background: #f2effa;
-        color: #1a1721;
-        font-family: 'mono', monospace, sans-serif;
-        font-size: 11px;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-        pointer-events: none;
-        white-space: nowrap;
-        transition: left 0.3s ease-out, transform 0.1s ease-out, opacity 0.1s ease-out;
-    `;
-
-    track.appendChild(unfill);
-    track.appendChild(fill);
-    track.appendChild(thumb);
-    track.appendChild(bubble);
-    container.appendChild(track);
-
-    // 格式化顯示數值（整數不帶贅餘 0，小數依步長自適應）
-    const formatValue = (v) => {
-        if (step >= 1) return Math.round(v).toString();
-        const precision = step < 0.01 ? 3 : (step < 0.1 ? 2 : 1);
-        return parseFloat(v.toFixed(precision)).toString();
-    };
-
-    // 內部更新視覺與數值函式
-    const updateVisuals = (val) => {
-        val = Math.max(min, Math.min(max, val));
-        const percent = (max === min) ? 0 : Math.max(0, Math.min(1, (val - min) / (max - min)));
-
-        const offsetGap = halfThumb + gap; // 2 + 4 = 6px
-
-        fill.style.display = 'block';
-        fill.style.width = `calc(${percent * 100}% - ${offsetGap}px)`;
-        fill.style.borderRadius = '10px 4px 4px 10px';
-
-        unfill.style.display = 'block';
-        unfill.style.left = `calc(${percent * 100}% + ${offsetGap}px)`;
-        unfill.style.borderRadius = '4px 10px 10px 4px';
-
-        thumb.style.left = `${percent * 100}%`;
-        bubble.style.left = `${percent * 100}%`;
-
-        bubble.textContent = formatValue(val);
-        container.value = val;
-    };
-
-    // 處理拖曳/點擊邏輯
-    let isDragging = false;
-
-    const handlePointerMove = (e) => {
-        const rect = track.getBoundingClientRect();
-        if (rect.width <= 0) return;
-
-        const clickX = e.clientX - rect.left;
-        let pct = Math.max(0, Math.min(1, clickX / rect.width));
-
-        let rawVal = min + pct * (max - min);
-        let steppedVal = Math.round(rawVal / step) * step;
-
-        steppedVal = parseFloat(steppedVal.toFixed(4));
-        steppedVal = Math.max(min, Math.min(max, steppedVal));
-
-        updateVisuals(steppedVal);
-        if (onInputCallback) onInputCallback(steppedVal);
-    };
-
-    container.addEventListener('pointerdown', (e) => {
-        isDragging = true;
-        container.setPointerCapture(e.pointerId);
-        thumb.style.transform = 'translate(-50%, -50%) scaleY(1.1) scaleX(1.3)';
-        bubble.style.opacity = 1;
-        bubble.style.transform = 'translateX(-50%) translateY(-75%)';
-        handlePointerMove(e);
-    });
-
-    container.addEventListener('pointermove', (e) => {
-        if (!isDragging) return;
-        handlePointerMove(e);
-    });
-
-    const stopDrag = () => {
-        if (!isDragging) return;
-        isDragging = false;
-        thumb.style.transform = 'translate(-50%, -50%) scale(1)';
-        bubble.style.opacity = 0;
-        bubble.style.transform = 'translateX(-50%)';
-        updateVisuals(container.value);
-    };
-
-    container.addEventListener('pointerup', stopDrag);
-    container.addEventListener('pointercancel', stopDrag);
-
-    // 初始化數值視覺
-    updateVisuals(initialValue);
-
-    // 提供外部更新或重置介面
-    container._updateDisplay = () => {
-        updateVisuals(container.value);
-    };
-
-    return container;
-};
 
 const activeDebug = () => {
     const debugInfoEl = document.createElement('div');
@@ -1755,6 +2233,7 @@ const activeDebug = () => {
 
 window.activeDebug = activeDebug;
 
+<<<<<<< HEAD
 async function resampleAudioBuffer(audioBuffer, targetSampleRate = 44100) {
     if (audioBuffer.sampleRate === targetSampleRate) {
         return audioBuffer;
@@ -2946,6 +3425,8 @@ export class SimaiLogicControler {
     }
 }
 
+=======
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 export function easeOutQuad(x) {
     return 1 - (1 - x) * (1 - x);
 }
@@ -2986,7 +3467,7 @@ export async function ensureMediabunny() {
 
 export async function ensureJSZip() {
     if (window.JSZip) return window.JSZip;
-    await loadScript('Scripts/jszip.min.js');
+    await loadScript(new URL('./jszip.min.js', import.meta.url).href);
     return window.JSZip;
 }
 
@@ -3000,4 +3481,154 @@ export async function ensureJsMediaTags() {
     if (window.jsmediatags) return window.jsmediatags;
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js');
     return window.jsmediatags;
+}
+/**
+ * 禁用手機/瀏覽器的「滑動上一頁/下一頁」與「下拉重新整理」原生手勢
+ */
+export function disableNavigationGestures() {
+    if (typeof window === 'undefined') return;
+
+    // 1. 禁用邊緣滑動歷史導覽手勢 (iOS Safari / Android Chrome 側滑上一頁/下一頁)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isEdgeTouch = false;
+
+    window.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+
+            // 判斷觸控起點是否在螢幕兩側邊緣 24px 內
+            isEdgeTouch = touchStartX < 24 || touchStartX > window.innerWidth - 24;
+
+            // 若點擊目標為按鈕或可互動元件，絕不在此階段阻止 touchstart，以保證正常觸發 click 事件
+            const isInteractive = e.target && e.target.closest('button, [role="button"], .utilityButton, input, select, textarea, a, label, #utilityContainer');
+            if (isInteractive) {
+                isEdgeTouch = false;
+                return;
+            }
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!e.cancelable || !e.touches) return;
+
+        // 多指觸控 (如雙指捏合 Pinch-to-zoom) 一律阻斷，防止頁面縮放
+        if (e.touches.length > 1) {
+            e.preventDefault();
+            return;
+        }
+
+        const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
+
+        // 邊緣滑動歷史導覽手勢阻斷 (側滑上一頁/下一頁)
+        if (isEdgeTouch) {
+            const diffX = Math.abs(currentX - touchStartX);
+            const diffY = Math.abs(currentY - touchStartY);
+            if (diffX > 5 && diffX > diffY) {
+                e.preventDefault();
+                return;
+            }
+        }
+
+        const deltaX = Math.abs(currentX - touchStartX);
+        const deltaY = Math.abs(currentY - touchStartY);
+        const isPullingDown = currentY > touchStartY && deltaY > deltaX;
+
+        // 橫向滑動為主或位於頂部水平工具列內時，不阻斷原生觸控捲動
+        if (!isPullingDown) return;
+        if (e.target && e.target.closest('#topUtilityBtns, .utility-row')) {
+            return;
+        }
+
+        let el = e.target;
+        let canScrollDown = false;
+        while (el && el !== document.body && el !== document.documentElement) {
+            const style = window.getComputedStyle(el);
+            const overflowY = style.overflowY;
+            if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+                // 如果已經在最頂端還往下拉，阻斷它以避免觸發 pull-to-refresh
+                if (el.scrollTop <= 0) {
+                    canScrollDown = false;
+                } else {
+                    canScrollDown = true;
+                }
+                break;
+            }
+            el = el.parentElement;
+        }
+
+        if (!canScrollDown) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    // 3. 禁用 iOS Safari 專屬手勢縮放 (Pinch-to-zoom)
+    document.addEventListener('gesturestart', (e) => {
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('gesturechange', (e) => {
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('gestureend', (e) => {
+        if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+
+    // 4. 禁用雙點放大 (Double-tap to zoom)
+    let lastTouchEndTime = 0;
+    document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        // 若在 300ms 內快速連續點擊兩次
+        if (now - lastTouchEndTime <= 300) {
+            // 若點擊目標為按鈕或可互動元件，允許高速連點，不阻斷 click 生成
+            const isInteractive = e.target && e.target.closest('button, [role="button"], .utilityButton, input, select, textarea, a, label, #utilityContainer');
+            if (!isInteractive) {
+                if (e.cancelable) {
+                    e.preventDefault();
+                }
+            }
+        }
+        lastTouchEndTime = now;
+    }, { passive: false });
+}
+
+/**
+ * 同步難度下拉選單各選項的譜面資料指示狀態 (data-has-data)
+ * @param {HTMLSelectElement|null} selectEl
+ * @param {Object|null} maidata
+ * @param {string|number|null} [activeDiff=null]
+ * @param {string|null} [activeContent=null]
+ */
+export function syncDifficultySelectIndicators(selectEl, maidata, activeDiff = null, activeContent = null) {
+    if (!selectEl || !selectEl.options) return;
+    const activeKey = activeDiff != null ? String(activeDiff) : null;
+    for (let i = 0; i < selectEl.options.length; i++) {
+        const opt = selectEl.options[i];
+        const diffVal = String(opt.value);
+        let rawChart;
+        if (activeKey !== null && diffVal === activeKey && typeof activeContent === 'string') {
+            rawChart = activeContent;
+        } else {
+            rawChart = maidata?.[`inote_${diffVal}`];
+        }
+        const hasData = typeof rawChart === 'string' && rawChart.trim().length > 0;
+        if (hasData) {
+            opt.dataset.hasData = 'true';
+        } else {
+            delete opt.dataset.hasData;
+        }
+    }
+}
+
+/**
+ * 將秒數格式化為分:秒.百分秒，供時間顯示膠囊使用。
+ * @param {number} sec
+ * @returns {string}
+ */
+export function formatCapsuleTime(sec) {
+    const s = Math.max(0, Number.isFinite(sec) ? sec : 0);
+    const m = Math.floor(s / 60);
+    const rem = (s % 60).toFixed(2).padStart(5, '0');
+    return `${String(m).padStart(2, '0')}:${rem}`;
 }

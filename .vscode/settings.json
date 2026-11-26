@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "chat.tools.terminal.autoApprove": {
         "type": true
     },
@@ -13,4 +14,19 @@
         "json"
     ],
     "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml"
+=======
+  "chat.tools.terminal.autoApprove": {
+    "type": true
+  },
+  "i18n-ally.localesPaths": [
+    "locales"
+  ],
+  "i18n-ally.sourceLanguage": "zh-TW",
+  "i18n-ally.displayLanguage": "zh-TW",
+  "i18n-ally.keystyle": "nested",
+  "i18n-ally.ignoredLocales": [
+    "manifest"
+  ],
+  "i18n-ally.customFrameworkPath": ".vscode/i18n-ally-custom-framework.yml"
+>>>>>>> baeb70bd35e488c679d3c1668fe1646a88f6e96c
 }

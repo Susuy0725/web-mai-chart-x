@@ -519,7 +519,7 @@
       "slideDebug": "Show the slide judgement debugger (Ctrl+D)",
       "lang": "Language",
       "langAuto": "Follow system",
-      "drawHitEffect": "Render Hit Effects",
+      "richHitEffect": "Hit Effect Display",
       "drawHanabiEffect": "Render Hanabi Effects",
       "lowRes": "Low Resolution Mode",
       "majdataWsUrl": "MajdataView WebSocket URL",
@@ -592,6 +592,11 @@
       "dark": "Dark Mode",
       "light": "Light Mode",
       "auto": "Follow System"
+    },
+    "richHitEffectOpts": {
+      "off": "Off",
+      "wmcx": "wmcx",
+      "standard": "standard"
     },
     "invertWheelOpts": {
       "none": "Default",

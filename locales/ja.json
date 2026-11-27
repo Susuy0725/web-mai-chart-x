@@ -523,7 +523,7 @@
       "majdataWsUrl": "MajdataView WebSocket URL",
       "autoConnectMajdataView": "起動時に MajdataView に自動接続",
       "drawHanabiEffect": "花火のエフェクトのレンダリング",
-      "drawHitEffect": "ヒットエフェクトをレンダリングする",
+      "richHitEffect": "エフェクト表示",
       "manageResources": "リソース管理",
       "manageResourcesBtn": "開く",
       "exportAllData": "バックアップをポエクスポート",
@@ -592,6 +592,11 @@
       "dark": "ダークモード",
       "light": "ライトモード",
       "auto": "システムに従う"
+    },
+    "richHitEffectOpts": {
+      "off": "オフ",
+      "wmcx": "wmcx",
+      "standard": "standard"
     },
     "invertWheelOpts": {
       "none": "デフォルト",

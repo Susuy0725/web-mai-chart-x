@@ -5731,7 +5731,7 @@ eventBus.on(EVENTS.SETTINGS_CHANGED, ({ key, value }) => {
     const redrawKeys = [
         'showOutline', 'showBorder', 'showUI', 'showUIPosition',
         'showJudge', 'showCriticalPerfect', 'showBreakCriticalPerfect',
-        'drawHitEffect', 'drawHanabiEffect', 'richHanabi',
+        'richHitEffect', 'drawHanabiEffect', 'richHanabi',
         'previewAudioVisualMode', 'previewWaveformColor',
         'previewSpectrogramMinFreq', 'previewSpectrogramMaxFreq', 'previewSpectrogramBrightness',
         'previewTagOpacity', 'previewBpmLineOpacity',

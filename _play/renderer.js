@@ -160,7 +160,7 @@ export class SimaiRenderer extends BaseSimaiRenderer {
     // --- 1. 開關策略（未明確設為 false 時預設啟用） ---
 
     shouldDrawHitEffects() {
-        return this.settings?.drawHitEffect !== false;
+        return this.resolveHitEffectMode() !== 'off';
     }
 
     shouldDrawHanabiEffects() {
@@ -354,7 +354,7 @@ export class SimaiRenderer extends BaseSimaiRenderer {
     handleTouchTapCompletedOrTriggered(s, noteT, posInfo) {
         if (!s.triggered) return false;
         if (this.shouldDrawHitEffects() && (!s.judgeResult || s.judgeResult.grade !== 'MISS')) {
-            this.queueHitEffect(null, s.triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
+            this.queueTouchEffect(s.triggeredTime - this.globalTime, s.judgeResult, posInfo.x, posInfo.y);
         }
         return true;
     }

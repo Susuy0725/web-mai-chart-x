@@ -40,12 +40,52 @@
 </head>
 
 <body>
-    <div
-        style="user-select:none;z-index: 100;position: fixed; top: 0; right: 0; background-color: #00000080;color: whitesmoke;margin: 10px; padding: 10px; border-radius: 40px; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -o-user-select: none;">
-        BETA</div>
-
     <main id="app" role="main"
         style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: hidden;">
+        <div id="playToolbar" role="group" data-i18n-aria-label="a11y.mainMenu" aria-label="主選單">
+            <button type="button" id="hidePlayToolbar" class="splitter-toolbar-btn" aria-controls="playToolbar"
+                aria-expanded="true" data-i18n-title="visualToolbar.collapseToolbar"
+                data-i18n-aria-label="visualToolbar.collapseToolbar" title="收納工具列" aria-label="收納工具列">
+                <span class="material-symbols-outlined" translate="no">keyboard_arrow_up</span>
+            </button>
+            <button type="button" class="splitter-toolbar-btn" data-buttonAction="fullscreen"
+                data-i18n-title="menu.fullscreen" data-i18n-aria-label="menu.fullscreen" title="全螢幕" aria-label="全螢幕">
+                <span class="material-symbols-outlined" translate="no">fullscreen</span>
+            </button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button type="button" class="splitter-toolbar-btn" data-buttonAction="openProject"
+                data-i18n-title="menu.fileProjectManager" data-i18n-aria-label="menu.fileProjectManager" title="專案總管"
+                aria-label="專案總管">
+                <span class="material-symbols-outlined" translate="no">topic</span>
+            </button>
+            <label class="splitter-toolbar-btn play-difficulty" data-i18n-title="menu.changeDifficulty" title="難度">
+                <span class="material-symbols-outlined" translate="no" aria-hidden="true">layers</span>
+                <select id="playDifficulty" data-i18n-aria-label="menu.changeDifficulty" aria-label="難度"
+                    disabled></select>
+            </label>
+            <button type="button" class="splitter-toolbar-btn" data-buttonAction="autoPlay" data-autoplay="computer"
+                data-i18n-title="settings.autoPlayOpts.computer" data-i18n-aria-label="settings.items.autoPlay"
+                title="自動" aria-label="遊玩模式">
+                <span class="material-symbols-outlined" translate="no">computer</span>
+            </button>
+            <button type="button" class="splitter-toolbar-btn" data-buttonAction="connection"
+                data-i18n-title="settings.connection.syncView" data-i18n-aria-label="settings.connection.syncView"
+                title="設定同步檢視" aria-label="設定同步檢視">
+                <span class="material-symbols-outlined" translate="no">devices</span>
+            </button>
+            <button type="button" class="splitter-toolbar-btn" data-buttonAction="settings"
+                data-i18n-title="menu.settings" data-i18n-aria-label="menu.settings" title="設定" aria-label="設定">
+                <span class="material-symbols-outlined" translate="no">settings</span>
+            </button>
+        </div>
+        <button type="button" id="showPlayToolbar" hidden aria-controls="playToolbar" aria-expanded="false"
+            data-i18n-title="visualToolbar.expandToolbar" data-i18n-aria-label="visualToolbar.expandToolbar"
+            title="展開工具列" aria-label="展開工具列">
+            <span class="splitter-toolbar-btn" aria-hidden="true">
+                <span class="material-symbols-outlined" translate="no">keyboard_arrow_down</span>
+            </span>
+        </button>
+        <div class="play-beta-badge">BETA</div>
         <div id="canvasContainer">
             <canvas id="main" data-i18n-aria-label="a11y.playCanvas" aria-label="譜面播放畫布"></canvas>
             <div class="backgroundContainer">
@@ -60,33 +100,27 @@
                 <div id="speedDisplayCapsule" class="speed-display-capsule">1.00x</div>
             </div>
             <div id="playControlContainer">
-                <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01" data-i18n-aria-label="a11y.playbackProgress" aria-label="播放進度">
+                <input type="range" id="timeControl" min="0" max="1" value="0" step="0.01"
+                    data-i18n-aria-label="a11y.playbackProgress" aria-label="播放進度">
                 <div class="controlsContainer">
-                    <div class="controlButton" data-buttonAction="reset"
-                        data-i18n-title="a11y.restart" data-i18n-aria-label="a11y.restart"
-                        title="重新開始" role="button" tabindex="0" aria-label="重新開始">
+                    <div class="controlButton" data-buttonAction="reset" data-i18n-title="a11y.restart"
+                        data-i18n-aria-label="a11y.restart" title="重新開始" role="button" tabindex="0" aria-label="重新開始">
                         <span class="material-symbols-outlined" translate="no">
                             skip_previous
                         </span>
                     </div>
                     <div class="controlButton" data-buttonAction="play/pause" data-playing="false"
-                        data-i18n-title="keybindings.actions.playbackToggle" data-i18n-aria-label="keybindings.actions.playbackToggle"
-                        title="播放 / 暫停" role="button" tabindex="0" aria-label="播放或暫停">
+                        data-i18n-title="keybindings.actions.playbackToggle"
+                        data-i18n-aria-label="keybindings.actions.playbackToggle" title="播放 / 暫停" role="button"
+                        tabindex="0" aria-label="播放或暫停">
                         <span class="material-symbols-outlined" translate="no">
                             play_arrow
                         </span>
                     </div>
-                    <div class="controlButton" data-buttonAction="autoPlay" data-autoplay="computer"
-                        data-i18n-title="settings.autoPlayOpts.computer" title="自動" role="button" tabindex="0"
-                        data-i18n-aria-label="settings.items.autoPlay" aria-label="遊玩模式">
-                        <span class="material-symbols-outlined" translate="no">
-                            computer
-                        </span>
-                    </div>
                     <div class="controlSpeedAnchor">
-                        <button type="button" class="controlButton" data-buttonAction="speed" aria-controls="speedPopover"
-                            data-i18n-aria-label="menu.playbackSpeed" data-i18n-title="menu.playbackSpeed"
-                            aria-label="播放速度" title="播放速度" aria-expanded="false">
+                        <button type="button" class="controlButton" data-buttonAction="speed"
+                            aria-controls="speedPopover" data-i18n-aria-label="menu.playbackSpeed"
+                            data-i18n-title="menu.playbackSpeed" aria-label="播放速度" title="播放速度" aria-expanded="false">
                             <span class="material-symbols-outlined" translate="no">
                                 speed
                             </span>
@@ -121,33 +155,6 @@
                             keyboard_arrow_down
                         </span>
                     </div>
-                    <button type="button" class="controlButton" data-buttonAction="openProject"
-                        data-i18n-title="menu.fileProjectManager" data-i18n-aria-label="menu.fileProjectManager"
-                        title="專案總管" aria-label="專案總管">
-                        <span class="material-symbols-outlined" translate="no">topic</span>
-                    </button>
-                    <label class="controlButton play-difficulty" data-i18n-title="menu.changeDifficulty" title="難度">
-                        <span class="material-symbols-outlined" translate="no" aria-hidden="true">layers</span>
-                        <select id="playDifficulty" data-i18n-aria-label="menu.changeDifficulty" aria-label="難度" disabled></select>
-                    </label>
-                    <button type="button" class="controlButton" data-buttonAction="connection"
-                        data-i18n-title="settings.connection.syncView" data-i18n-aria-label="settings.connection.syncView">
-                        <span class="material-symbols-outlined" translate="no">devices</span>
-                    </button>
-                    <div class="controlButton" data-buttonAction="settings"
-                        data-i18n-title="menu.settings" data-i18n-aria-label="menu.settings"
-                        title="設定" role="button" tabindex="0" aria-label="遊戲設定">
-                        <span class="material-symbols-outlined" translate="no">
-                            settings
-                        </span>
-                    </div>
-                    <div class="controlButton" data-buttonAction="fullscreen"
-                        data-i18n-title="menu.fullscreen" data-i18n-aria-label="menu.fullscreen"
-                        title="全螢幕" role="button" tabindex="0" aria-label="全螢幕">
-                        <span class="material-symbols-outlined" translate="no">
-                            fullscreen
-                        </span>
-                    </div>
                     <!-- <div class="controlButton" data-buttonAction="slideDebug" title="滑軌除錯" role="button" tabindex="0" aria-label="滑軌除錯">
                         <span class="material-symbols-outlined" translate="no">
                             bug_report
@@ -155,8 +162,9 @@
                     </div> -->
                 </div>
             </div>
-            <div id="showPlayControlsBtn" data-i18n-title="a11y.showPlayControls" data-i18n-aria-label="a11y.showPlayControls"
-                title="顯示控制列" role="button" tabindex="0" aria-label="顯示控制列">
+            <div id="showPlayControlsBtn" data-i18n-title="a11y.showPlayControls"
+                data-i18n-aria-label="a11y.showPlayControls" title="顯示控制列" role="button" tabindex="0"
+                aria-label="顯示控制列">
                 <span class="splitter-toolbar-btn" aria-hidden="true">
                     <span class="material-symbols-outlined" translate="no">keyboard_arrow_up</span>
                 </span>

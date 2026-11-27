@@ -264,6 +264,26 @@ async function loadAndRestoreSettings(ctx, step, sharedSettingsPromise = null) {
             delete settings.enablePreviewWaveform;
             hasNewKeys = true;
         }
+        if (!('richHitEffect' in parsedSettings)) {
+            if (parsedSettings.drawHitEffect === false) {
+                settings.richHitEffect = 'off';
+                hasNewKeys = true;
+            } else if (parsedSettings.richHitEffectBeta === true) {
+                settings.richHitEffect = 'standard';
+                hasNewKeys = true;
+            } else if ('drawHitEffect' in parsedSettings || 'richHitEffectBeta' in parsedSettings) {
+                settings.richHitEffect = 'wmcx';
+                hasNewKeys = true;
+            }
+        }
+        if ('drawHitEffect' in settings) {
+            delete settings.drawHitEffect;
+            hasNewKeys = true;
+        }
+        if ('richHitEffectBeta' in settings) {
+            delete settings.richHitEffectBeta;
+            hasNewKeys = true;
+        }
         if (!('showUIPosition' in parsedSettings) && ('showUIHorizontalPosition' in parsedSettings || 'showUIVerticalPosition' in parsedSettings)) {
             const horiz = parsedSettings.showUIHorizontalPosition === 'right' ? 'right' : 'left';
             const vert = parsedSettings.showUIVerticalPosition === 'bottom' ? 'bottom' : 'top';

@@ -96,9 +96,8 @@ export const defaultSettings = {
     showMiniPreview: true, // 顯示預覽時間軸
     timeDisplayCapsule: true, // 懸浮時間膠囊
     timeDisplayCapsulePosition: 'center', // 懸浮時間膠囊位置: 'left' | 'center' | 'right'
-    drawHitEffect: true,
     drawHanabiEffect: true,
-    richHitEffectBeta: false,
+    richHitEffect: 'standard', // 'off' | 'wmcx' | 'standard'
     showBorder: true,
     canvasAspectRatio: 'auto',
     themeMode: DEFAULT_THEME_MODE,
@@ -165,6 +164,34 @@ export const settingsConfig = [
             },
             { type: 'header', label: 'settings.sections.appearanceAndNotes' },
             {
+                id: 'middleDisplay',
+                type: 'dropdown',
+                label: 'settings.items.middleDisplay',
+                options: [
+                    { value: 0, label: 'settings.middleDisplayOpts.off' },
+                    { value: 1, label: 'settings.middleDisplayOpts.combo' },
+                    { value: 2, label: 'settings.middleDisplayOpts.scorePlus' },
+                    { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }
+                ],
+                def: defaultSettings.middleDisplay
+            },
+            {
+                id: 'moviebrightness',
+                type: 'dropdown',
+                label: 'settings.items.moviebrightness',
+                options: [
+                    { value: '0', label: 'settings.items.bright' },
+                    { value: '-1', label: 'settings.items.normal' },
+                    { value: '-2', label: 'settings.items.dark' },
+                    { value: '-3', label: 'settings.items.veryDark' },
+                ],
+                def: defaultSettings.moviebrightness ?? -3,
+                apply: (val) => {
+                    const fn = window.applyMovieBrightness;
+                    if (fn) fn(val);
+                }
+            },
+            {
                 id: 'skin',
                 type: 'dropdown',
                 label: 'settings.items.skin',
@@ -192,32 +219,17 @@ export const settingsConfig = [
                 label: 'settings.items.showOutline',
                 def: defaultSettings.showOutline ?? true,
             },
-            {
-                id: 'showBorder',
-                type: 'checkbox',
-                label: 'settings.items.showBorder',
-                def: defaultSettings.showBorder ?? true
-            },
-            {
-                id: 'canvasAspectRatio',
-                type: 'dropdown',
-                label: 'settings.items.canvasAspectRatio',
-                options: [
-                    { value: 'auto', label: 'settings.aspectRatioOpts.auto' },
-                    { value: '16:9', label: 'settings.aspectRatioOpts.r16_9' },
-                    { value: '4:3', label: 'settings.aspectRatioOpts.r4_3' },
-                    { value: '1:1', label: 'settings.aspectRatioOpts.r1_1' },
-                    { value: '3:4', label: 'settings.aspectRatioOpts.r3_4' },
-                    { value: '9:16', label: 'settings.aspectRatioOpts.r9_16' },
-                ],
-                def: defaultSettings.canvasAspectRatio || 'auto'
-            },
             { type: 'header', label: 'settings.sections.effectsAndJudge' },
             {
-                id: 'drawHitEffect',
-                type: 'checkbox',
-                label: 'settings.items.drawHitEffect',
-                def: defaultSettings.drawHitEffect || false
+                id: 'richHitEffect',
+                type: 'dropdown',
+                label: 'settings.items.richHitEffect',
+                options: [
+                    { value: 'off', label: 'settings.richHitEffectOpts.off' },
+                    { value: 'wmcx', label: 'settings.richHitEffectOpts.wmcx' },
+                    { value: 'standard', label: 'settings.richHitEffectOpts.standard' },
+                ],
+                def: defaultSettings.richHitEffect || 'wmcx'
             },
             {
                 id: 'drawHanabiEffect',
@@ -251,22 +263,6 @@ export const settingsConfig = [
             },
             { type: 'header', label: 'settings.sections.backgroundAndSensor' },
             {
-                id: 'moviebrightness',
-                type: 'dropdown',
-                label: 'settings.items.moviebrightness',
-                options: [
-                    { value: '0', label: 'settings.items.bright' },
-                    { value: '-1', label: 'settings.items.normal' },
-                    { value: '-2', label: 'settings.items.dark' },
-                    { value: '-3', label: 'settings.items.veryDark' },
-                ],
-                def: defaultSettings.moviebrightness ?? -3,
-                apply: (val) => {
-                    const fn = window.applyMovieBrightness;
-                    if (fn) fn(val);
-                }
-            },
-            {
                 id: 'enableVideo',
                 type: 'checkbox',
                 label: 'settings.items.enableVideo',
@@ -296,8 +292,13 @@ export const settingsConfig = [
                 label: 'settings.items.showSensorTextWhenPaused',
                 def: defaultSettings.showSensorTextWhenPaused
             },
+            {
+                id: 'showBorder',
+                type: 'checkbox',
+                label: 'settings.items.showBorder',
+                def: defaultSettings.showBorder ?? true
+            },
             { type: 'header', label: 'settings.sections.canvasInfo' },
-            { id: 'middleDisplay', type: 'dropdown', label: 'settings.items.middleDisplay', options: [{ value: 0, label: 'settings.middleDisplayOpts.off' }, { value: 1, label: 'settings.middleDisplayOpts.combo' }, { value: 2, label: 'settings.middleDisplayOpts.scorePlus' }, { value: 3, label: 'settings.middleDisplayOpts.scoreMinus' }], def: defaultSettings.middleDisplay },
             {
                 id: 'renderSurroundingAuxiliaryText',
                 type: 'checkbox',
@@ -368,6 +369,20 @@ export const settingsConfig = [
                 apply: (val) => {
                     applySyntaxColors(val);
                 }
+            },
+            {
+                id: 'canvasAspectRatio',
+                type: 'dropdown',
+                label: 'settings.items.canvasAspectRatio',
+                options: [
+                    { value: 'auto', label: 'settings.aspectRatioOpts.auto' },
+                    { value: '16:9', label: 'settings.aspectRatioOpts.r16_9' },
+                    { value: '4:3', label: 'settings.aspectRatioOpts.r4_3' },
+                    { value: '1:1', label: 'settings.aspectRatioOpts.r1_1' },
+                    { value: '3:4', label: 'settings.aspectRatioOpts.r3_4' },
+                    { value: '9:16', label: 'settings.aspectRatioOpts.r9_16' },
+                ],
+                def: defaultSettings.canvasAspectRatio || 'auto'
             },
             { type: 'header', label: 'settings.sections.previewTrack' },
             {

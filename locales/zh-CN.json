@@ -465,7 +465,7 @@
       "slideDebug": "显示滑轨判定调试面板（Ctrl+D）",
       "lang": "语言 / Language",
       "langAuto": "跟随系统",
-      "drawHitEffect": "渲染击打特效",
+      "richHitEffect": "效果显示",
       "drawHanabiEffect": "渲染烟火特效",
       "lowRes": "低分辨率模式",
       "majdataWsUrl": "MajdataView WebSocket 地址",
@@ -538,6 +538,11 @@
       "dark": "深色模式",
       "light": "浅色模式",
       "auto": "跟随系统"
+    },
+    "richHitEffectOpts": {
+      "off": "关",
+      "wmcx": "wmcx",
+      "standard": "standard"
     },
     "invertWheelOpts": {
       "none": "默认",

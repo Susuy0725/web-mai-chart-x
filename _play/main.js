@@ -60,6 +60,7 @@ const defaultSettings = {
     showUIPosition: 'top-left',
     timeDisplayCapsule: true,
     timeDisplayCapsulePosition: 'center',
+    richHitEffect: 'wmcx', // 'off' | 'wmcx' | 'standard'
     drawHanabiEffect: true,
     richHanabi: false,
     simplayPerfect: true,
@@ -323,7 +324,11 @@ function resolveTouchGroup(group, lastResult, triggerSourceNote = null) {
                     const posInfo = touchRefPos[remainNote.touchPos]
                         ? touchRefPos[remainNote.touchPos][remainNote.touchPos === "C" ? 0 : remainNote.pos - 1]
                         : { x: 0, y: 0 };
-                    renderer.queueHitEffect(null, 0, remainNote.judgeResult, posInfo.x, posInfo.y);
+                    if (remainNote.holdDuration > 0 || remainNote.isHold) {
+                        renderer.queueHitEffect(null, 0, remainNote.judgeResult, posInfo.x, posInfo.y);
+                    } else {
+                        renderer.queueTouchEffect(0, remainNote.judgeResult, posInfo.x, posInfo.y);
+                    }
                 }
 
                 if (remainNote.isHanabi && remainNote.judgeResult.grade !== 'MISS') {
@@ -521,6 +526,17 @@ if (savedSettings) {
             } else if (settings.autoPlay === false) {
                 settings.autoPlay = 'off';
             }
+            if (!('richHitEffect' in parsed)) {
+                if (parsed.drawHitEffect === false) {
+                    settings.richHitEffect = 'off';
+                } else if (parsed.richHitEffectBeta === true) {
+                    settings.richHitEffect = 'standard';
+                } else if ('drawHitEffect' in parsed || 'richHitEffectBeta' in parsed) {
+                    settings.richHitEffect = 'wmcx';
+                }
+            }
+            delete settings.drawHitEffect;
+            delete settings.richHitEffectBeta;
         } else {
             settings = { ...defaultSettings };
         }
@@ -3925,8 +3941,14 @@ function openSettings() {
                 },
                 { type: 'header', label: 'settings.sections.effectsAndJudge' },
                 {
-                    id: 'drawHitEffect', type: 'checkbox', label: 'settings.items.drawHitEffect', def: defaultSettings.drawHitEffect ?? true,
-                    apply: (val) => { renderer.settings.drawHitEffect = val; draw(); }
+                    id: 'richHitEffect', type: 'dropdown', label: 'settings.items.richHitEffect',
+                    options: [
+                        { value: 'off', label: 'settings.richHitEffectOpts.off' },
+                        { value: 'wmcx', label: 'settings.richHitEffectOpts.wmcx' },
+                        { value: 'standard', label: 'settings.richHitEffectOpts.standard' },
+                    ],
+                    def: defaultSettings.richHitEffect || 'wmcx',
+                    apply: (val) => { renderer.settings.richHitEffect = val; draw(); }
                 },
                 {
                     id: 'drawHanabiEffect', type: 'checkbox', label: 'settings.items.drawHanabiEffect', def: defaultSettings.drawHanabiEffect ?? true,

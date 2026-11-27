@@ -782,8 +782,17 @@ export class SimaiRenderer {
         }
     }
 
+    resolveHitEffectMode() {
+        const mode = this.settings?.richHitEffect;
+        if (mode === 'off' || mode === false) return 'off';
+        if (mode === 'standard' || mode === true) return 'standard';
+        if (mode === 'wmcx') return 'wmcx';
+        if (this.settings?.drawHitEffect === false) return 'off';
+        return 'wmcx';
+    }
+
     shouldDrawHitEffects() {
-        return Boolean(this.settings.drawHitEffect);
+        return this.resolveHitEffectMode() !== 'off';
     }
 
     shouldDrawHanabiEffects() {
@@ -976,6 +985,54 @@ export class SimaiRenderer {
     }
 
     /**
+     * 佇列 Touch 單點打擊特效 (Touch Hit Effect) - 具備同位置去重 (Deduplication)
+     */
+    queueTouchEffect(noteT, judge = null, x = 0, y = 0, rot = null) {
+        if (!this.shouldDrawHitEffects()) return;
+        if (!Number.isFinite(noteT)) return;
+        if (judge && (judge.grade === 'MISS' || judge === 'MISS')) return;
+
+        const duration = 0.25;
+        if (noteT < -duration || noteT > 0.05) return;
+
+        const px = Number.isFinite(x) ? x : 0;
+        const py = Number.isFinite(y) ? y : 0;
+        const thresholdSq = Math.pow((this.settings.noteBaseSize || 11) * 0.5, 2);
+
+        for (let i = 0; i < this._hitEffectCount; i++) {
+            const eff = this._hitEffectQueue[i];
+            if (eff.type === 'touch') {
+                const dx = eff.x - px;
+                const dy = eff.y - py;
+                if (dx * dx + dy * dy < thresholdSq) {
+                    if (noteT > eff.noteT) {
+                        eff.x = px;
+                        eff.y = py;
+                        eff.rot = rot;
+                        eff.noteT = noteT;
+                        eff.judge = judge || eff.judge;
+                    }
+                    return;
+                }
+            }
+        }
+
+        let eff = this._hitEffectQueue[this._hitEffectCount];
+        if (!eff) {
+            eff = { type: 'touch', x: 0, y: 0, rot: 0, noteT: 0, judge: null, pos: 0 };
+            this._hitEffectQueue[this._hitEffectCount] = eff;
+        }
+        eff.type = 'touch';
+        eff.x = px;
+        eff.y = py;
+        eff.rot = rot;
+        eff.noteT = noteT;
+        eff.judge = judge;
+        eff.pos = 0;
+        this._hitEffectCount++;
+    }
+
+    /**
      * 清空打擊特效佇列與位置去重映射表
      */
     clearHitEffects() {
@@ -989,7 +1046,8 @@ export class SimaiRenderer {
      * 在所有音符繪製完成後統一執行，整幀只切換一次混合模式
      */
     drawHitEffects() {
-        if (!this.shouldDrawHitEffects() || this._hitEffectCount === 0) {
+        const mode = this.resolveHitEffectMode();
+        if (mode === 'off' || this._hitEffectCount === 0) {
             this.clearHitEffects();
             return;
         }
@@ -997,6 +1055,7 @@ export class SimaiRenderer {
         const { ctx } = this;
         const count = this._hitEffectCount;
         const queue = this._hitEffectQueue;
+        const isStandard = mode === 'standard';
 
         ctx.save();
         // iOS WebKit 在透明畫布上使用 lighter 會導致 Metal 著色器產生黑塊 (Black Artifacts)，安全回退至 source-over
@@ -1005,16 +1064,22 @@ export class SimaiRenderer {
         for (let i = 0; i < count; i++) {
             const eff = queue[i];
             if (eff.type === 'hit') {
-                if (this.settings.richHitEffectBeta) {
+                if (isStandard) {
                     this.standardHitEffect(eff.noteT, eff.judge, eff.x, eff.y, eff.rot, true);
                 } else {
                     this.simpleHitEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
                 }
             } else if (eff.type === 'hold') {
-                if (this.settings.richHitEffectBeta) {
+                if (isStandard) {
                     this.standardHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, eff.rot, true);
                 } else {
                     this.simpleHoldEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
+                }
+            } else if (eff.type === 'touch') {
+                if (isStandard) {
+                    this.standardTouchEffect(eff.noteT, eff.judge, eff.x, eff.y, eff.rot || 0, true);
+                } else {
+                    this.simpleHitEffect(eff.noteT, eff.judge, eff.x, eff.y, true);
                 }
             }
         }
@@ -1563,6 +1628,110 @@ export class SimaiRenderer {
             const drawSize = minSize + (maxSize - minSize) * u;
             ctx.globalAlpha = alpha;
             this.drawImgAtcenter(titimg, drawSize, 0, 0);
+        }
+
+        ctx.restore();
+    }
+
+    /**
+     * 繪製 Touch 單點打擊特效（中心光球 + 外環 8 星空心／實心交替 + 內環 4 小空心星）
+     */
+    standardTouchEffect(noteT, judge = null, x = 0, y = 0, rot = 0, isBatch = false) {
+        if (!Number.isFinite(noteT)) return;
+        const duration = 0.25;
+        const p = Math.max(0, -noteT) / duration;
+        if (!Number.isFinite(p) || p >= 1) return;
+
+        const nb = this.settings.noteBaseSize || 11;
+        const nbScale = nb / 11;
+        const safeX = Number.isFinite(x) ? x : 0;
+        const safeY = Number.isFinite(y) ? y : 0;
+        const colorHex = resolveJudgeColorHex(judge, '#ffdc1a');
+        const rgb = hexToRgb(colorHex);
+
+        const ctx = this.ctx;
+        ctx.save();
+        if (!isBatch) {
+            ctx.globalCompositeOperation = IS_IOS_OR_SAFARI ? 'source-over' : 'lighter';
+        }
+        ctx.translate(safeX, safeY);
+        ctx.rotate(rot);
+
+        function scaleFunction(t) {
+            return -51.33921 * Math.pow(t, 4) + 108.11218 * Math.pow(t, 3) - 76.98365 * Math.pow(t, 2) + 19.39951 * t + 1.6458;
+        }
+        function distanceFunction(t) {
+            return -0.283214 * Math.pow(t, 2) + 0.466786 * t + 0.362308;
+        }
+        function scaleSmallFunction(t) {
+            if (t <= 0.56993) return 1.2;
+            else return -6.63929 * Math.pow(t, 2) + 7.56786 * t - 0.95;
+        }
+
+        // 1. 中心發光光球（0.00 ~ 0.36 迅速擴散並淡出）
+        if (p < 0.36) {
+            const orbU = p / 0.36;
+            const orbEase = 1 - Math.pow(1 - orbU, 2.2);
+            const orbRadius = Math.max(1.0, nb * (0.14 + 0.35 * orbEase));
+            const orbAlpha = 1 * Math.pow(1 - orbU, 1.2);
+
+            if (orbAlpha > 0.01) {
+                const rimR = Math.min(255, Math.round(rgb.r + (255 - rgb.r) * 0.28));
+                const rimG = Math.min(255, Math.round(rgb.g + (255 - rgb.g) * 0.28));
+                const rimB = Math.min(255, Math.round(rgb.b + (255 - rgb.b) * 0.28));
+                const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, orbRadius);
+                grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)`);
+                grad.addColorStop(0, `rgba(${rimR}, ${rimG}, ${rimB}, 0)`);
+
+                ctx.globalAlpha = orbAlpha;
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, orbRadius, 0, TWO_PI);
+                ctx.fill();
+            }
+        }
+
+        // 切換回 source-over 繪製銳利四角星，避免重疊光球時色彩過曝變白
+        ctx.globalCompositeOperation = 'source-over';
+
+        const hollowKey = !imgNotExists(this.images?.TouchEffparts_01) ? 'TouchEffparts_01' : null;
+        const solidKey = !imgNotExists(this.images?.TouchEffparts_02) ? 'TouchEffparts_02' : null;
+        const hollowImg = hollowKey ? this.getMemoizedTintedImage(hollowKey, 0.95, colorHex) : null;
+        const solidImg = solidKey ? this.getMemoizedTintedImage(solidKey, 0.95, colorHex) : null;
+
+        const drawTouchStar = (starImg, isHollow, sx, sy, starSize, rot) => {
+            if (starSize <= 0.5) return;
+            if (starImg && !imgNotExists(starImg)) {
+                ctx.save();
+                ctx.translate(sx, sy);
+                ctx.rotate(rot);
+                this.drawImgAtcenter(starImg, starSize, 0, 0);
+                ctx.restore();
+            }
+        };
+
+        // 2. 外環 8 顆空心／實心交替四角星
+        const outerDist = nb * distanceFunction(p);
+        const innerDist = nb * 0.3;
+        const size = scaleFunction(p) * nbScale;
+        const sizesmall = scaleSmallFunction(p) * nbScale * 1.5;
+
+        ctx.globalAlpha = 1;
+        for (let i = 0; i < 8; i++) {
+            const angle = i * (Math.PI * 0.25) - Math.PI / 8;
+            const sx = Math.cos(angle) * outerDist;
+            const sy = Math.sin(angle) * outerDist;
+            const isHollow = (i & 1) === 1;
+            drawTouchStar(isHollow ? hollowImg : solidImg, isHollow, sx, sy, size, angle - rot);
+        }
+
+        // 3. 內環 4 顆小型空心四角星（中後段於內側浮現並擴散）
+        for (let i = 0; i < 8; i++) {
+            const angle = i * (Math.PI * 0.25) - Math.PI / 8;
+            const sx = Math.cos(angle) * innerDist;
+            const sy = Math.sin(angle) * innerDist;
+            const isHollow = (i & 1) === 0;
+            drawTouchStar(isHollow ? hollowImg : solidImg, isHollow, sx, sy, sizesmall, angle - rot);
         }
 
         ctx.restore();
@@ -3136,7 +3305,7 @@ export class SimaiRenderer {
     handleTouchTapCompletedOrTriggered(s, noteT, posInfo) {
         if (noteT <= 0) {
             if (this.shouldDrawHitEffects()) {
-                this.queueHitEffect(null, noteT, s, posInfo.x, posInfo.y);
+                this.queueTouchEffect(noteT, s, posInfo.x, posInfo.y, posInfo.rot);
             }
             if (this.settings.showJudge !== false) {
                 this.queueJudgeEffect(s, null, s.time);

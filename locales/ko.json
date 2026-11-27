@@ -465,7 +465,7 @@
       "slideDebug": "슬라이드 판정 디버그 패널 표시(Ctrl+D)",
       "lang": "언어 / Language",
       "langAuto": "시스템 설정 따르기",
-      "drawHitEffect": "타격 효과 렌더링",
+      "richHitEffect": "이펙트 표시",
       "drawHanabiEffect": "불꽃 효과 렌더링",
       "lowRes": "저해상도 모드",
       "majdataWsUrl": "MajdataView WebSocket 주소",
@@ -538,6 +538,11 @@
       "dark": "다크 모드",
       "light": "라이트 모드",
       "auto": "시스템 설정 따르기"
+    },
+    "richHitEffectOpts": {
+      "off": "끄기",
+      "wmcx": "wmcx",
+      "standard": "standard"
     },
     "invertWheelOpts": {
       "none": "기본",

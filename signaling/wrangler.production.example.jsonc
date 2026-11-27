@@ -1,0 +1,23 @@
+{
+    "name": "wmcx-signal",
+    "main": "worker.mjs",
+    // Copy the compatibility date and flags from the current deployment.
+    "compatibility_date": "2026-11-27",
+    "ratelimits": [
+        {
+            "name": "IP_RATE_LIMIT",
+            "namespace_id": "<existing IP rate-limit namespace ID>",
+            "simple": { "limit": 30, "period": 60 }
+        },
+        {
+            "name": "JOIN_RATE_LIMIT",
+            "namespace_id": "<existing join rate-limit namespace ID>",
+            "simple": { "limit": 10, "period": 10 }
+        }
+    ],
+    "durable_objects": {
+        "bindings": [{ "name": "SYNC_ROOMS", "class_name": "SyncRoom" }]
+    },
+    "migrations": [{ "tag": "sync-room-v1", "new_sqlite_classes": ["SyncRoom"] }],
+    "triggers": { "crons": [] }
+}

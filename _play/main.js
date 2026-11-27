@@ -710,6 +710,8 @@ const settingsBtn = getControlButton("settings");
 const fullscreenBtn = getControlButton("fullscreen");
 const connectionBtn = getControlButton("connection");
 const syncManager = new SyncManager({
+    getPlaybackState: () => ({ playing, time: realTime, speed: settings.playbackSpeed || 1 }),
+    waitForAudio: () => audioManager.bgmReady,
     onStatusChange: () => syncManager.updateButtonUI(connectionBtn),
     onPlay: (time, speed) => {
         if (speed !== settings.playbackSpeed) setPlaybackSpeed(speed);
@@ -721,6 +723,8 @@ const syncManager = new SyncManager({
     onSeek: seekPlayback,
     onSpeed: setPlaybackSpeed,
     onChart: data => {
+        const position = data.preservePlayback ? realTime : 0;
+        const resume = data.preservePlayback && playing;
         restart();
         currentProjectId = null;
         selectedDifficulty = Number(data.selectedDifficulty) || 3;
@@ -730,7 +734,8 @@ const syncManager = new SyncManager({
             first: data.musicDelay,
             ['inote_' + selectedDifficulty]: data.fumen
         });
-        seekPlayback(0);
+        seekPlayback(position);
+        if (resume) play();
     },
     onAudio: blob => audioManager.setBackgroundMusic(blob),
     onAudioClear: () => audioManager.removeBackgroundMusic(),
@@ -2013,10 +2018,11 @@ if (timeControl) {
 
 function play() {
     if (playing) return;
+    const speed = settings.playbackSpeed || 1;
+    if (syncManager.requestPlay(realTime, speed)) return;
     playing = true;
     playStartTimestamp = null;
 
-    const speed = settings.playbackSpeed || 1;
     startTime = performance.now() - (pausedTime * 1000 / speed);
 
     if (playPauseBtn) {

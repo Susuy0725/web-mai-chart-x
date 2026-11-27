@@ -1,0 +1,9 @@
+{
+    "name": "wmcx-signal-room-local",
+    "main": "worker.mjs",
+    "compatibility_date": "2026-11-27",
+    "durable_objects": {
+        "bindings": [{ "name": "SYNC_ROOMS", "class_name": "SyncRoom" }]
+    },
+    "migrations": [{ "tag": "sync-room-v1", "new_sqlite_classes": ["SyncRoom"] }]
+}

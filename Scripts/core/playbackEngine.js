@@ -265,6 +265,7 @@ export class PlaybackEngine {
             return;
         }
 
+        if (this.opts.requestSyncedPlay?.(this.realTime, this.opts.getSettings().playbackSpeed || 1)) return;
         this.bgmUpdateTimer = null;
         this.lastStartTime = this.realTime;
         this.notifyTime();

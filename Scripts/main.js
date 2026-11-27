@@ -4213,6 +4213,7 @@ function applyHighlight(text, immediate = false) {
 // === 實例化中央播放引擎 (PlaybackEngine) ===
 const playbackEngine = new PlaybackEngine({
     appContext,
+    requestSyncedPlay: (time, speed) => editorSync.requestPlay(time, speed),
     audioManager,
     majdataWs,
     getSettings: () => settings,
@@ -4255,6 +4256,12 @@ editorSync.init({
     getDifficulty: () => String(nowDifficulty),
     getFullMaidata: () => serializeMaidata({ ...maidata, ['inote_' + nowDifficulty]: editorInput.value }),
     getAudioFile: () => audioManager.getBGMFile(),
+    getPlaybackState: () => ({
+        playing: playbackEngine.isPlaying,
+        time: playbackEngine.realTime,
+        speed: settings.playbackSpeed || 1
+    }),
+    waitForAudio: () => audioManager.bgmReady,
     onRemotePlay: (time, speed) => {
         if (speed !== settings.playbackSpeed) setPlaybackSpeed(speed);
         playbackEngine.seekToRealTime(time);
@@ -4274,7 +4281,9 @@ eventBus.on(EVENTS.PLAYBACK_STATE_CHANGED, ({ isPlaying, realTime }) => {
         editorSync.sendSeek(realTime);
     }
 });
-eventBus.on(EVENTS.PROJECT_LOADED, () => editorSync.pushCurrentProject());
+eventBus.on(EVENTS.PROJECT_LOADED, () => {
+    editorSync.pushCurrentProject().catch(error => console.warn('[Sync] Project transfer failed', error));
+});
 appContext.register('getIsImagesLoaded', () => isImagesLoaded);
 appContext.register('getIsInitComplete', () => isInitComplete);
 

@@ -3,19 +3,10 @@
  * 統一支援 Editor (電腦端) 與 Play (播放器/行動端) 之雙向與對等同步
  */
 
-import { WebRtcSync, DEFAULT_WORKER_URL } from './webrtcSync.js';
+import { createWebRtcSync, DEFAULT_WORKER_URL } from './roomSync.js';
+import { AudioTransfer } from './audioTransfer.js';
 import { popupWindow, simpleToast } from '../helper.js';
 import { t } from '../i18n.js';
-
-function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-}
 
 function base64ToUint8Array(base64) {
     const binary = atob(base64);
@@ -48,7 +39,7 @@ export class SyncManager {
         };
 
         // 內部傳輸與接收狀態
-        this._isSendingAudio = false;
+        this.audioTransfer = new AudioTransfer();
         this._isRemoteTriggered = false;
         this._incomingAudioChunks = null;
         this._incomingAudioMeta = null;
@@ -57,13 +48,24 @@ export class SyncManager {
         this._modalUpdater = null;
 
         // 初始化底層 WebRTC
-        this.sync = new WebRtcSync({
+        this.sync = createWebRtcSync({
             workerUrl: this.workerUrl,
+            waitForPlaybackReady: async () => {
+                await this.audioTransfer.ready();
+                await this.incomingTransfer;
+                await options.waitForAudio?.();
+            },
+            getPlaybackState: options.getPlaybackState,
             onStatusChange: (status, detail) => {
                 this._handleStatusChange(status, detail);
             },
-            onMessage: (msg) => {
-                this._handleIncomingMessage(msg);
+            onMessage: (msg, channel) => {
+                const handle = () => this._handleIncomingMessage(msg, channel);
+                if (['audio_start', 'audio_chunk', 'audio_end', 'audio_clear', 'projectLoaded'].includes(msg.action)) {
+                    this.incomingTransfer = (this.incomingTransfer ?? Promise.resolve()).then(handle).catch(this.sync.onError);
+                } else {
+                    Promise.resolve(handle()).catch(this.sync.onError);
+                }
             },
             onError: (err) => {
                 simpleToast({ content: `WebRTC 錯誤: ${err.message}`, type: 'error', timeout: 3500 });
@@ -87,6 +89,10 @@ export class SyncManager {
     // =========================================================
     // 傳輸指令發送 API
     // =========================================================
+
+    requestPlay(startAt, speed) {
+        return !this._isRemoteTriggered && this.sync.requestPlay(startAt, speed);
+    }
 
     sendPlay(startAt, speed = 1) {
         if (!this.sync.isConnected() || this._isRemoteTriggered) return;
@@ -126,7 +132,7 @@ export class SyncManager {
     /**
      * 發送譜面資料
      */
-    sendChart({ fumen = '', fullMaidata = '', title = '', artist = '', musicDelay = 0, selectedDifficulty = '3' }) {
+    sendChart({ fumen = '', fullMaidata = '', title = '', artist = '', musicDelay = 0, selectedDifficulty = '3' }, channel) {
         if (!this.sync.isConnected()) return;
         this.sync.sendChart({
             fumen,
@@ -135,84 +141,20 @@ export class SyncManager {
             artist,
             musicDelay,
             selectedDifficulty
-        });
+        }, channel);
     }
 
     /**
      * 分塊傳輸音源檔案 (32KB Chunks)
      */
-    async sendAudioFile(fileOrBlob) {
-        if (!fileOrBlob || !this.sync.isConnected()) return;
-        if (this._isSendingAudio) return;
-        this._isSendingAudio = true;
-
-        try {
-            let arrayBuffer;
-            if (fileOrBlob instanceof Blob) {
-                arrayBuffer = await fileOrBlob.arrayBuffer();
-            } else if (fileOrBlob instanceof ArrayBuffer) {
-                arrayBuffer = fileOrBlob;
-            } else if (typeof fileOrBlob === 'string') {
-                const res = await fetch(fileOrBlob);
-                arrayBuffer = await res.arrayBuffer();
-            }
-            if (!arrayBuffer || arrayBuffer.byteLength === 0) return;
-
-            const CHUNK_SIZE = 32 * 1024; // 32KB
-            const totalSize = arrayBuffer.byteLength;
-            const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
-            const fileName = fileOrBlob.name || 'track.mp3';
-            const mimeType = fileOrBlob.type || 'audio/mp3';
-
-            simpleToast({ content: t('settings.connection.audioSending') || '正在同步音源檔案至對端...', type: 'info', timeout: 2000 });
-
-            this.sync.send({
-                action: 'audio_start',
-                fileName,
-                totalSize,
-                totalChunks,
-                mimeType
-            });
-
-            for (let i = 0; i < totalChunks; i++) {
-                if (!this.sync.isConnected()) break;
-                if (this.sync.dataChannel && this.sync.dataChannel.bufferedAmount > 65536) {
-                    await new Promise(r => setTimeout(r, 25));
-                }
-
-                const start = i * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, totalSize);
-                const chunkBuffer = arrayBuffer.slice(start, end);
-                const base64Data = arrayBufferToBase64(chunkBuffer);
-
-                this.sync.send({
-                    action: 'audio_chunk',
-                    chunkIndex: i,
-                    totalChunks,
-                    data: base64Data
-                });
-            }
-
-            this.sync.send({
-                action: 'audio_end',
-                fileName,
-                totalSize,
-                totalChunks
-            });
-
-            simpleToast({ content: t('settings.connection.audioSendSuccess') || '音源已成功同步至對端！', type: 'success', timeout: 2500 });
-        } catch (err) {
-            console.error('[SyncManager sendAudioFile error]', err);
-            simpleToast({ content: `音源傳輸失敗: ${err.message}`, type: 'error', timeout: 3000 });
-        } finally {
-            this._isSendingAudio = false;
-        }
+    async sendAudioFile(fileOrBlob, channels = this.sync.channels()) {
+        await this.audioTransfer.send(fileOrBlob, channels);
     }
 
     /**
      * 完整推播當前專案 (譜面 + 音源)
      */
-    async pushProject(customData = null) {
+    async pushProject(customData = null, channel = null) {
         if (!this.sync.isConnected()) return;
 
         let proj = customData;
@@ -222,13 +164,14 @@ export class SyncManager {
         if (!proj) return;
 
         if (proj.chart) {
-            this.sendChart(proj.chart);
+            this.sendChart(proj.chart, channel);
         }
         if (proj.audio) {
-            await this.sendAudioFile(proj.audio);
+            await this.sendAudioFile(proj.audio, channel ? [channel] : undefined);
         } else {
-            this.sendClearAudio();
+            await this.audioTransfer.clear(channel ? [channel] : this.sync.channels());
         }
+        if (channel) this.sync.send({ action: 'projectLoaded' }, channel);
     }
 
     // =========================================================
@@ -240,7 +183,6 @@ export class SyncManager {
             this._incomingAudioChunks = null;
             this._incomingAudioMeta = null;
             this._incomingAudioCount = 0;
-            this._isSendingAudio = false;
             this._isRemoteTriggered = false;
             if (this._transferCardEl) {
                 this._transferCardEl.style.opacity = '0';
@@ -248,17 +190,11 @@ export class SyncManager {
                     if (this._transferCardEl) this._transferCardEl.style.display = 'none';
                 }, 300);
             }
-        } else if (status === 'connected') {
-            if (this.role === 'client') {
-                this.requestChart();
-            } else if (this.role === 'host') {
-                setTimeout(() => {
-                    if (this.sync.isConnected()) {
-                        this.pushProject();
-                    }
-                }, 300);
-            }
         }
+        if (status === 'connected' && this.lastStatus !== 'connected' && this.sync.role === 'client') {
+            this.requestChart();
+        }
+        this.lastStatus = status;
 
         if (this._modalUpdater) this._modalUpdater();
         if (typeof this.callbacks.onStatusChange === 'function') {
@@ -266,21 +202,99 @@ export class SyncManager {
         }
     }
 
-    async _handleIncomingMessage(msg) {
+    async _handleIncomingMessage(msg, channel) {
         if (!msg || !msg.action) return;
 
         if (msg.action === 'requestChart') {
-            this.pushProject();
+            await this.pushProject(null, channel);
             return;
         }
 
+        if (msg.action === 'projectLoaded') {
+            this.sync.send({ action: 'projectReady' });
+            return;
+        }
+
+        if (['play', 'pause', 'seek', 'restart', 'speed', 'chart'].includes(msg.action)) {
+            this._applyRemoteControl(msg);
+            return;
+        }
+        if (msg.action === 'audio_clear') {
+            if (typeof this.callbacks.onAudioClear === 'function') {
+                await this.callbacks.onAudioClear();
+            }
+            this._incomingAudioChunks = null;
+            this._incomingAudioMeta = null;
+            this._incomingAudioCount = 0;
+            this.showTransferProgress({
+                text: t('settings.connection.transferComplete') || '同步完成',
+                percent: 100,
+                completed: true
+            });
+        } else if (msg.action === 'audio_start') {
+            this._incomingAudioMeta = msg;
+            this._incomingAudioChunks = new Array(msg.totalChunks || 0);
+            this._incomingAudioCount = 0;
+            const songName = msg.fileName || 'track';
+            this.showTransferProgress({
+                text: `${t('settings.connection.transferAudio') || '正在同步音源'} (${songName})...`,
+                percent: 50,
+                completed: false
+            });
+        } else if (msg.action === 'audio_chunk') {
+            if (this._incomingAudioChunks && typeof msg.chunkIndex === 'number' && msg.data) {
+                const u8 = base64ToUint8Array(msg.data);
+                this._incomingAudioChunks[msg.chunkIndex] = u8;
+                this._incomingAudioCount++;
+                const total = msg.totalChunks || 1;
+                const pct = Math.min(95, Math.floor(50 + (this._incomingAudioCount / total) * 45));
+                this.showTransferProgress({
+                    text: `${t('settings.connection.transferAudio') || '正在同步音源'} (${pct}%)...`,
+                    percent: pct,
+                    completed: false
+                });
+            }
+        } else if (msg.action === 'audio_end') {
+            if (this._incomingAudioChunks && this._incomingAudioChunks.length > 0) {
+                try {
+                    this.showTransferProgress({
+                        text: t('settings.connection.audioSyncing') || '正在配置音源...',
+                        percent: 98,
+                        completed: false
+                    });
+                    const mimeType = this._incomingAudioMeta?.mimeType || 'audio/mp3';
+                    const audioBlob = new Blob(this._incomingAudioChunks, { type: mimeType });
+                    if (typeof this.callbacks.onAudio === 'function') {
+                        await this.callbacks.onAudio(audioBlob, this._incomingAudioMeta);
+                    }
+                    this._incomingAudioChunks = null;
+                    this._incomingAudioMeta = null;
+                    this._incomingAudioCount = 0;
+                    this.showTransferProgress({
+                        text: t('settings.connection.transferComplete') || '同步完成',
+                        percent: 100,
+                        completed: true
+                    });
+                } catch (err) {
+                    console.error('[SyncManager Error assembling audio]', err);
+                    this.showTransferProgress({
+                        text: `音源載入失敗: ${err.message}`,
+                        percent: 100,
+                        completed: true
+                    });
+                }
+            }
+        }
+    }
+
+    _applyRemoteControl(msg) {
         this._isRemoteTriggered = true;
         try {
             if (msg.action === 'play') {
                 const speed = msg.speed || 1;
                 const startAt = typeof msg.startAt === 'number' ? msg.startAt : 0;
                 if (typeof this.callbacks.onPlay === 'function') {
-                    await this.callbacks.onPlay(startAt, speed);
+                    this.callbacks.onPlay(startAt, speed);
                 }
             } else if (msg.action === 'pause') {
                 if (typeof this.callbacks.onPause === 'function') {
@@ -301,72 +315,7 @@ export class SyncManager {
             } else if (msg.action === 'chart') {
                 if (msg.data && typeof this.callbacks.onChart === 'function') {
                     // 譜面即時同步：靜默套用，不彈出任何視窗
-                    await this.callbacks.onChart(msg.data);
-                }
-            } else if (msg.action === 'audio_clear') {
-                if (typeof this.callbacks.onAudioClear === 'function') {
-                    await this.callbacks.onAudioClear();
-                }
-                this._incomingAudioChunks = null;
-                this._incomingAudioMeta = null;
-                this._incomingAudioCount = 0;
-                this.showTransferProgress({
-                    text: t('settings.connection.transferComplete') || '同步完成',
-                    percent: 100,
-                    completed: true
-                });
-            } else if (msg.action === 'audio_start') {
-                this._incomingAudioMeta = msg;
-                this._incomingAudioChunks = new Array(msg.totalChunks || 0);
-                this._incomingAudioCount = 0;
-                const songName = msg.fileName || 'track';
-                this.showTransferProgress({
-                    text: `${t('settings.connection.transferAudio') || '正在同步音源'} (${songName})...`,
-                    percent: 50,
-                    completed: false
-                });
-            } else if (msg.action === 'audio_chunk') {
-                if (this._incomingAudioChunks && typeof msg.chunkIndex === 'number' && msg.data) {
-                    const u8 = base64ToUint8Array(msg.data);
-                    this._incomingAudioChunks[msg.chunkIndex] = u8;
-                    this._incomingAudioCount++;
-                    const total = msg.totalChunks || 1;
-                    const pct = Math.min(95, Math.floor(50 + (this._incomingAudioCount / total) * 45));
-                    this.showTransferProgress({
-                        text: `${t('settings.connection.transferAudio') || '正在同步音源'} (${pct}%)...`,
-                        percent: pct,
-                        completed: false
-                    });
-                }
-            } else if (msg.action === 'audio_end') {
-                if (this._incomingAudioChunks && this._incomingAudioChunks.length > 0) {
-                    try {
-                        this.showTransferProgress({
-                            text: t('settings.connection.audioSyncing') || '正在配置音源...',
-                            percent: 98,
-                            completed: false
-                        });
-                        const mimeType = this._incomingAudioMeta?.mimeType || 'audio/mp3';
-                        const audioBlob = new Blob(this._incomingAudioChunks, { type: mimeType });
-                        if (typeof this.callbacks.onAudio === 'function') {
-                            await this.callbacks.onAudio(audioBlob, this._incomingAudioMeta);
-                        }
-                        this._incomingAudioChunks = null;
-                        this._incomingAudioMeta = null;
-                        this._incomingAudioCount = 0;
-                        this.showTransferProgress({
-                            text: t('settings.connection.transferComplete') || '同步完成',
-                            percent: 100,
-                            completed: true
-                        });
-                    } catch (err) {
-                        console.error('[SyncManager Error assembling audio]', err);
-                        this.showTransferProgress({
-                            text: `音源載入失敗: ${err.message}`,
-                            percent: 100,
-                            completed: true
-                        });
-                    }
+                    this.callbacks.onChart(msg.data);
                 }
             }
         } finally {
@@ -588,6 +537,7 @@ export class SyncManager {
         disconnectBtn.style.display = this.sync.isConnected() ? 'block' : 'none';
         container.appendChild(disconnectBtn);
 
+        let roomTimer = null;
         const renderSyncUI = () => {
             const isWrtc = this.sync.isConnected();
             const isConnecting = this.sync.status === 'connecting';
@@ -610,13 +560,29 @@ export class SyncManager {
                 pushProjectBtn.style.display = 'none';
             }
 
-            if (this.sync.roomCode) {
-                hostCodeDisplay.textContent = this.sync.roomCode;
+            hostCodeDisplay.textContent = this.sync.roomCode || '------';
+            const active = this.sync.status !== 'disconnected';
+            roleSelect.disabled = active;
+            joinBtn.disabled = active;
+            createCodeBtn.disabled = active;
+            pushProjectBtn.style.display = this.sync.role === 'host' && isWrtc ? 'block' : 'none';
+            disconnectBtn.textContent = t(this.sync.role === 'host'
+                ? 'settings.connection.closeRoom' : 'settings.connection.leaveRoom');
+            if (this.sync.role === 'host' && this.sync.expiresAt) {
+                const remaining = Math.max(0, Math.ceil((this.sync.expiresAt - Date.now()) / 1000));
+                const time = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+                const connected = this.sync.channels().length + 1;
+                const occupancy = t('settings.connection.roomOccupancy', {
+                    occupied: Math.max(connected, this.sync.occupied), connected
+                });
+                const countdown = t(remaining ? 'settings.connection.countdownRemaining' : 'settings.connection.countdownExpired', { time });
+                statusValue.textContent = `${occupancy} · ${countdown}`;
             }
         };
 
         this._modalUpdater = renderSyncUI;
         renderSyncUI();
+        roomTimer = setInterval(renderSyncUI, 1000);
 
         roleSelect.addEventListener('change', (e) => {
             this.role = e.target.value;
@@ -630,7 +596,7 @@ export class SyncManager {
                 try { await options.onBeforeConnect(); } catch (_) { }
             }
             const code = codeInput.value.trim();
-            if (code.length !== 6) {
+            if (!/^\d{6}$/.test(code)) {
                 simpleToast({ content: t('settings.connection.pairCodePlaceholder') || '請輸入完整的 6 位數配對碼', type: 'warning', timeout: 2000 });
                 return;
             }
@@ -640,7 +606,8 @@ export class SyncManager {
                 await this.sync.joinRoom(code);
                 simpleToast({ content: `${t('settings.connection.statusConnecting') || '正在連線...'} (${code})`, type: 'info', timeout: 2000 });
             } catch (e) {
-                simpleToast({ content: `連線失敗: ${e.message}`, type: 'error', timeout: 3000 });
+                const detail = t(`settings.connection.${e.message}`);
+                simpleToast({ content: detail === `settings.connection.${e.message}` ? e.message : detail, type: 'error', timeout: 3000 });
             } finally {
                 joinBtn.disabled = false;
                 joinBtn.textContent = t('settings.connection.joinBtn') || '手動加入連線';
@@ -678,12 +645,13 @@ export class SyncManager {
             buttons: [
                 {
                     text: t('popup.close') || '關閉',
-                    onClick: () => {
-                        this._modalUpdater = null;
-                    },
                     hideOnClick: true
                 }
-            ]
+            ],
+            onClose: () => {
+                clearInterval(roomTimer);
+                this._modalUpdater = null;
+            }
         });
     }
 

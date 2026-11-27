@@ -101,12 +101,12 @@ const manualInputSensors = new Set();
 const usedSensorsThisFrame = new Set();
 
 const _pc = document.getElementById("playControls");
-const _pcc = document.getElementById("playControlContainer");
-const _ccon = _pcc.querySelector(".controlsContainer");
-const _ccb = _ccon.querySelectorAll(".controlButton");
+const playToolbar = document.getElementById("playToolbar");
+const hideToolbarBtn = document.getElementById("hidePlayToolbar");
+const showToolbarBtn = document.getElementById("showPlayToolbar");
 
 function getControlButton(action) {
-    const btn = Array.from(_ccb).find(el => el.dataset.buttonaction === action);
+    const btn = document.querySelector(`#app [data-buttonAction="${action}"]`);
     if (!btn) console.warn(`no button ${action}`);
     return btn;
 }
@@ -647,12 +647,13 @@ function applyPlayCanvasAspectRatio() {
     }
     const appRect = canvasContainer.parentElement?.getBoundingClientRect()
         || { width: window.innerWidth, height: window.innerHeight };
-    const playH = hidden ? 0 : (document.getElementById('playControls')?.getBoundingClientRect().height || 0);
+    const playH = _pc.offsetHeight;
+    const toolbarHeight = playToolbar.inert ? 0 : playToolbar.offsetHeight;
     const rect = fitRectToAspectRatio({
         left: 0,
-        top: 0,
+        top: toolbarHeight,
         width: Math.max(1, appRect.width),
-        height: Math.max(1, appRect.height - playH),
+        height: Math.max(1, appRect.height - playH - toolbarHeight),
     }, ratioVal);
     canvasContainer.classList.add('aspect-ratio-constrained');
     canvasContainer.style.left = `${rect.left}px`;
@@ -696,6 +697,16 @@ if (typeof document !== 'undefined' && document.fonts) {
 resize();
 
 window.addEventListener('resize', resize);
+
+function setToolbarCollapsed(collapsed) {
+    playToolbar.inert = collapsed;
+    showToolbarBtn.hidden = !collapsed;
+    (collapsed ? showToolbarBtn : hideToolbarBtn).focus({ preventScroll: true });
+    resize();
+}
+
+hideToolbarBtn.addEventListener('click', () => setToolbarCollapsed(true));
+showToolbarBtn.addEventListener('click', () => setToolbarCollapsed(false));
 
 const playPauseBtn = getControlButton("play/pause");
 const restartBtn = getControlButton("reset");
@@ -1779,7 +1790,10 @@ if (fullscreenBtn) {
         if (iconSpan) {
             iconSpan.textContent = isFullscreen ? 'fullscreen_exit' : 'fullscreen';
         }
-        const titleText = isFullscreen ? (t('settings.exitFullscreen') || '退出全螢幕') : (t('settings.fullscreen') || '全螢幕');
+        const labelKey = isFullscreen ? 'menu.exitFullscreen' : 'menu.fullscreen';
+        fullscreenBtn.dataset.i18nTitle = labelKey;
+        fullscreenBtn.dataset.i18nAriaLabel = labelKey;
+        const titleText = t(labelKey);
         fullscreenBtn.title = titleText;
         fullscreenBtn.setAttribute('aria-label', titleText);
         setTimeout(resize, 100);

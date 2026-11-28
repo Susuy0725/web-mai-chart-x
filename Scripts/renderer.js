@@ -2735,7 +2735,7 @@ export class SimaiRenderer {
         ctx.textBaseline = "bottom";
         ctx.letterSpacing = "0px";
         ctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-        ctx.fillText('Powered By', x, bottom - 7);
+        ctx.fillText('Created with', x, bottom - 7);
         ctx.font = '700 4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
         ctx.fillText('Web mai Chart X', x, bottom - 2);
     }

@@ -576,6 +576,16 @@ export class SimaiRenderer {
         this._brightnessCache?.clear();
         this._slideTrackCache?.clear();
         this._middleGlyphCache?.clear();
+
+        // 非同步預解碼 WiFi Break 等多片式貼圖，避免首次播放進入畫面時同步解碼卡頓
+        if (images) {
+            for (let i = 0; i <= 10; i++) {
+                const img = images[`wifi_break_${i}`];
+                if (img && typeof img.decode === 'function') {
+                    img.decode().catch(() => { });
+                }
+            }
+        }
     }
 
     /**
@@ -4297,14 +4307,15 @@ export class SimaiRenderer {
         const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
         const isTinted = isIllegal;
 
+        let baseSingleImg = null;
         let singleImg = null;
         if (!typew) {
             if (isTinted) {
                 this._tempColorConfig.colorCode = colorCode;
                 singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
             } else {
-                singleImg = this.images[prefixOrKey];
-                if (br > 0) singleImg = getBrightenedImage(singleImg, 1 + br);
+                baseSingleImg = this.images[prefixOrKey];
+                singleImg = baseSingleImg;
             }
             if (!singleImg) return;
         }
@@ -4320,8 +4331,8 @@ export class SimaiRenderer {
 
         const ctx = this.ctx;
 
-        // 靜態完整軌道快取（浮現淡入與待機階段 starProgress <= 0）：烘焙為單張離屏畫布以 1 次 drawImage 繪製
-        const canBakeStatic = starProgress <= 0 && !isIllegal && br === 0 && !this._isRenderingVideo
+        // 靜態完整軌道快取（starProgress <= 0，含 Break 閃爍期間）：先繪製基礎烘焙軌道，再以 lighter 疊加亮度
+        const canBakeStatic = starProgress <= 0 && !isIllegal && !this._isRenderingVideo
             && arrows.length >= 4 && (typeof document !== 'undefined' || typeof OffscreenCanvas !== 'undefined');
         if (canBakeStatic) {
             const bakeP = this._p > 0 ? this._p : Math.hypot(a, b);
@@ -4334,6 +4345,13 @@ export class SimaiRenderer {
                     this._slideTrackCache.delete(bakeKey);
                     this._slideTrackCache.set(bakeKey, baked);
                     ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                    if (br > 0) {
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'lighter';
+                        ctx.globalAlpha *= Math.min(1, br);
+                        ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                        ctx.restore();
+                    }
                     return;
                 }
 
@@ -4354,7 +4372,7 @@ export class SimaiRenderer {
                             const raw = this.images[prefixOrKey + arr.imgIndex];
                             return raw && typeof raw !== 'string' && raw.complete !== false && raw.naturalWidth !== 0;
                         })
-                        : (singleImg && typeof singleImg !== 'string' && singleImg.complete !== false && singleImg.naturalWidth !== 0);
+                        : (baseSingleImg && typeof baseSingleImg !== 'string' && baseSingleImg.complete !== false && baseSingleImg.naturalWidth !== 0);
 
                     if (allImgsReady) {
                         const bakeCanvas = typeof OffscreenCanvas !== 'undefined'
@@ -4368,7 +4386,7 @@ export class SimaiRenderer {
                         if (bctx) {
                             bctx.imageSmoothingEnabled = true;
                             bctx.imageSmoothingQuality = this.getSmoothingQuality();
-                            const cachedSingle = !typew ? getFastSprite(singleImg) : null;
+                            const cachedSingle = !typew ? getFastSprite(baseSingleImg) : null;
                             for (let i = 0; i < arrows.length; i++) {
                                 const arr = arrows[i];
                                 const img = typew ? getFastSprite(this.images[prefixOrKey + arr.imgIndex]) : cachedSingle;
@@ -4396,6 +4414,13 @@ export class SimaiRenderer {
                             baked = { canvas: bakeCanvas, minX, minY, w: pxW / bakeP, h: pxH / bakeP };
                             this._slideTrackCache.set(bakeKey, baked);
                             ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                            if (br > 0) {
+                                ctx.save();
+                                ctx.globalCompositeOperation = 'lighter';
+                                ctx.globalAlpha *= Math.min(1, br);
+                                ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                                ctx.restore();
+                            }
                             return;
                         }
                     }
@@ -4403,8 +4428,12 @@ export class SimaiRenderer {
             }
         }
 
+        const quantBri = br > 0 ? Math.round((1 + br) * 20) / 20 : 1;
         if (!typew && singleImg) {
             singleImg = getFastSprite(singleImg);
+            if (!isTinted && br > 0) {
+                singleImg = getBrightenedImage(singleImg, quantBri);
+            }
         }
 
         let drewAny = false;
@@ -4429,9 +4458,8 @@ export class SimaiRenderer {
                     this._tempColorConfig.colorCode = colorCode;
                     img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
                 } else {
-                    img = this.images[imgKey];
-                    if (br > 0) img = getBrightenedImage(img, 1 + br);
-                    else img = getFastSprite(img);
+                    img = getFastSprite(this.images[imgKey]);
+                    if (br > 0) img = getBrightenedImage(img, quantBri);
                 }
             } else {
                 img = singleImg;

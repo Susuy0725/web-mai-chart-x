@@ -457,6 +457,8 @@
       "simplayPerfect": "Use perfect timing for simulated input",
       "simplayUseButton": "Use outer buttons for simulated input",
       "randomOffset": "Maximum simulated timing offset (seconds)",
+      "adjustTiming": "Audio Offset (Adjust A, frames)",
+      "judgeTiming": "Judge Offset (Adjust B, frames)",
       "fatFinger": "Expand the touch detection area",
       "fatFingerRadius": "Touch detection radius",
       "slideIllegalRed": "Highlight invalid slide paths in red",

@@ -375,7 +375,7 @@ export class SimaiRenderer extends BaseSimaiRenderer {
     getSlideTrackProgress(s, noteT) {
         const tail = s.chainTail || s;
         const isNoteReached = -noteT >= 0;
-        if (s.isMine || !isNoteReached) return 0;
+        if (!isNoteReached) return 0;
         if (tail.slideFinish) return 1;
         return Math.min(1, Math.max(0, s.slideProgress || 0));
     }

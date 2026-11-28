@@ -457,6 +457,8 @@
       "simplayPerfect": "模拟输入使用完美判定",
       "simplayUseButton": "模拟输入使用外圈按键",
       "randomOffset": "模拟输入的最大时间偏移（秒）",
+      "adjustTiming": "音频延迟（A判，帧）",
+      "judgeTiming": "判定延迟（B判，帧）",
       "fatFinger": "扩大触控判定范围",
       "fatFingerRadius": "触控判定半径",
       "slideIllegalRed": "以红色标记异常滑轨",

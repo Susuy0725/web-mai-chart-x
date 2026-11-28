@@ -457,6 +457,8 @@
       "simplayPerfect": "模擬入力を判定時刻に合わせる",
       "simplayUseButton": "模擬入力に外周ボタンを使用する",
       "randomOffset": "模擬入力の最大時間差（秒）",
+      "adjustTiming": "音声遅延（判定調整A、フレーム）",
+      "judgeTiming": "判定遅延（判定調整B、フレーム）",
       "fatFinger": "タッチ判定範囲を広げる",
       "fatFingerRadius": "タッチ判定の半径",
       "slideIllegalRed": "無効なスライド軌道を赤色で表示する",

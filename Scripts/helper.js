@@ -1680,46 +1680,28 @@ function brightenImage(img, brightness = 1) {
         return canvas;
     }
 
-    // 調亮 (> 1)：優先直接以像素運算等比放大 RGB (數學精準並相容 Safari/iOS)
+    // 調亮 (> 1)：優先使用 GPU 原生 filter / 混合管線，徹底避免同步 getImageData 造成主執行緒 GPU 阻塞卡頓
     try {
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] === 0) continue;
-            data[i] = Math.min(255, Math.round(data[i] * brightness));
-            data[i + 1] = Math.min(255, Math.round(data[i + 1] * brightness));
-            data[i + 2] = Math.min(255, Math.round(data[i + 2] * brightness));
-        }
-        ctx.putImageData(imgData, 0, 0);
-        return canvas;
-    } catch (e) {
-        // 若遇跨域圖片無法讀取像素，降級嘗試 ctx.filter 或 lighter 疊加
-        try {
-            if ('filter' in ctx) {
-                ctx.clearRect(0, 0, w, h);
-                ctx.save();
-                ctx.filter = `brightness(${brightness})`;
-                ctx.drawImage(img, 0, 0, w, h);
-                ctx.restore();
-                return canvas;
-            }
-        } catch (_) { }
-
-        const extraPasses = Math.min(4, brightness - 1);
-        let remain = extraPasses;
-        while (remain > 0.01) {
-            const alpha = Math.min(1, remain);
+        if (typeof ctx.filter === 'string') {
+            ctx.clearRect(0, 0, w, h);
             ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.globalAlpha = alpha;
+            ctx.filter = `brightness(${brightness})`;
             ctx.drawImage(img, 0, 0, w, h);
             ctx.restore();
-            remain -= alpha;
+            return canvas;
         }
+    } catch (_) { }
+
+    const extraPasses = Math.min(4, brightness - 1);
+    let remain = extraPasses;
+    while (remain > 0.01) {
+        const alpha = Math.min(1, remain);
         ctx.save();
-        ctx.globalCompositeOperation = 'destination-in';
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = alpha;
         ctx.drawImage(img, 0, 0, w, h);
         ctx.restore();
+        remain -= alpha;
     }
 
     return canvas;

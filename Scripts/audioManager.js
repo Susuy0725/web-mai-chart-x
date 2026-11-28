@@ -497,9 +497,10 @@ class AudioManager {
                 this.sfxVolumes[key] = clampVolume(vol, this.MAX_VOLUME_LIMIT);
             }
         }
+        // GREAT 與 GOOD 判定音統一連動至一般判定音 (judge) 音量
+        this.sfxVolumes['judge_great'] = this.sfxVolumes['judge'];
+        this.sfxVolumes['judge_good'] = this.sfxVolumes['judge'];
         if (volumes.judge !== undefined) {
-            if (volumes.judge_great === undefined) this.sfxVolumes['judge_great'] = this.sfxVolumes['judge'];
-            if (volumes.judge_good === undefined) this.sfxVolumes['judge_good'] = this.sfxVolumes['judge'];
             if (volumes.judge_ex === undefined) this.sfxVolumes['judge_ex'] = this.sfxVolumes['judge'];
         }
         // 若未顯式單獨指定 judge_break_slide，連動至 judge_break (或 judge)
@@ -611,12 +612,13 @@ class AudioManager {
     }
 
     queueSoundSingle(sample, targetTime, isMono = false, detune = 0) {
-        const fallbackVol = (sample === 'judge_break_slide')
+        const volKey = (sample === 'judge_great' || sample === 'judge_good') ? 'judge' : sample;
+        const fallbackVol = (volKey === 'judge_break_slide')
             ? (this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4)
-            : (sample === 'break_slide')
+            : (volKey === 'break_slide')
                 ? (this.sfxVolumes['judge_break_slide'] ?? this.sfxVolumes['break'] ?? 0.4)
                 : 1.0;
-        const vol = clampVolume(this.sfxVolumes[sample] ?? fallbackVol, this.MAX_VOLUME_LIMIT);
+        const vol = clampVolume(this.sfxVolumes[volKey] ?? fallbackVol, this.MAX_VOLUME_LIMIT);
         this._checkAndPush(sample, targetTime, isMono, vol, detune);
     }
 
@@ -914,8 +916,9 @@ class AudioManager {
 
         if (key) {
             const isNonPitchKey = (key === 'answer' || key === 'hanabi' || key === 'clock');
+            const volKey = (key === 'judge_great' || key === 'judge_good') ? 'judge' : key;
             const vol = clampVolume(
-                this.sfxVolumes[key] ?? (key === 'judge_break_slide' ? (this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4) : 1),
+                this.sfxVolumes[volKey] ?? (volKey === 'judge_break_slide' ? (this.sfxVolumes['judge_break'] ?? this.sfxVolumes['judge'] ?? 0.4) : 1),
                 this.MAX_VOLUME_LIMIT
             );
             events.push({

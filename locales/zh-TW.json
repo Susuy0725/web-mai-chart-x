@@ -457,6 +457,8 @@
       "simplayPerfect": "模擬輸入採用完美判定",
       "simplayUseButton": "模擬輸入使用外圈按鍵",
       "randomOffset": "模擬輸入的最大時間偏移（秒）",
+      "adjustTiming": "音訊延遲（A判，幀）",
+      "judgeTiming": "判定延遲（B判，幀）",
       "fatFinger": "擴大觸控判定範圍",
       "fatFingerRadius": "觸控判定半徑",
       "slideIllegalRed": "以紅色標示異常滑軌",

@@ -132,7 +132,7 @@ export class SimulatedPlayController {
                 : (noteType === 'slide' ? (slideDelay + slideDuration + touchHoldEnd + 0.1) : (touchDur + 0.1));
 
             const isPastDone = (globalTime > note.time + maxActiveSpan) &&
-                (noteType === 'slide' ? (note.slideFinish || note.isMine || slideDuration <= 0) : (note.triggered || -noteT > touchDur));
+                (noteType === 'slide' ? (note.slideFinish || note.isMine || slideDuration <= 0) : (note.triggered || note.isMine || -noteT > touchDur));
 
             if (canAdvanceCursor) {
                 if (isPastDone) {
@@ -155,7 +155,7 @@ export class SimulatedPlayController {
             }
 
             // 1. Tap / Star / 普通 Touch：在擊中時刻產生感應器輸入並觸發判定
-            if (!isHoldNote && (noteType === 'tap' || noteType === 'touch')) {
+            if (!note.isMine && !isHoldNote && (noteType === 'tap' || noteType === 'touch')) {
                 const sensorId = (noteType === 'touch')
                     ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
                     : (normalPrefix + note.pos);
@@ -175,7 +175,7 @@ export class SimulatedPlayController {
             }
 
             // 2. Hold & TouchHold：在到達時刻觸發判定，並在長按期間持續產生感應器輸入
-            if (isHoldNote) {
+            if (!note.isMine && isHoldNote) {
                 const sensorId = (noteType === 'touch')
                     ? ((note.touchPos === 'C') ? 'C' : (note.touchPos + note.pos))
                     : (normalPrefix + note.pos);
@@ -209,7 +209,7 @@ export class SimulatedPlayController {
                 // 只在打擊窗口內短暫按壓起點，不在星星開始滑動前持續按住起點
                 const isHeadPart = note.firstSlide || !note.prevSlide;
                 const slideT = -noteT - slideDelay;
-                if (isHeadPart && noteT <= 0 && -noteT <= this._simulatTouchDuration) {
+                if (!note.isMine && isHeadPart && noteT <= 0 && -noteT <= this._simulatTouchDuration) {
                     this.activeSensors.add(normalPrefix + note.pos);
                     if (!note.headTriggered && !note.triggered) {
                         note.headTriggered = true;

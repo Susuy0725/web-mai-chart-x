@@ -67,6 +67,8 @@ const defaultSettings = {
     simplayPerfect: true,
     simplayUseButton: true,
     randomOffset: 0,
+    adjustTiming: 0, // 音訊延遲 (A判，單位：幀 1/60s，-2.0 ~ +2.0)
+    judgeTiming: 0,  // 判定延遲 (B判，單位：幀 1/60s，-2.0 ~ +2.0)
     // Sound & Playback
     playHoldEnd: true,
     playbackSpeed: 1, // 播放速度，1 是正常速度
@@ -77,8 +79,6 @@ const defaultSettings = {
         'clock': 0.8,
         'answer': 1,
         'judge': 0.4,
-        'judge_great': 0.4,
-        'judge_good': 0.4,
         'judge_ex': 0.4,
         'judge_break': 0.4,
         'judge_break_slide': 0.4,
@@ -318,7 +318,8 @@ function resolveTouchGroup(group, lastResult, triggerSourceNote = null) {
                 remainNote.triggeredTime = globalTime;
                 remainNote.judgeResult = { ...resultTemplate };
                 spawnJudgeEffect(remainNote, remainNote.judgeResult);
-                audioManager.queueHitSound(remainNote, globalTime, remainNote.judgeResult.grade);
+                const audioNow = getAudioGlobalTime(globalTime);
+                audioManager.queueHitSound(remainNote, audioNow, remainNote.judgeResult.grade);
                 remainNote._startEffectPlayed = true;
 
                 if (renderer && remainNote.judgeResult.grade !== 'MISS') {
@@ -333,7 +334,7 @@ function resolveTouchGroup(group, lastResult, triggerSourceNote = null) {
                 }
 
                 if (remainNote.isHanabi && remainNote.judgeResult.grade !== 'MISS') {
-                    audioManager.queueSoundSingle('hanabi', globalTime);
+                    audioManager.queueSoundSingle('hanabi', audioNow);
                 }
 
                 if (remainNote.holdDuration > 0 || remainNote.isHold) {
@@ -523,6 +524,8 @@ if (savedSettings) {
             }
             if (defaultSettings.sfxVolumes) {
                 settings.sfxVolumes = { ...defaultSettings.sfxVolumes, ...(parsed.sfxVolumes || {}) };
+                delete settings.sfxVolumes.judge_great;
+                delete settings.sfxVolumes.judge_good;
             }
             if (settings.autoPlay === true) {
                 settings.autoPlay = 'computer';
@@ -604,10 +607,30 @@ const VIDEO_SEEK_THRESHOLD = 0.3;
 const VIDEO_MIN_SEEK_INTERVAL = 0.8;
 
 let timeControlSliding = false;
+let _lastPlayTimeUiUpdate = 0;
+let _lastPlayTimelineMax = -1;
+let _lastPlaySliderRatio = -1;
+let _lastPlayCapsuleText = '';
 
 // --- 墨滢-moying maimai 判定全解標準系統 (JudgeEngine) ---
 // 注意：必須於模組頂層初次 resize() -> draw() 呼叫前宣告，避免 TDZ ReferenceError
 const FRAME_SEC = 1 / 60; // 0.0166667s (16.67ms)
+
+function getAdjustOffsetSec() {
+    return (Number(settings?.adjustTiming) || 0) * FRAME_SEC;
+}
+
+function getJudgeOffsetSec() {
+    return (Number(settings?.judgeTiming) || 0) * FRAME_SEC;
+}
+
+function getAudioGlobalTime(visualTime = globalTime) {
+    return visualTime + getAdjustOffsetSec();
+}
+
+function getJudgeGlobalTime(visualTime = globalTime) {
+    return visualTime - getJudgeOffsetSec();
+}
 
 const JUDGE_WINDOWS = {
     TAP: {
@@ -1174,6 +1197,10 @@ function evaluateSlideGrade(diffSec, note) {
  * 依主體有效區間內的鬆手時間比例[0, 33, 67, 95, 100] % 對頭部判定進行階梯降級，並保留 Fast / Late 與 Break 分級
 */
 function evaluateHoldTotalGrade(note, headJudge, releaseDuration, holdDuration, bodyPressed, isTouchHold) {
+    if (note?.isMine) {
+        return makeMineMissResult(note);
+    }
+
     const headIgnoreSec = isTouchHold
         ? JUDGE_WINDOWS.HOLD.TOUCH_HEAD_IGNORE_SEC
         : JUDGE_WINDOWS.HOLD.HEAD_IGNORE_SEC;
@@ -1312,6 +1339,22 @@ function makeCriticalPerfectResult(note) {
     };
 }
 
+function makeMineMissResult(note) {
+    const isBreak = !!note?.isBreak;
+    return {
+        grade: 'MISS',
+        subGrade: 'TOO_FAST',
+        isFast: true,
+        diffMSec: 0,
+        isBreak,
+        scoreMultiplier: 0,
+        breakMultiplier: 0,
+        breakScoreValue: 0,
+        normalScore: 0,
+        breakBonus: 0,
+    };
+}
+
 function resetNotesForSeek(targetGlobalTime) {
     if (!datas || !datas.notes) return;
     usedSensorsThisFrame.clear();
@@ -1326,7 +1369,7 @@ function resetNotesForSeek(targetGlobalTime) {
         if (note.type === 'slide') {
             if (endTargetT < targetGlobalTime) {
                 // 已超過整個 Slide 完成時間：未結算者預設視為 CRITICAL_PERFECT（而非 MISS）
-                if (!note._slideJudged && !note.slideFinish && !note.isMine) {
+                if (!note._slideJudged && !note.slideFinish) {
                     note.triggered = true;
                     note.headTriggered = true;
                     note.triggeredTime = note.time;
@@ -1337,11 +1380,12 @@ function resetNotesForSeek(targetGlobalTime) {
                     note._slideJudged = true;
                     note._judgeEffectSpawned = true;
                     note._judgeSettleTime = endTargetT;
-                    note.slideProgress = 1;
+                    note.slideProgress = note.isMine ? 0 : 1;
                     note._startEffectPlayed = true;
                     note._slideStartPlayed = true;
                     note._endEffectPlayed = true;
                     note._simplayAutoCompleted = false;
+                    note._mineTouched = false;
                     note.judgeResult = makeCriticalPerfectResult(note);
                 }
             } else {
@@ -1355,6 +1399,7 @@ function resetNotesForSeek(targetGlobalTime) {
                 note._judgeSettleTime = null;
                 note.judgeResult = null;
                 note._simplayAutoCompleted = false;
+                note._mineTouched = false;
 
                 if (startTargetT >= targetGlobalTime) {
                     note._startEffectPlayed = false;
@@ -1385,13 +1430,14 @@ function resetNotesForSeek(targetGlobalTime) {
         } else if (isHoldNote) {
             if (endTargetT < targetGlobalTime) {
                 // 已超過 Hold / TouchHold 結束時間：未結算者預設視為 CRITICAL_PERFECT
-                if (!note.holdFinish && !note.judgeResult && !note.isMine) {
+                if (!note.holdFinish && !note.judgeResult) {
                     note.triggered = true;
                     note.triggeredTime = note.time;
-                    note._holdPressed = true;
+                    note._holdPressed = !note.isMine;
                     note.isHolding = false;
                     note.holdFinish = true;
                     note._headMiss = false;
+                    note._mineTouched = false;
                     note._headJudge = makeCriticalPerfectResult(note);
                     note.judgeResult = makeCriticalPerfectResult(note);
                     note._startEffectPlayed = true;
@@ -1407,6 +1453,7 @@ function resetNotesForSeek(targetGlobalTime) {
                 note.isHolding = false;
                 note._holdPressed = false;
                 note._releaseDuration = 0;
+                note._mineTouched = false;
                 note.judgeResult = null;
 
                 if (note.time >= targetGlobalTime) {
@@ -1433,13 +1480,14 @@ function resetNotesForSeek(targetGlobalTime) {
         } else {
             // Tap / Star / 普通 Touch
             if (note.time < targetGlobalTime) {
-                if (!note.triggered && !note.isMine) {
+                if (!note.triggered) {
                     const cpRes = makeCriticalPerfectResult(note);
                     note.triggered = true;
                     note.triggeredTime = note.time;
                     note._judgeSettleTime = note.time;
                     note.judgeResult = cpRes;
                     note._missReported = false;
+                    note._mineTouched = false;
                     note._startEffectPlayed = true;
                     note._answerSoundPlayed = true;
                     note._hanabiSoundPlayed = true;
@@ -1457,6 +1505,7 @@ function resetNotesForSeek(targetGlobalTime) {
                 note.judgeResult = null;
                 note._judgeSettleTime = null;
                 note._missReported = false;
+                note._mineTouched = false;
                 if (note.touchGroup) {
                     note.touchGroup.isResolved = false;
                     note.touchGroup.lastJudgeResult = null;
@@ -1514,10 +1563,12 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
     const rt = datas._playRuntime;
     const activeHolds = rt ? rt.judgeActiveHolds : [];
     const activeHoldSet = rt ? rt.judgeHoldSet : null;
+    const judgeNow = getJudgeGlobalTime(globalTime);
+    const audioNow = getAudioGlobalTime(globalTime);
 
     // 清理並同步已過濾出滑動游標的長按 Hold，避免每鍵擊都重頭掃描整首譜面
     if (rt) {
-        if (globalTime < rt.lastStateTime - 0.05) {
+        if (judgeNow < rt.lastStateTime - 0.05) {
             rt.judgeCursor = 0;
             activeHolds.length = 0;
             activeHoldSet.clear();
@@ -1526,7 +1577,7 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
             const h = activeHolds[k];
             const hDur = h.holdDuration ?? 0;
             const lateWin = (h.type === 'touch') ? JUDGE_WINDOWS.TOUCH.GOOD_LATE : JUDGE_WINDOWS.TAP.GOOD;
-            const isExpired = h.holdFinish || (h.triggered ? (globalTime >= h.time + hDur) : (globalTime - h.time > Math.max(hDur, lateWin)));
+            const isExpired = h.holdFinish || (h.triggered ? (judgeNow >= h.time + hDur) : (judgeNow - h.time > (h.isMine ? hDur : Math.max(hDur, lateWin))));
             if (isExpired) {
                 activeHoldSet.delete(h);
                 activeHolds.splice(k, 1);
@@ -1556,7 +1607,7 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
             continue; // Slide 由劃軌 Checkpoint 判定，不接受點擊觸發
         }
 
-        const noteT = note.time - globalTime;
+        const noteT = note.time - judgeNow;
         // 音符在未來且超過最大容許判定視窗，後續音符更靠後，直接結束搜尋
         if (noteT > 0.65) break;
 
@@ -1565,14 +1616,16 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
         const laneKey = getFrontmostLaneKey(note);
         const lateWin = isTouch ? JUDGE_WINDOWS.TOUCH.GOOD_LATE : JUDGE_WINDOWS.TAP.GOOD;
 
-        // 檢查該音符是否仍在同鍵位上尚未結束 (未結算且未逾時)
+        // 檢查該音符是否仍在同鍵位上尚未結束 (未結算且未逾時；Mine 音符無 Late 視窗)
         const holdDuration = note.holdDuration ?? 0;
+        const mineLateWin = isHoldNoteType ? holdDuration : 0;
+        const laneLateWin = note.isMine ? mineLateWin : lateWin;
         const isEndedInLane = isHoldNoteType
-            ? (!!note.holdFinish || (note.triggered ? (globalTime >= note.time + holdDuration) : (-noteT > Math.max(holdDuration, lateWin))))
-            : (!!note.triggered || -noteT > lateWin);
+            ? (!!note.holdFinish || (note.triggered ? (judgeNow >= note.time + holdDuration) : (-noteT > (note.isMine ? holdDuration : Math.max(holdDuration, lateWin)))))
+            : (!!note.triggered || -noteT > laneLateWin);
 
         if (canAdvanceCursor) {
-            if (isEndedInLane && (!note.isHolding || globalTime >= note.time + holdDuration)) {
+            if (isEndedInLane && (!note.isHolding || judgeNow >= note.time + holdDuration)) {
                 rt.judgeCursor = i + 1;
                 continue;
             }
@@ -1599,13 +1652,16 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
         if (isBlockedByEarlier) continue;
         if (note.triggered) continue;
 
-        // 依據音符類型檢查是否在可擊中時機窗口內
+        // 依據音符類型檢查是否在可擊中時機窗口內（Mine 音符無 Late 視窗，僅於到達前/持續期間判定）
         if (isTouch) {
-            if (noteT > JUDGE_WINDOWS.TOUCH.FAST_WINDOW || noteT < -JUDGE_WINDOWS.TOUCH.GOOD_LATE) {
+            const fastLimit = note.isMine ? JUDGE_WINDOWS.TOUCH.GOOD_LATE : JUDGE_WINDOWS.TOUCH.FAST_WINDOW;
+            const lateLimit = note.isMine ? (isHoldNoteType ? holdDuration : 0) : JUDGE_WINDOWS.TOUCH.GOOD_LATE;
+            if (noteT > fastLimit || noteT < -lateLimit) {
                 continue;
             }
         } else {
-            if (noteT > JUDGE_WINDOWS.TAP.GOOD || noteT < -JUDGE_WINDOWS.TAP.GOOD) {
+            const lateLimit = note.isMine ? (isHoldNoteType ? holdDuration : 0) : JUDGE_WINDOWS.TAP.GOOD;
+            if (noteT > JUDGE_WINDOWS.TAP.GOOD || noteT < -lateLimit) {
                 continue;
             }
         }
@@ -1626,9 +1682,9 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
             continue;
         }
 
-        const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (globalTime - note.time);
+        const diffForEval = (forceDiffSec !== null) ? forceDiffSec : (judgeNow - note.time);
         const evalRes = evaluateHitGrade(diffForEval, note);
-        if (!evalRes || evalRes.grade === 'MISS') continue;
+        if (!evalRes || (evalRes.grade === 'MISS' && !note.isMine)) continue;
 
         const absDiff = Math.abs(diffForEval);
         candidates.push({ note, laneKey, slotKey, evalRes });
@@ -1658,7 +1714,22 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
             hn.triggered = true;
             hn.triggeredTime = globalTime;
 
-            if (isHoldNote) {
+            if (hn.isMine) {
+                hn._mineTouched = true;
+                hn._headJudge = evalRes;
+                hn.judgeResult = evalRes;
+                if (isHoldNote) {
+                    hn.isHolding = false;
+                    hn.holdFinish = true;
+                    hn._holdPressed = true;
+                    if (activeHoldSet && activeHoldSet.has(hn)) {
+                        activeHoldSet.delete(hn);
+                        const activeIdx = activeHolds.indexOf(hn);
+                        if (activeIdx >= 0) activeHolds.splice(activeIdx, 1);
+                    }
+                }
+                spawnJudgeEffect(hn, evalRes);
+            } else if (isHoldNote) {
                 hn._holdPressed = true;
                 hn.isHolding = true;
                 hn._headJudge = evalRes;
@@ -1672,21 +1743,21 @@ function triggerManualHit(sensorInput, forceDiffSec = null) {
                 spawnJudgeEffect(hn, evalRes);
             }
 
-            audioManager.queueHitSound(hn, globalTime, evalRes.grade);
+            audioManager.queueHitSound(hn, audioNow, evalRes.grade);
             hn._startEffectPlayed = true;
 
             // Touch Hanabi 判定音效：需要判定命中且非 TouchHold 時在此播放
             if (hn.type === 'touch' && (!hn.holdDuration || hn.holdDuration <= 0) && hn.isHanabi && evalRes.grade !== 'MISS') {
-                audioManager.queueSoundSingle('hanabi', globalTime);
+                audioManager.queueSoundSingle('hanabi', audioNow);
             }
 
             // 墨滢專欄：Touch-Group 容錯傳導機制觸發
-            if (hn.type === 'touch' && hn.touchGroup) {
+            if (hn.type === 'touch' && hn.touchGroup && !hn.isMine) {
                 resolveTouchGroup(hn.touchGroup, evalRes, hn);
             }
 
             // 若擊中的是 slide 頭部 star，立即解鎖對應 slide 允許滑動
-            if (hn.type !== 'touch') {
+            if (hn.type !== 'touch' && !hn.isMine) {
                 const chainSearchStart = Math.max(0, startIdx);
                 for (let j = chainSearchStart; j < notes.length; j++) {
                     const sn = notes[j];
@@ -2030,11 +2101,6 @@ function getTotalTime() {
     return Math.max(datas?.endTime || 0, 0) + 1;
 }
 
-let _lastPlayTimeUiUpdate = 0;
-let _lastPlayTimelineMax = -1;
-let _lastPlaySliderRatio = -1;
-let _lastPlayCapsuleText = '';
-
 function updateTimeControlUI(force = false) {
     if (!timeControl) return;
     const now = performance.now();
@@ -2083,7 +2149,7 @@ if (timeControl) {
         const newTime = parseFloat(timeControl.value);
         pausedTime = newTime;
         realTime = newTime;
-        globalTime = realTime - musicDelay;
+        globalTime = realTime - musicDelay - getAdjustOffsetSec();
         playStartTimestamp = null;
 
         // 拖拽/跳轉時完整重置 Note 音效播放、劃軌進度與遊玩 Hit/判定狀態記錄
@@ -2191,7 +2257,7 @@ function restart() {
     playStartTimestamp = null;
     pausedTime = 0;
     realTime = 0;
-    globalTime = realTime - musicDelay;
+    globalTime = realTime - musicDelay - getAdjustOffsetSec();
 
     if (datas && datas.notes) {
         datas.notes.forEach(n => {
@@ -2219,6 +2285,7 @@ function restart() {
             n._headJudge = null;
             n._headMiss = false;
             n._missReported = false;
+            n._mineTouched = false;
             n._settledCommitted = false;
             n._simplayAutoCompleted = false;
             if (n.touchGroup) {
@@ -2387,7 +2454,7 @@ function update() {
             const bgmTime = audioManager.getBGMTime();
             if (bgmTime !== null && bgmTime !== undefined) {
                 realTime = bgmTime;
-                globalTime = realTime - musicDelay;
+                globalTime = realTime - musicDelay - getAdjustOffsetSec();
                 timeUpdatedByBgm = true;
                 playStartTimestamp = now;
                 playStartRealTime = realTime;
@@ -2402,7 +2469,7 @@ function update() {
             }
             const elapsed = (now - playStartTimestamp) * 0.001;
             realTime = playStartRealTime + elapsed * speed;
-            globalTime = realTime - musicDelay;
+            globalTime = realTime - musicDelay - getAdjustOffsetSec();
         }
 
         // 3. 背景 PV 影片同步（設置 0.3s 閾值避防無效流轉卡頓）
@@ -2420,7 +2487,7 @@ function update() {
         }
     } else {
         realTime = pausedTime;
-        globalTime = realTime - musicDelay;
+        globalTime = realTime - musicDelay - getAdjustOffsetSec();
         playStartTimestamp = null;
     }
 
@@ -2498,7 +2565,7 @@ function isNoteFinishedForPlayState(note, globalTime) {
     if (isHold) {
         return !!note.holdFinish && globalTime > note.time + (note.holdDuration ?? 0) + 0.1;
     }
-    const lateWin = (noteType === 'touch') ? JUDGE_WINDOWS.TOUCH.GOOD_LATE : JUDGE_WINDOWS.TAP.GOOD;
+    const lateWin = note.isMine ? 0 : ((noteType === 'touch') ? JUDGE_WINDOWS.TOUCH.GOOD_LATE : JUDGE_WINDOWS.TAP.GOOD);
     return !!note.triggered && globalTime > note.time + Math.max(0.1, lateWin) + 0.05;
 }
 
@@ -2510,6 +2577,7 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
     const compSensors = new Set();
     if (!playing || timeControlSliding || !notes) return compSensors;
 
+    const audioNow = getAudioGlobalTime(globalTime);
     const rt = datas?._playRuntime;
     if (rt && globalTime < rt.lastStateTime - 0.05) {
         rt.stateCursor = 0;
@@ -2533,10 +2601,12 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                     note.triggeredTime = note.time;
                     note.judgeResult = makeCriticalPerfectResult(note);
                     spawnJudgeEffect(note, note.judgeResult);
-                    audioManager.queueHitSound(note, globalTime, 'CRITICAL_PERFECT');
+                    if (!note.isMine) {
+                        audioManager.queueHitSound(note, audioNow, 'CRITICAL_PERFECT');
+                    }
                     note._startEffectPlayed = true;
                 }
-                if (-noteT <= 0.06) {
+                if (!note.isMine && -noteT <= 0.06) {
                     compSensors.add('A' + note.pos);
                 }
             }
@@ -2549,16 +2619,18 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                     note.triggeredTime = note.time;
                     note.judgeResult = makeCriticalPerfectResult(note);
                     spawnJudgeEffect(note, note.judgeResult);
-                    audioManager.queueHitSound(note, globalTime, 'CRITICAL_PERFECT');
+                    if (!note.isMine) {
+                        audioManager.queueHitSound(note, audioNow, 'CRITICAL_PERFECT');
+                    }
                     note._startEffectPlayed = true;
 
-                    if (note.isHanabi && !note._hanabiSoundPlayed) {
+                    if (!note.isMine && note.isHanabi && !note._hanabiSoundPlayed) {
                         note._hanabiSoundPlayed = true;
-                        audioManager.queueSoundSingle('hanabi', globalTime);
+                        audioManager.queueSoundSingle('hanabi', audioNow);
                         //renderer.triggerHanabiEffect(note, globalTime);
                     }
                 }
-                if (-noteT <= 0.06) {
+                if (!note.isMine && -noteT <= 0.06) {
                     const noteSensor = note.touchPos + note.pos;
                     const normSensor = (noteSensor === 'C1' || noteSensor === 'C2') ? 'C' : noteSensor;
                     compSensors.add(normSensor);
@@ -2570,7 +2642,17 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
             const rawSensor = noteType === 'touch' ? (note.touchPos + note.pos) : ('A' + note.pos);
             const sensorId = (rawSensor === 'C1' || rawSensor === 'C2') ? 'C' : rawSensor;
 
-            if (noteT <= 0) {
+            if (note.isMine) {
+                if (globalTime >= note.time + holdDuration && !note.holdFinish) {
+                    note.triggered = true;
+                    note.triggeredTime = note.time + holdDuration;
+                    note.isHolding = false;
+                    note.holdFinish = true;
+                    note.judgeResult = makeCriticalPerfectResult(note);
+                    spawnJudgeEffect(note, note.judgeResult);
+                    note._startEffectPlayed = true;
+                }
+            } else if (noteT <= 0) {
                 // 起手觸發
                 if (!note.triggered) {
                     note.triggered = true;
@@ -2579,7 +2661,7 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                     note._holdPressed = true;
                     note._startEffectPlayed = true;
                     note._headJudge = makeCriticalPerfectResult(note);
-                    audioManager.queueHitSound(note, globalTime, 'CRITICAL_PERFECT');
+                    audioManager.queueHitSound(note, audioNow, 'CRITICAL_PERFECT');
                 }
 
                 // 長按期間
@@ -2596,12 +2678,12 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
 
                         if (settings.playHoldEnd !== false && noteType !== 'tap') {
                             const soundKey = note.isBreak ? 'judge_break' : (note.isEx ? 'judge_ex' : 'judge');
-                            audioManager.queueSoundSingle(soundKey, globalTime);
+                            audioManager.queueSoundSingle(soundKey, audioNow);
                         }
 
                         if (note.isHanabi && !note._hanabiSoundPlayed) {
                             note._hanabiSoundPlayed = true;
-                            audioManager.queueSoundSingle('hanabi', globalTime);
+                            audioManager.queueSoundSingle('hanabi', audioNow);
                             //renderer.triggerHanabiEffect(note, globalTime);
                         }
                     }
@@ -2615,13 +2697,13 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
         else if (noteType === 'slide') {
             // A. 頭部 Tap/Star 點擊
             const isHead = note.firstSlide || !note.prevSlide;
-            if (isHead && noteT <= 0) {
+            if (!note.isMine && isHead && noteT <= 0) {
                 if (!note.triggered) {
                     note.triggered = true;
                     note.headTriggered = true;
                     note.triggeredTime = note.time;
                     note._startEffectPlayed = true;
-                    audioManager.queueHitSound(note, globalTime, 'CRITICAL_PERFECT');
+                    audioManager.queueHitSound(note, audioNow, 'CRITICAL_PERFECT');
                 }
                 if (-noteT <= 0.06) {
                     compSensors.add('A' + note.pos);
@@ -2632,7 +2714,21 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
             const startTiming = note.time + slideDelay;
             const endTiming = startTiming + slideDuration;
 
-            if (globalTime >= startTiming) {
+            if (note.isMine) {
+                if (globalTime >= endTiming && !note.slideFinish) {
+                    note.slideProgress = 0;
+                    finishSlideNote(note);
+                    note.slideProgress = 0;
+                    note._slideJudged = true;
+                    note._judgeSettleTime = endTiming;
+                    note.judgeResult = makeCriticalPerfectResult(note);
+                    const isGroupPartEnd = note.lastSlide || !note.nextSlide;
+                    if (isGroupPartEnd) {
+                        note._judgeEffectSpawned = true;
+                        spawnJudgeEffect(note, note.judgeResult);
+                    }
+                }
+            } else if (globalTime >= startTiming) {
                 note.slideStart = true;
                 const p = slideDuration > 0 ? Math.min(1, Math.max(0, (globalTime - startTiming) / slideDuration)) : 1;
                 note.slideProgress = p;
@@ -2642,7 +2738,7 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                 const firstStepRatio = 1 / Math.max(2, (note._totalAreasCount || 4));
                 if (!leader._slideStartPlayed && !leader.isMine && (p >= firstStepRatio || slideDuration === 0)) {
                     leader._slideStartPlayed = true;
-                    audioManager.queueSound(leader, globalTime, { includeAnswer: false });
+                    audioManager.queueSound(leader, audioNow, { includeAnswer: false });
                     const chainList = leader.chainList || [leader];
                     for (let k = 0; k < chainList.length; k++) {
                         chainList[k]._slideStartPlayed = true;
@@ -2722,7 +2818,7 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
                             spawnJudgeEffect(note, note.judgeResult);
                             if (note.isBreak && !note._endEffectPlayed) {
                                 note._startEffectPlayed = true;
-                                audioManager.queueSound(note, globalTime, { includeAnswer: false, grade: 'CRITICAL_PERFECT' });
+                                audioManager.queueSound(note, audioNow, { includeAnswer: false, grade: 'CRITICAL_PERFECT' });
                                 note._endEffectPlayed = true;
                             }
                         }
@@ -2777,12 +2873,13 @@ function updateComputerPlayState({ globalTime, notes, renderer, playing, timeCon
     return compSensors;
 }
 
-function updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding, dt = 0.016, sensors = null }) {
+function updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding, dt = 0.016, sensors = null, audioTime = null }) {
     if (!playing || timeControlSliding) return;
 
     const currentSensors = sensors || manualInputSensors;
     if (!currentSensors) return;
 
+    const audioNow = (audioTime !== null && audioTime !== undefined) ? audioTime : getAudioGlobalTime(globalTime);
     const rt = datas?._playRuntime;
     if (rt && globalTime < rt.lastStateTime - 0.05) {
         rt.stateCursor = 0;
@@ -2812,7 +2909,30 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             const tailIgnoreSec = JUDGE_WINDOWS.HOLD.TAIL_IGNORE_SEC;
             const elapsedHold = -noteT;
 
-            if (noteT <= 0.05 && elapsedHold <= note.holdDuration) {
+            if (note.isMine) {
+                const earlyHoldWin = (noteType === 'touch') ? JUDGE_WINDOWS.TOUCH.GOOD_LATE : JUDGE_WINDOWS.TAP.GOOD;
+                const holdDur = note.holdDuration ?? 0;
+                if (!note.holdFinish) {
+                    if (elapsedHold >= holdDur) {
+                        note.isHolding = false;
+                        note.holdFinish = true;
+                        note.triggered = true;
+                        note.triggeredTime = note.time + holdDur;
+                        note.judgeResult = makeCriticalPerfectResult(note);
+                        spawnJudgeEffect(note, note.judgeResult);
+                    } else if (noteT <= earlyHoldWin && isSensorPressed) {
+                        note._mineTouched = true;
+                        note._holdPressed = true;
+                        note.triggered = true;
+                        note.triggeredTime = globalTime;
+                        note.isHolding = false;
+                        note.holdFinish = true;
+                        note._headJudge = makeMineMissResult(note);
+                        note.judgeResult = note._headJudge;
+                        spawnJudgeEffect(note, note.judgeResult);
+                    }
+                }
+            } else if (noteT <= 0.05 && elapsedHold <= note.holdDuration) {
                 // 支援任意時刻中途補按/續按：只要在 Hold 持續時間內按壓即可生效長按，非必須起手擊中
                 if (isSensorPressed) {
                     note.isHolding = true;
@@ -2836,7 +2956,7 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                             };
                         }
                         const headGrade = note._headJudge?.grade || 'CRITICAL_PERFECT';
-                        audioManager.queueHitSound(note, globalTime, headGrade);
+                        audioManager.queueHitSound(note, audioNow, headGrade);
                         note._startEffectPlayed = true;
                     }
                 } else {
@@ -2876,13 +2996,13 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                         // 結算音效 (手動遊玩結尾音效)
                         if (settings.playHoldEnd !== false && noteType !== 'tap' && finalGrade !== 'MISS') {
                             const soundKey = note.isBreak ? 'judge_break' : (note.isEx ? 'judge_ex' : 'judge');
-                            audioManager.queueSoundSingle(soundKey, globalTime);
+                            audioManager.queueSoundSingle(soundKey, audioNow);
                         }
 
                         // TouchHold Hanabi 結算音效：成功按壓結算且非 MISS 時播放
                         if (note.isHanabi && finalGrade !== 'MISS' && !note._hanabiSoundPlayed) {
                             note._hanabiSoundPlayed = true;
-                            audioManager.queueSoundSingle('hanabi', globalTime);
+                            audioManager.queueSoundSingle('hanabi', audioNow);
                         }
                     } else {
                         // 全程未曾按壓
@@ -2896,40 +3016,44 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             }
         }
 
-        // 3. 一般 Tap 音符超時判定 (超過 9 幀 / 150ms)
+        // 3. 一般 Tap 音符超時判定 (超過 9 幀 / 150ms；Mine 音符剛好到達 noteT <= 0 即自動判定 CRITICAL_PERFECT，無 Late)
         if (!isHold && noteType === 'tap' && !note.triggered) {
-            if (-noteT > JUDGE_WINDOWS.TAP.GOOD) {
+            if (note.isMine ? (noteT <= 0) : (-noteT > JUDGE_WINDOWS.TAP.GOOD)) {
                 note.triggered = true;
-                note.triggeredTime = globalTime;
-                note.judgeResult = {
-                    grade: 'MISS',
-                    subGrade: '',
-                    isFast: false,
-                    diffMSec: Math.round(-noteT * 1000 * 10) / 10,
-                    isBreak: !!note.isBreak,
-                    scoreMultiplier: 0,
-                    breakMultiplier: 0,
-                    breakScoreValue: 0
-                };
+                note.triggeredTime = note.isMine ? note.time : globalTime;
+                note.judgeResult = note.isMine
+                    ? makeCriticalPerfectResult(note)
+                    : {
+                        grade: 'MISS',
+                        subGrade: '',
+                        isFast: false,
+                        diffMSec: Math.round(-noteT * 1000 * 10) / 10,
+                        isBreak: !!note.isBreak,
+                        scoreMultiplier: 0,
+                        breakMultiplier: 0,
+                        breakScoreValue: 0
+                    };
                 spawnJudgeEffect(note, note.judgeResult);
             }
         }
 
-        // 4. 一般 Touch 音符超時判定 (超過 18 幀 / 300ms, Too Late)
+        // 4. 一般 Touch 音符超時判定 (超過 18 幀 / 300ms；Mine 音符剛好到達 noteT <= 0 即自動判定 CRITICAL_PERFECT，無 Late)
         if (!isHold && noteType === 'touch' && !note.triggered) {
-            if (-noteT > JUDGE_WINDOWS.TOUCH.GOOD_LATE) {
+            if (note.isMine ? (noteT <= 0) : (-noteT > JUDGE_WINDOWS.TOUCH.GOOD_LATE)) {
                 note.triggered = true;
-                note.triggeredTime = globalTime;
-                note.judgeResult = {
-                    grade: 'MISS',
-                    subGrade: '',
-                    isFast: false,
-                    diffMSec: Math.round(-noteT * 1000 * 10) / 10,
-                    isBreak: !!note.isBreak,
-                    scoreMultiplier: 0,
-                    breakMultiplier: 0,
-                    breakScoreValue: 0
-                };
+                note.triggeredTime = note.isMine ? note.time : globalTime;
+                note.judgeResult = note.isMine
+                    ? makeCriticalPerfectResult(note)
+                    : {
+                        grade: 'MISS',
+                        subGrade: '',
+                        isFast: false,
+                        diffMSec: Math.round(-noteT * 1000 * 10) / 10,
+                        isBreak: !!note.isBreak,
+                        scoreMultiplier: 0,
+                        breakMultiplier: 0,
+                        breakScoreValue: 0
+                    };
                 spawnJudgeEffect(note, note.judgeResult);
             }
         }
@@ -3045,7 +3169,7 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                             leader._slideStartPlayed = true;
                             // 確保呼叫時 leader._startEffectPlayed 為 false，讓 audioManager 識別為開頭 (break_slide_start / slide)
                             leader._startEffectPlayed = false;
-                            audioManager.queueSound(leader, globalTime, { includeAnswer: false });
+                            audioManager.queueSound(leader, audioNow, { includeAnswer: false });
                             const chainList = leader.chainList || [leader];
                             for (let k = 0; k < chainList.length; k++) {
                                 chainList[k]._slideStartPlayed = true;
@@ -3108,13 +3232,13 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
 
                     const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
 
-                    // 實時更新滑條視覺進度 (依已放開感應區比例更新，放開時 track 箭頭才消失)
+                    // 實時更新滑條視覺進度 (依已放開感應區比例更新，沒觸發感應器維持 0)
                     if (note._totalAreasCount > 0) {
                         const finishedCount = note._totalAreasCount - queueRemaining;
                         note.slideProgress = Math.min(1, Math.max(note.slideProgress || 0, finishedCount / note._totalAreasCount));
                     }
 
-                    // 若隊列清空，標記本段完成 (在感應區放開後正式清空觸發)
+                    // 若隊列清空，標記本段完成 (Mine Slide 僅有滑到底時才觸發 MISS)
                     if (queueRemaining === 0) {
                         if (note._simplayAutoCompleted) {
                             note._simplayAutoCompleted = false;
@@ -3126,15 +3250,23 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
             }
 
             // 參照 SlideRoot.cs Judge() & IsNoteCheckTimeStart()：
-            // 必須進入有效判定起點 (leader.startTiming - 0.60s) 後才結算最終評級；早於 ±36 幀完成依 SlideRoot.cs L890 轉為 FastGood
+            // 必須進入有效判定起點 (leader.startTiming - 0.60s) 後才結算最終評級；Mine Slide 若真的滑到底才結算為 MISS
             const minDelayTiming = (note.chainLeader || note).time + ((note.chainLeader || note).slideDelay ?? 0);
             const judgeCheckStart = minDelayTiming - JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
-            if (isGroupPartEnd && note.slideFinish && !note._slideJudged && globalTime >= judgeCheckStart) {
+            if (isGroupPartEnd && note.slideFinish && !note._slideJudged && (note.isMine || globalTime >= judgeCheckStart)) {
                 note._slideJudged = true;
-                note._judgeSettleTime = Math.max(globalTime, minDelayTiming);
-                const isAuto = getAutoPlayMode() !== 'off';
-                const diffSec = (isAuto && (settings.simplayPerfect ?? true)) ? 0 : (globalTime - judgeTiming);
-                note.judgeResult = evaluateSlideGrade(diffSec, note);
+                if (note.isMine) {
+                    note._mineTouched = true;
+                    note._judgeSettleTime = globalTime;
+                    note.judgeResult = makeMineMissResult(note);
+                    note._judgeEffectSpawned = true;
+                    spawnJudgeEffect(note, note.judgeResult);
+                } else {
+                    note._judgeSettleTime = Math.max(globalTime, minDelayTiming);
+                    const isAuto = getAutoPlayMode() !== 'off';
+                    const diffSec = (isAuto && (settings.simplayPerfect ?? true)) ? 0 : (globalTime - judgeTiming);
+                    note.judgeResult = evaluateSlideGrade(diffSec, note);
+                }
             }
 
             // 判定特效與 Break 結尾音效顯示：在 slideDelay 後顯示 (若提前完成，等待至超過 slideDelay 時同步觸發)
@@ -3142,97 +3274,109 @@ function updateManualPlayState({ globalTime, notes, renderer, playing, timeContr
                 if (globalTime >= minDelayTiming) {
                     note._judgeEffectSpawned = true;
                     spawnJudgeEffect(note, note.judgeResult);
-                    if (note.isBreak && !note._endEffectPlayed && note.judgeResult && note.judgeResult.grade !== 'MISS') {
+                    if (!note.isMine && note.isBreak && !note._endEffectPlayed && note.judgeResult && note.judgeResult.grade !== 'MISS') {
                         note._startEffectPlayed = true;
-                        audioManager.queueSound(note, globalTime, { includeAnswer: false, grade: note.judgeResult.grade });
+                        audioManager.queueSound(note, audioNow, { includeAnswer: false, grade: note.judgeResult.grade });
                         note._endEffectPlayed = true;
                     }
                 }
             }
 
-            // 超時判定 (TooLateJudge - 600ms 寬容窗口: StartTiming + Length + 0.60s)
-            // 連鎖 Slide 的前段需以整條 chain 末段的時間為準，否則後段尚在進行時前段就會提早讓整條 MISS
+            // 超時判定 (TooLateJudge - 600ms 寬容窗口；Mine Slide 到達結束時間且未滑到底即自動結算 CRITICAL_PERFECT，無 Late)
             const chainTail = note.chainTail || note;
             const tailStartTiming = chainTail.time + (chainTail.slideDelay ?? 0);
             const tailDuration = chainTail.slideDuration ?? 0;
-            const ownTooLate = startTiming + slideDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
-            const tailTooLate = tailStartTiming + tailDuration + JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
+            const slideLateMargin = note.isMine ? 0 : JUDGE_WINDOWS.SLIDE.GOOD_AREA_SEC;
+            const ownTooLate = startTiming + slideDuration + slideLateMargin;
+            const tailTooLate = tailStartTiming + tailDuration + slideLateMargin;
             const tooLateTiming = (chainTail === note || isGroupPartEnd) ? ownTooLate : Math.max(ownTooLate, tailTooLate);
-            if (globalTime > tooLateTiming && !note.slideFinish) {
-                const tail = chainTail;
-                const isTail = (note === tail || isGroupPartEnd);
-
-                if (isTail) {
-                    // 末段超時：進行最終判定與 MISS / LATE GOOD 結算
-                    if (!note._slideJudged) {
+            if ((note.isMine ? (globalTime >= tooLateTiming) : (globalTime > tooLateTiming)) && !note.slideFinish) {
+                if (note.isMine) {
+                    const isTail = (note === chainTail || isGroupPartEnd);
+                    if (isTail && !note._slideJudged) {
                         note._slideJudged = true;
-                        note._judgeSettleTime = tooLateTiming;
-                        const queues = note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
-                        const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
-                        const allParentsFinished = !note.prevSlide || note.prevSlide.slideFinish;
-
-                        // 參照 MajdataPlay SlideBase.cs lines 639-646:
-                        // 僅在前置段落全部完成且末段只剩最後 1 區未完成時，給予 LATE GOOD 保底；其餘一律判定為 MISS
-                        if (allParentsFinished && queueRemaining === 1) {
-                            note.judgeResult = {
-                                grade: 'GOOD',
-                                subGrade: 'LATE',
-                                isFast: false,
-                                diffMSec: 600,
-                                isBreak: !!note.isBreak,
-                                scoreMultiplier: note.isBreak ? 0.4 : 0.5,
-                                breakMultiplier: note.isBreak ? 0.3 : 0,
-                                breakScoreValue: note.isBreak ? 1000 : 0
-                            };
-                            if (note.isBreak && !note._endEffectPlayed) {
-                                note._startEffectPlayed = true;
-                                audioManager.queueSound(note, globalTime, { includeAnswer: false, grade: 'GOOD' });
-                                note._endEffectPlayed = true;
-                            }
-                        } else {
-                            note.judgeResult = {
-                                grade: 'MISS',
-                                subGrade: 'TOO_LATE',
-                                isFast: false,
-                                diffMSec: 600,
-                                isBreak: !!note.isBreak,
-                                scoreMultiplier: 0,
-                                breakMultiplier: 0,
-                                breakScoreValue: 0
-                            };
-                        }
+                        note._judgeSettleTime = ownTooLate;
+                        note.judgeResult = makeCriticalPerfectResult(note);
                         note._judgeEffectSpawned = true;
                         spawnJudgeEffect(note, note.judgeResult);
                     }
                     finishSlideNote(note);
                 } else {
-                    // 非末段 (連鎖 Slide 前段) 超時：說明玩家連前置段都未在時限內劃完，整條 chain slide 確定 MISS
-                    if (!tail._slideJudged) {
-                        tail._slideJudged = true;
-                        tail._judgeSettleTime = tooLateTiming;
-                        tail.judgeResult = {
-                            grade: 'MISS',
-                            subGrade: 'TOO_LATE',
-                            isFast: false,
-                            diffMSec: 600,
-                            isBreak: !!tail.isBreak,
-                            scoreMultiplier: 0,
-                            breakMultiplier: 0,
-                            breakScoreValue: 0
-                        };
-                        tail._judgeEffectSpawned = true;
-                        spawnJudgeEffect(tail, tail.judgeResult);
-                    }
-                    finishSlideNote(tail);
-                    finishSlideNote(note);
-                }
+                    const tail = chainTail;
+                    const isTail = (note === tail || isGroupPartEnd);
 
-                if (note.judgeQueues) {
-                    for (let i = 0; i < note.judgeQueues.length; i++) {
-                        note.judgeQueues[i].length = 0;
+                    if (isTail) {
+                        // 末段超時：進行最終判定與 MISS / LATE GOOD 結算
+                        if (!note._slideJudged) {
+                            note._slideJudged = true;
+                            note._judgeSettleTime = tooLateTiming;
+                            const queues = note.judgeQueues || (note.judgeQueue ? [note.judgeQueue] : []);
+                            const queueRemaining = queues.length > 0 ? Math.max(...queues.map(q => q.length)) : 0;
+                            const allParentsFinished = !note.prevSlide || note.prevSlide.slideFinish;
+
+                            // 參照 MajdataPlay SlideBase.cs lines 639-646:
+                            // 僅在前置段落全部完成且末段只剩最後 1 區未完成時，給予 LATE GOOD 保底；其餘一律判定為 MISS
+                            if (allParentsFinished && queueRemaining === 1) {
+                                note.judgeResult = {
+                                    grade: 'GOOD',
+                                    subGrade: 'LATE',
+                                    isFast: false,
+                                    diffMSec: 600,
+                                    isBreak: !!note.isBreak,
+                                    scoreMultiplier: note.isBreak ? 0.4 : 0.5,
+                                    breakMultiplier: note.isBreak ? 0.3 : 0,
+                                    breakScoreValue: note.isBreak ? 1000 : 0
+                                };
+                                if (note.isBreak && !note._endEffectPlayed) {
+                                    note._startEffectPlayed = true;
+                                    audioManager.queueSound(note, audioNow, { includeAnswer: false, grade: 'GOOD' });
+                                    note._endEffectPlayed = true;
+                                }
+                            } else {
+                                note.judgeResult = {
+                                    grade: 'MISS',
+                                    subGrade: 'TOO_LATE',
+                                    isFast: false,
+                                    diffMSec: 600,
+                                    isBreak: !!note.isBreak,
+                                    scoreMultiplier: 0,
+                                    breakMultiplier: 0,
+                                    breakScoreValue: 0
+                                };
+                            }
+                            note._judgeEffectSpawned = true;
+                            spawnJudgeEffect(note, note.judgeResult);
+                        }
+                        finishSlideNote(note);
+                    } else {
+                        // 非末段 (連鎖 Slide 前段) 超時：說明玩家連前置段都未在時限內劃完，整條 chain slide 確定 MISS
+                        if (!tail._slideJudged) {
+                            tail._slideJudged = true;
+                            tail._judgeSettleTime = tooLateTiming;
+                            tail.judgeResult = {
+                                grade: 'MISS',
+                                subGrade: 'TOO_LATE',
+                                isFast: false,
+                                diffMSec: 600,
+                                isBreak: !!tail.isBreak,
+                                scoreMultiplier: 0,
+                                breakMultiplier: 0,
+                                breakScoreValue: 0
+                            };
+                            tail._judgeEffectSpawned = true;
+                            spawnJudgeEffect(tail, tail.judgeResult);
+                        }
+                        finishSlideNote(tail);
+                        finishSlideNote(note);
                     }
+
+                    if (note.judgeQueues) {
+                        for (let i = 0; i < note.judgeQueues.length; i++) {
+                            note.judgeQueues[i].length = 0;
+                        }
+                    }
+                    note.judgeQueue = [];
                 }
-                note.judgeQueue = [];
             }
         }
     };
@@ -3293,6 +3437,8 @@ function draw() {
     let activeSensors = null;
 
     const autoMode = getAutoPlayMode();
+    const audioNow = getAudioGlobalTime(globalTime);
+    const judgeNow = getJudgeGlobalTime(globalTime);
 
     if (autoMode === 'computer') {
         // 電腦模式：就像譜面播放展示一樣，無論如何 All Perfect
@@ -3305,7 +3451,7 @@ function draw() {
     } else if (autoMode === 'simulate') {
         // 模擬模式：使用 SimulatedPlay 模擬玩家感應器觸發狀態，並透過 triggerManualHit 觸發打擊
         simulatedPlayController.update({
-            globalTime,
+            globalTime: judgeNow,
             notes,
             renderer,
             playing,
@@ -3319,12 +3465,12 @@ function draw() {
         for (const s of manualInputSensors) {
             activeSensors.add(s);
         }
-        updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding, dt, sensors: activeSensors });
+        updateManualPlayState({ globalTime: judgeNow, audioTime: audioNow, notes, renderer, playing, timeControlSliding, dt, sensors: activeSensors });
     } else {
         // 手動模式：使用玩家鍵盤/觸控實時按壓 Sensor
         simulatedPlayController.reset();
         activeSensors = manualInputSensors;
-        updateManualPlayState({ globalTime, notes, renderer, playing, timeControlSliding, dt, sensors: activeSensors });
+        updateManualPlayState({ globalTime: judgeNow, audioTime: audioNow, notes, renderer, playing, timeControlSliding, dt, sensors: activeSensors });
     }
 
     // 初始化 nowIndex (使用預編譯 _nonSlideTimes 進行 O(log N) 二分搜尋)
@@ -3358,7 +3504,8 @@ function draw() {
     let firstFutureIdx = notesLength;
 
     const evaluateScoreNote = (note, commitAllowed) => {
-        const noteT = note.time - globalTime;
+        const scoreNow = (autoMode === 'computer') ? globalTime : judgeNow;
+        const noteT = note.time - scoreNow;
         const noteType = note.type;
         const isHold = (noteType === 'hold' || note.isHold || (noteType === 'touch' && ((note.holdDuration ?? 0) > 0 || note.isHold)));
         const holdDuration = note.holdDuration ?? 0;
@@ -3380,11 +3527,22 @@ function draw() {
 
             const startTiming = note.time + slideDelay;
             const minDelayTiming = (note.chainLeader || note).time + ((note.chainLeader || note).slideDelay ?? 0);
-            const tooLateTiming = startTiming + slideDuration + (JUDGE_WINDOWS.SLIDE?.GOOD_AREA_SEC ?? 0.6);
+            const tooLateTiming = startTiming + slideDuration + (note.isMine ? 0 : (JUDGE_WINDOWS.SLIDE?.GOOD_AREA_SEC ?? 0.6));
 
-            if ((!note.slideFinish && !note._slideJudged && globalTime <= tooLateTiming) || (note.slideFinish && globalTime < minDelayTiming)) {
+            if (((!note.slideFinish && !note._slideJudged && (note.isMine ? (scoreNow < tooLateTiming) : (scoreNow <= tooLateTiming))) || (!note.isMine && note.slideFinish && scoreNow < minDelayTiming))) {
                 if (note.time < minUnsettledTime) minUnsettledTime = note.time;
                 return true;
+            }
+
+            if (note.isMine && !note._slideJudged && !note.slideFinish) {
+                note._slideJudged = true;
+                note._judgeSettleTime = tooLateTiming;
+                note.judgeResult = makeCriticalPerfectResult(note);
+                if (!note._judgeEffectSpawned) {
+                    note._judgeEffectSpawned = true;
+                    spawnJudgeEffect(note, note.judgeResult);
+                }
+                finishSlideNote(note);
             }
 
             const { normalMax, bonusMax } = getNoteBaseScores(note);
@@ -3412,7 +3570,21 @@ function draw() {
         if (isHold) {
             const holdEndT = holdDuration + noteT;
 
-            if (!note.triggered && !note._holdPressed && !note.isHolding) {
+            if (note.isMine) {
+                const mineHoldEnd = holdDuration;
+                if (-noteT < mineHoldEnd && !note.holdFinish) {
+                    if (note.time + mineHoldEnd < minUnsettledTime) minUnsettledTime = note.time + mineHoldEnd;
+                    return true;
+                }
+                if (!note.holdFinish) {
+                    note.isHolding = false;
+                    note.holdFinish = true;
+                    note.triggered = true;
+                    note.triggeredTime = note.time + mineHoldEnd;
+                    note.judgeResult = makeCriticalPerfectResult(note);
+                    spawnJudgeEffect(note, note.judgeResult);
+                }
+            } else if (!note.triggered && !note._holdPressed && !note.isHolding) {
                 if (noteT >= -lateJudgeWindow) {
                     if (note.time - maxFutureJudgeWindow < minUnsettledTime) minUnsettledTime = note.time - maxFutureJudgeWindow;
                     return true;
@@ -3435,9 +3607,7 @@ function draw() {
                     activeScoreState.pendingComboEvents.push({ time: note.time + holdDuration, isHit: false });
                 }
                 return false;
-            }
-
-            if (holdEndT > 0 && !note.holdFinish) {
+            } else if (holdEndT > 0 && !note.holdFinish) {
                 if (note.time + holdDuration < minUnsettledTime) minUnsettledTime = note.time + holdDuration;
                 return true;
             }
@@ -3485,17 +3655,35 @@ function draw() {
             return false;
         }
 
-        if (noteT < -lateJudgeWindow) {
+        const mineExpired = note.isMine && noteT <= 0;
+        if (mineExpired || noteT < -lateJudgeWindow) {
+            const settleAt = note.isMine ? note.time : (note.time + lateJudgeWindow);
             if (!note._missReported) {
                 note._missReported = true;
-                note.judgeResult = { grade: 'MISS', subGrade: '', isBreak: !!note.isBreak, scoreMultiplier: 0, breakMultiplier: 0, breakScoreValue: 0 };
+                note.triggered = true;
+                note.triggeredTime = note.triggeredTime ?? settleAt;
+                note.judgeResult = note.isMine
+                    ? makeCriticalPerfectResult(note)
+                    : { grade: 'MISS', subGrade: '', isBreak: !!note.isBreak, scoreMultiplier: 0, breakMultiplier: 0, breakScoreValue: 0 };
                 spawnJudgeEffect(note, note.judgeResult);
             }
+            const isHit = !!(note.judgeResult && note.judgeResult.grade !== 'MISS');
             if (commitAllowed && !note._settledCommitted) {
                 note._settledCommitted = true;
-                activeScoreState.committedLostNormalScore += normalMax;
-                activeScoreState.committedLostBonusScore += bonusMax;
-                activeScoreState.pendingComboEvents.push({ time: note.time + lateJudgeWindow, isHit: false });
+                if (isHit) {
+                    const earned = getNoteJudgeScore(note, note.judgeResult);
+                    activeScoreState.committedNormalScore += earned.normalScore;
+                    activeScoreState.committedBonusScore += earned.bonusScore;
+                    activeScoreState.committedLostNormalScore += (normalMax - earned.normalScore);
+                    activeScoreState.committedLostBonusScore += (bonusMax - earned.bonusScore);
+                    if (note.isBreak) activeScoreState.committedQty.break++;
+                    else activeScoreState.committedQty[noteType]++;
+                    activeScoreState.pendingComboEvents.push({ time: settleAt, isHit: true });
+                } else {
+                    activeScoreState.committedLostNormalScore += normalMax;
+                    activeScoreState.committedLostBonusScore += bonusMax;
+                    activeScoreState.pendingComboEvents.push({ time: settleAt, isHit: false });
+                }
             }
             return false;
         }
@@ -3517,10 +3705,11 @@ function draw() {
     }
 
     // 2. 僅掃描當前游標之後尚未進入遠未來的音符，將已結算項目增量累加並推進游標
+    const activeScoreNow = (autoMode === 'computer') ? globalTime : judgeNow;
     let canAdvanceScoreCursor = (datas._isSorted !== false);
     for (let i = activeScoreState.settledCursor; i < notesLength; i++) {
         const note = notes[i];
-        const noteT = note.time - globalTime;
+        const noteT = note.time - activeScoreNow;
         if (noteT > maxFutureJudgeWindow) {
             firstFutureIdx = i;
             break;
@@ -3659,8 +3848,8 @@ function draw() {
 
             const lookAhead = 0.1; // 100ms look-ahead
 
-            // 1. Answer 節拍提示音：始終在 note.time 準時播放，不隨玩家輸入改變時間 (Slide 音符本身不播放 answer)
-            const answerDiffT = note.time - globalTime;
+            // 1. Answer 節拍提示音：始終貼齊 BGM 音軌時間 (audioNow = realTime - musicDelay)，不受判定調整 A/B 影響
+            const answerDiffT = note.time - audioNow;
             if (answerDiffT <= lookAhead && !note._answerSoundPlayed) {
                 if (!note.isMine && noteType !== 'slide' && answerDiffT >= -0.1) {
                     audioManager.queueSoundSingle('answer', note.time);
@@ -3672,7 +3861,7 @@ function draw() {
             const isHoldNoteObj = (note.holdDuration > 0 || note.isHold || noteType === 'hold');
             if (isHoldNoteObj && !note.isMine && (note.holdDuration ?? 0) > 0) {
                 const holdEndTargetT = note.time + (note.holdDuration ?? 0);
-                const holdEndDiffT = holdEndTargetT - globalTime;
+                const holdEndDiffT = holdEndTargetT - audioNow;
                 if (holdEndDiffT <= lookAhead && !note._holdEndAnswerPlayed) {
                     if (holdEndDiffT >= -0.1) {
                         audioManager.queueSoundSingle('answer', holdEndTargetT);
@@ -3692,7 +3881,7 @@ function draw() {
                 if (shouldPlayEndSound && endNoteT >= -0.1) {
                     const soundGrade = note.judgeResult?.grade || note._headJudge?.grade || null;
                     note._startEffectPlayed = true;
-                    audioManager.queueSound(note, endTargetT, { includeAnswer: false, grade: soundGrade });
+                    audioManager.queueSound(note, getAudioGlobalTime(endTargetT), { includeAnswer: false, grade: soundGrade });
                 }
                 note._endEffectPlayed = true;
             }
@@ -3702,10 +3891,10 @@ function draw() {
             const startTargetT = note.time + (note.slideDelay ?? 0);
             const endTargetT = note.time + skipT;
             const isHoldNoteObj = (note.holdDuration > 0 || note.isHold || noteType === 'hold');
-            if (note.time - globalTime > lookAhead) {
+            if (note.time - audioNow > lookAhead) {
                 note._answerSoundPlayed = false;
             }
-            if (isHoldNoteObj && (note.time + (note.holdDuration ?? 0) - globalTime > lookAhead)) {
+            if (isHoldNoteObj && (note.time + (note.holdDuration ?? 0) - audioNow > lookAhead)) {
                 note._holdEndAnswerPlayed = false;
             }
             if (startTargetT - globalTime > lookAhead) {
@@ -3809,7 +3998,7 @@ function draw() {
         });
     }
 
-    audioManager.update(globalTime);
+    audioManager.update(audioNow);
     usedSensorsThisFrame.clear();
 }
 
@@ -4022,6 +4211,24 @@ function openSettings() {
                     visibleWhen: (s) => s.autoPlay === 'simulate' && !s.simplayPerfect,
                     apply: (val) => {
                         settings.randomOffset = val;
+                    }
+                },
+                {
+                    id: 'adjustTiming', type: 'range', label: 'settings.items.adjustTiming', min: -2, max: 2, step: 0.1, def: defaultSettings.adjustTiming,
+                    apply: (val) => {
+                        settings.adjustTiming = val;
+                        globalTime = realTime - musicDelay - getAdjustOffsetSec();
+                        resetNotesForSeek(globalTime);
+                        draw();
+                    }
+                },
+                {
+                    id: 'judgeTiming', type: 'range', label: 'settings.items.judgeTiming', min: -2, max: 2, step: 0.1, def: defaultSettings.judgeTiming,
+                    apply: (val) => {
+                        settings.judgeTiming = val;
+                        if (!playing) {
+                            draw();
+                        }
                     }
                 },
                 {

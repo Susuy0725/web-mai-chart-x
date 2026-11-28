@@ -2,14 +2,22 @@
 
 本檔案將記錄Web mai Chart X 的可記錄變更
 
+##  [2026.11.28 (2)]
+
+### Added
+
+- 加入 break touch 支援
+
+### Fixed
+
+- 修正 break mine note 皮膚未改變的問題
+
 ##  [2026.11.28 (1)]
 
 ### Changed
 
 - UI調整
 - Play新增上方功能列
-
-
 
 ##  [2026.11.27 (1)]
 

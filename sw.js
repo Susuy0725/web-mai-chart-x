@@ -84,6 +84,7 @@ const ASSETS = [
     './Scripts/core/init.js',
     './Scripts/core/keybindings.js',
     './Scripts/core/legalVersionManager.js',
+    './Scripts/core/noteScore.js',
     './Scripts/core/panelLayout.js',
     './Scripts/core/playbackEngine.js',
     './Scripts/core/renderOverlayRegistry.js',

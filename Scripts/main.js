@@ -53,6 +53,7 @@ import {
     syncDifficultySelectIndicators
 } from './helper.js';
 import { SimaiLogicControler } from './core/simaiLogicControler.js';
+import { buildPlayScoreRes } from './core/noteScore.js';
 import { SimaiRenderer, SimaiVisualEditor, SimaiPreviewRenderer } from './renderer.js';
 import { simaiDecode } from './decode.js';
 import { decodeWorkerManager } from './core/decodeWorkerManager.js';
@@ -339,7 +340,7 @@ let errors = [], errorPositions = [], errorItems = [];
 let warnings = [], warningPositions = [], warningPositionsConst = [], warningItems = [];
 let decodedTags = [];
 let cachedChartSnapshot = null;
-let playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
+let playScoreRes = buildPlayScoreRes();
 
 let lastCanvasSize = { w: 0, h: 0 };
 let lastVisualEditorSize = { w: 0, h: 0 };
@@ -1700,12 +1701,7 @@ function applyDecodeResult(result, simaiDataValue) {
 
     dataIndexToTime = result.indexToTime || [];
 
-    playScoreRes = {
-        ...result.notesCounts,
-        score: result.score,
-    };
-    playScoreRes.breakScore = playScoreRes.break == 0 ? 0 : (1 / playScoreRes.break);
-    playScoreRes.invScore = 1 / playScoreRes.score;
+    playScoreRes = buildPlayScoreRes(result.notesCounts);
     rawData = splitSimaiPreservingAll(simaiDataValue);
     updateRawCharOffsets();
     lastCursorIndex = -1;

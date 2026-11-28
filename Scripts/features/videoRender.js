@@ -10,6 +10,7 @@
 
 import { ensureMediabunny, simpleToast, popupWindow } from '../helper.js';
 import { SimaiLogicControler } from '../core/simaiLogicControler.js';
+import { buildPlayScoreRes } from '../core/noteScore.js';
 import { renderOverlayRegistry } from '../core/renderOverlayRegistry.js';
 import { t as i18n } from '../i18n.js';
 
@@ -209,7 +210,7 @@ export async function videoRender(audioManager, canvas, renderer, {
     editorBackgroundImage = null,
     editorBackgroundVideo = null,
     notes = [],
-    playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 },
+    playScoreRes = buildPlayScoreRes(),
     chartInfo = {},
     overallBrightness = 1.0,
     movieBrightness = null,

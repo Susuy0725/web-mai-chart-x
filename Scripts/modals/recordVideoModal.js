@@ -9,6 +9,7 @@ import {
 } from './settingsModal.js';
 import { videoRender } from '../features/videoRender.js';
 import { SimaiLogicControler } from '../core/simaiLogicControler.js';
+import { buildPlayScoreRes } from '../core/noteScore.js';
 import { SimaiRenderer } from '../renderer.js';
 import { t } from '../i18n.js';
 
@@ -58,7 +59,7 @@ export async function openRecordVideoModal({
     const maxDuration = Math.max(0.1, Number((endTime + musicDelay).toFixed(2))); // 總曲長
     const mainRenderer = typeof getRenderer === 'function' ? getRenderer() : null;
     const notes = typeof getNotes === 'function' ? getNotes() : [];
-    const playScoreRes = typeof getPlayScoreRes === 'function' ? getPlayScoreRes() : { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
+    const playScoreRes = typeof getPlayScoreRes === 'function' ? getPlayScoreRes() : buildPlayScoreRes();
     const maidata = typeof getMaidata === 'function' ? getMaidata() : {};
 
     // 格式化時間 (分:秒.毫秒)

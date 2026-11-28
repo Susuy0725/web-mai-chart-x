@@ -1,4 +1,5 @@
 import { PathRecorder, noteRefPos, innerCirleBase, isObject } from './core/chartGeometry.js';
+import { buildPlayScoreRes } from './core/noteScore.js';
 
 export let errs = [];
 export let errpos = [];
@@ -1000,13 +1001,13 @@ function decodeCommaBlock(e, noteCommaIndex, state, context) {
             }
 
             if (noteStr.includes('b') && !slideMatch) {
-                if (touchMatch) {
-                    pushWarning('decode.warning.breakInTouch', {}, "Break flag 'b' is not allowed in touch notes", { errpos: noteCommaIndex });
-                    continue;
-                }
                 noteObj.isBreak = true;
                 breakCounts++;
-                tapCounts--;
+                if (touchMatch) {
+                    touchCounts--;
+                } else {
+                    tapCounts--;
+                }
                 noteStr = noteStr.replace(/b/g, '');
             }
 
@@ -1464,20 +1465,24 @@ break: ${breakCounts}`
         }
     }
 
+    const notesCounts = {
+        tap: tapCounts,
+        hold: holdCounts,
+        slide: slideCounts,
+        touch: touchCounts,
+        break: breakCounts,
+    };
+    const scoreTotals = buildPlayScoreRes(notesCounts);
     const result = {
         notes,
         endTime,
         tags,
         bpm: firstBpm || 60,
         baseOffset,
-        notesCounts: {
-            tap: tapCounts,
-            hold: holdCounts,
-            slide: slideCounts,
-            touch: touchCounts,
-            break: breakCounts,
-        },
-        score: (tapCounts + touchCounts + holdCounts * 2 + slideCounts * 3 + breakCounts * 5) || 0,
+        notesCounts,
+        allPerfectScore: scoreTotals.allPerfectScore,
+        breakBonusScore: scoreTotals.breakBonusScore,
+        score: scoreTotals.allPerfectScore,
         failed: false,
         errors: errs,
         errorItems: errItems,
@@ -1537,6 +1542,8 @@ export function simaiDecode(data = "", baseOffset = true, options = {}) {
                 touch: 0,
                 break: 0,
             },
+            allPerfectScore: 0,
+            breakBonusScore: 0,
             score: 0,
             failed: false,
             errors: [],

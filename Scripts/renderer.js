@@ -465,6 +465,19 @@ export class SimaiRenderer {
 
         // 打擊判定文字特效佇列 (Judge Text / Break Effect Queue)
         this.judgeEffects = [];
+
+        // EachLine / TapHold / Frame Transform 重用物件池，避免每幀配置陣列與 DOMMatrix
+        this._eachPosBuf = new Int8Array(8);
+        this._eachSortedBuf = new Int8Array(8);
+        this._eachGroupMap = new Map();
+        this._eachGroupPool = [];
+        this._eachGroupPoolUsed = 0;
+        this._tapHoldRenderItems = [];
+        this._tapHoldRenderItemCount = 0;
+        this._eachLineItems = [];
+        this._eachLineItemCount = 0;
+        this._frameTransform = { active: false, a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+        this._currentFrameBreakBrightness = 1;
     }
 
 
@@ -501,10 +514,10 @@ export class SimaiRenderer {
         this._cx = w * 0.5;
         this._cy = h * 0.5;
 
-        const speed = this.settings.speed || 1;
-        const touchSpeed = this.settings.touchSpeed || 1;
-        this._speedFactor = speed * 0.8833 + 0.8167;
-        this._touchSpeedFactor = touchSpeed * 0.8833 + 0.8167;
+        const speed = this.settings.speed ?? 1;
+        const touchSpeed = this.settings.touchSpeed ?? 1;
+        this._speedFactor = calcPiecewiseSpeed(speed);
+        this._touchSpeedFactor = calcPiecewiseSpeed(touchSpeed);
     }
 
     resetBaseTransform() {
@@ -558,27 +571,23 @@ export class SimaiRenderer {
      * - steps 1~3 對應 EachLine1~3 (45°/90°/135° 順時針弧)
      * - steps 4 對應 EachLine4 (180° 對位全環 360°)
      */
-    _resolveEachLineSpec(groupNotes) {
-        if (!groupNotes || groupNotes.length < 2) return null;
-        let posMask = 0;
-        const uniquePos = [];
-        // buckets 為反序推入，從末端起算可保留原始譜面首音符作為 anchor
-        for (let i = groupNotes.length - 1; i >= 0; i--) {
-            const p = groupNotes[i].pos | 0;
-            if (p >= 1 && p <= 8 && !(posMask & (1 << p))) {
-                posMask |= (1 << p);
-                uniquePos.push(p);
+    _resolveEachLineSpecFromPositions(posMask, rawPositions, rawCount, outSpec = null) {
+        if (!posMask || rawCount < 2) return null;
+        const sorted = this._eachSortedBuf;
+        let sortedCount = 0;
+        for (let p = 1; p <= 8; p++) {
+            if (posMask & (1 << p)) {
+                sorted[sortedCount++] = p;
             }
         }
-        if (uniquePos.length < 2) return null;
+        if (sortedCount < 2) return null;
 
         // 先找最小順時針包覆弧 (maxGap 最大補角)，讓 2 押與 <=180° 的多押一律完整相連且不因書寫順序斷裂
-        const sorted = uniquePos.slice().sort((a, b) => a - b);
         let maxGap = -1;
         let maxGapIdx = 0;
-        for (let i = 0; i < sorted.length; i++) {
+        for (let i = 0; i < sortedCount; i++) {
             const curr = sorted[i];
-            const next = sorted[(i + 1) % sorted.length];
+            const next = sorted[(i + 1) % sortedCount];
             const gap = (next - curr + 8) % 8;
             if (gap > maxGap) {
                 maxGap = gap;
@@ -586,20 +595,25 @@ export class SimaiRenderer {
             }
         }
 
+        const result = outSpec || { startPos: 1, steps: 1 };
         const cwSteps = 8 - maxGap;
-        const cwStart = sorted[(maxGapIdx + 1) % sorted.length];
+        const cwStart = sorted[(maxGapIdx + 1) % sortedCount];
         if (cwSteps >= 1 && cwSteps <= 3) {
-            return { startPos: cwStart, steps: cwSteps };
+            result.startPos = cwStart;
+            result.steps = cwSteps;
+            return result;
         }
         if (cwSteps === 4) {
-            return { startPos: 1, steps: 4 };
+            result.startPos = 1;
+            result.steps = 4;
+            return result;
         }
 
         // 跨越超過 180° 的 3+ 押 (如 1/3/6、1/4/5)：參照 NoteBase.GetEachAngle 由首顆音符起算最大有號角距
-        const anchor = uniquePos[0];
+        const anchor = rawPositions[rawCount - 1];
         let bestSignedSteps = 0;
-        for (let i = 1; i < uniquePos.length; i++) {
-            const delta = (uniquePos[i] - anchor + 8) % 8;
+        for (let i = rawCount - 2; i >= 0; i--) {
+            const delta = (rawPositions[i] - anchor + 8) % 8;
             const signedSteps = (delta <= 4) ? delta : -(8 - delta);
             if (Math.abs(signedSteps) > Math.abs(bestSignedSteps)) {
                 bestSignedSteps = signedSteps;
@@ -607,18 +621,39 @@ export class SimaiRenderer {
         }
         if (bestSignedSteps === 0) return null;
         if (Math.abs(bestSignedSteps) === 4) {
-            return { startPos: 1, steps: 4 };
+            result.startPos = 1;
+            result.steps = 4;
+            return result;
         }
         if (bestSignedSteps > 0) {
-            return { startPos: anchor, steps: bestSignedSteps };
+            result.startPos = anchor;
+            result.steps = bestSignedSteps;
+            return result;
         }
         const steps = -bestSignedSteps;
-        const startPos = ((anchor - 1 - steps + 8) % 8) + 1;
-        return { startPos, steps };
+        result.startPos = ((anchor - 1 - steps + 8) % 8) + 1;
+        result.steps = steps;
+        return result;
+    }
+
+    _resolveEachLineSpec(groupNotes, outSpec = null) {
+        if (!groupNotes || groupNotes.length < 2) return null;
+        let posMask = 0;
+        const rawPositions = this._eachPosBuf;
+        let rawCount = 0;
+        for (let i = 0; i < groupNotes.length; i++) {
+            const p = groupNotes[i].pos | 0;
+            if (p >= 1 && p <= 8 && !(posMask & (1 << p))) {
+                posMask |= (1 << p);
+                rawPositions[rawCount++] = p;
+                if (rawCount >= 8) break;
+            }
+        }
+        return this._resolveEachLineSpecFromPositions(posMask, rawPositions, rawCount, outSpec);
     }
 
     getTapImage(isMine, isBreak, isDouble) {
-        if (isMine) return this.images["tap_mine"];
+        if (isMine) return this.images[isBreak ? "tap_break_mine" : "tap_mine"];
         if (isBreak) {
             this._tempColorConfig.colorCode = "#fff8a6";
             const br = this.getBreakTint(isBreak, isMine);
@@ -631,10 +666,10 @@ export class SimaiRenderer {
     getStarImage(isMine, isBreak, isDouble, isMultiple, forceblue = false) {
         const isPink = this.settings.pinkStars && !forceblue;
         const imgKey = isMultiple ?
-            (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))) :
-            (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))));
+            (isMine ? (isBreak ? "star_break_double_mine" : "star_mine_double") : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))) :
+            (isMine ? (isBreak ? "star_break_mine" : "star_mine") : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))));
 
-        if (isBreak) {
+        if (isBreak && !isMine) {
             this._tempColorConfig.colorCode = "#fff8a6";
             const br = this.getBreakTint(isBreak, isMine);
             return this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
@@ -644,15 +679,15 @@ export class SimaiRenderer {
 
     getHoldImage(isMine, isBreak, isDouble, isOn) {
         const holdImgKey = isOn ?
-            (isMine ? "hold_mine" : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
-            (isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
+            (isMine ? (isBreak ? "hold_break_mine_on" : "hold_mine_on") : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
+            (isMine ? (isBreak ? "hold_break_mine" : "hold_mine") : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
 
-        if (isBreak) {
+        if (isBreak && !isMine) {
             this._tempColorConfig.colorCode = "#fff8a6";
             const br = this.getBreakTint(isBreak, isMine);
             return this.getMemoizedTintedImage(holdImgKey, br, this._tempColorConfig);
         }
-        return this.images[holdImgKey];
+        return this.images[holdImgKey] || (isMine ? this.images[isBreak ? "hold_break_mine" : "hold_mine"] : null);
     }
 
     getHoldEndImage(isMine, isBreak, isDouble) {
@@ -662,16 +697,39 @@ export class SimaiRenderer {
         return this.images["Hold_End"];
     }
 
-    getTouchBorderImages(isMine, isDouble) {
-        const key = isMine ? "mine" : (isDouble ? "each" : "normal");
+    getTouchBorderImages(isMine, isDouble, isBreak = false) {
+        const key = isMine ? (isBreak ? "break_mine" : "mine") : (isBreak ? "break" : (isDouble ? "each" : "normal"));
         if (!this._touchBorderCache) this._touchBorderCache = {};
         if (!this._touchBorderCache[key]) {
-            this._touchBorderCache[key] = {
-                borderImg: this.images[isMine ? "touch_border_2_mine" : (isDouble ? "touch_border_2_each" : "touch_border_2")],
-                borderImg3: this.images[isMine ? "touch_border_3_mine" : (isDouble ? "touch_border_3_each" : "touch_border_3")],
-                touchPoint: this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")],
-                touchImg: this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")]
-            };
+            if (isMine && isBreak) {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images["touch_break_mine_border_2"],
+                    borderImg3: this.images["touch_break_mine_border_3"],
+                    touchPoint: this.images["touch_break_point_mine"],
+                    touchImg: this.images["touch_break_mine"]
+                };
+            } else if (isMine) {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images["touch_border_2_mine"],
+                    borderImg3: this.images["touch_border_3_mine"],
+                    touchPoint: this.images["touch_point_mine"],
+                    touchImg: this.images["touch_mine"]
+                };
+            } else if (isBreak) {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images["touch_break_border_2"],
+                    borderImg3: this.images["touch_break_border_3"],
+                    touchPoint: this.images["touch_break_point"],
+                    touchImg: this.images["touch_break"]
+                };
+            } else {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images[isDouble ? "touch_border_2_each" : "touch_border_2"],
+                    borderImg3: this.images[isDouble ? "touch_border_3_each" : "touch_border_3"],
+                    touchPoint: this.images[isDouble ? "touch_point_each" : "touch_point"],
+                    touchImg: this.images[isDouble ? "touch_each" : "touch"]
+                };
+            }
         }
         return this._touchBorderCache[key];
     }
@@ -1363,16 +1421,14 @@ export class SimaiRenderer {
     /**
      * 獨立的打擊判定文字/圖片與閃爍特效渲染通道 (Judge Effects Pass - globalTime driven)
      * @param {number|null} currentTime 當前譜面時間 (秒)，若為空則使用 this.globalTime
+     * @param {'all'|'slide'|'nonSlide'} filterMode 指定渲染哪一類判定特效 (Slide 位於音符後層，其餘位於音符前層)
      */
-    drawJudgeEffects(currentTime = null) {
+    drawJudgeEffects(currentTime = null, filterMode = 'all') {
         if (!this.shouldDrawJudgeEffects()) return;
         const now = (currentTime !== null && currentTime !== undefined) ? currentTime : this.globalTime;
         const ctx = this.ctx;
         const images = this.images;
-
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        let ctxSaved = false;
 
         for (let i = this.judgeEffects.length - 1; i >= 0; i--) {
             const eff = this.judgeEffects[i];
@@ -1384,8 +1440,17 @@ export class SimaiRenderer {
                 this.judgeEffects.splice(i, 1);
                 continue;
             }
+            if (filterMode === 'slide' && !isSlide) continue;
+            if (filterMode === 'nonSlide' && isSlide) continue;
             if (elapsed < 0) {
                 continue; // 尚未到達觸發時間
+            }
+
+            if (!ctxSaved) {
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctxSaved = true;
             }
 
             const progress = elapsed / eff.duration;
@@ -1485,7 +1550,9 @@ export class SimaiRenderer {
 
             ctx.restore();
         }
-        ctx.restore();
+        if (ctxSaved) {
+            ctx.restore();
+        }
     }
 
     getSlideOffset(eff, flip, cruv) {
@@ -1551,7 +1618,7 @@ export class SimaiRenderer {
 
         const isBreak = typeof judge === 'boolean'
             ? judge
-            : !!(judge && (judge.isBreak || judge.grade?.includes?.('BREAK') || judge.breakScoreValue !== undefined));
+            : !!(judge && (judge.isBreak || judge.grade?.includes?.('BREAK')));
         const img = (isBreak ? this.images.StarEffect : this.images.HexEffect) || this.images.HexEffect || this.images.StarEffect;
         if (!img) return;
 
@@ -2087,7 +2154,7 @@ export class SimaiRenderer {
 
     getNoteTransform(noteT, speedMult = 1, size) {
         const sz = this.getNoteSizeScaled(size);
-        const speed = (speedMult === 1) ? this._speedFactor : calcPiecewiseSpeed(this.settings.speed * speedMult);
+        const speed = (speedMult === 1) ? this._speedFactor : calcPiecewiseSpeed((this.settings.speed ?? 1) * speedMult);
         const progress = noteT * speed;
         const t = 1 - this.timeFunction(progress);
         const displayT = Math.max(this.settings.middleDistance, t);
@@ -2142,6 +2209,7 @@ export class SimaiRenderer {
 
         this.globalTime = globalTime;
         this._currentFrameBreakTint = Math.pow(Math.sin(globalTime * -6), 2) * 0.7;
+        this._currentFrameBreakBrightness = 1 + (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25;
         this.playCombo = playCombo;
         this.playScore = playScore;
         this.playScoreMinus = (playScoreMinus !== undefined) ? playScoreMinus : 101;
@@ -2222,44 +2290,66 @@ export class SimaiRenderer {
         }
         runOverlay('beforeNotes');
 
-        // 4. 繪製順序優化
-        const hasSensorHighlight = this.hasActiveSensorOverlay(activeSensors);
-        if (showSensor || showSensorText || hasSensorHighlight) {
-            this.drawSensors(showSensor, showSensorText, activeSensors);
+        // 快取本幀基底變換矩陣，避免內層各音符與箭頭重複呼叫 ctx.getTransform() 配置 DOMMatrix
+        const ft = this._frameTransform;
+        if (typeof ctx.getTransform === 'function') {
+            const m = ctx.getTransform();
+            ft.a = m.a; ft.b = m.b; ft.c = m.c; ft.d = m.d; ft.e = m.e; ft.f = m.f;
+        } else {
+            ft.a = this._p; ft.b = 0; ft.c = 0; ft.d = this._p; ft.e = this._cx; ft.f = this._cy;
         }
-        runOverlay('afterSensors');
+        ft.active = true;
 
-        // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
-        this.drawMiddleDisplay();
-        runOverlay('afterMiddleDisplay');
+        try {
+            // 4. 繪製順序優化
+            const hasSensorHighlight = this.hasActiveSensorOverlay(activeSensors);
+            if (showSensor || showSensorText || hasSensorHighlight) {
+                this.drawSensors(showSensor, showSensorText, activeSensors);
+            }
+            runOverlay('afterSensors');
 
-        if (this.shouldDrawHanabiEffects()) {
+            // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
+            this.drawMiddleDisplay();
+            runOverlay('afterMiddleDisplay');
+
+            if (this.shouldDrawHanabiEffects()) {
+                const touchBucket = buckets.touch;
+                for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
+                this.drawHanabiEffects();
+            }
+
+            const slideBucket = buckets.slide;
+
+            for (let i = 0; i < slideBucket.length; i++) this.drawSlideTrack(slideBucket[i]);
+            for (let i = 0; i < slideBucket.length; i++) this.drawSlideStar(slideBucket[i]);
+
+            // Slide 判定特效獨立通道：先蒐集已完成 Slide 的判定，再置於 Tap/Hold 與導引弧後方繪製（含暫停拖曳時間軸）
+            this.prepareSlideJudgeEffects(slideBucket);
+            this.drawJudgeEffects(null, 'slide');
+
+            if (buckets.tapnhold && buckets.tapnhold.length > 0) {
+                // 先獨立繪製 Arc 與 EachLine (在 Slide 之上、Tap/Hold 之下，且 EachLine 在所有 Arc 之上)，再繪製音符本體
+                this.drawTapAndHoldArcs(buckets.tapnhold);
+                this.drawTapAndHoldList(buckets.tapnhold, true);
+            }
             const touchBucket = buckets.touch;
-            for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
-            this.drawHanabiEffects();
+            for (let i = 0; i < touchBucket.length; i++) this.drawTouch(touchBucket[i]);
+            runOverlay('afterNoteObjects');
+
+            // 獨立分離的打擊特效層與一般音符判定特效層 (Hit Effects & Non-Slide Judge Pass)
+            this.drawHitEffects();
+            this.drawJudgeEffects(null, 'nonSlide');
+            runOverlay('afterEffects');
+
+            if (this.settings.showBorder !== false) this.drawStaticBackground();
+            runOverlay('afterBorder');
+
+            if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
+            if (this.settings.showUI) this.drawUI(dt, globalTime);
+            runOverlay('afterNotes');
+        } finally {
+            ft.active = false;
         }
-        const slideBucket = buckets.slide;
-        for (let i = 0; i < slideBucket.length; i++) this.drawSlideTrack(slideBucket[i]);
-        for (let i = 0; i < slideBucket.length; i++) this.drawSlideStar(slideBucket[i]);
-
-        if (buckets.tapnhold && buckets.tapnhold.length > 0) {
-            this.drawTapAndHoldList(buckets.tapnhold);
-        }
-        const touchBucket = buckets.touch;
-        for (let i = 0; i < touchBucket.length; i++) this.drawTouch(touchBucket[i]);
-        runOverlay('afterNoteObjects');
-
-        // 獨立分離的打擊特效層 (Hit Effects Pass)
-        this.drawHitEffects();
-        this.drawJudgeEffects();
-        runOverlay('afterEffects');
-
-        if (this.settings.showBorder !== false) this.drawStaticBackground();
-        runOverlay('afterBorder');
-
-        if (this.settings.renderSurroundingAuxiliaryText) this.drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore);
-        if (this.settings.showUI) this.drawUI(dt, globalTime);
-        runOverlay('afterNotes');
     }
 
     /**
@@ -3065,63 +3155,105 @@ export class SimaiRenderer {
         return false;
     }
 
-    drawTapAndHoldList(notes) {
+    _prepareTapAndHoldItems(notes) {
+        if (!this._tapHoldRenderItems) {
+            this._tapHoldRenderItems = [];
+        }
+        if (!this._eachLineItems) {
+            this._eachLineItems = [];
+        }
+        this._tapHoldRenderItemCount = 0;
+        this._eachLineItemCount = 0;
         if (!notes || notes.length === 0) return;
 
-        const ctx = this.ctx;
         const globalTime = this.globalTime;
         const md = this.settings.middleDistance;
         const baseSize = this.settings.noteBaseSize;
         const drawHitEffect = this.shouldDrawHitEffects();
-        const rotateStars = this.settings.rotateStars;
-        const pinkStars = this.settings.pinkStars;
-
-        const { a, b, c, d, e, f } = ctx.getTransform();
 
         let eachTimeGroups = null;
         if (this.settings.showEachLine !== false && notes.length > 1) {
-            eachTimeGroups = this._eachTimeGroups || (this._eachTimeGroups = new Map());
+            eachTimeGroups = this._eachGroupMap || (this._eachGroupMap = new Map());
             eachTimeGroups.clear();
+            const pool = this._eachGroupPool || (this._eachGroupPool = []);
+            let poolUsed = 0;
             for (let i = 0; i < notes.length; i++) {
                 const n = notes[i];
                 if (n.isMine) continue;
                 const nt = n.time - globalTime;
                 if (this.isNoteHiddenForEachGuide(n, nt)) continue;
+                const p = n.pos | 0;
+                if (p < 1 || p > 8) continue;
+
                 const timeKey = Math.round(n.time * 1000);
                 let entry = eachTimeGroups.get(timeKey);
                 if (!entry) {
-                    entry = { notes: [n], drawn: false, spec: null, resolved: false };
+                    entry = pool[poolUsed];
+                    if (!entry) {
+                        entry = {
+                            posMask: 0,
+                            rawPositions: new Int8Array(8),
+                            rawCount: 0,
+                            drawn: false,
+                            resolved: false,
+                            hasSpec: false,
+                            spec: { startPos: 1, steps: 1 }
+                        };
+                        pool[poolUsed] = entry;
+                    }
+                    poolUsed++;
+                    entry.posMask = 1 << p;
+                    entry.rawPositions[0] = p;
+                    entry.rawCount = 1;
+                    entry.drawn = false;
+                    entry.resolved = false;
+                    entry.hasSpec = false;
                     eachTimeGroups.set(timeKey, entry);
-                } else {
-                    entry.notes.push(n);
+                } else if (!(entry.posMask & (1 << p))) {
+                    entry.posMask |= (1 << p);
+                    if (entry.rawCount < 8) {
+                        entry.rawPositions[entry.rawCount++] = p;
+                    }
                 }
             }
+            this._eachGroupPoolUsed = poolUsed;
         }
 
-        const drawGroupEachLineIfNeeded = (s, displayT, currentScale) => {
+        const pushEachLineForGroup = (s, displayT, currentScale) => {
             if (!eachTimeGroups || s.isMine) return;
             const timeKey = Math.round(s.time * 1000);
             const entry = eachTimeGroups.get(timeKey);
-            if (!entry || entry.drawn || entry.notes.length < 2) return;
+            if (!entry || entry.drawn || entry.rawCount < 2) return;
             entry.drawn = true;
             if (!entry.resolved) {
                 entry.resolved = true;
-                entry.spec = this._resolveEachLineSpec(entry.notes);
+                const resolvedSpec = this._resolveEachLineSpecFromPositions(
+                    entry.posMask,
+                    entry.rawPositions,
+                    entry.rawCount,
+                    entry.spec
+                );
+                entry.hasSpec = Boolean(resolvedSpec);
             }
-            const spec = entry.spec;
-            if (!spec) return;
-            const eachLineImg = this.getEachLineImage(spec.steps);
+            if (!entry.hasSpec) return;
+
+            const eachLineImg = this.getEachLineImage(entry.spec.steps);
             if (imgNotExists(eachLineImg)) return;
 
-            const rotAngle = (spec.steps === 4) ? 0 : ((spec.startPos - 1) * (Math.PI / 4));
-            if (rotAngle !== 0) ctx.rotate(rotAngle);
-            if (currentScale !== 1) ctx.globalAlpha = currentScale;
-            // EachLine1~4.png 為 980x980 紋理且圓環半徑約 479.5px，以 980/479.5 倍縮放對齊 innerCirleBase
-            this.drawImgAtcenter(eachLineImg, displayT * innerCirleBase * (980 / 479.5));
-            if (currentScale !== 1) ctx.globalAlpha = 1;
-            ctx.setTransform(a, b, c, d, e, f);
+            const eIdx = this._eachLineItemCount++;
+            let eItem = this._eachLineItems[eIdx];
+            if (!eItem) {
+                eItem = {};
+                this._eachLineItems[eIdx] = eItem;
+            }
+            eItem.img = eachLineImg;
+            eItem.steps = entry.spec.steps;
+            eItem.startPos = entry.spec.startPos;
+            eItem.displayT = displayT;
+            eItem.currentScale = currentScale;
         };
 
+        const items = this._tapHoldRenderItems;
         for (let i = 0; i < notes.length; i++) {
             const s = notes[i];
             const isHold = s.type === "hold";
@@ -3129,12 +3261,12 @@ export class SimaiRenderer {
             const posInfo = noteRefPos[s.pos - 1];
 
             if (isHold) {
-                // drawHold
                 if (this.handleHoldCompletedOrTriggered(s, noteT, posInfo, drawHitEffect)) {
                     continue;
                 }
 
-                const speed = (s.hispeed === 1) ? this._speedFactor : calcPiecewiseSpeed(this.settings.speed * (s.hispeed || 1));
+                const hs = s.hispeed ?? 1;
+                const speed = (hs === 1) ? this._speedFactor : calcPiecewiseSpeed((this.settings.speed ?? 1) * hs);
                 const t = 1 - this.timeFunction(noteT * speed);
 
                 const t1 = 1 - this.timeFunction((noteT + s.holdDuration) * speed);
@@ -3143,29 +3275,166 @@ export class SimaiRenderer {
                 const size = baseSize * currentScale;
                 const sizeOffset = (t < md) ? 0 :
                     Math.max(0, Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize)); // 20.35
-                const { img, isOn, holdJudge } = this.resolveHoldVisualState(s, noteT);
-                if (!img) continue;
-                const bri = (s.isBreak && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI - 0.5 * Math.PI))) : 0);
-                const brImg = getBrightenedImage(img, 1 + bri);
-                const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
-                const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
+                const holdState = this.resolveHoldVisualState(s, noteT);
+                if (!holdState.img) continue;
 
-                // 1. 導引弧 (Arc & EachLine)
-                drawGroupEachLineIfNeeded(s, displayT, currentScale);
-                ctx.rotate(posInfo.rot);
-                if (currentScale !== 1) ctx.globalAlpha = currentScale;
-                this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-                if (currentScale !== 1) ctx.globalAlpha = 1;
-
-                // 2. Hold 尾端
-                if (t1 > md && endimg) {
-                    ctx.setTransform(a, b, c, d, e, f);
-                    ctx.translate(posInfo.x * t1, posInfo.y * t1);
-                    this.drawImgAtcenter(endimg, size * 0.65);
+                const idx = this._tapHoldRenderItemCount++;
+                let item = items[idx];
+                if (!item) {
+                    item = {};
+                    items[idx] = item;
+                }
+                item.s = s;
+                item.isHold = true;
+                item.noteT = noteT;
+                item.posInfo = posInfo;
+                item.displayT = displayT;
+                item.currentScale = currentScale;
+                item.t1 = t1;
+                item.size = size;
+                item.sizeOffset = sizeOffset;
+                item.img = holdState.img;
+                item.isOn = holdState.isOn;
+                item.holdJudge = holdState.holdJudge;
+                item.arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
+                item.endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
+                pushEachLineForGroup(s, displayT, currentScale);
+            } else {
+                if (this.handleTapOrStarCompletedOrTriggered(s, noteT, posInfo, drawHitEffect)) {
+                    continue;
                 }
 
-                // 3. Hold 本體
-                ctx.setTransform(a, b, c, d, e, f);
+                const tr = this.getNoteTransform(noteT, s.hispeed, s.size);
+                const isStar = !!s.isStar;
+                const idx = this._tapHoldRenderItemCount++;
+                let item = items[idx];
+                if (!item) {
+                    item = {};
+                    items[idx] = item;
+                }
+                item.s = s;
+                item.isHold = false;
+                item.noteT = noteT;
+                item.posInfo = posInfo;
+                item.displayT = tr.displayT;
+                item.currentScale = tr.currentScale;
+                item.size = baseSize * tr.currentScale;
+                item.scaleX = tr.scaleX;
+                item.scaleY = tr.scaleY;
+                item.isStar = isStar;
+                item.arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
+                pushEachLineForGroup(s, tr.displayT, tr.currentScale);
+            }
+        }
+    }
+
+    drawTapAndHoldArcs(notes) {
+        this._prepareTapAndHoldItems(notes);
+        const count = this._tapHoldRenderItemCount || 0;
+        const eachCount = this._eachLineItemCount || 0;
+        if (count === 0 && eachCount === 0) return;
+
+        const ctx = this.ctx;
+        const items = this._tapHoldRenderItems;
+        const ft = this._frameTransform;
+        let a, b, c, d, e, f;
+        if (ft && ft.active) {
+            a = ft.a; b = ft.b; c = ft.c; d = ft.d; e = ft.e; f = ft.f;
+        } else {
+            const m = ctx.getTransform();
+            a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
+        }
+
+        let lastAlpha = 1;
+        // Pass 1: 先繪製所有 Arc
+        for (let i = 0; i < count; i++) {
+            const item = items[i];
+            const arcimg = item.arcimg;
+            if (!arcimg) continue;
+
+            const currentScale = item.currentScale;
+            if (currentScale !== lastAlpha) {
+                ctx.globalAlpha = currentScale;
+                lastAlpha = currentScale;
+            }
+            ctx.rotate(item.posInfo.rot);
+            this.drawImgAtcenter(arcimg, item.displayT * innerCirleBase * 2.25);
+            ctx.setTransform(a, b, c, d, e, f);
+        }
+
+        // Pass 2: 再繪製所有 EachLine，確保全部 EachLine 位於所有 Arc 之上、Tap/Hold 之下
+        const eachItems = this._eachLineItems;
+        for (let i = 0; i < eachCount; i++) {
+            const eItem = eachItems[i];
+            const currentScale = eItem.currentScale;
+            if (currentScale !== lastAlpha) {
+                ctx.globalAlpha = currentScale;
+                lastAlpha = currentScale;
+            }
+            const rotAngle = (eItem.steps === 4) ? 0 : ((eItem.startPos - 1) * (Math.PI / 4));
+            if (rotAngle !== 0) ctx.rotate(rotAngle);
+            // EachLine1~4.png 為 980x980 紋理且圓環半徑約 479.5px，以 980/479.5 倍縮放對齊 innerCirleBase
+            this.drawImgAtcenter(eItem.img, eItem.displayT * innerCirleBase * (980 / 479.5));
+            ctx.setTransform(a, b, c, d, e, f);
+        }
+
+        if (lastAlpha !== 1) {
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    drawTapAndHoldList(notes, usePrepared = false) {
+        if (!notes || notes.length === 0) return;
+
+        if (!usePrepared) {
+            this.drawTapAndHoldArcs(notes);
+        }
+
+        const count = this._tapHoldRenderItemCount || 0;
+        if (count === 0) return;
+
+        const ctx = this.ctx;
+        const globalTime = this.globalTime;
+        const md = this.settings.middleDistance;
+        const drawHitEffect = this.shouldDrawHitEffects();
+        const rotateStars = this.settings.rotateStars;
+        const pinkStars = this.settings.pinkStars;
+        const frameBreakBri = this._currentFrameBreakBrightness !== undefined
+            ? this._currentFrameBreakBrightness
+            : (1 + (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25);
+        const items = this._tapHoldRenderItems;
+        const ft = this._frameTransform;
+        let a, b, c, d, e, f;
+        if (ft && ft.active) {
+            a = ft.a; b = ft.b; c = ft.c; d = ft.d; e = ft.e; f = ft.f;
+        } else {
+            const m = ctx.getTransform();
+            a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
+        }
+
+        for (let i = 0; i < count; i++) {
+            const item = items[i];
+            const s = item.s;
+            const noteT = item.noteT;
+            const posInfo = item.posInfo;
+            const displayT = item.displayT;
+            const size = item.size;
+
+            if (item.isHold) {
+                const { t1, sizeOffset, img, isOn, holdJudge, endimg } = item;
+                const breakAddon = (s.isBreak && !s.isMine && noteT > 0) ? (frameBreakBri - 1) : 0;
+                const onAddon = isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI - 0.5 * Math.PI))) : 0;
+                const bri = breakAddon + onAddon;
+                const brImg = bri > 0 ? getBrightenedImage(img, 1 + bri) : img;
+
+                // Hold 尾端
+                if (t1 > md && endimg) {
+                    ctx.translate(posInfo.x * t1, posInfo.y * t1);
+                    this.drawImgAtcenter(endimg, size * 0.65);
+                    ctx.setTransform(a, b, c, d, e, f);
+                }
+
+                // Hold 本體
                 ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
                 ctx.rotate(posInfo.rot);
 
@@ -3183,38 +3452,19 @@ export class SimaiRenderer {
                     }
                 }
 
-                if (drawHitEffect) {
-                    if (isOn) {
-                        this.queueHoldEffect(s.pos, noteT, holdJudge, posInfo.x * displayT, posInfo.y * displayT);
-                    }
+                if (drawHitEffect && isOn) {
+                    this.queueHoldEffect(s.pos, noteT, holdJudge, posInfo.x * displayT, posInfo.y * displayT);
                 }
 
                 ctx.setTransform(a, b, c, d, e, f);
             } else {
-                // drawtap drawstar
-                // 普通 Tap / Star
-                if (this.handleTapOrStarCompletedOrTriggered(s, noteT, posInfo, drawHitEffect)) {
-                    continue;
-                }
-
-                const { displayT, currentScale, scaleX, scaleY } = this.getNoteTransform(noteT, s.hispeed, s.size);
-                const isStar = !!s.isStar;
+                const { scaleX, scaleY, isStar } = item;
                 const img = isStar
                     ? this.getStarImage(s.isMine, s.isBreak, s.isDouble, s.isMultiple)
                     : this.getTapImage(s.isMine, s.isBreak, s.isDouble);
-                const brimg = getBrightenedImage(img, 1 + (s.isBreak ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0))
-                const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
-                const size = baseSize * currentScale;
+                const brimg = (s.isBreak && !s.isMine) ? getBrightenedImage(img, frameBreakBri) : img;
 
-                // 1. 導引弧 (Arc & EachLine)
-                drawGroupEachLineIfNeeded(s, displayT, currentScale);
-                ctx.rotate(posInfo.rot);
-                if (currentScale !== 1) ctx.globalAlpha = currentScale;
-                this.drawImgAtcenter(arcimg, displayT * innerCirleBase * 2.25);
-                if (currentScale !== 1) ctx.globalAlpha = 1;
-
-                // 2. 音符本體 (Tap / Star)
-                ctx.setTransform(a, b, c, d, e, f);
+                // Tap / Star 本體
                 ctx.translate(posInfo.x * displayT, posInfo.y * displayT);
 
                 let rot = posInfo.rot;
@@ -3296,7 +3546,7 @@ export class SimaiRenderer {
     resolveTouchHoldVisualState(s, noteT) {
         const isOn = noteT <= -0.15; // 150ms
         const state = this._tempTouchHoldState;
-        state.borderKey = "touchhold_border" + (s.isMine ? "_mine" : "");
+        state.borderKey = s.isMine ? "touchhold_border_mine" : (s.isBreak ? "touchhold_break_border" : "touchhold_border");
         state.isOn = isOn;
         state.holdJudge = null;
         return state;
@@ -3324,16 +3574,18 @@ export class SimaiRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, touchPos, isBreak, isDouble, isMine, holdDuration, hispeed } = s;
         const zoneKey = TOUCH_GROUP_TO_INDEX[touchPos] + (touchPos === 'C' ? 0 : pos - 1);
 
         const count = this._zoneCounts[zoneKey];
 
         const noteT = (noteTime - this.globalTime);
-        const t = 1 - this.timeFunction(noteT * this._touchSpeedFactor * (hispeed || 1));
+        const hs = hispeed ?? 1;
+        const touchSpeed = (hs === 1) ? this._touchSpeedFactor : calcPiecewiseSpeed((this.settings.touchSpeed ?? 1) * hs);
+        const t = 1 - this.timeFunction(noteT * touchSpeed);
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
-        const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble);
+        const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble, isBreak);
 
         if (holdDuration) {
             if (this.handleTouchHoldCompletedOrTriggered(s, noteT, posInfo)) {
@@ -3346,6 +3598,9 @@ export class SimaiRenderer {
             const size = this.settings.noteBaseSize * 0.7;
             const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
             const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+            const thBri = (isBreak && !isMine && noteT > 0)
+                ? ((this._currentFrameBreakBrightness !== undefined ? this._currentFrameBreakBrightness : (1 + (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25)))
+                : 1;
 
             this.ctx.save();
             this.ctx.translate(posInfo.x, posInfo.y);
@@ -3361,7 +3616,8 @@ export class SimaiRenderer {
             this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
             this.ctx.rotate(Math.PI * -0.75);
             for (let i = 0; i < 4; i++) {
-                const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                const thKey = isMine ? ("touchhold_" + i + "_mine") : (isBreak ? ("touchhold_break_" + i) : ("touchhold_" + i));
+                const thImg = thBri !== 1 ? getBrightenedImage(this.images[thKey], thBri) : this.images[thKey];
                 this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
             }
@@ -3382,6 +3638,10 @@ export class SimaiRenderer {
             return;
         }
 
+        const touchDrawImg = (isBreak && !isMine)
+            ? getBrightenedImage(touchImg, this._currentFrameBreakBrightness !== undefined ? this._currentFrameBreakBrightness : (1 + (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25))
+            : touchImg;
+
         this.ctx.save();
         const size = this.settings.noteBaseSize * 0.7;
         const a = this.touchTimeFunction(18 * Math.max(1 - t, 0) / 1.5) * 1.6;
@@ -3397,7 +3657,7 @@ export class SimaiRenderer {
         }
         this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
         for (let i = 0; i < 4; i++) {
-            this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.drawImage(touchDrawImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
             this.ctx.rotate(Math.PI * 0.5);
         }
         this.ctx.globalAlpha = 1;
@@ -3431,9 +3691,10 @@ export class SimaiRenderer {
         const size = this.settings.noteBaseSize;
         const isIllegalRed = s.isIllegal && this.settings.slideIllegalRed;
         const prefix = isIllegalRed ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
-        const standardKey = isIllegalRed ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
+        const standardKey = isIllegalRed ? "slide" : (s.isMine ? (s.isBreak ? "slide_break_mine" : "slide_mine") : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
 
-        const speedMult = this._speedFactor * (hispeed || 1);
+        const hs = hispeed ?? 1;
+        const speedMult = (hs === 1) ? this._speedFactor : calcPiecewiseSpeed((this.settings.speed ?? 1) * hs);
         const t = 1 - this.timeFunction(noteT * speedMult);
         const p = path || generatePath(pos, slideEnd);
         if (p.totalLength < 1e-4) return;
@@ -3445,20 +3706,31 @@ export class SimaiRenderer {
         const isWiFi = s.slideType === "w";
         const prefixOrKey = isWiFi ? prefix : standardKey;
         const trackProgress = this.getSlideTrackProgress(s, noteT, displaySlideProgress);
-        const br = (isTaped && s.isBreak && !s.isMine && !isIllegalRed) ? (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25 : 0;
+        const br = (isTaped && s.isBreak && !s.isMine && !isIllegalRed)
+            ? ((this._currentFrameBreakBrightness !== undefined ? this._currentFrameBreakBrightness - 1 : (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25))
+            : 0;
         this.drawPathWithArrows(p, trackProgress, prefixOrKey, isWiFi, br, isIllegalRed, 0.3963 * size);
         this.ctx.restore();
     }
 
-    shouldSkipSlideStar(s, noteT, displaySlideProgress, path) {
-        if (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish || !s.nextSlide)) {
-            if (this.settings.showJudge !== false) {
-                const p = path || generatePath(s.pos, s.slideEnd);
+    prepareSlideJudgeEffects(slideBucket) {
+        if (!slideBucket || slideBucket.length === 0 || this.settings.showJudge === false) return;
+        for (let i = 0; i < slideBucket.length; i++) {
+            const s = slideBucket[i];
+            if (!s.lastSlide && !s.slideFinish && s.nextSlide) continue;
+            const noteT = s.time - this.globalTime;
+            const displaySlideProgress = (-noteT > s.slideDelay)
+                ? (s.slideDuration > 0 ? (-noteT - s.slideDelay) / s.slideDuration : Infinity)
+                : 0;
+            if (displaySlideProgress >= 1 || s.slideFinish) {
+                const p = s.path || generatePath(s.pos, s.slideEnd);
                 if (s.endTangent === undefined && p) s.endTangent = p.endTangent;
                 if (s.lastSlide) this.queueJudgeEffect(s, null, s.time + s.slideDelay + s.slideDuration);
             }
         }
+    }
 
+    shouldSkipSlideStar(s, noteT, displaySlideProgress, path) {
         const c = s.slideDelay + (s.cullSkipExtend ?? 0) + s.slideDuration;
         return (displaySlideProgress >= 1 && (s.lastSlide || s.slideFinish)) || (s.isMine && -noteT > c);
     }
@@ -3489,7 +3761,14 @@ export class SimaiRenderer {
             const isWiFi = s.slideType === "w";
 
             if (isWiFi && wPaths) {
-                const { a, b, c, d, e, f } = this.ctx.getTransform();
+                const ft = this._frameTransform;
+                let a, b, c, d, e, f;
+                if (ft && ft.active) {
+                    a = ft.a; b = ft.b; c = ft.c; d = ft.d; e = ft.e; f = ft.f;
+                } else {
+                    const m = this.ctx.getTransform();
+                    a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
+                }
 
                 const w1Point = wPaths.w1.getPointAt(Math.min(1, displaySlideProgress));
                 this.ctx.translate(w1Point.x, w1Point.y);
@@ -3717,12 +3996,19 @@ export class SimaiRenderer {
                 singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
             } else {
                 singleImg = this.images[prefixOrKey];
-                singleImg = getBrightenedImage(singleImg, 1 + br);
+                if (br > 0) singleImg = getBrightenedImage(singleImg, 1 + br);
             }
             if (!singleImg) return;
         }
 
-        const { a, b, c, d, e, f } = this.ctx.getTransform();
+        const ft = this._frameTransform;
+        let a, b, c, d, e, f;
+        if (ft && ft.active) {
+            a = ft.a; b = ft.b; c = ft.c; d = ft.d; e = ft.e; f = ft.f;
+        } else {
+            const m = this.ctx.getTransform();
+            a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
+        }
 
         for (let i = 0; i < arrows.length; i++) {
             const arr = arrows[i];
@@ -3742,7 +4028,7 @@ export class SimaiRenderer {
                     img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
                 } else {
                     img = this.images[imgKey];
-                    img = getBrightenedImage(img, 1 + br);
+                    if (br > 0) img = getBrightenedImage(img, 1 + br);
                 }
             } else {
                 img = singleImg;
@@ -4108,7 +4394,7 @@ export class SimaiVisualEditor {
         const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
         const t = (noteTime - this.globalTime);
 
-        const img = this.images[isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
+        const img = this.images[isMine ? (isBreak ? "tap_break_mine" : "tap_mine") : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
         if (imgNotExists(img)) return;
         const size = this.settings.noteBaseSize;
         const x = visualNoteRefPos[pos - 1].x;
@@ -4135,7 +4421,7 @@ export class SimaiVisualEditor {
 
         const isPink = Boolean(this.settings.pinkStars);
         const img = this.images[isMine ?
-            (isMultiple ? "star_mine_double" : "star_mine")
+            (isMultiple ? (isBreak ? "star_break_double_mine" : "star_mine_double") : (isBreak ? "star_break_mine" : "star_mine"))
             : (isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))
                 : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))))
         ];
@@ -4160,18 +4446,18 @@ export class SimaiVisualEditor {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration } = s;
+        const { time: noteTime, pos, touchPos, isBreak, isDouble, isMine, holdDuration } = s;
         const t = (noteTime - this.globalTime);
         const touchX = visualNoteRefPos[8]?.x ?? 0;
 
         if (holdDuration) {
             const imgs = [];
             for (let i = 0; i < 4; i++) {
-                const img = this.images[isMine ? ("touchhold_" + i + "_mine") : ("touchhold_" + i)];
+                const img = this.images[isMine ? ("touchhold_" + i + "_mine") : (isBreak ? ("touchhold_break_" + i) : ("touchhold_" + i))];
                 if (imgNotExists(img)) return;
                 imgs.push(img);
             }
-            const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
+            const touchPoint = this.images[isMine ? (isBreak ? "touch_break_point_mine" : "touch_point_mine") : (isBreak ? "touch_break_point" : (isDouble ? "touch_point_each" : "touch_point"))];
 
             this.ctx.save();
 
@@ -4230,8 +4516,8 @@ export class SimaiVisualEditor {
             return;
         }
 
-        const img = this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")];
-        const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
+        const img = this.images[isMine ? (isBreak ? "touch_break_mine" : "touch_mine") : (isBreak ? "touch_break" : (isDouble ? "touch_each" : "touch"))];
+        const touchPoint = this.images[isMine ? (isBreak ? "touch_break_point_mine" : "touch_point_mine") : (isBreak ? "touch_break_point" : (isDouble ? "touch_point_each" : "touch_point"))];
         if (imgNotExists(img)) return;
 
         this.ctx.save();
@@ -4260,7 +4546,7 @@ export class SimaiVisualEditor {
         const t = (noteTime - this.globalTime);
         const posInfo = visualNoteRefPos[pos - 1];
 
-        const img = this.images[isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
+        const img = this.images[isMine ? (isBreak ? "hold_break_mine" : "hold_mine") : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
         if (imgNotExists(img)) return;
 
         function drawHoldImage(ctx, img, size, sizeOffset) {
@@ -4290,7 +4576,7 @@ export class SimaiVisualEditor {
     }
 
     drawSlide(s) {
-        const target = this.images[s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
+        const target = this.images[s.isMine ? (s.isBreak ? "slide_break_mine" : "slide_mine") : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
         if (imgNotExists(target)) return;
 
         const { time: noteTime, pos, slideDelay, slideDuration } = s;
@@ -6113,7 +6399,7 @@ export class SimaiPreviewRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, isHanabi } = s;
+        const { time: noteTime, pos, touchPos, isBreak, isDouble, isMine, holdDuration, isHanabi } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -6183,7 +6469,7 @@ export class SimaiPreviewRenderer {
             }
         } else {
             ctx.lineWidth = size * 0.35;
-            ctx.strokeStyle = isMine ? this.color.mine : (isDouble ? this.color.double : this.color.star);
+            ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star));
             ctx.strokeRect(-size * 0.5, -size * 0.5, size, size);
         }
         ctx.restore();

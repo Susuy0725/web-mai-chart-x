@@ -295,7 +295,7 @@ export class SimaiRenderer extends BaseSimaiRenderer {
             state.isOn = true;
             state.holdJudge = s._headJudge || s.judgeResult || null;
         } else {
-            state.img = this.images[s.isMine ? "hold_mine" : "hold_off"];
+            state.img = this.images[s.isMine ? (s.isBreak ? "hold_break_mine" : "hold_mine") : "hold_off"];
             state.isOn = false;
             state.holdJudge = null;
         }
@@ -341,7 +341,9 @@ export class SimaiRenderer extends BaseSimaiRenderer {
     resolveTouchHoldVisualState(s, noteT) {
         const isActiveVisual = noteT > -0.1 || !!s.isHolding;
         const state = this._tempTouchHoldState;
-        state.borderKey = (isActiveVisual ? "touchhold_border" : "touchhold_off") + (s.isMine ? "_mine" : "");
+        state.borderKey = s.isMine
+            ? (isActiveVisual ? "touchhold_border_mine" : "touchhold_off")
+            : (isActiveVisual ? (s.isBreak ? "touchhold_break_border" : "touchhold_border") : "touchhold_off");
         state.isOn = isActiveVisual && noteT <= -0.1;
         state.holdJudge = s._headJudge || s.judgeResult || null;
         return state;
@@ -376,6 +378,10 @@ export class SimaiRenderer extends BaseSimaiRenderer {
         if (s.isMine || !isNoteReached) return 0;
         if (tail.slideFinish) return 1;
         return Math.min(1, Math.max(0, s.slideProgress || 0));
+    }
+
+    prepareSlideJudgeEffects() {
+        // 遊玩模式由判定系統於結算時呼叫 spawnJudgeEffect，不在渲染前預先排程
     }
 
     shouldSkipSlideStar(s) {

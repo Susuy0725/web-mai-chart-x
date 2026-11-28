@@ -618,7 +618,7 @@ export class SimaiRenderer {
     }
 
     getTapImage(isMine, isBreak, isDouble) {
-        if (isMine) return this.images["tap_mine"];
+        if (isMine) return this.images[isBreak ? "tap_break_mine" : "tap_mine"];
         if (isBreak) {
             this._tempColorConfig.colorCode = "#fff8a6";
             const br = this.getBreakTint(isBreak, isMine);
@@ -631,10 +631,10 @@ export class SimaiRenderer {
     getStarImage(isMine, isBreak, isDouble, isMultiple, forceblue = false) {
         const isPink = this.settings.pinkStars && !forceblue;
         const imgKey = isMultiple ?
-            (isMine ? "star_mine_double" : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))) :
-            (isMine ? "star_mine" : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))));
+            (isMine ? (isBreak ? "star_break_double_mine" : "star_mine_double") : (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))) :
+            (isMine ? (isBreak ? "star_break_mine" : "star_mine") : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))));
 
-        if (isBreak) {
+        if (isBreak && !isMine) {
             this._tempColorConfig.colorCode = "#fff8a6";
             const br = this.getBreakTint(isBreak, isMine);
             return this.getMemoizedTintedImage(imgKey, br, this._tempColorConfig);
@@ -644,15 +644,15 @@ export class SimaiRenderer {
 
     getHoldImage(isMine, isBreak, isDouble, isOn) {
         const holdImgKey = isOn ?
-            (isMine ? "hold_mine" : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
-            (isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
+            (isMine ? (isBreak ? "hold_break_mine_on" : "hold_mine_on") : (isBreak ? "hold_break_on" : (isDouble ? "hold_each_on" : "hold_on"))) :
+            (isMine ? (isBreak ? "hold_break_mine" : "hold_mine") : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold")));
 
-        if (isBreak) {
+        if (isBreak && !isMine) {
             this._tempColorConfig.colorCode = "#fff8a6";
             const br = this.getBreakTint(isBreak, isMine);
             return this.getMemoizedTintedImage(holdImgKey, br, this._tempColorConfig);
         }
-        return this.images[holdImgKey];
+        return this.images[holdImgKey] || (isMine ? this.images[isBreak ? "hold_break_mine" : "hold_mine"] : null);
     }
 
     getHoldEndImage(isMine, isBreak, isDouble) {
@@ -662,16 +662,39 @@ export class SimaiRenderer {
         return this.images["Hold_End"];
     }
 
-    getTouchBorderImages(isMine, isDouble) {
-        const key = isMine ? "mine" : (isDouble ? "each" : "normal");
+    getTouchBorderImages(isMine, isDouble, isBreak = false) {
+        const key = isMine ? (isBreak ? "break_mine" : "mine") : (isBreak ? "break" : (isDouble ? "each" : "normal"));
         if (!this._touchBorderCache) this._touchBorderCache = {};
         if (!this._touchBorderCache[key]) {
-            this._touchBorderCache[key] = {
-                borderImg: this.images[isMine ? "touch_border_2_mine" : (isDouble ? "touch_border_2_each" : "touch_border_2")],
-                borderImg3: this.images[isMine ? "touch_border_3_mine" : (isDouble ? "touch_border_3_each" : "touch_border_3")],
-                touchPoint: this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")],
-                touchImg: this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")]
-            };
+            if (isMine && isBreak) {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images["touch_break_mine_border_2"],
+                    borderImg3: this.images["touch_break_mine_border_3"],
+                    touchPoint: this.images["touch_break_point_mine"],
+                    touchImg: this.images["touch_break_mine"]
+                };
+            } else if (isMine) {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images["touch_border_2_mine"],
+                    borderImg3: this.images["touch_border_3_mine"],
+                    touchPoint: this.images["touch_point_mine"],
+                    touchImg: this.images["touch_mine"]
+                };
+            } else if (isBreak) {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images["touch_break_border_2"],
+                    borderImg3: this.images["touch_break_border_3"],
+                    touchPoint: this.images["touch_break_point"],
+                    touchImg: this.images["touch_break"]
+                };
+            } else {
+                this._touchBorderCache[key] = {
+                    borderImg: this.images[isDouble ? "touch_border_2_each" : "touch_border_2"],
+                    borderImg3: this.images[isDouble ? "touch_border_3_each" : "touch_border_3"],
+                    touchPoint: this.images[isDouble ? "touch_point_each" : "touch_point"],
+                    touchImg: this.images[isDouble ? "touch_each" : "touch"]
+                };
+            }
         }
         return this._touchBorderCache[key];
     }
@@ -3145,7 +3168,7 @@ export class SimaiRenderer {
                     Math.max(0, Math.min(1 - md, (t - t1), (1 - t1), (t - md)) / (1 - md) * ((27.15 * (1 - md)) / baseSize)); // 20.35
                 const { img, isOn, holdJudge } = this.resolveHoldVisualState(s, noteT);
                 if (!img) continue;
-                const bri = (s.isBreak && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI - 0.5 * Math.PI))) : 0);
+                const bri = (s.isBreak && !s.isMine && noteT > 0 ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0) + (isOn ? (0.25 * (1 + Math.sin((-0.15 - noteT) * 8 * Math.PI - 0.5 * Math.PI))) : 0);
                 const brImg = getBrightenedImage(img, 1 + bri);
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, false);
                 const endimg = this.getHoldEndImage(s.isMine, s.isBreak, s.isDouble);
@@ -3202,7 +3225,7 @@ export class SimaiRenderer {
                 const img = isStar
                     ? this.getStarImage(s.isMine, s.isBreak, s.isDouble, s.isMultiple)
                     : this.getTapImage(s.isMine, s.isBreak, s.isDouble);
-                const brimg = getBrightenedImage(img, 1 + (s.isBreak ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0))
+                const brimg = getBrightenedImage(img, 1 + (s.isBreak && !s.isMine ? (1 + Math.sin(globalTime * Math.PI * 4)) * 0.25 : 0))
                 const arcimg = this.getArcImage(s.isMine, s.isBreak, s.isDouble, isStar);
                 const size = baseSize * currentScale;
 
@@ -3296,7 +3319,7 @@ export class SimaiRenderer {
     resolveTouchHoldVisualState(s, noteT) {
         const isOn = noteT <= -0.15; // 150ms
         const state = this._tempTouchHoldState;
-        state.borderKey = "touchhold_border" + (s.isMine ? "_mine" : "");
+        state.borderKey = s.isMine ? "touchhold_border_mine" : (s.isBreak ? "touchhold_break_border" : "touchhold_border");
         state.isOn = isOn;
         state.holdJudge = null;
         return state;
@@ -3324,7 +3347,7 @@ export class SimaiRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, hispeed } = s;
+        const { time: noteTime, pos, touchPos, isBreak, isDouble, isMine, holdDuration, hispeed } = s;
         const zoneKey = TOUCH_GROUP_TO_INDEX[touchPos] + (touchPos === 'C' ? 0 : pos - 1);
 
         const count = this._zoneCounts[zoneKey];
@@ -3333,7 +3356,7 @@ export class SimaiRenderer {
         const t = 1 - this.timeFunction(noteT * this._touchSpeedFactor * (hispeed || 1));
         const posInfo = touchRefPos[touchPos][touchPos === "C" ? 0 : pos - 1];
 
-        const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble);
+        const { borderImg, borderImg3, touchPoint, touchImg } = this.getTouchBorderImages(isMine, isDouble, isBreak);
 
         if (holdDuration) {
             if (this.handleTouchHoldCompletedOrTriggered(s, noteT, posInfo)) {
@@ -3346,6 +3369,7 @@ export class SimaiRenderer {
             const size = this.settings.noteBaseSize * 0.7;
             const holdP = Math.max(0, Math.min(1, -noteT / holdDuration));
             const a = this.touchTimeFunction(18 * (1 - Math.min(1, t)) / 1.5) * 1.6;
+            const thBri = (isBreak && !isMine && noteT > 0) ? (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25 : 0;
 
             this.ctx.save();
             this.ctx.translate(posInfo.x, posInfo.y);
@@ -3361,7 +3385,8 @@ export class SimaiRenderer {
             this.ctx.globalAlpha = Math.max(0, 1 - (1 - Math.min(1, t)) * 0.5);
             this.ctx.rotate(Math.PI * -0.75);
             for (let i = 0; i < 4; i++) {
-                const thImg = this.images["touchhold_" + i + (isMine ? "_mine" : "")];
+                const thKey = isMine ? ("touchhold_" + i + "_mine") : (isBreak ? ("touchhold_break_" + i) : ("touchhold_" + i));
+                const thImg = thBri > 0 ? getBrightenedImage(this.images[thKey], 1 + thBri) : this.images[thKey];
                 this.ctx.drawImage(thImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
                 this.ctx.rotate(Math.PI / 2);
             }
@@ -3382,6 +3407,10 @@ export class SimaiRenderer {
             return;
         }
 
+        const touchDrawImg = (isBreak && !isMine)
+            ? getBrightenedImage(touchImg, 1 + (1 + Math.sin(this.globalTime * Math.PI * 4)) * 0.25)
+            : touchImg;
+
         this.ctx.save();
         const size = this.settings.noteBaseSize * 0.7;
         const a = this.touchTimeFunction(18 * Math.max(1 - t, 0) / 1.5) * 1.6;
@@ -3397,7 +3426,7 @@ export class SimaiRenderer {
         }
         this.ctx.globalAlpha = Math.max(0, 1 - (1 - t) * 0.5);
         for (let i = 0; i < 4; i++) {
-            this.ctx.drawImage(touchImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
+            this.ctx.drawImage(touchDrawImg, -size * 1.365 * 0.5, size * 0.15 * (a - 1.5), size * 1.365, size);
             this.ctx.rotate(Math.PI * 0.5);
         }
         this.ctx.globalAlpha = 1;
@@ -3431,7 +3460,7 @@ export class SimaiRenderer {
         const size = this.settings.noteBaseSize;
         const isIllegalRed = s.isIllegal && this.settings.slideIllegalRed;
         const prefix = isIllegalRed ? "wifi_" : (s.isMine ? "wifi_mine_" : (s.isBreak ? "wifi_break_" : (s.isDouble ? "wifi_each_" : "wifi_")));
-        const standardKey = isIllegalRed ? "slide" : (s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
+        const standardKey = isIllegalRed ? "slide" : (s.isMine ? (s.isBreak ? "slide_break_mine" : "slide_mine") : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide")));
 
         const speedMult = this._speedFactor * (hispeed || 1);
         const t = 1 - this.timeFunction(noteT * speedMult);
@@ -4108,7 +4137,7 @@ export class SimaiVisualEditor {
         const { time: noteTime, pos, isBreak, isDouble, isMine } = s;
         const t = (noteTime - this.globalTime);
 
-        const img = this.images[isMine ? "tap_mine" : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
+        const img = this.images[isMine ? (isBreak ? "tap_break_mine" : "tap_mine") : (isBreak ? "tap_break" : (isDouble ? "tap_each" : "tap"))];
         if (imgNotExists(img)) return;
         const size = this.settings.noteBaseSize;
         const x = visualNoteRefPos[pos - 1].x;
@@ -4135,7 +4164,7 @@ export class SimaiVisualEditor {
 
         const isPink = Boolean(this.settings.pinkStars);
         const img = this.images[isMine ?
-            (isMultiple ? "star_mine_double" : "star_mine")
+            (isMultiple ? (isBreak ? "star_break_double_mine" : "star_mine_double") : (isBreak ? "star_break_mine" : "star_mine"))
             : (isMultiple ? (isBreak ? "star_break_double" : (isDouble ? "star_each_double" : (isPink ? "star_pink_double" : "star_double")))
                 : (isBreak ? "star_break" : (isDouble ? "star_each" : (isPink ? "star_pink" : "star"))))
         ];
@@ -4160,18 +4189,18 @@ export class SimaiVisualEditor {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration } = s;
+        const { time: noteTime, pos, touchPos, isBreak, isDouble, isMine, holdDuration } = s;
         const t = (noteTime - this.globalTime);
         const touchX = visualNoteRefPos[8]?.x ?? 0;
 
         if (holdDuration) {
             const imgs = [];
             for (let i = 0; i < 4; i++) {
-                const img = this.images[isMine ? ("touchhold_" + i + "_mine") : ("touchhold_" + i)];
+                const img = this.images[isMine ? ("touchhold_" + i + "_mine") : (isBreak ? ("touchhold_break_" + i) : ("touchhold_" + i))];
                 if (imgNotExists(img)) return;
                 imgs.push(img);
             }
-            const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
+            const touchPoint = this.images[isMine ? (isBreak ? "touch_break_point_mine" : "touch_point_mine") : (isBreak ? "touch_break_point" : (isDouble ? "touch_point_each" : "touch_point"))];
 
             this.ctx.save();
 
@@ -4230,8 +4259,8 @@ export class SimaiVisualEditor {
             return;
         }
 
-        const img = this.images[isMine ? "touch_mine" : (isDouble ? "touch_each" : "touch")];
-        const touchPoint = this.images[isMine ? "touch_point_mine" : (isDouble ? "touch_point_each" : "touch_point")];
+        const img = this.images[isMine ? (isBreak ? "touch_break_mine" : "touch_mine") : (isBreak ? "touch_break" : (isDouble ? "touch_each" : "touch"))];
+        const touchPoint = this.images[isMine ? (isBreak ? "touch_break_point_mine" : "touch_point_mine") : (isBreak ? "touch_break_point" : (isDouble ? "touch_point_each" : "touch_point"))];
         if (imgNotExists(img)) return;
 
         this.ctx.save();
@@ -4260,7 +4289,7 @@ export class SimaiVisualEditor {
         const t = (noteTime - this.globalTime);
         const posInfo = visualNoteRefPos[pos - 1];
 
-        const img = this.images[isMine ? "hold_mine" : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
+        const img = this.images[isMine ? (isBreak ? "hold_break_mine" : "hold_mine") : (isBreak ? "hold_break" : (isDouble ? "hold_each" : "hold"))];
         if (imgNotExists(img)) return;
 
         function drawHoldImage(ctx, img, size, sizeOffset) {
@@ -4290,7 +4319,7 @@ export class SimaiVisualEditor {
     }
 
     drawSlide(s) {
-        const target = this.images[s.isMine ? "slide_mine" : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
+        const target = this.images[s.isMine ? (s.isBreak ? "slide_break_mine" : "slide_mine") : (s.isBreak ? "slide_break" : (s.isDouble ? "slide_each" : "slide"))];
         if (imgNotExists(target)) return;
 
         const { time: noteTime, pos, slideDelay, slideDuration } = s;
@@ -6113,7 +6142,7 @@ export class SimaiPreviewRenderer {
     }
 
     drawTouch(s) {
-        const { time: noteTime, pos, touchPos, isDouble, isMine, holdDuration, isHanabi } = s;
+        const { time: noteTime, pos, touchPos, isBreak, isDouble, isMine, holdDuration, isHanabi } = s;
         const t = (noteTime - this.globalTime);
         const ctx = this.ctx;
 
@@ -6183,7 +6212,7 @@ export class SimaiPreviewRenderer {
             }
         } else {
             ctx.lineWidth = size * 0.35;
-            ctx.strokeStyle = isMine ? this.color.mine : (isDouble ? this.color.double : this.color.star);
+            ctx.strokeStyle = isMine ? this.color.mine : (isBreak ? this.color.break : (isDouble ? this.color.double : this.color.star));
             ctx.strokeRect(-size * 0.5, -size * 0.5, size, size);
         }
         ctx.restore();

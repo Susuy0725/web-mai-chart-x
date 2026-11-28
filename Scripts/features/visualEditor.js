@@ -103,7 +103,7 @@ export function peelNoteStructure(clean) {
         const rest = withoutBracket.slice(touchPos.length);
         const isHold = rest.includes('h');
         const flagsRaw = rest.replace(/h/g, '');
-        const flags = new Set(flagsRaw.match(/[mfx]/g) || []);
+        const flags = new Set(flagsRaw.match(/[bmfx]/g) || []);
 
         return {
             type: isHold ? 'touchhold' : 'touch',
@@ -507,11 +507,11 @@ export function createVisualNoteCallbacks(ctx) {
                 newNoteStr = `${lane}${headMod}-${endLane}[4:1]`;
                 newLabel = 'Slide';
             } else if (effectiveType === 'touch') {
-                const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
+                const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : (selectedModifier === 'break') ? 'b' : '';
                 newNoteStr = `C${touchMod}`;
                 newLabel = 'Touch';
             } else if (effectiveType === 'touchhold') {
-                const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
+                const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : (selectedModifier === 'break') ? 'b' : '';
                 newNoteStr = `Ch${touchMod}[4:1]`;
                 newLabel = 'TouchHold';
             } else if (effectiveType === 'hold') {
@@ -547,11 +547,11 @@ export function createVisualNoteCallbacks(ctx) {
             noteString = `${lane}${headMod}-${endLane}[4:1]`;
             noteLabel = 'Slide';
         } else if (effectiveType === 'touch') {
-            const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
+            const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : (selectedModifier === 'break') ? 'b' : '';
             noteString = `C${touchMod}`;
             noteLabel = 'Touch';
         } else if (effectiveType === 'touchhold') {
-            const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : '';
+            const touchMod = (selectedModifier === 'mine') ? 'm' : (selectedModifier === 'firework') ? 'f' : (selectedModifier === 'break') ? 'b' : '';
             noteString = `Ch${touchMod}[4:1]`;
             noteLabel = 'TouchHold';
         } else if (effectiveType === 'hold') {
@@ -798,10 +798,6 @@ export function createVisualNoteCallbacks(ctx) {
                                  selectedModifier === 'firework' ? t('visualToolbar.modFirework') : '';
 
                 // 相容性防呆校驗 (參考 decode.js)
-                if (targetFlag === 'b' && peeled.isTouch) {
-                    simpleToast({ content: t('visualEditor.touchNoBreak'), type: 'warning', timeout: 1500 });
-                    return;
-                }
                 if (targetFlag === 'f' && !peeled.isTouch) {
                     simpleToast({ content: t('visualEditor.fireworkTouchOnly'), type: 'warning', timeout: 1500 });
                     return;

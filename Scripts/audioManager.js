@@ -699,6 +699,10 @@ class AudioManager {
                     }
                     break;
                 case 'touch':
+                    if (note.isMine) {
+                        key = includeAnswer ? 'answer' : '';
+                        break;
+                    }
                     key = 'touch';
                     isMono = false;
                     if (includeAnswer) {
@@ -840,6 +844,10 @@ class AudioManager {
                 }
                 break;
             case 'touch':
+                if (note.isMine) {
+                    key = includeAnswer ? 'answer' : '';
+                    break;
+                }
                 key = 'touch';
                 isMono = false;
                 if (includeAnswer) {

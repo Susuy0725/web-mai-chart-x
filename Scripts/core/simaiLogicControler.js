@@ -1,3 +1,5 @@
+import { getNoteBaseScores, resolvePlayScoreTotals, calcAchievement } from './noteScore.js';
+
 function binarySearchLowerBound(arr, val) {
     let low = 0, high = arr.length;
     while (low < high) {
@@ -109,7 +111,10 @@ export class SimaiLogicControler {
         this._nonSlideTimes = new Float64Array(0);
         this._nonSlideIndexes = new Int32Array(0);
         this._comboTimes = new Float64Array(0);
-        this._prefixScores = new Float64Array(0);
+        this._prefixNormalScores = new Float64Array(0);
+        this._prefixBonusScores = new Float64Array(0);
+        this._allPerfectScore = 0;
+        this._breakBonusScore = 0;
         this._prefixBreak = new Int32Array(0);
         this._prefixHold = new Int32Array(0);
         this._prefixTap = new Int32Array(0);
@@ -158,9 +163,10 @@ export class SimaiLogicControler {
         this._nonSlideTimes = new Float64Array(nsTimes);
         this._nonSlideIndexes = new Int32Array(nsIndexes);
 
-        // 前綴和陣列建構 (Combo / Score / noteQuantity)
-        const invScore = playScoreRes?.invScore || 0;
-        const breakScore = playScoreRes?.breakScore || 0;
+        // 前綴和陣列建構 (Combo / NoteScore 整數分數 / noteQuantity)
+        const { allPerfectScore, breakBonusScore } = resolvePlayScoreTotals(playScoreRes);
+        this._allPerfectScore = allPerfectScore;
+        this._breakBonusScore = breakBonusScore;
         const comboEvents = [];
 
         for (let i = 0; i < len; i++) {
@@ -188,15 +194,15 @@ export class SimaiLogicControler {
             }
 
             if (counts) {
-                const baseWeight = n.isBreak ? 5 : (noteType === 'slide' ? 3 : (n.holdDuration !== undefined ? 2 : 1));
-                const scoreInc = (baseWeight * invScore) * 100 + (n.isBreak ? breakScore : 0);
+                const { normalMax, bonusMax } = getNoteBaseScores(n);
                 comboEvents.push({
                     time: finishTime,
                     origIndex: i,
                     isBreak: !!n.isBreak,
                     isHold: !!n.isHold,
                     type: noteType,
-                    scoreInc
+                    normalInc: normalMax,
+                    bonusInc: bonusMax,
                 });
             }
         }
@@ -205,27 +211,31 @@ export class SimaiLogicControler {
 
         const evCount = comboEvents.length;
         this._comboTimes = new Float64Array(evCount);
-        this._prefixScores = new Float64Array(evCount + 1);
+        this._prefixNormalScores = new Float64Array(evCount + 1);
+        this._prefixBonusScores = new Float64Array(evCount + 1);
         this._prefixBreak = new Int32Array(evCount + 1);
         this._prefixHold = new Int32Array(evCount + 1);
         this._prefixTap = new Int32Array(evCount + 1);
         this._prefixTouch = new Int32Array(evCount + 1);
         this._prefixSlide = new Int32Array(evCount + 1);
 
-        let curScore = 0;
+        let curNormalScore = 0;
+        let curBonusScore = 0;
         let curBreak = 0, curHold = 0, curTap = 0, curTouch = 0, curSlide = 0;
 
         for (let i = 0; i < evCount; i++) {
             const ev = comboEvents[i];
             this._comboTimes[i] = ev.time;
-            curScore += ev.scoreInc;
+            curNormalScore += ev.normalInc;
+            curBonusScore += ev.bonusInc;
             if (ev.isBreak) curBreak++;
             else if (ev.isHold) curHold++;
             else if (ev.type === 'slide') curSlide++;
             else if (ev.type === 'touch') curTouch++;
             else curTap++;
 
-            this._prefixScores[i + 1] = curScore;
+            this._prefixNormalScores[i + 1] = curNormalScore;
+            this._prefixBonusScores[i + 1] = curBonusScore;
             this._prefixBreak[i + 1] = curBreak;
             this._prefixHold[i + 1] = curHold;
             this._prefixTap[i + 1] = curTap;
@@ -334,7 +344,12 @@ export class SimaiLogicControler {
         // 二分搜尋取得 Combo / Score / noteQuantity (O(log N))
         const k = binarySearchLowerBound(this._comboTimes, globalTime);
         const playCombo = k;
-        const playScore = this._prefixScores[k];
+        const playScore = calcAchievement(
+            this._prefixNormalScores[k],
+            this._prefixBonusScores[k],
+            this._allPerfectScore,
+            this._breakBonusScore
+        );
         this._noteQuantity.break = this._prefixBreak[k];
         this._noteQuantity.hold = this._prefixHold[k];
         this._noteQuantity.tap = this._prefixTap[k];
@@ -566,7 +581,9 @@ export class SimaiLogicControler {
         const noteQuantity = this._noteQuantity;
 
         let playCombo = 0;
-        let playScore = 0;
+        let earnedNormalScore = 0;
+        let earnedBonusScore = 0;
+        const { allPerfectScore, breakBonusScore } = resolvePlayScoreTotals(playScoreRes);
         let foundIndexForThisFrame = false;
 
         const baseSpeed = settings.speed || 1;
@@ -612,10 +629,9 @@ export class SimaiLogicControler {
                         noteQuantity[noteType]++;
                     }
                     playCombo++;
-                    playScore += ((note.isBreak ? 5 :
-                        (noteType === "slide" ? 3 :
-                            note.holdDuration !== undefined ? 2 : 1)
-                    ) * playScoreRes.invScore) * 100 + (note.isBreak ? playScoreRes.breakScore : 0);
+                    const { normalMax, bonusMax } = getNoteBaseScores(note);
+                    earnedNormalScore += normalMax;
+                    earnedBonusScore += bonusMax;
                 }
             }
 
@@ -746,7 +762,7 @@ export class SimaiLogicControler {
         }
 
         this._result.playCombo = playCombo;
-        this._result.playScore = playScore;
+        this._result.playScore = calcAchievement(earnedNormalScore, earnedBonusScore, allPerfectScore, breakBonusScore);
         this._result.nowIndex = nowIndex;
         return this._result;
     }

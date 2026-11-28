@@ -6,6 +6,7 @@ import { openProjectManager } from '../Scripts/modals/projectManager.js';
 import { SimaiRenderer } from './renderer.js';
 import { simaiDecode } from '../Scripts/decode.js';
 import { cullSlideBucket } from '../Scripts/core/simaiLogicControler.js';
+import { buildPlayScoreRes, getNoteBaseScores, getNoteJudgeScore, calcAchievement, calcAchievementMinus } from '../Scripts/core/noteScore.js';
 import { parseMaidata, disableNavigationGestures, loadAllImages, scaleBase, noteRefPos, touchRefPos, audioManager, debounce, popupWindow, simpleToast, formatCapsuleTime, clamp, imgNotExists } from '../Scripts/helper.js';
 import { parseCanvasAspectRatio, fitRectToAspectRatio } from '../Scripts/core/panelLayout.js';
 import { t, getAvailableLanguages, getLangSetting, onLanguageChange, setLang } from '../Scripts/i18n.js';
@@ -370,8 +371,10 @@ function createFreshScoreState() {
         settledCursor: 0,
         pendingNotes: [],
         pendingSet: new Set(),
-        committedScore: 0,
-        committedLostScore: 0,
+        committedNormalScore: 0,
+        committedBonusScore: 0,
+        committedLostNormalScore: 0,
+        committedLostBonusScore: 0,
         committedQty: { tap: 0, hold: 0, slide: 0, touch: 0, break: 0 },
         committedCombo: 0,
         pendingComboEvents: [],
@@ -1066,11 +1069,15 @@ function evaluateHitGrade(diffSec, note) {
         breakScoreValue = 0;
     }
 
-    return { grade, subGrade, isFast, diffMSec, scoreMultiplier, breakMultiplier, breakScoreValue };
+    const { normalScore, bonusScore } = getNoteJudgeScore(note, {
+        grade,
+        scoreMultiplier,
+        breakMultiplier,
+        breakScoreValue,
+    });
+    return { grade, subGrade, isFast, diffMSec, scoreMultiplier, breakMultiplier, breakScoreValue, normalScore, breakBonus: bonusScore };
 }
-
-/**
- * 評估 Slide 劃軌完成評級 (參照 NoteJudge.cs GetSlideJudgeTiming & judgeParamTbl[2])
+/*
  * @param {number} diffSec 完成時間與基準判定時間的偏差 (秒, globalTime - judgeTiming, 負數代表提前FAST, 正數代表延後LATE)
  * @param {Object} note Slide 音符物件
  * @returns {Object} 判定結果物件
@@ -1146,13 +1153,17 @@ function evaluateSlideGrade(diffSec, note) {
         breakScoreValue = 0;
     }
 
-    return { grade, subGrade, isFast, diffMSec, scoreMultiplier, breakMultiplier, breakScoreValue };
+    const { normalScore, bonusScore } = getNoteJudgeScore(note, {
+        grade,
+        scoreMultiplier,
+        breakMultiplier,
+        breakScoreValue,
+    });
+    return { grade, subGrade, isFast, diffMSec, scoreMultiplier, breakMultiplier, breakScoreValue, normalScore, breakBonus: bonusScore };
 }
-
-/**
- * 評估 Hold / TouchHold 總結算評級 (參照 NoteJudge.cs JudgeHoldTotal & holdJudgeParam)
- * 依主體有效區間內的鬆手時間比例 [0, 33, 67, 95, 100]% 對頭部判定進行階梯降級，並保留 Fast/Late 與 Break 分級
- */
+/*
+ * 依主體有效區間內的鬆手時間比例[0, 33, 67, 95, 100] % 對頭部判定進行階梯降級，並保留 Fast / Late 與 Break 分級
+*/
 function evaluateHoldTotalGrade(note, headJudge, releaseDuration, holdDuration, bodyPressed, isTouchHold) {
     const headIgnoreSec = isTouchHold
         ? JUDGE_WINDOWS.HOLD.TOUCH_HEAD_IGNORE_SEC
@@ -1189,12 +1200,20 @@ function evaluateHoldTotalGrade(note, headJudge, releaseDuration, holdDuration, 
                 bScore = 1000;
             }
         }
+        const { normalScore, bonusScore } = getNoteJudgeScore(note, {
+            grade,
+            scoreMultiplier: sMult,
+            breakMultiplier: bMult,
+            breakScoreValue: bScore,
+        });
         return {
             grade,
             subGrade: grade === 'CRITICAL_PERFECT' || grade === 'MISS' ? '' : subGrade,
             scoreMultiplier: sMult,
             breakMultiplier: bMult,
-            breakScoreValue: bScore
+            breakScoreValue: bScore,
+            normalScore,
+            breakBonus: bonusScore,
         };
     };
 
@@ -1854,7 +1873,7 @@ function setDataEmpty() {
     rawdata = null;
     updateDifficultyOptions();
     datas = null;
-    playScoreRes = { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
+    playScoreRes = buildPlayScoreRes();
     playCombo = 0;
     playScore = 0;
     if (renderer) renderer.clearJudgeEffects();
@@ -1885,18 +1904,7 @@ function tryUpdateBackgroundBrightness() {
 }
 
 function calculatePlayScoreRes(datas) {
-    if (!datas) return { tap: 0, hold: 0, slide: 0, touch: 0, break: 0, score: 0, breakScore: 0, invScore: 0 };
-    const counts = datas.notesCounts || { tap: 0, hold: 0, slide: 0, touch: 0, break: 0 };
-    const score = datas.score || 0;
-    const breakCount = counts.break || 0;
-    const invScore = score > 0 ? (1 / score) : 0;
-    const breakScore = breakCount > 0 ? (1 / breakCount) : 0;
-    return {
-        ...counts,
-        score,
-        invScore,
-        breakScore
-    };
+    return buildPlayScoreRes(datas?.notesCounts);
 }
 
 function getResult() {
@@ -3240,20 +3248,19 @@ function draw() {
                 return true;
             }
 
-            const baseW = note.isBreak ? 5 : 3;
-            const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
+            const { normalMax, bonusMax } = getNoteBaseScores(note);
             const isHit = (note.judgeResult && note.judgeResult.grade !== 'MISS') || (note.slideFinish && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
             const settleTime = isHit
                 ? (note._judgeSettleTime ?? Math.max(startTiming + slideDuration, minDelayTiming))
                 : (note._judgeSettleTime ?? tooLateTiming);
-            const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
-            const breakMult = note.isBreak ? (note.judgeResult?.breakMultiplier ?? (note.judgeResult?.grade === 'CRITICAL_PERFECT' ? 1.0 : (note.judgeResult?.grade === 'PERFECT' ? 0.75 : 0.4))) : 0;
-            const earnedScore = isHit ? (((note.isBreak ? 5 : 3) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * breakMult : 0)) : 0;
+            const earned = isHit ? getNoteJudgeScore(note, note.judgeResult) : { normalScore: 0, bonusScore: 0 };
 
             if (commitAllowed && !note._settledCommitted) {
                 note._settledCommitted = true;
-                activeScoreState.committedScore += earnedScore;
-                activeScoreState.committedLostScore += (maxNoteScore - earnedScore);
+                activeScoreState.committedNormalScore += earned.normalScore;
+                activeScoreState.committedBonusScore += earned.bonusScore;
+                activeScoreState.committedLostNormalScore += (normalMax - earned.normalScore);
+                activeScoreState.committedLostBonusScore += (bonusMax - earned.bonusScore);
                 if (isHit) {
                     if (note.isBreak) activeScoreState.committedQty.break++;
                     else activeScoreState.committedQty.slide++;
@@ -3281,11 +3288,11 @@ function draw() {
                     if (note.time + lateJudgeWindow < minUnsettledTime) minUnsettledTime = note.time + lateJudgeWindow;
                     return true;
                 }
-                const baseW = note.isBreak ? 5 : 2;
-                const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
+                const { normalMax, bonusMax } = getNoteBaseScores(note);
                 if (commitAllowed && !note._settledCommitted) {
                     note._settledCommitted = true;
-                    activeScoreState.committedLostScore += maxNoteScore;
+                    activeScoreState.committedLostNormalScore += normalMax;
+                    activeScoreState.committedLostBonusScore += bonusMax;
                     activeScoreState.pendingComboEvents.push({ time: note.time + holdDuration, isHit: false });
                 }
                 return false;
@@ -3296,18 +3303,17 @@ function draw() {
                 return true;
             }
 
-            const baseW = note.isBreak ? 5 : 2;
-            const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
+            const { normalMax, bonusMax } = getNoteBaseScores(note);
             const isHit = (note.judgeResult && note.judgeResult.grade !== 'MISS') || (note.holdFinish && (!note.judgeResult || note.judgeResult.grade !== 'MISS'));
             const holdSettleTime = note.time + holdDuration;
-            const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
-            const breakMult = note.isBreak ? (note.judgeResult?.breakMultiplier ?? (note.judgeResult?.grade === 'CRITICAL_PERFECT' ? 1.0 : (note.judgeResult?.grade === 'PERFECT' ? 0.75 : 0.4))) : 0;
-            const earnedScore = isHit ? (((note.isBreak ? 5 : 2) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * breakMult : 0)) : 0;
+            const earned = isHit ? getNoteJudgeScore(note, note.judgeResult) : { normalScore: 0, bonusScore: 0 };
 
             if (commitAllowed && !note._settledCommitted) {
                 note._settledCommitted = true;
-                activeScoreState.committedScore += earnedScore;
-                activeScoreState.committedLostScore += (maxNoteScore - earnedScore);
+                activeScoreState.committedNormalScore += earned.normalScore;
+                activeScoreState.committedBonusScore += earned.bonusScore;
+                activeScoreState.committedLostNormalScore += (normalMax - earned.normalScore);
+                activeScoreState.committedLostBonusScore += (bonusMax - earned.bonusScore);
                 if (isHit) {
                     if (note.isBreak) activeScoreState.committedQty.break++;
                     else activeScoreState.committedQty.hold++;
@@ -3318,20 +3324,19 @@ function draw() {
         }
 
         // Tap / Star / Touch
-        const baseW = note.isBreak ? 5 : 1;
-        const maxNoteScore = (baseW * (playScoreRes.invScore || 0) * 100) + (note.isBreak ? (playScoreRes.breakScore || 0) : 0);
+        const { normalMax, bonusMax } = getNoteBaseScores(note);
 
         if (note.triggered) {
             const isHit = !(note.judgeResult && note.judgeResult.grade === 'MISS');
             const triggerSettleTime = note.triggeredTime ?? note.time;
-            const mult = note.judgeResult?.scoreMultiplier ?? 1.0;
-            const breakMult = note.isBreak ? (note.judgeResult?.breakMultiplier ?? (note.judgeResult?.grade === 'CRITICAL_PERFECT' ? 1.0 : (note.judgeResult?.grade === 'PERFECT' ? 0.75 : 0.4))) : 0;
-            const earnedScore = isHit ? (((note.isBreak ? 5 : 1) * mult) * (playScoreRes.invScore || 0) * 100 + (note.isBreak ? (playScoreRes.breakScore || 0) * breakMult : 0)) : 0;
+            const earned = isHit ? getNoteJudgeScore(note, note.judgeResult) : { normalScore: 0, bonusScore: 0 };
 
             if (commitAllowed && !note._settledCommitted) {
                 note._settledCommitted = true;
-                activeScoreState.committedScore += earnedScore;
-                activeScoreState.committedLostScore += (maxNoteScore - earnedScore);
+                activeScoreState.committedNormalScore += earned.normalScore;
+                activeScoreState.committedBonusScore += earned.bonusScore;
+                activeScoreState.committedLostNormalScore += (normalMax - earned.normalScore);
+                activeScoreState.committedLostBonusScore += (bonusMax - earned.bonusScore);
                 if (isHit) {
                     if (note.isBreak) activeScoreState.committedQty.break++;
                     else activeScoreState.committedQty[noteType]++;
@@ -3349,7 +3354,8 @@ function draw() {
             }
             if (commitAllowed && !note._settledCommitted) {
                 note._settledCommitted = true;
-                activeScoreState.committedLostScore += maxNoteScore;
+                activeScoreState.committedLostNormalScore += normalMax;
+                activeScoreState.committedLostBonusScore += bonusMax;
                 activeScoreState.pendingComboEvents.push({ time: note.time + lateJudgeWindow, isHit: false });
             }
             return false;
@@ -3424,8 +3430,6 @@ function draw() {
         }
     }
 
-    playScore = activeScoreState.committedScore;
-    lostScore = activeScoreState.committedLostScore;
     noteQuantity.tap = activeScoreState.committedQty.tap;
     noteQuantity.hold = activeScoreState.committedQty.hold;
     noteQuantity.slide = activeScoreState.committedQty.slide;
@@ -3453,8 +3457,18 @@ function draw() {
         }
     }
 
-    const maxTotalScore = (datas.score > 0 ? 100 : 0) + ((datas.notesCounts?.break > 0) ? 1 : 0);
-    const playScoreMinus = Math.max(0, Math.min(maxTotalScore, maxTotalScore - lostScore));
+    playScore = calcAchievement(
+        activeScoreState.committedNormalScore,
+        activeScoreState.committedBonusScore,
+        playScoreRes.allPerfectScore,
+        playScoreRes.breakBonusScore
+    );
+    const playScoreMinus = calcAchievementMinus(
+        activeScoreState.committedLostNormalScore,
+        activeScoreState.committedLostBonusScore,
+        playScoreRes.allPerfectScore,
+        playScoreRes.breakBonusScore
+    );
 
     const calcPiecewiseSpeed = (x) => {
         if (x >= 1) {

@@ -49,11 +49,12 @@ const coreImageKeys = [
     'hold', 'hold_break', 'hold_each', 'hold_ex',
     'hold_break_on', 'hold_each_on', 'hold_on', 'hold_off',
     'Hold_End', 'Hold_Break_End', 'Hold_Each_End',
-    'touch', 'touch_each', 'touch_point', 'touch_point_each',
-    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each',
+    'touch', 'touch_each', 'touch_break', 'touch_point', 'touch_point_each', 'touch_break_point',
+    'touch_border_2', 'touch_border_3', 'touch_border_2_each', 'touch_border_3_each', 'touch_break_border_2', 'touch_break_border_3',
     'star', 'star_pink', 'star_break', 'star_each', 'star_ex',
     'slide', 'slide_each', 'slide_break',
     'touchhold_0', 'touchhold_1', 'touchhold_2', 'touchhold_3', 'touchhold_border',
+    'touchhold_break_0', 'touchhold_break_1', 'touchhold_break_2', 'touchhold_break_3', 'touchhold_break_border',
     'touch_just', 'touchhold_off',
     'judge_text_good', 'judge_text_miss', 'judge_text_great',
     'judge_text_perfect', 'judge_text_normal', 'judge_text_break',
@@ -72,13 +73,14 @@ const coreImageKeys = [
 
 // 次要/特殊素材（WiFi 連續動畫幀、地雷、雙押星等，由背景非同步載入不阻塞首屏）
 const secondaryImageKeys = [
-    'tap_mine', 'MineArc',
-    'hold_mine', 'Hold_Mine_End',
+    'tap_mine', 'tap_break_mine', 'MineArc',
+    'hold_mine', 'hold_mine_on', 'hold_break_mine', 'hold_break_mine_on', 'Hold_Mine_End',
     'touch_mine', 'touch_point_mine', 'touch_border_2_mine', 'touch_border_3_mine',
-    'star_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double',
-    'slide_mine',
+    'touch_break_mine', 'touch_break_point_mine', 'touch_break_mine_border_2', 'touch_break_mine_border_3',
+    'star_mine', 'star_break_mine', 'star_double', 'star_pink_double', 'star_break_double', 'star_each_double', 'star_ex_double', 'star_mine_double', 'star_break_double_mine',
+    'slide_mine', 'slide_break_mine',
     'ColorBall', 'HexEffect', 'HoldEffect', 'StarEffect', 'HoldEffect', 'TouchEffparts_01', 'TouchEffparts_02',
-    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine'
+    'touchhold_0_mine', 'touchhold_1_mine', 'touchhold_2_mine', 'touchhold_3_mine', 'touchhold_border_mine', 'touchhold_break_mine'
 ];
 const wifiPrefixes = ['wifi_', 'wifi_break_', 'wifi_each_', 'wifi_mine_'];
 

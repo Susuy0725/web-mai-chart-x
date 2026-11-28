@@ -1240,7 +1240,11 @@
 
 .record-video-preview-viewport {
     width: 100%;
-    max-height: 240px;
+    max-width: calc(240px * 16 / 9);
+    margin-inline: auto;
+    box-sizing: border-box;
+    min-height: 0;
+    flex: none;
     background: #050508;
     border-radius: 6px;
     overflow: hidden;

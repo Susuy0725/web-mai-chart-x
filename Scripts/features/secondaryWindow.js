@@ -336,14 +336,23 @@ export class SecondaryWindowManager {
                 secBgContainer.style.height = size + 'px';
             }
 
-            const brightnessFilter = `brightness(${1 + 0.1875 * (settings.moviebrightness ?? -4)})`;
+            const b = Math.max(0, 1 + 0.1875 * (settings.moviebrightness ?? -4));
+            const applySecDim = (el) => {
+                if (b <= 1) {
+                    el.style.filter = 'none';
+                    el.style.opacity = String(b);
+                } else {
+                    el.style.opacity = '1';
+                    el.style.filter = `brightness(${b})`;
+                }
+            };
 
             if (secBgImg && editorBackgroundImage) {
                 if (secBgImg.src !== editorBackgroundImage.src) {
                     secBgImg.src = editorBackgroundImage.src;
                 }
                 secBgImg.style.display = editorBackgroundImage.style.display;
-                secBgImg.style.filter = brightnessFilter;
+                applySecDim(secBgImg);
             }
 
             if (secBgVideo && editorBackgroundVideo) {
@@ -351,7 +360,7 @@ export class SecondaryWindowManager {
                     secBgVideo.src = editorBackgroundVideo.src;
                 }
                 secBgVideo.style.display = editorBackgroundVideo.style.display;
-                secBgVideo.style.filter = brightnessFilter;
+                applySecDim(secBgVideo);
 
                 if (editorBackgroundVideo.src) {
                     const playing = playButton.dataset.playing === 'true';
@@ -374,6 +383,10 @@ export class SecondaryWindowManager {
 
                     secBgVideo.playbackRate = settings.playbackSpeed || 1;
                 }
+            }
+
+            if (secBgVideo && secBgVideo.style.display !== 'none' && secBgImg) {
+                secBgImg.style.display = 'none';
             }
 
             updatePlayBtnState();

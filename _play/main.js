@@ -681,9 +681,18 @@ function applyPlayCanvasAspectRatio() {
     canvasContainer.style.height = `${rect.height}px`;
 }
 
+function getPlayDPR(win = window) {
+    if (settings?.lowRes) return 1;
+    const raw = win.devicePixelRatio || 1;
+    const isCoarseMobile = typeof win.matchMedia === 'function'
+        && win.matchMedia('(pointer: coarse)').matches
+        && Math.min(win.innerWidth || 0, win.innerHeight || 0) <= 900;
+    return Math.min(raw, isCoarseMobile ? 1.5 : 2);
+}
+
 function resize() {
     applyPlayCanvasAspectRatio();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getPlayDPR();
     const w = (canvasContainer ? canvasContainer.clientWidth : window.innerWidth) * dpr;
     const h = (canvasContainer ? canvasContainer.clientHeight : window.innerHeight) * dpr;
 
@@ -1708,7 +1717,7 @@ function getSensorsFromPointer(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getPlayDPR();
     const p = Math.min(canvas.width, canvas.height) / scaleBase * renderer.scale;
     const rx = (x * dpr - canvas.width * 0.5) / p;
     const ry = (y * dpr - canvas.height * 0.5) / p;
@@ -1928,7 +1937,7 @@ difficultySelect.addEventListener('change', () => {
     restart();
     selectedDifficulty = Number(difficultySelect.value);
     getResult();
-    updateTimeControlUI();
+    updateTimeControlUI(true);
     draw();
     if (currentProjectId) idbSetProject(currentProjectId, 'now_difficulty', selectedDifficulty);
 });
@@ -1979,13 +1988,23 @@ function setDataEmpty() {
         gameBackgroundVideo.style.display = 'none';
     }
 
-    updateTimeControlUI();
+    updateTimeControlUI(true);
 }
 
 function tryUpdateBackgroundBrightness() {
-    gameBackgroundImage.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-    gameBackgroundVideo.style.filter = `brightness(${1 + 0.1875 * settings.moviebrightness})`;
-    //console.log(gameBackgroundVideo);
+    const b = Math.max(0, 1 + 0.1875 * (Number(settings.moviebrightness) || 0));
+    const applyDim = (el) => {
+        if (!el) return;
+        if (b <= 1) {
+            el.style.filter = 'none';
+            el.style.opacity = String(b);
+        } else {
+            el.style.opacity = '1';
+            el.style.filter = `brightness(${b})`;
+        }
+    };
+    applyDim(gameBackgroundImage);
+    applyDim(gameBackgroundVideo);
 }
 
 function calculatePlayScoreRes(datas) {
@@ -2011,20 +2030,43 @@ function getTotalTime() {
     return Math.max(datas?.endTime || 0, 0) + 1;
 }
 
-function updateTimeControlUI() {
+let _lastPlayTimeUiUpdate = 0;
+let _lastPlayTimelineMax = -1;
+let _lastPlaySliderRatio = -1;
+let _lastPlayCapsuleText = '';
+
+function updateTimeControlUI(force = false) {
     if (!timeControl) return;
-    const totalTime = getTotalTime();
-    timeControl.max = totalTime;
-    if (!timeControlSliding) {
-        timeControl.value = realTime;
+    const now = performance.now();
+    if (!force && playing && !timeControlSliding && (now - _lastPlayTimeUiUpdate) < 66) {
+        return;
     }
-    const ratio = Math.max(0, Math.min(1, totalTime > 0 ? (realTime / totalTime) : 0));
-    const thumbWidth = 16;
-    const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-    timeControl.style.setProperty('--timeline-progress', stopPos);
+    _lastPlayTimeUiUpdate = now;
+
+    const totalTime = getTotalTime();
+    if (force || totalTime !== _lastPlayTimelineMax) {
+        _lastPlayTimelineMax = totalTime;
+        timeControl.max = totalTime;
+    }
+
+    const rawRatio = Math.max(0, Math.min(1, totalTime > 0 ? (realTime / totalTime) : 0));
+    const quantized = Math.round(rawRatio * 500) / 500;
+    if (force || quantized !== _lastPlaySliderRatio) {
+        _lastPlaySliderRatio = quantized;
+        if (!timeControlSliding) {
+            timeControl.value = realTime;
+        }
+        const thumbWidth = 16;
+        const stopPos = `calc(${thumbWidth * 0.5}px + ${quantized} * (100% - ${thumbWidth}px))`;
+        timeControl.style.setProperty('--timeline-progress', stopPos);
+    }
+
     if (!hidden && !playCapsules.hidden) {
         const text = `${formatCapsuleTime(Math.min(realTime, totalTime))} / ${formatCapsuleTime(totalTime)}`;
-        if (timeDisplayCapsule.textContent !== text) timeDisplayCapsule.textContent = text;
+        if (force || _lastPlayCapsuleText !== text) {
+            _lastPlayCapsuleText = text;
+            timeDisplayCapsule.textContent = text;
+        }
     }
 }
 
@@ -2064,7 +2106,7 @@ if (timeControl) {
             audioManager.clearSoundQueue();
             audioManager.stopBGM();
         }
-        updateTimeControlUI();
+        updateTimeControlUI(true);
         draw();
     };
 
@@ -2100,13 +2142,33 @@ function play() {
         if (playPauseBtn.children[0]) playPauseBtn.children[0].innerText = "pause";
     }
 
-    gameBackgroundImage.style.display = (gameBackgroundImage.complete && gameBackgroundImage.naturalWidth !== 0) ? 'block' : 'none';
-    gameBackgroundVideo.style.display = ((gameBackgroundVideo.readyState === 4) ? 'block' : 'none');
-    if (gameBackgroundVideo.readyState >= 1) {
+    const hasImage = !!(gameBackgroundImage && gameBackgroundImage.complete && gameBackgroundImage.naturalWidth !== 0);
+    const showVideo = !!(gameBackgroundVideo && gameBackgroundVideo.src && gameBackgroundVideo.readyState >= 2);
+    if (gameBackgroundVideo) {
+        if (gameBackgroundVideo._onPlayLoadedData && typeof gameBackgroundVideo.removeEventListener === 'function') {
+            gameBackgroundVideo.removeEventListener('loadeddata', gameBackgroundVideo._onPlayLoadedData);
+            gameBackgroundVideo._onPlayLoadedData = null;
+        }
+        gameBackgroundVideo.style.display = showVideo ? 'block' : 'none';
+        if (!showVideo && gameBackgroundVideo.src && typeof gameBackgroundVideo.addEventListener === 'function') {
+            gameBackgroundVideo._onPlayLoadedData = () => {
+                gameBackgroundVideo._onPlayLoadedData = null;
+                if (playing) {
+                    gameBackgroundVideo.style.display = 'block';
+                    if (gameBackgroundImage) gameBackgroundImage.style.display = 'none';
+                }
+            };
+            gameBackgroundVideo.addEventListener('loadeddata', gameBackgroundVideo._onPlayLoadedData, { once: true });
+        }
+    }
+    if (gameBackgroundImage) {
+        gameBackgroundImage.style.display = (!showVideo && hasImage) ? 'block' : 'none';
+    }
+    if (gameBackgroundVideo && gameBackgroundVideo.readyState >= 1) {
         gameBackgroundVideo.currentTime = realTime;
         gameBackgroundVideo.playbackRate = speed;
     }
-    if (gameBackgroundVideo.paused && gameBackgroundVideo.readyState >= 1) {
+    if (gameBackgroundVideo && gameBackgroundVideo.paused && gameBackgroundVideo.readyState >= 1) {
         gameBackgroundVideo.play().catch(() => { });
     }
 
@@ -2172,7 +2234,7 @@ function restart() {
         gameBackgroundVideo.currentTime = 0;
     }
 
-    updateTimeControlUI();
+    updateTimeControlUI(true);
     draw();
 }
 
@@ -2294,7 +2356,7 @@ function toggleHide() {
         hideBtn.classList.remove("hide");
         hidden = false;
         _cssroot.style.setProperty('--playControls-height', 'var(--playControls-height-max)');
-        updateTimeControlUI();
+        updateTimeControlUI(true);
     } else {
         setSpeedPopoverOpen(false);
         _pc.classList.add("hide");
@@ -3825,7 +3887,7 @@ async function loadProject(projectId) {
 
         resize();
         draw();
-        updateTimeControlUI();
+        updateTimeControlUI(true);
 
         const list = await projectList();
         const proj = list.find(p => p.id === projectId);
@@ -4164,7 +4226,7 @@ function openSettings() {
                 },
                 {
                     id: 'timeDisplayCapsule', type: 'checkbox', label: 'settings.items.timeDisplayCapsule', def: defaultSettings.timeDisplayCapsule,
-                    apply: () => { updatePlayCapsules(); updateTimeControlUI(); }
+                    apply: () => { updatePlayCapsules(); updateTimeControlUI(true); }
                 },
                 {
                     id: 'timeDisplayCapsulePosition', type: 'dropdown', label: 'settings.items.timeDisplayCapsulePosition',
@@ -4344,7 +4406,7 @@ function openSettings() {
                     renderer.settings = settings;
                     updateOutlineUI();
                     updatePlayCapsules();
-                    updateTimeControlUI();
+                    updateTimeControlUI(true);
                     updateAutoPlayUI();
                     tryUpdateBackgroundBrightness();
                     resize();

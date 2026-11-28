@@ -13,6 +13,7 @@
     justify-content: center;
     align-items: center;
     box-shadow: 0px -1px 4px #00000040;
+    contain: layout style;
 }
 
 #playControls #playCapsulesContainer {
@@ -58,10 +59,19 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     pointer-events: none;
-    contain: layout style;
+    contain: layout style paint;
+}
+
+#playControls .time-display-capsule {
+    width: 158px;
+    height: 26px;
+    box-sizing: border-box;
+    contain: strict;
 }
 
 #playControls .speed-display-capsule {
+    min-width: 56px;
+    box-sizing: border-box;
     transition: background-color 150ms ease, color 150ms ease;
 }
 
@@ -80,6 +90,7 @@
     border-radius: 7px;
     border: none;
     outline: none;
+    contain: layout style;
 }
 
 #timeControl:hover::-webkit-slider-thumb {

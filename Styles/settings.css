@@ -1245,7 +1245,7 @@
     box-sizing: border-box;
     min-height: 0;
     flex: none;
-    background: #050508;
+    background: var(--player-background);
     border-radius: 6px;
     overflow: hidden;
     position: relative;

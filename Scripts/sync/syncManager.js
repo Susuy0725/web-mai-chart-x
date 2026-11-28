@@ -61,8 +61,8 @@ export class SyncManager {
             },
             onMessage: (msg, channel) => {
                 const handle = () => this._handleIncomingMessage(msg, channel);
-                if (['audio_start', 'audio_chunk', 'audio_end', 'audio_clear', 'projectLoaded'].includes(msg.action)) {
-                    this.incomingTransfer = (this.incomingTransfer ?? Promise.resolve()).then(handle).catch(this.sync.onError);
+                if (['projectBegin', 'chart', 'audio_start', 'audio_chunk', 'audio_end', 'audio_clear', 'projectLoaded'].includes(msg.action)) {
+                    this.incomingTransfer = (this.incomingTransfer ?? Promise.resolve()).then(handle).catch(error => { if (this.receivingProject) this.receivingProject.failed = true; this.sync.onError(error); });
                 } else {
                     Promise.resolve(handle()).catch(this.sync.onError);
                 }
@@ -134,14 +134,14 @@ export class SyncManager {
      */
     sendChart({ fumen = '', fullMaidata = '', title = '', artist = '', musicDelay = 0, selectedDifficulty = '3' }, channel) {
         if (!this.sync.isConnected()) return;
-        this.sync.sendChart({
+        if (!this.sync.sendChart({
             fumen,
             fullMaidata,
             title,
             artist,
             musicDelay,
             selectedDifficulty
-        }, channel);
+        }, channel)) throw new Error('Chart transfer failed');
     }
 
     /**
@@ -163,15 +163,16 @@ export class SyncManager {
         }
         if (!proj) return;
 
+        await this.sync.transferProject(channel, async channel => {
         if (proj.chart) {
             this.sendChart(proj.chart, channel);
         }
         if (proj.audio) {
-            await this.sendAudioFile(proj.audio, channel ? [channel] : undefined);
+            await this.sendAudioFile(proj.audio, [channel]);
         } else {
-            await this.audioTransfer.clear(channel ? [channel] : this.sync.channels());
+            await this.audioTransfer.clear([channel]);
         }
-        if (channel) this.sync.send({ action: 'projectLoaded' }, channel);
+        });
     }
 
     // =========================================================
@@ -210,13 +211,17 @@ export class SyncManager {
             return;
         }
 
+        if (msg.action === 'projectBegin') {
+            this.receivingProject = { id: msg.id, failed: false };
+            return;
+        }
         if (msg.action === 'projectLoaded') {
-            this.sync.send({ action: 'projectReady' });
+            if (this.receivingProject?.id === msg.id && !this.receivingProject.failed) this.sync.send({ action: 'projectReady', id: msg.id });
             return;
         }
 
         if (['play', 'pause', 'seek', 'restart', 'speed', 'chart'].includes(msg.action)) {
-            this._applyRemoteControl(msg);
+            await this._applyRemoteControl(msg);
             return;
         }
         if (msg.action === 'audio_clear') {
@@ -276,6 +281,7 @@ export class SyncManager {
                         completed: true
                     });
                 } catch (err) {
+                    if (this.receivingProject) this.receivingProject.failed = true;
                     console.error('[SyncManager Error assembling audio]', err);
                     this.showTransferProgress({
                         text: `音源載入失敗: ${err.message}`,
@@ -287,7 +293,7 @@ export class SyncManager {
         }
     }
 
-    _applyRemoteControl(msg) {
+    async _applyRemoteControl(msg) {
         this._isRemoteTriggered = true;
         try {
             if (msg.action === 'play') {
@@ -315,7 +321,7 @@ export class SyncManager {
             } else if (msg.action === 'chart') {
                 if (msg.data && typeof this.callbacks.onChart === 'function') {
                     // 譜面即時同步：靜默套用，不彈出任何視窗
-                    this.callbacks.onChart(msg.data);
+                    await this.callbacks.onChart(msg.data);
                 }
             }
         } finally {

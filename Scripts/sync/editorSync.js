@@ -89,7 +89,7 @@ class EditorSyncManager {
         const difficulty = this.editorContext.getDifficulty ? this.editorContext.getDifficulty() : '3';
         const fullMaidata = this.editorContext.getFullMaidata ? this.editorContext.getFullMaidata() : '';
 
-        this.sync.sendChart({
+        if (!this.sync.sendChart({
             fumen: fumenText,
             fullMaidata: fullMaidata,
             title: meta.title || '',
@@ -97,7 +97,7 @@ class EditorSyncManager {
             musicDelay: meta.offset || 0,
             selectedDifficulty: difficulty,
             ...(preservePlayback ? { preservePlayback: true } : {})
-        }, channel);
+        }, channel)) throw new Error('Chart transfer failed');
     }
 
     /**
@@ -113,14 +113,15 @@ class EditorSyncManager {
      */
     async pushCurrentProject(channel) {
         if (!this.sync.isConnected()) return;
+        await this.sync.transferProject(channel, async channel => {
         this.pushCurrentChart(channel, false);
         const bgm = this.editorContext?.getAudioFile ? this.editorContext.getAudioFile() : null;
         if (bgm) {
-            await this.sendAudioFile(bgm, channel ? [channel] : undefined);
+            await this.sendAudioFile(bgm, [channel]);
         } else {
-            await this.audioTransfer.clear(channel ? [channel] : this.sync.channels());
+            await this.audioTransfer.clear([channel]);
         }
-        if (channel) this.sync.send({ action: 'projectLoaded' }, channel);
+        });
     }
 
     /**

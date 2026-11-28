@@ -12,8 +12,7 @@ const SIGNAL_ERRORS = {
 };
 
 export function createWebRtcSync(options) {
-    const workerUrl = import.meta.env?.DEV ? location.origin : options.workerUrl;
-    return new RoomSync({ ...options, workerUrl });
+    return new RoomSync(options);
 }
 
 async function localDescription(pc, description) {
@@ -226,6 +225,26 @@ export class RoomSync {
         return sent;
     }
 
+    async transferProject(channel, sendProject) {
+        const targets = channel ? [channel] : this.channels();
+        await Promise.all(targets.map(async target => {
+            const peer = Array.from(this.peers.values()).find(item => item.channel === target);
+            const id = crypto.randomUUID();
+            if (peer) {
+                peer.projectReady = false;
+                peer.transferId = id;
+            }
+            const previous = target.projectTransfer;
+            const transfer = Promise.resolve(previous).catch(() => {}).then(async () => {
+                if (!this.send({ action: 'projectBegin', id }, target)) throw new Error('Project transfer disconnected');
+                await sendProject(target);
+                if (!this.send({ action: 'projectLoaded', id }, target)) throw new Error('Project transfer disconnected');
+            });
+            target.projectTransfer = transfer;
+            await transfer;
+        }));
+    }
+
     sendChart(data, channel) {
         return this.send({ action: 'chart', data }, channel);
     }
@@ -262,6 +281,7 @@ export class RoomSync {
                 this.onMessage(message, peer.channel);
                 return;
             case 'projectReady': {
+                if (!peer.transferId || message.id !== peer.transferId) return;
                 peer.projectReady = true;
                 if (!this.groupStart) this.sendPlaybackState(peer);
                 else if (!this.groupStart.members.has(peer)) peer.needsPlaybackState = true;

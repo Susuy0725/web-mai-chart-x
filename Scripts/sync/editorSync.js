@@ -173,6 +173,11 @@ class EditorSyncManager {
             simpleToast({ content: t('settings.connection.toastConnected') || '已成功建立 P2P 直連！', type: 'success', timeout: 3000 });
         } else if (status === 'disconnected') {
             this._isRemoteTriggered = false;
+            if (detail === 'allMembersLeft') {
+                simpleToast({ content: t('settings.connection.allMembersLeft') || '所有成員已離開，房間已關閉', type: 'info', timeout: 2500 });
+            } else if (detail === 'joinClosed') {
+                simpleToast({ content: t('settings.connection.pairExpired') || '配對已逾時', type: 'info', timeout: 2500 });
+            }
         }
 
         this.lastStatus = status;
@@ -232,25 +237,43 @@ class EditorSyncManager {
      */
     openSyncModal() {
         const container = document.createElement('div');
-        container.style.cssText = 'display:flex; flex-direction:column; gap:16px; padding:6px 0; color:#eee; font-size:13px; min-width:300px;';
+        container.style.cssText = 'display:flex; flex-direction:column; gap:16px; padding:6px 0; color:#eee; font-size:13px; width:100%; box-sizing:border-box;';
 
         // 提示說明
         const desc = document.createElement('div');
         desc.style.cssText = 'color:#bbb; line-height:1.6;';
-        desc.textContent = t('settings.connection.modalDesc') || '請確保欲連線的裝置在同個Wi-Fi連線下並輸入以下配對碼';
+        desc.textContent = t('settings.connection.modalDesc') || '請在另一台裝置輸入以下房間號碼以建立同步連線';
         container.appendChild(desc);
 
-        // 配對碼大字體顯示區
+        // 房間號碼大字體顯示區
         const codeBox = document.createElement('div');
         codeBox.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; background:#18181c; border:1px solid #333; border-radius:8px; padding:18px 12px; gap:8px;';
 
         const codeTitle = document.createElement('span');
         codeTitle.style.cssText = 'font-size:12px; color:#888; letter-spacing:1px;';
-        codeTitle.textContent = t('settings.connection.pairCodeTitle') || '手機/iPad 配對碼 (6 位數字)';
+        codeTitle.textContent = t('settings.connection.pairCode') || '房間號碼';
 
         const codeText = document.createElement('div');
-        codeText.style.cssText = 'font-size:36px; font-weight:bold; letter-spacing:6px; color:#00e5ff; font-family:monospace; user-select:all;';
+        codeText.style.cssText = 'font-size:36px; font-weight:bold; letter-spacing:6px; color:#00e5ff; font-family:monospace; user-select:all; cursor:pointer;';
+        codeText.setAttribute('role', 'button');
+        codeText.tabIndex = 0;
         codeText.textContent = this.sync.roomCode || '------';
+        const copyPairCode = async () => {
+            if (!this.sync.roomCode) return;
+            try {
+                await navigator.clipboard?.writeText(this.sync.roomCode);
+                simpleToast({ content: t('settings.connection.pairCodeCopied') || '已複製房間號碼', type: 'success', timeout: 1500 });
+            } catch (error) {
+                console.warn('[Sync] Failed to copy room code', error);
+            }
+        };
+        codeText.addEventListener('click', copyPairCode);
+        codeText.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                copyPairCode();
+            }
+        });
 
         const countdownLabel = document.createElement('div');
         countdownLabel.style.cssText = 'font-size:11px; color:#aaa; font-family:monospace; margin-top:2px; display:none;';
@@ -270,7 +293,7 @@ class EditorSyncManager {
                 if (remaining <= 0) {
                     clearInterval(countdownTimer);
                     countdownTimer = null;
-                    countdownLabel.textContent = t('settings.connection.countdownExpired') || '配對碼已逾期';
+                    countdownLabel.textContent = t('settings.connection.countdownExpired') || '房間號碼已逾期';
                     countdownLabel.style.color = '#ff5252';
                 }
             };
@@ -288,7 +311,7 @@ class EditorSyncManager {
 
         const statusLabel = document.createElement('div');
         statusLabel.style.cssText = 'font-size:12px; color:#ffab00; margin-top:4px;';
-        statusLabel.textContent = this.sync.isConnected() ? (t('settings.connection.statusConnected', { target: t('settings.connection.p2pDirect') || 'P2P 直連' }) || '狀態：已連線 (P2P 直連)') : (this.sync.roomCode ? (t('settings.connection.waitingClient') || '請在手機 _play 設定中輸入此配對碼') : (t('settings.connection.promptGenCode') || '點擊下方按鈕產生配對碼'));
+        statusLabel.textContent = this.sync.isConnected() ? (t('settings.connection.statusConnected') || '已連線') : (this.sync.roomCode ? (t('settings.connection.waitingClient') || '請在手機 _play 設定中輸入此房間號碼') : (t('settings.connection.promptGenCode') || '點擊下方按鈕開始配對'));
 
         codeBox.appendChild(codeTitle);
         codeBox.appendChild(codeText);
@@ -303,51 +326,136 @@ class EditorSyncManager {
         const actionBtn = document.createElement('button');
         actionBtn.className = 'popup-button';
         actionBtn.style.cssText = 'flex:1; padding:8px 16px; font-size:13px; font-weight:bold; cursor:pointer; background:#4a90e2; color:#fff; border:none; border-radius:4px; transition:background 0.2s;';
-        actionBtn.textContent = this.sync.isConnected() ? (t('settings.connection.btnDisconnect') || '中斷連線') : (this.sync.roomCode ? (t('settings.connection.btnRegen') || '重新產生配對碼') : (t('settings.connection.btnGen') || '產生配對碼'));
+        actionBtn.textContent = this.sync.isConnected() ? (t('settings.connection.btnDisconnect') || '中斷連線') : (this.sync.roomCode ? (t('settings.connection.btnRegen') || '重新產生房間號碼') : (t('settings.connection.btnGen') || '開始配對'));
 
         const pushProjectBtn = document.createElement('button');
         pushProjectBtn.className = 'popup-button';
-        pushProjectBtn.style.cssText = 'padding:8px 14px; font-size:13px; cursor:pointer; background:#333; color:#eee; border:1px solid #555; border-radius:4px; display:' + (this.sync.isConnected() ? 'block' : 'none') + ';';
-        pushProjectBtn.textContent = t('settings.connection.btnManualPush') || '手動同步專案';
+        pushProjectBtn.style.cssText = 'flex:1; padding:8px 14px; font-size:13px; cursor:pointer; background:#333; color:#eee; border:1px solid #555; border-radius:4px; display:' + (this.sync.isConnected() ? 'block' : 'none') + ';';
+        pushProjectBtn.textContent = t('settings.connection.btnManualPush') || '同步資料';
         pushProjectBtn.addEventListener('click', () => {
             this.pushCurrentProject().catch(error => this.sync.onError(error));
             simpleToast({ content: t('settings.connection.manualPushed') || '已發送專案至手機', type: 'success', timeout: 1500 });
         });
 
-        this._updateModalUI = () => {
+        let popup = null;
+        let currentButtonMode = null;
+        const syncPopupButtons = () => {
+            if (!popup) return;
+            const phase = this.sync.phase();
             const connected = this.sync.isConnected();
-            const hasCode = !!this.sync.roomCode;
+            const mode = phase === 'idle'
+                ? 'idle'
+                : phase === 'pairing'
+                    ? (connected ? 'pairing-connected' : 'pairing-waiting')
+                    : 'connected';
+            if (mode === currentButtonMode) return;
+            currentButtonMode = mode;
+            if (mode === 'idle') {
+                popup.setButtons([{
+                    text: t('popup.close') || '關閉',
+                    hideOnClick: true
+                }]);
+            } else if (mode === 'pairing-waiting') {
+                popup.setButtons([{
+                    text: t('settings.connection.cancelPairing') || '取消配對',
+                    onClick: (ctx) => {
+                        this.sync.disconnect();
+                        ctx.close();
+                    }
+                }]);
+            } else if (mode === 'pairing-connected') {
+                popup.setButtons([
+                    {
+                        text: t('settings.connection.cancelPairing') || '取消配對',
+                        onClick: (ctx) => {
+                            this.sync.disconnect();
+                            ctx.close();
+                        }
+                    },
+                    {
+                        text: t('settings.connection.finishPairing') || '完成配對',
+                        onClick: (ctx) => {
+                            this.sync.finishPairing();
+                            ctx.close();
+                        }
+                    }
+                ]);
+            } else {
+                popup.setButtons([
+                    {
+                        text: t('settings.connection.closeRoom') || '關閉房間',
+                        onClick: () => {
+                            stopCountdown();
+                            this.sync.disconnect();
+                            this._updateModalUI?.();
+                            simpleToast({ content: t('settings.connection.disconnectedToast') || '已中斷連線', type: 'info', timeout: 1500 });
+                        }
+                    },
+                    {
+                        text: t('popup.close') || '關閉',
+                        hideOnClick: true
+                    }
+                ]);
+            }
+        };
+
+        this._updateModalUI = () => {
+            const phase = this.sync.phase();
+            const connected = this.sync.isConnected();
 
             codeText.textContent = this.sync.roomCode || '------';
 
-            if (hasCode) {
+            if (phase === 'idle') {
+                stopCountdown();
+                desc.style.display = 'block';
+                codeBox.style.display = 'flex';
+                codeTitle.style.display = '';
+                codeText.style.display = '';
+                codeText.style.cursor = 'default';
+                statusLabel.textContent = t('settings.connection.promptGenCode') || '點擊下方按鈕開始配對';
+                statusLabel.style.color = '#888';
+                btnRow.style.display = 'flex';
+                actionBtn.style.display = 'block';
+                actionBtn.textContent = t('settings.connection.btnGen') || '開始配對';
+                actionBtn.style.background = '#4a90e2';
+                pushProjectBtn.style.display = 'none';
+            } else if (phase === 'pairing') {
+                desc.style.display = 'block';
+                codeBox.style.display = 'flex';
+                codeTitle.style.display = '';
+                codeText.style.display = '';
+                codeText.style.cursor = 'pointer';
                 const ready = this.sync.channels().length + 1;
                 statusLabel.textContent = t('settings.connection.roomOccupancy', {
                     occupied: Math.max(ready, this.sync.occupied), connected: ready
                 });
                 statusLabel.style.color = connected ? '#00e676' : '#ffab00';
-                actionBtn.textContent = t('settings.connection.closeRoom');
-                actionBtn.style.background = '#d32f2f';
+                btnRow.style.display = connected ? 'flex' : 'none';
+                actionBtn.style.display = 'none';
                 pushProjectBtn.style.display = connected ? 'block' : 'none';
-                startCountdown(this.sync.expiresAt);
+                if (this.sync.expiresAt) startCountdown(this.sync.expiresAt);
+                else stopCountdown();
             } else {
                 stopCountdown();
-                statusLabel.textContent = t('settings.connection.promptGenCode') || '點擊「產生配對碼」以開始連線';
-                statusLabel.style.color = '#888';
-                actionBtn.textContent = t('settings.connection.btnGen') || '產生配對碼';
-                actionBtn.style.background = '#4a90e2';
-                pushProjectBtn.style.display = 'none';
+                desc.style.display = 'none';
+                codeBox.style.display = 'flex';
+                codeTitle.style.display = '';
+                codeText.style.display = '';
+                codeText.style.cursor = this.sync.roomCode ? 'pointer' : 'default';
+                const ready = this.sync.channels().length + 1;
+                statusLabel.textContent = t('settings.connection.roomOccupancy', {
+                    occupied: ready, connected: ready
+                });
+                statusLabel.style.color = '#00e676';
+                btnRow.style.display = 'flex';
+                actionBtn.style.display = 'none';
+                pushProjectBtn.style.display = 'block';
             }
+            syncPopupButtons();
         };
 
         actionBtn.addEventListener('click', async () => {
-            if (this.sync.roomCode) {
-                stopCountdown();
-                this.sync.disconnect();
-                this._updateModalUI?.();
-                simpleToast({ content: t('settings.connection.disconnectedToast') || '已中斷連線', type: 'info', timeout: 1500 });
-                return;
-            }
+            if (this.sync.phase() !== 'idle') return;
 
             actionBtn.disabled = true;
             actionBtn.textContent = t('settings.connection.generating') || '產生中...';
@@ -355,10 +463,10 @@ class EditorSyncManager {
                 const code = await this.sync.createRoom();
                 codeText.textContent = code;
                 this._updateModalUI?.();
-                simpleToast({ content: `${t('settings.connection.pairCodeReady') || '配對碼已就緒'}: ${code}`, type: 'success', timeout: 3000 });
+                simpleToast({ content: `${t('settings.connection.pairCodeReady') || '房間號碼已就緒'}: ${code}`, type: 'success', timeout: 3000 });
             } catch (err) {
                 stopCountdown();
-                simpleToast({ content: t('settings.connection.genCodeFailed', { error: err.message }) || `產生配對碼失敗: ${err.message}`, type: 'error', timeout: 3500 });
+                simpleToast({ content: t('settings.connection.genCodeFailed', { error: err.message }) || `產生房間號碼失敗: ${err.message}`, type: 'error', timeout: 3500 });
                 this._updateModalUI?.();
             } finally {
                 actionBtn.disabled = false;
@@ -369,28 +477,20 @@ class EditorSyncManager {
         btnRow.appendChild(pushProjectBtn);
         container.appendChild(btnRow);
 
-        // 如果尚未有房間碼且未連線，自動嘗試產生配對碼
-        if (!this.sync.roomCode && !this.sync.isConnected()) {
-            actionBtn.click();
-        }
-
         this._updateModalUI();
-        popupWindow({
+        popup = popupWindow({
             title: t('menu.toolsSyncPlay') || '同步至 _play (手機)',
             customContent: container,
-            width: 380,
-            maxWidth: 440,
-            buttons: [
-                {
-                    text: t('popup.close') || '關閉',
-                    hideOnClick: true
-                }
-            ],
+            width: 400,
+            maxWidth: '90%',
+            unclosable: true,
+            buttons: [],
             onClose: () => {
                 stopCountdown();
                 this._updateModalUI = null;
             }
         });
+        syncPopupButtons();
     }
 }
 

@@ -185,6 +185,11 @@ export class SyncManager {
             this._incomingAudioMeta = null;
             this._incomingAudioCount = 0;
             this._isRemoteTriggered = false;
+            if (detail === 'allMembersLeft') {
+                simpleToast({ content: t('settings.connection.allMembersLeft') || '所有成員已離開，房間已關閉', type: 'info', timeout: 2500 });
+            } else if (detail === 'joinClosed') {
+                simpleToast({ content: t('settings.connection.pairExpired') || '配對已逾時', type: 'info', timeout: 2500 });
+            }
             if (this._transferCardEl) {
                 this._transferCardEl.style.opacity = '0';
                 setTimeout(() => {
@@ -421,25 +426,7 @@ export class SyncManager {
             return row;
         };
 
-        // 1. 連線狀態列
-        const statusRow = document.createElement('div');
-        statusRow.className = 'popup-setting-row';
-        const statusLabel = document.createElement('span');
-        statusLabel.className = 'popup-setting-label';
-        statusLabel.dataset.i18n = 'settings.connection.statusLabel';
-        statusLabel.textContent = t('settings.connection.statusLabel');
-
-        const statusValue = document.createElement('span');
-        statusValue.style.fontSize = '14px';
-        statusValue.style.fontWeight = '500';
-        statusValue.style.color = '#888';
-        statusValue.textContent = t('settings.connection.statusDisconnected') || '狀態：未連線';
-
-        statusRow.appendChild(statusLabel);
-        statusRow.appendChild(statusValue);
-        container.appendChild(statusRow);
-
-        // 2. 同步角色選擇 (接收端 / 發起端)
+        // 1. 同步角色選擇 (接收端 / 發起端)
         const roleSelect = document.createElement('select');
         roleSelect.className = 'popup-setting-select';
         roleSelect.style.padding = '6px 10px';
@@ -455,7 +442,8 @@ export class SyncManager {
         roleSelect.appendChild(optHost);
         roleSelect.value = this.role;
 
-        container.appendChild(createRow(t('settings.connection.syncRole') || '同步角色', roleSelect));
+        const roleRow = createRow(t('settings.connection.syncRole') || '同步角色', roleSelect);
+        container.appendChild(roleRow);
 
         // 3. Client (接收端) 面板
         const clientBox = document.createElement('div');
@@ -465,6 +453,9 @@ export class SyncManager {
 
         const codeInput = document.createElement('input');
         codeInput.type = 'text';
+        codeInput.inputMode = 'numeric';
+        codeInput.autocomplete = 'one-time-code';
+        codeInput.pattern = '[0-9]*';
         codeInput.className = 'popup-setting-input';
         codeInput.maxLength = 6;
         codeInput.placeholder = '000000';
@@ -473,15 +464,23 @@ export class SyncManager {
         codeInput.style.textAlign = 'center';
         codeInput.style.fontSize = '18px';
         codeInput.style.width = '140px';
+        codeInput.addEventListener('input', () => {
+            codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
+        });
 
-        clientBox.appendChild(createRow(t('settings.connection.pairCode') || '配對碼', codeInput));
+        clientBox.appendChild(createRow(t('settings.connection.pairCode') || '房間號碼', codeInput));
 
         const joinBtn = document.createElement('button');
         joinBtn.className = 'popup-button';
         joinBtn.textContent = t('settings.connection.joinBtn') || '手動加入連線';
-        joinBtn.style.padding = '8px 16px';
-        joinBtn.style.width = '100%';
+        joinBtn.style.cssText = 'width:100%; padding:8px 16px; font-size:13px; font-weight:bold; cursor:pointer; background:#4a90e2; color:#fff; border:none; border-radius:4px; transition:background 0.2s;';
         clientBox.appendChild(joinBtn);
+        codeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !joinBtn.disabled) {
+                e.preventDefault();
+                joinBtn.click();
+            }
+        });
 
         container.appendChild(clientBox);
 
@@ -491,36 +490,62 @@ export class SyncManager {
         hostBox.style.flexDirection = 'column';
         hostBox.style.gap = '10px';
 
-        const hostCodeDisplay = document.createElement('span');
-        hostCodeDisplay.style.fontSize = '20px';
-        hostCodeDisplay.style.fontWeight = 'bold';
-        hostCodeDisplay.style.letterSpacing = '6px';
-        hostCodeDisplay.style.color = '#00e5ff';
+        const hostCodeDisplay = document.createElement('div');
+        hostCodeDisplay.style.cssText = 'font-size:36px; font-weight:bold; letter-spacing:6px; color:#00e5ff; font-family:monospace; user-select:all; cursor:pointer;';
+        hostCodeDisplay.setAttribute('role', 'button');
+        hostCodeDisplay.tabIndex = 0;
         hostCodeDisplay.textContent = this.sync.roomCode || '------';
+        const copyHostCode = async () => {
+            if (!this.sync.roomCode) return;
+            try {
+                await navigator.clipboard?.writeText(this.sync.roomCode);
+                simpleToast({ content: t('settings.connection.pairCodeCopied') || '已複製房間號碼', type: 'success', timeout: 1500 });
+            } catch (error) {
+                console.warn('[Sync] Failed to copy room code', error);
+            }
+        };
+        hostCodeDisplay.addEventListener('click', copyHostCode);
+        hostCodeDisplay.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                copyHostCode();
+            }
+        });
+
+        const hostCodeCard = document.createElement('div');
+        hostCodeCard.style.cssText = 'display:none; flex-direction:column; align-items:center; justify-content:center; background:#18181c; border:1px solid #333; border-radius:8px; padding:18px 12px; gap:8px;';
+        const hostCodeTitle = document.createElement('span');
+        hostCodeTitle.style.cssText = 'font-size:12px; color:#888; letter-spacing:1px;';
+        hostCodeTitle.textContent = t('settings.connection.pairCode') || '房間號碼';
+        const cardCountdown = document.createElement('div');
+        cardCountdown.style.cssText = 'font-size:11px; color:#aaa; font-family:monospace; margin-top:2px; display:none;';
+        const cardStatus = document.createElement('div');
+        cardStatus.style.cssText = 'font-size:12px; color:#ffab00; margin-top:4px;';
+        hostCodeCard.append(hostCodeTitle, hostCodeDisplay, cardCountdown, cardStatus);
+        container.appendChild(hostCodeCard);
 
         const createCodeBtn = document.createElement('button');
         createCodeBtn.className = 'popup-button';
-        createCodeBtn.textContent = t('settings.connection.createBtn') || '產生配對碼';
-        createCodeBtn.style.padding = '6px 14px';
-
-        const hostRow = document.createElement('div');
-        hostRow.className = 'popup-setting-row';
-        hostRow.appendChild(hostCodeDisplay);
-        hostRow.appendChild(createCodeBtn);
-        hostBox.appendChild(createRow(t('settings.connection.hostStart') || '發起連線', hostRow));
+        createCodeBtn.textContent = t('settings.connection.createBtn') || '開始配對';
+        createCodeBtn.style.cssText = 'width:100%; padding:8px 16px; font-size:13px; font-weight:bold; cursor:pointer; background:#4a90e2; color:#fff; border:none; border-radius:4px; transition:background 0.2s;';
+        hostBox.appendChild(createCodeBtn);
 
         container.appendChild(hostBox);
 
         // 5. 手動同步專案按鈕
         const pushProjectBtn = document.createElement('button');
         pushProjectBtn.className = 'popup-button';
-        pushProjectBtn.textContent = t('settings.connection.btnManualPush') || '手動同步專案';
+        pushProjectBtn.textContent = t('settings.connection.btnManualPush') || '同步資料';
         pushProjectBtn.style.padding = '8px 16px';
         pushProjectBtn.style.width = '100%';
         pushProjectBtn.style.backgroundColor = '#333';
         pushProjectBtn.style.border = '1px solid #555';
         pushProjectBtn.style.display = this.sync.isConnected() ? 'block' : 'none';
         pushProjectBtn.addEventListener('click', async () => {
+            if (this.sync.role === 'client') {
+                this.requestChart();
+                return;
+            }
             pushProjectBtn.disabled = true;
             try {
                 await this.pushProject();
@@ -533,57 +558,136 @@ export class SyncManager {
         });
         container.appendChild(pushProjectBtn);
 
-        // 6. 中斷連線按鈕
-        const disconnectBtn = document.createElement('button');
-        disconnectBtn.className = 'popup-button';
-        disconnectBtn.textContent = t('settings.connection.disconnect') || '中斷連線';
-        disconnectBtn.style.padding = '8px 16px';
-        disconnectBtn.style.width = '100%';
-        disconnectBtn.style.backgroundColor = '#d32f2f';
-        disconnectBtn.style.display = this.sync.isConnected() ? 'block' : 'none';
-        container.appendChild(disconnectBtn);
+        let popup = null;
+        let currentButtonKey = null;
+        const syncPopupButtons = () => {
+            if (!popup) return;
+            const phase = this.sync.phase();
+            const isHost = this.sync.role === 'host';
+            const mode = phase === 'idle'
+                ? 'idle'
+                : phase === 'pairing'
+                    ? (isHost && this.sync.isConnected() ? 'pairing-connected' : 'pairing-waiting')
+                    : 'connected';
+            const buttonKey = `${mode}:${this.sync.role || ''}`;
+            if (buttonKey === currentButtonKey) return;
+            currentButtonKey = buttonKey;
+            if (mode === 'idle') {
+                popup.setButtons([{
+                    text: t('popup.close') || '關閉',
+                    hideOnClick: true
+                }]);
+            } else if (mode === 'pairing-waiting') {
+                popup.setButtons([{
+                    text: t('settings.connection.cancelPairing') || '取消配對',
+                    onClick: (ctx) => {
+                        this.sync.disconnect();
+                        ctx.close();
+                    }
+                }]);
+            } else if (mode === 'pairing-connected') {
+                popup.setButtons([
+                    {
+                        text: t('settings.connection.cancelPairing') || '取消配對',
+                        onClick: (ctx) => {
+                            this.sync.disconnect();
+                            ctx.close();
+                        }
+                    },
+                    {
+                        text: t('settings.connection.finishPairing') || '完成配對',
+                        onClick: (ctx) => {
+                            this.sync.finishPairing();
+                            ctx.close();
+                        }
+                    }
+                ]);
+            } else {
+                popup.setButtons([
+                    {
+                        text: t(isHost ? 'settings.connection.closeRoom' : 'settings.connection.leaveRoom'),
+                        onClick: () => {
+                            this.sync.disconnect();
+                            renderSyncUI();
+                            simpleToast({ content: t('settings.connection.webrtcDisconnectedToast') || '已中斷 WebRTC 連線', type: 'info', timeout: 1500 });
+                        }
+                    },
+                    {
+                        text: t('popup.close') || '關閉',
+                        hideOnClick: true
+                    }
+                ]);
+            }
+        };
 
         let roomTimer = null;
         const renderSyncUI = () => {
-            const isWrtc = this.sync.isConnected();
-            const isConnecting = this.sync.status === 'connecting';
+            const phase = this.sync.phase();
+            const isHost = this.sync.role === 'host';
+            const connected = this.sync.isConnected();
+            const displayCode = this.sync.roomCode || (phase === 'pairing' && !isHost ? codeInput.value.trim() : '') || '------';
 
-            if (isWrtc) {
-                const codeStr = this.sync.roomCode ? ` #${this.sync.roomCode}` : '';
-                statusValue.textContent = t('settings.connection.webrtcConnected', { code: codeStr }) || `狀態：已連線 (P2P 房間${codeStr})`;
-                statusValue.style.color = '#00e676';
-                disconnectBtn.style.display = 'block';
-                pushProjectBtn.style.display = 'block';
-            } else if (isConnecting) {
-                statusValue.textContent = t('settings.connection.statusConnecting') || '狀態：正在連線...';
-                statusValue.style.color = '#ffab00';
-                disconnectBtn.style.display = 'block';
-                pushProjectBtn.style.display = 'none';
+            hostCodeDisplay.textContent = displayCode;
+            pushProjectBtn.style.display = connected ? 'block' : 'none';
+
+            if (phase === 'idle') {
+                roleRow.style.display = 'flex';
+                clientBox.style.display = this.role === 'client' ? 'flex' : 'none';
+                hostBox.style.display = this.role === 'host' ? 'flex' : 'none';
+                hostCodeCard.style.display = this.role === 'host' ? 'flex' : 'none';
+                hostCodeDisplay.style.cursor = 'default';
+                cardCountdown.style.display = 'none';
+                cardStatus.textContent = t('settings.connection.promptGenCode') || '點擊下方按鈕開始配對';
+                cardStatus.style.color = '#888';
+            } else if (phase === 'pairing') {
+                roleRow.style.display = 'none';
+                clientBox.style.display = 'none';
+                hostBox.style.display = 'none';
+                hostCodeCard.style.display = 'flex';
+                hostCodeDisplay.style.cursor = this.sync.roomCode ? 'pointer' : 'default';
+                if (isHost) {
+                    const ready = this.sync.channels().length + 1;
+                    cardStatus.textContent = t('settings.connection.roomOccupancy', {
+                        occupied: Math.max(ready, this.sync.occupied), connected: ready
+                    });
+                    cardStatus.style.color = connected ? '#00e676' : '#ffab00';
+                    if (this.sync.expiresAt) {
+                        const remaining = Math.max(0, Math.ceil((this.sync.expiresAt - Date.now()) / 1000));
+                        const time = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+                        cardCountdown.style.display = 'block';
+                        if (remaining <= 0) {
+                            cardCountdown.textContent = t('settings.connection.countdownExpired') || '房間號碼已逾期';
+                            cardCountdown.style.color = '#ff5252';
+                        } else {
+                            cardCountdown.textContent = t('settings.connection.countdownRemaining', { time }) || `${time} remaining`;
+                            cardCountdown.style.color = '#aaa';
+                        }
+                    } else {
+                        cardCountdown.style.display = 'none';
+                    }
+                } else {
+                    cardCountdown.style.display = 'none';
+                    cardStatus.textContent = t('settings.connection.statusConnecting') || '狀態：正在連線...';
+                    cardStatus.style.color = '#ffab00';
+                }
             } else {
-                statusValue.textContent = t('settings.connection.statusDisconnected') || '狀態：未連線';
-                statusValue.style.color = '#888';
-                disconnectBtn.style.display = 'none';
-                pushProjectBtn.style.display = 'none';
+                roleRow.style.display = 'none';
+                clientBox.style.display = 'none';
+                hostBox.style.display = 'none';
+                hostCodeCard.style.display = 'flex';
+                hostCodeDisplay.style.cursor = this.sync.roomCode ? 'pointer' : 'default';
+                cardCountdown.style.display = 'none';
+                cardStatus.style.color = '#00e676';
+                if (isHost) {
+                    const ready = this.sync.channels().length + 1;
+                    cardStatus.textContent = t('settings.connection.roomOccupancy', {
+                        occupied: ready, connected: ready
+                    });
+                } else {
+                    cardStatus.textContent = t('settings.connection.statusConnected') || '已連線';
+                }
             }
-
-            hostCodeDisplay.textContent = this.sync.roomCode || '------';
-            const active = this.sync.status !== 'disconnected';
-            roleSelect.disabled = active;
-            joinBtn.disabled = active;
-            createCodeBtn.disabled = active;
-            pushProjectBtn.style.display = this.sync.role === 'host' && isWrtc ? 'block' : 'none';
-            disconnectBtn.textContent = t(this.sync.role === 'host'
-                ? 'settings.connection.closeRoom' : 'settings.connection.leaveRoom');
-            if (this.sync.role === 'host' && this.sync.expiresAt) {
-                const remaining = Math.max(0, Math.ceil((this.sync.expiresAt - Date.now()) / 1000));
-                const time = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
-                const connected = this.sync.channels().length + 1;
-                const occupancy = t('settings.connection.roomOccupancy', {
-                    occupied: Math.max(connected, this.sync.occupied), connected
-                });
-                const countdown = t(remaining ? 'settings.connection.countdownRemaining' : 'settings.connection.countdownExpired', { time });
-                statusValue.textContent = `${occupancy} · ${countdown}`;
-            }
+            syncPopupButtons();
         };
 
         this._modalUpdater = renderSyncUI;
@@ -593,8 +697,7 @@ export class SyncManager {
         roleSelect.addEventListener('change', (e) => {
             this.role = e.target.value;
             localStorage.setItem('wmcx_webrtc_role', this.role);
-            clientBox.style.display = this.role === 'client' ? 'flex' : 'none';
-            hostBox.style.display = this.role === 'host' ? 'flex' : 'none';
+            renderSyncUI();
         });
 
         joinBtn.addEventListener('click', async () => {
@@ -603,7 +706,7 @@ export class SyncManager {
             }
             const code = codeInput.value.trim();
             if (!/^\d{6}$/.test(code)) {
-                simpleToast({ content: t('settings.connection.pairCodePlaceholder') || '請輸入完整的 6 位數配對碼', type: 'warning', timeout: 2000 });
+                simpleToast({ content: t('settings.connection.pairCodePlaceholder') || '請輸入完整的 6 位數房間號碼', type: 'warning', timeout: 2000 });
                 return;
             }
             joinBtn.disabled = true;
@@ -627,38 +730,30 @@ export class SyncManager {
             try {
                 const code = await this.sync.createRoom();
                 hostCodeDisplay.textContent = code;
-                simpleToast({ content: t('settings.connection.toastPairCodeReady', { code }) || `配對碼 ${code} 已就緒，請在另一端輸入`, type: 'success', timeout: 3000 });
+                simpleToast({ content: t('settings.connection.toastPairCodeReady', { code }) || `房間號碼 ${code} 已就緒，請在另一端輸入`, type: 'success', timeout: 3000 });
             } catch (e) {
                 simpleToast({ content: `建立失敗: ${e.message}`, type: 'error', timeout: 3000 });
             } finally {
                 createCodeBtn.disabled = false;
-                createCodeBtn.textContent = t('settings.connection.regenerateBtn') || '重新產生';
+                createCodeBtn.textContent = t('settings.connection.createBtn') || '開始配對';
                 renderSyncUI();
             }
         });
 
-        disconnectBtn.addEventListener('click', () => {
-            this.sync.disconnect();
-            renderSyncUI();
-            simpleToast({ content: t('settings.connection.webrtcDisconnectedToast') || '已中斷 WebRTC 連線', type: 'info', timeout: 1500 });
-        });
-
-        return popupWindow({
+        popup = popupWindow({
             title: options.title || t('settings.connection.syncView') || '設定同步檢視',
             customContent: container,
-            width: '90%',
-            maxWidth: '440px',
-            buttons: [
-                {
-                    text: t('popup.close') || '關閉',
-                    hideOnClick: true
-                }
-            ],
+            width: 400,
+            maxWidth: '90%',
+            unclosable: true,
+            buttons: [],
             onClose: () => {
                 clearInterval(roomTimer);
                 this._modalUpdater = null;
             }
         });
+        syncPopupButtons();
+        return popup;
     }
 
     updateButtonUI(connectionBtn) {

@@ -88,7 +88,7 @@ export class SyncRoom {
         }
     }
 
-    webSocketMessage(socket, raw) {
+    async webSocketMessage(socket, raw) {
         const host = this.host;
         if (!host) return;
         if (typeof raw !== 'string' || raw.length > MAX_SIGNAL_LENGTH) {
@@ -113,7 +113,7 @@ export class SyncRoom {
             delete state.members[memberId];
             this.updateHost(host, state);
             this.memberSocket(memberId)?.close(1000, 'slotReleased');
-            this.finishIfClosed(host, state);
+            if (!(await this.finishIfClosed(host, state))) await this.syncAlarm(host, state);
             return;
         }
 
@@ -133,27 +133,28 @@ export class SyncRoom {
             member.phase = 'connected';
             this.updateHost(host, state);
             this.memberSocket(memberId)?.close(1000, 'paired');
-            this.finishIfClosed(host, state);
+            if (!(await this.finishIfClosed(host, state))) await this.syncAlarm(host, state);
         }
     }
 
-    webSocketClose(socket) {
-        this.removeSocket(socket);
+    async webSocketClose(socket) {
+        await this.removeSocket(socket);
         socket.close();
     }
 
-    webSocketError(socket) {
-        this.removeSocket(socket);
+    async webSocketError(socket) {
+        await this.removeSocket(socket);
         socket.close(1011, 'socketError');
     }
 
-    removeSocket(socket) {
+    async removeSocket(socket) {
         const attachment = socket.deserializeAttachment();
         if (!attachment) return;
         if ('expiresAt' in attachment) {
             for (const id of Object.keys(attachment.members)) {
                 this.memberSocket(id)?.close(1000, 'hostLeft');
             }
+            await this.ctx.storage.deleteAlarm();
             return;
         }
 
@@ -164,13 +165,39 @@ export class SyncRoom {
         if (!state.members[id] || state.members[id].phase === 'connected') return;
         delete state.members[id];
         this.updateHost(host, state);
-        this.finishIfClosed(host, state);
+        if (!(await this.finishIfClosed(host, state))) await this.syncAlarm(host, state);
     }
 
-    finishIfClosed(host, state) {
+    nextAlarmAt(state, now) {
+        const deadlines = Object.values(state.members)
+            .filter(member => member.phase !== 'connected')
+            .map(member => member.pairUntil);
+        if (state.expiresAt > now) deadlines.push(state.expiresAt);
+        return deadlines.length ? Math.min(...deadlines) : null;
+    }
+
+    async syncAlarm(host, state) {
+        const next = this.nextAlarmAt(state, Date.now());
+        if (next === null) {
+            if (state.alarmAt !== null) {
+                state.alarmAt = null;
+                host.serializeAttachment(state);
+                await this.ctx.storage.deleteAlarm();
+            }
+            return;
+        }
+        if (next !== state.alarmAt) {
+            state.alarmAt = next;
+            host.serializeAttachment(state);
+            await this.ctx.storage.setAlarm(next);
+        }
+    }
+
+    async finishIfClosed(host, state) {
         if (Date.now() < state.expiresAt) return false;
         if (Object.values(state.members).some(member => member.phase !== 'connected')) return false;
         host.close(1000, 'signalingComplete');
+        await this.ctx.storage.deleteAlarm();
         return true;
     }
 
@@ -180,12 +207,8 @@ export class SyncRoom {
         const state = host.deserializeAttachment();
         const now = Date.now();
         this.removeExpiredMembers(state, now);
-        if (this.finishIfClosed(host, state)) return;
-        const deadlines = Object.values(state.members)
-            .filter(member => member.phase !== 'connected')
-            .map(member => member.pairUntil);
-        if (state.expiresAt > now) deadlines.push(state.expiresAt);
-        state.alarmAt = Math.min(...deadlines);
+        if (await this.finishIfClosed(host, state)) return;
+        state.alarmAt = this.nextAlarmAt(state, now);
         this.updateHost(host, state);
         await this.ctx.storage.setAlarm(state.alarmAt);
     }

@@ -2661,6 +2661,10 @@
         margin-bottom: 0;
     }
 
+    .popup-page .popup-title:only-child {
+        padding-left: 10px;
+    }
+
     /* 進度條貼合在 AppBar 下方 */
     .popup-progress-container {
         margin-bottom: 10px;

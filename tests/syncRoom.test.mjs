@@ -51,7 +51,10 @@ function setup(t) {
                     const ctx = {
                         getWebSockets: tag => sockets.get(tag) || [],
                         acceptWebSocket: (socket, [tag]) => sockets.set(tag, [socket]),
-                        storage: { async setAlarm(at) { ctx.alarmAt = at; } }
+                        storage: {
+                            async setAlarm(at) { ctx.alarmAt = at; },
+                            async deleteAlarm() { ctx.alarmAt = null; }
+                        }
                     };
                     objects.set(code, ctx);
                 }
@@ -69,7 +72,14 @@ function setup(t) {
     };
     const room = code => new SyncRoom(objects.get(code));
     const message = (code, socket, data) => room(code).webSocketMessage(socket.peer, JSON.stringify(data));
-    return { request, room, message, setNow: value => { now = value; }, calls: () => calls };
+    return {
+        request,
+        room,
+        message,
+        setNow: value => { now = value; },
+        calls: () => calls,
+        alarmAt: code => objects.get(code)?.alarmAt
+    };
 }
 
 test('同時加入只保留三席，各成員只收到自己的 answer', async t => {
@@ -85,20 +95,20 @@ test('同時加入只保留三席，各成員只收到自己的 answer', async t
 
     const ids = members.map(peer => peer.messages[0].memberId);
     assert.equal(new Set(ids).size, 3);
-    members.forEach((peer, i) => app.message(code, peer, { type: 'offer', memberId: ids[0], sdp: `offer ${i}` }));
+    await Promise.all(members.map((peer, i) => app.message(code, peer, { type: 'offer', memberId: ids[0], sdp: `offer ${i}` })));
     assert.deepEqual(host.messages.filter(msg => msg.type === 'offer').map(msg => msg.memberId), ids);
-    ids.forEach((memberId, i) => app.message(code, host, { type: 'answer', memberId, sdp: `answer ${i}` }));
+    await Promise.all(ids.map((memberId, i) => app.message(code, host, { type: 'answer', memberId, sdp: `answer ${i}` })));
     members.forEach((peer, i) => {
         assert.deepEqual(peer.messages.filter(msg => msg.type === 'answer'), [
             { type: 'answer', memberId: ids[i], sdp: `answer ${i}` }
         ]);
     });
 
-    app.message(code, host, { type: 'connected', memberId: ids[0] });
+    await app.message(code, host, { type: 'connected', memberId: ids[0] });
     assert.equal(members[0].closeReason, 'paired');
-    app.room(code).webSocketClose(members[0].peer);
+    await app.room(code).webSocketClose(members[0].peer);
     assert.equal((await app.request(`join/${code}`)).messages[0].code, 'roomFull');
-    app.message(code, host, { type: 'release', memberId: ids[0] });
+    await app.message(code, host, { type: 'release', memberId: ids[0] });
     assert.equal((await app.request(`join/${code}`)).messages[0].type, 'joined');
 });
 
@@ -117,6 +127,7 @@ test('空房不輪詢，90 秒截止後仍可完成已保留的配對', async t 
     app.setNow(emptyRoom.expiresAt);
     await app.room(emptyRoom.code).alarm();
     assert.equal(empty.closeReason, 'signalingComplete');
+    assert.equal(app.alarmAt(emptyRoom.code), null);
     assert.equal(app.calls(), 1);
 
     const host = await app.request('create');
@@ -128,9 +139,39 @@ test('空房不輪詢，90 秒截止後仍可完成已保留的配對', async t 
     await app.room(code).alarm();
     assert.equal(host.readyState, 1);
     assert.equal((await app.request(`join/${code}`)).messages[0].code, 'joinClosed');
-    app.message(code, member, { type: 'offer', sdp: 'offer' });
-    app.message(code, host, { type: 'answer', memberId, sdp: 'answer' });
+    await app.message(code, member, { type: 'offer', sdp: 'offer' });
+    await app.message(code, host, { type: 'answer', memberId, sdp: 'answer' });
     assert.equal(member.messages.at(-1).sdp, 'answer');
-    app.message(code, host, { type: 'connected', memberId });
+    await app.message(code, host, { type: 'connected', memberId });
     assert.equal(host.closeReason, 'signalingComplete');
+    assert.equal(app.alarmAt(code), null);
+});
+
+test('配對完成與斷線時同步調整或刪除 alarm', async t => {
+    const app = setup(t);
+    const host = await app.request('create');
+    const [{ code, expiresAt }] = host.messages;
+    assert.equal(app.alarmAt(code), expiresAt);
+
+    app.setNow(2000);
+    const first = await app.request(`join/${code}`);
+    const [{ memberId: firstId, pairUntil: firstUntil }] = first.messages;
+    assert.equal(app.alarmAt(code), firstUntil);
+
+    app.setNow(5000);
+    const second = await app.request(`join/${code}`);
+    const [{ memberId: secondId, pairUntil: secondUntil }] = second.messages;
+    assert.equal(app.alarmAt(code), firstUntil);
+
+    await app.message(code, first, { type: 'offer', sdp: 'offer-1' });
+    await app.message(code, host, { type: 'answer', memberId: firstId, sdp: 'answer-1' });
+    await app.message(code, host, { type: 'connected', memberId: firstId });
+    assert.equal(app.alarmAt(code), secondUntil);
+
+    await app.room(code).webSocketClose(second.peer);
+    assert.equal(app.alarmAt(code), expiresAt);
+
+    await app.room(code).webSocketClose(host.peer);
+    assert.equal(app.alarmAt(code), null);
+    assert.equal(secondId !== firstId, true);
 });

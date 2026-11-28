@@ -130,9 +130,20 @@ export class RoomSync {
             socket.onclose = event => {
                 if (this.socket === socket) {
                     this.socket = null;
-                    const completed = event.reason === 'signalingComplete' || event.reason === 'paired';
-                    if (!this.isConnected() && !completed) this.disconnect();
-                    else this.refresh();
+                    if (this.role === 'client' && event.reason === 'paired') {
+                        this.refresh();
+                    } else if (event.reason === 'signalingComplete') {
+                        if (this.peers.size === 0) {
+                            this.disconnect('joinClosed');
+                        } else {
+                            this.expiresAt = null;
+                            this.refresh();
+                        }
+                    } else if (!this.isConnected()) {
+                        this.disconnect();
+                    } else {
+                        this.refresh();
+                    }
                 }
                 reject(new Error('roomUnavailable'));
             };
@@ -201,12 +212,16 @@ export class RoomSync {
         this.occupied = Math.max(this.channels().length + 1, this.occupied - 1);
         this.groupStart?.members.delete(peer);
         if (this.groupStart) this.commitIfReady(this.groupStart);
+        if (!this.isPairingOpen() && this.peers.size === 0) {
+            this.disconnect('allMembersLeft');
+            return;
+        }
         this.refresh();
     }
 
-    refresh() {
-        this.status = this.isConnected() ? 'connected' : this.role ? 'connecting' : 'disconnected';
-        this.onStatusChange(this.status);
+    refresh(detail = null) {
+        this.status = this.isConnected() ? 'connected' : (this.isPairingOpen() || this.peers.size > 0) ? 'connecting' : 'disconnected';
+        this.onStatusChange(this.status, detail);
     }
 
     send(message, channel = null) {
@@ -389,7 +404,26 @@ export class RoomSync {
         this.playbackStart.cancel();
     }
 
-    disconnect() {
+    phase() {
+        if (this.isPairingOpen() || (!this.isConnected() && this.peers.size > 0)) return 'pairing';
+        if (this.isConnected()) return 'connected';
+        return 'idle';
+    }
+
+    isPairingOpen() {
+        return Boolean(this.socket && this.socket.readyState <= WebSocket.OPEN);
+    }
+
+    finishPairing() {
+        const socket = this.socket;
+        this.socket = null;
+        socket?.close(1000, 'pairingFinished');
+        this.expiresAt = null;
+        this.occupied = this.channels().length + (this.role ? 1 : 0);
+        this.refresh();
+    }
+
+    disconnect(reason = null) {
         this.cancelStart();
         const socket = this.socket;
         this.socket = null;
@@ -405,6 +439,6 @@ export class RoomSync {
         this.roomCode = null;
         this.expiresAt = null;
         this.occupied = 0;
-        this.refresh();
+        this.refresh(reason);
     }
 }

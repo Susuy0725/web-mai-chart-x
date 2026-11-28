@@ -147,7 +147,7 @@ test('空房不輪詢，90 秒截止後仍可完成已保留的配對', async t 
     assert.equal(app.alarmAt(code), null);
 });
 
-test('配對完成與斷線時同步調整或刪除 alarm', async t => {
+test('加入、配對完成與成員斷線均沿用房間 alarm', async t => {
     const app = setup(t);
     const host = await app.request('create');
     const [{ code, expiresAt }] = host.messages;
@@ -155,18 +155,18 @@ test('配對完成與斷線時同步調整或刪除 alarm', async t => {
 
     app.setNow(2000);
     const first = await app.request(`join/${code}`);
-    const [{ memberId: firstId, pairUntil: firstUntil }] = first.messages;
-    assert.equal(app.alarmAt(code), firstUntil);
+    const [{ memberId: firstId }] = first.messages;
+    assert.equal(app.alarmAt(code), expiresAt);
 
     app.setNow(5000);
     const second = await app.request(`join/${code}`);
-    const [{ memberId: secondId, pairUntil: secondUntil }] = second.messages;
-    assert.equal(app.alarmAt(code), firstUntil);
+    const [{ memberId: secondId }] = second.messages;
+    assert.equal(app.alarmAt(code), expiresAt);
 
     await app.message(code, first, { type: 'offer', sdp: 'offer-1' });
     await app.message(code, host, { type: 'answer', memberId: firstId, sdp: 'answer-1' });
     await app.message(code, host, { type: 'connected', memberId: firstId });
-    assert.equal(app.alarmAt(code), secondUntil);
+    assert.equal(app.alarmAt(code), expiresAt);
 
     await app.room(code).webSocketClose(second.peer);
     assert.equal(app.alarmAt(code), expiresAt);
@@ -174,4 +174,16 @@ test('配對完成與斷線時同步調整或刪除 alarm', async t => {
     await app.room(code).webSocketClose(host.peer);
     assert.equal(app.alarmAt(code), null);
     assert.equal(secondId !== firstId, true);
+});
+
+test('30 秒截止時拒絕晚到的訊號並釋放席位', async t => {
+    const app = setup(t);
+    const host = await app.request('create');
+    const [{ code, expiresAt }] = host.messages;
+    const member = await app.request(`join/${code}`);
+    app.setNow(member.messages[0].pairUntil);
+    await app.message(code, member, { type: 'offer', sdp: 'late' });
+    assert.equal(member.closeReason, 'pairExpired');
+    assert.equal(host.messages.at(-1).occupied, 1);
+    assert.equal(app.alarmAt(code), expiresAt);
 });

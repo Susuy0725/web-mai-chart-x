@@ -2192,36 +2192,41 @@ const videoSeekDebounce = debounce((time) => {
     }
 }, 50);
 
+function seekPlayback(newTime) {
+    pausedTime = newTime;
+    realTime = newTime;
+    globalTime = realTime - musicDelay - getAdjustOffsetSec();
+    playStartTimestamp = null;
+
+    // 拖拽/跳轉時完整重置 Note 音效播放、劃軌進度與遊玩 Hit/判定狀態記錄
+    resetNotesForSeek(globalTime);
+    if (renderer) {
+        renderer.clearJudgeEffects();
+        renderer.clearHitEffects();
+    }
+
+    videoSeekDebounce(realTime);
+
+    if (playing) {
+        const speed = settings.playbackSpeed || 1;
+        startTime = performance.now() - (pausedTime * 1000 / speed);
+        audioManager.stopAllLongSounds();
+        audioManager.setPlaybackRate(speed);
+        audioManager.playBGM(realTime);
+    } else {
+        audioManager.stopAllLongSounds();
+        audioManager.clearSoundQueue();
+        audioManager.stopBGM();
+    }
+    updateTimeControlUI(true);
+    draw();
+}
+
 if (timeControl) {
     const handleSeek = () => {
-        const newTime = parseFloat(timeControl.value);
-        pausedTime = newTime;
-        realTime = newTime;
-        globalTime = realTime - musicDelay - getAdjustOffsetSec();
-        playStartTimestamp = null;
-
-        // 拖拽/跳轉時完整重置 Note 音效播放、劃軌進度與遊玩 Hit/判定狀態記錄
-        resetNotesForSeek(globalTime);
-        if (renderer) {
-            renderer.clearJudgeEffects();
-            renderer.clearHitEffects();
-        }
-
-        videoSeekDebounce(realTime);
-
-        if (playing) {
-            const speed = settings.playbackSpeed || 1;
-            startTime = performance.now() - (pausedTime * 1000 / speed);
-            audioManager.stopAllLongSounds();
-            audioManager.setPlaybackRate(speed);
-            audioManager.playBGM(realTime);
-        } else {
-            audioManager.stopAllLongSounds();
-            audioManager.clearSoundQueue();
-            audioManager.stopBGM();
-        }
-        updateTimeControlUI(true);
-        draw();
+        const time = parseFloat(timeControl.value);
+        seekPlayback(time);
+        syncManager.sendSeek(time);
     };
     timeControl.addEventListener("input", () => {
         timeControlSliding = true;

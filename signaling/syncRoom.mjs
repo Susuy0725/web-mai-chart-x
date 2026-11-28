@@ -57,11 +57,8 @@ export class SyncRoom {
         const pairUntil = now + PAIR_WINDOW_MS;
         const { server, response } = this.accept(memberId, { memberId });
         state.members[memberId] = { phase: 'joined', pairUntil };
-        const scheduleEarlier = pairUntil < state.alarmAt;
-        if (scheduleEarlier) state.alarmAt = pairUntil;
         this.updateHost(host, state);
         send(server, { type: 'joined', memberId, pairUntil });
-        if (scheduleEarlier) await this.ctx.storage.setAlarm(pairUntil);
         return response;
     }
 
@@ -113,11 +110,17 @@ export class SyncRoom {
             delete state.members[memberId];
             this.updateHost(host, state);
             this.memberSocket(memberId)?.close(1000, 'slotReleased');
-            if (!(await this.finishIfClosed(host, state))) await this.syncAlarm(host, state);
+            await this.finishIfClosed(host, state);
             return;
         }
 
-        if (member.phase === 'connected' || Date.now() >= member.pairUntil) return;
+        if (member.phase === 'connected') return;
+        if (Date.now() >= member.pairUntil) {
+            this.removeExpiredMembers(state, Date.now());
+            this.updateHost(host, state);
+            await this.finishIfClosed(host, state);
+            return;
+        }
         const type = message?.type;
         if (!isHost && type === 'offer' && member.phase === 'joined' && validSdp(message.sdp)) {
             member.phase = 'offered';
@@ -133,7 +136,7 @@ export class SyncRoom {
             member.phase = 'connected';
             this.updateHost(host, state);
             this.memberSocket(memberId)?.close(1000, 'paired');
-            if (!(await this.finishIfClosed(host, state))) await this.syncAlarm(host, state);
+            await this.finishIfClosed(host, state);
         }
     }
 
@@ -165,7 +168,7 @@ export class SyncRoom {
         if (!state.members[id] || state.members[id].phase === 'connected') return;
         delete state.members[id];
         this.updateHost(host, state);
-        if (!(await this.finishIfClosed(host, state))) await this.syncAlarm(host, state);
+        await this.finishIfClosed(host, state);
     }
 
     nextAlarmAt(state, now) {
@@ -174,23 +177,6 @@ export class SyncRoom {
             .map(member => member.pairUntil);
         if (state.expiresAt > now) deadlines.push(state.expiresAt);
         return deadlines.length ? Math.min(...deadlines) : null;
-    }
-
-    async syncAlarm(host, state) {
-        const next = this.nextAlarmAt(state, Date.now());
-        if (next === null) {
-            if (state.alarmAt !== null) {
-                state.alarmAt = null;
-                host.serializeAttachment(state);
-                await this.ctx.storage.deleteAlarm();
-            }
-            return;
-        }
-        if (next !== state.alarmAt) {
-            state.alarmAt = next;
-            host.serializeAttachment(state);
-            await this.ctx.storage.setAlarm(next);
-        }
     }
 
     async finishIfClosed(host, state) {

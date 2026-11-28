@@ -13,11 +13,6 @@ export function toggleNoteFlag(inputStr, flagType) {
         let note = part.trim();
         if (!note) return part;
 
-        // 1. Touch 音符不適用 (如 C, Cf, A1, E8f)
-        if (/^(?:[ABCDE][1-8]|C)/.test(note)) {
-            return part;
-        }
-
         // 2. 雙打縮寫音符 (如 35, 42, 81)
         if (/^[1-8]{2}$/.test(note)) {
             const pos1 = note[0];

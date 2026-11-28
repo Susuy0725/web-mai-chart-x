@@ -380,6 +380,10 @@ export class SimaiRenderer extends BaseSimaiRenderer {
         return Math.min(1, Math.max(0, s.slideProgress || 0));
     }
 
+    prepareSlideJudgeEffects() {
+        // 遊玩模式由判定系統於結算時呼叫 spawnJudgeEffect，不在渲染前預先排程
+    }
+
     shouldSkipSlideStar(s) {
         const tail = s.chainTail || s;
         return !!(s.hideStar || tail.slideFinish || s.chainFinished);

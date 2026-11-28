@@ -87,6 +87,14 @@ export function cullSlideBucket(slideBucket, maxSlideCount) {
     slideBucket.length = writeIdx;
 }
 
+const SLOW_HISPEED_THRESHOLD = 0.25;
+const TIME_FUNC_VIS_X_LIMIT = 4.3;
+
+function calcNoteMaxVisT(noteType, speedCoeff, touchSpeedCoeff) {
+    const effCoeff = noteType === 'touch' ? Math.abs(touchSpeedCoeff) : Math.abs(speedCoeff);
+    return effCoeff > 1e-4 ? (TIME_FUNC_VIS_X_LIMIT / effCoeff + 0.2) : Infinity;
+}
+
 export class SimaiLogicControler {
     constructor() {
         this._buckets = { slide: [], tapnhold: [], touch: [] };
@@ -121,6 +129,8 @@ export class SimaiLogicControler {
         this._prefixTouch = new Int32Array(0);
         this._prefixSlide = new Int32Array(0);
         this._maxRetain = 10;
+        this._minAbsHispeed = 1;
+        this._slowFutureNotes = [];
     }
 
     prepare(notes, playScoreRes) {
@@ -129,12 +139,16 @@ export class SimaiLogicControler {
         const len = notes ? notes.length : 0;
         if (len === 0) {
             this._canOptimize = false;
+            this._minAbsHispeed = 1;
+            this._slowFutureNotes = [];
             return;
         }
 
         const noteTimes = new Float64Array(len);
         let maxRetain = 0;
         let isSorted = true;
+        let minAbsHispeed = 1;
+        const slowFutureNotes = [];
 
         for (let i = 0; i < len; i++) {
             const n = notes[i];
@@ -144,11 +158,20 @@ export class SimaiLogicControler {
             const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0);
             const renderSkipT = n.type === 'slide' ? ((n.slideDelay ?? 0) + (n.slideDuration ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0)) : skipT;
             if (renderSkipT > maxRetain) maxRetain = renderSkipT;
+
+            const hs = Math.abs(n.hispeed ?? 1);
+            if (hs < SLOW_HISPEED_THRESHOLD) {
+                slowFutureNotes.push(i);
+            } else if (hs < minAbsHispeed) {
+                minAbsHispeed = hs;
+            }
         }
 
         this._isSorted = isSorted;
         this._noteTimes = noteTimes;
         this._maxRetain = maxRetain + 3.0; // 包含 decay 緩衝
+        this._minAbsHispeed = minAbsHispeed;
+        this._slowFutureNotes = slowFutureNotes;
 
         // Non-slide 音符，用於快速二分搜尋 nowIndex
         const nsTimes = [];
@@ -363,13 +386,6 @@ export class SimaiLogicControler {
         }
         this._lastGlobalTime = globalTime;
 
-        // 二分搜尋可見音符視窗區間 [lo, hi)
-        const safeV = Number.isFinite(V) ? Math.max(0, V) : 0;
-        const searchLo = globalTime - Math.max(this._maxRetain, safeV + this._maxRetain);
-        const searchHi = globalTime + Math.max(6, safeV);
-        const lo = binarySearchLowerBound(this._noteTimes, searchLo);
-        const hi = binarySearchUpperBound(this._noteTimes, searchHi);
-
         const baseSpeed = settings.speed || 1;
         const baseTouchSpeed = settings.touchSpeed || 1;
         const calcPiecewiseSpeed = (x) => {
@@ -379,13 +395,21 @@ export class SimaiLogicControler {
         };
         const baseSpeedCoeff = calcPiecewiseSpeed(baseSpeed);
         const baseTouchSpeedCoeff = calcPiecewiseSpeed(baseTouchSpeed);
+        const minBaseSpeedCoeff = Math.min(Math.abs(baseSpeedCoeff), Math.abs(baseTouchSpeedCoeff));
+        const effMinNormalSpeed = Math.max(0.05, minBaseSpeedCoeff * (this._minAbsHispeed || 1));
+        const maxFutureBySpeed = TIME_FUNC_VIS_X_LIMIT / effMinNormalSpeed + 0.2;
+
+        // 二分搜尋可見音符視窗區間 [lo, hi)
+        const safeV = Number.isFinite(V) ? Math.max(0, V) : 0;
+        const searchLo = globalTime - Math.max(this._maxRetain, safeV + this._maxRetain);
+        const searchHi = globalTime + Math.max(6, safeV, maxFutureBySpeed);
+        const lo = binarySearchLowerBound(this._noteTimes, searchLo);
+        const hi = binarySearchUpperBound(this._noteTimes, searchHi);
 
         const buckets = this._buckets;
         const visualBuckets = this._visualBuckets;
 
-        // 僅走訪視窗內音符 (從後往前，維持完全相同的桶子順序)
-        for (let i = hi - 1; i >= lo; i--) {
-            const note = notes[i];
+        const processWindowNote = (note) => {
             const noteT = note.time - globalTime;
             const noteType = note.type;
             const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
@@ -464,12 +488,13 @@ export class SimaiLogicControler {
                 }
             }
 
-            // 繪製可見性判斷
+            // 繪製可見性判斷（依各音符實際 speedCoeff / touchSpeedCoeff 推算出現視窗，避免慢速 hi-speed 突然閃現）
             const renderSkipT = noteType === 'slide' ? ((note.slideDelay ?? 0) + (note.slideDuration ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0)) : skipT;
             const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
+            const maxVisNoteT = calcNoteMaxVisT(noteType, speedCoeff, touchSpeedCoeff);
 
             let isVisible = false;
-            if (-noteT <= renderSkipT + decay && noteT < 6) {
+            if (-noteT <= renderSkipT + decay && noteT < maxVisNoteT) {
                 const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
                 const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
 
@@ -502,6 +527,19 @@ export class SimaiLogicControler {
                     visualBuckets.touch.push(note);
                 }
             }
+        };
+
+        // 先走訪超過 searchHi 的極慢速 hi-speed 音符 (保持嚴格由後往前的渲染順序)
+        const slowFutureNotes = this._slowFutureNotes;
+        for (let k = slowFutureNotes.length - 1; k >= 0; k--) {
+            const idx = slowFutureNotes[k];
+            if (idx < hi) break;
+            processWindowNote(notes[idx]);
+        }
+
+        // 僅走訪視窗內音符 (從後往前，維持完全相同的桶子順序)
+        for (let i = hi - 1; i >= lo; i--) {
+            processWindowNote(notes[i]);
         }
 
         cullSlideBucket(buckets.slide, maxSlideCount);
@@ -713,8 +751,10 @@ export class SimaiLogicControler {
             const renderSkipT = noteType === 'slide' ? ((note.slideDelay ?? 0) + (note.slideDuration ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0)) : skipT;
             const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
 
+            const maxVisNoteT = calcNoteMaxVisT(noteType, speedCoeff, touchSpeedCoeff);
+
             let isVisible = false;
-            if (-noteT <= renderSkipT + decay && noteT < 6) {
+            if (-noteT <= renderSkipT + decay && noteT < maxVisNoteT) {
                 const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
                 const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
 

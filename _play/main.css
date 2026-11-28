@@ -137,7 +137,9 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    #playToolbar { transition: none; }
+    #playToolbar {
+        transition: none;
+    }
 }
 
 #playToolbar .splitter-toolbar-btn {
@@ -198,19 +200,18 @@ body {
     height: calc(100% - var(--playControls-height) - var(--canvas-top));
     top: var(--canvas-top);
     left: 0;
-    background: #111;
     user-select: none;
     -webkit-user-select: none;
 }
 
 #canvasContainer.aspect-ratio-constrained {
     overflow: hidden;
-    background: #000;
 }
 
 #canvasContainer .backgroundContainer {
     z-index: -1;
     position: absolute;
+    background: #111;
 }
 
 #canvasContainer #backgroundImage {

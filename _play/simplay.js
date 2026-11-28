@@ -215,7 +215,6 @@ export class SimulatedPlayController {
                         note.headTriggered = true;
                         note.triggered = true;
                         note.triggeredTime = note.time;
-                        note._startEffectPlayed = true;
                     }
                 }
 
@@ -360,10 +359,17 @@ export class SimulatedPlayController {
                         }
                     }
 
-                    // 若已超過結束停留窗口仍未標記完成，強制清空隊列保證 main.js 結算
+                    // 若已超過結束停留窗口仍未標記完成，強制清空隊列保證 main.js 結算，並保留啟動音觸發機會
                     if (slideT >= arriveEndTime + touchHoldEnd && !note.slideFinish) {
+                        let hadRemaining = false;
                         for (let b = 0; b < queues.length; b++) {
-                            queues[b].length = 0;
+                            if (queues[b].length > 0) {
+                                hadRemaining = true;
+                                queues[b].length = 0;
+                            }
+                        }
+                        if (hadRemaining) {
+                            note._simplayAutoCompleted = true;
                         }
                     }
                     // 超過 slideDuration + touchHoldEnd 之後，不加入任何感應器，徹底防止結尾殘留

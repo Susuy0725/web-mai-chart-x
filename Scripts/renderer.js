@@ -6,6 +6,7 @@ import {
     touchRefPos,
 } from './core/chartGeometry.js';
 import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
+import { parseCanvasAspectRatio } from './core/panelLayout.js';
 import { getSpectrogramChunkTiles } from './core/audioSpectrogram.js';
 import {
     imgNotExists,
@@ -2779,9 +2780,46 @@ export class SimaiRenderer {
         ctx.drawImage(this._uiCacheCanvas, startX, startY, uiWidth, uiHeight);
     }
 
+    drawAuxiliaryCredit(x, bottom, align, targetCtx = this.ctx) {
+        const ctx = targetCtx;
+        ctx.textAlign = align;
+        ctx.textBaseline = "bottom";
+        ctx.letterSpacing = "0px";
+        ctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
+        ctx.fillText('Created with', x, bottom - 7);
+        ctx.font = '700 4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
+        ctx.fillText('Web mai Chart X', x, bottom - 2);
+    }
+
+    drawAuxiliaryCount(count, x, baseline, maxWidth, centered = false, targetCtx = this.ctx) {
+        const ctx = targetCtx;
+        ctx.font = "5px mono";
+        const slash = count.indexOf('/');
+        const current = count.slice(0, slash);
+        const total = count.slice(slash);
+        const currentWidth = ctx.measureText(current).width;
+        ctx.font = "2.5px mono";
+        const totalWidth = ctx.measureText(total).width;
+        const fit = Math.min(1, maxWidth / (currentWidth + totalWidth));
+        const left = centered ? x - (currentWidth + totalWidth) * fit / 2 : x;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(total, left + currentWidth * fit, baseline, totalWidth * fit);
+        ctx.font = "5px mono";
+        ctx.fillText(current, left, baseline, currentWidth * fit);
+    }
+
     drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
-        const { width: w, height: h } = this.getCanvasWH();
-        if (h >= w) return;
+        const { width, height } = this.getCanvasWH();
+        const canvasRatio = width / height;
+        const aspectRatio = this._isRenderingVideo
+            ? canvasRatio
+            : (parseCanvasAspectRatio(this.settings.canvasAspectRatio) ?? canvasRatio);
+        if (aspectRatio === 1) return;
+        const vertical = aspectRatio < 1;
+        // 以置中的固定比例版面定位資訊，由畫布裁去超出可視區的內容。
+        const w = vertical ? width : height * 16 / 9;
+        const h = vertical ? width * 16 / 9 : height;
         const { ctx } = this;
         const allRes = playScoreRes.tap + playScoreRes.hold + playScoreRes.slide + playScoreRes.touch + playScoreRes.break;
 
@@ -2791,60 +2829,91 @@ export class SimaiRenderer {
             this._lastAuxTimeStr = `${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
         }
 
+        const radius = scaleBase / 2;
+        const top = vertical ? Math.max(-radius - 3 - 15, -h / 2 + 2) : 0;
+
         const drawStaticPanelTo = (pctx) => {
             pctx.fillStyle = "white";
-            pctx.textAlign = "left";
-            pctx.textBaseline = "bottom";
-            pctx.letterSpacing = "0px";
-            pctx.font = '4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-            pctx.textAlign = "right";
-            pctx.fillText('Powered by', scaleBase / -2 - 3, h / 2 - 5);
-            pctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-            pctx.fillText('susuy0725/web-mai-chart-x', scaleBase / -2 - 3, h / 2 - 2);
-
-            pctx.textAlign = "left";
             this._auxTextList[0] = `${playCombo}/${allRes}`;
-            this._auxTextList[1] = `ALL:`;
+            this._auxTextList[1] = "ALL";
             this._auxTextList[2] = `${noteQuantity.break}/${playScoreRes.break}`;
-            this._auxTextList[3] = `BRK:`;
+            this._auxTextList[3] = vertical ? "BRK" : "BREAK";
             this._auxTextList[4] = `${noteQuantity.touch}/${playScoreRes.touch}`;
-            this._auxTextList[5] = `TOH:`;
+            this._auxTextList[5] = vertical ? "TOH" : "TOUCH";
             this._auxTextList[6] = `${noteQuantity.slide}/${playScoreRes.slide}`;
-            this._auxTextList[7] = `SLD:`;
+            this._auxTextList[7] = vertical ? "SLD" : "SLIDE";
             this._auxTextList[8] = `${noteQuantity.hold}/${playScoreRes.hold}`;
-            this._auxTextList[9] = `HOD:`;
+            this._auxTextList[9] = vertical ? "HOD" : "HOLD";
             this._auxTextList[10] = `${noteQuantity.tap}/${playScoreRes.tap}`;
-            this._auxTextList[11] = `TAP:`;
+            this._auxTextList[11] = "TAP";
 
+            if (vertical) {
+                const bottom = Math.min(radius + 3, h / 2 - 23);
+                pctx.textAlign = "center";
+                pctx.textBaseline = "top";
+                pctx.letterSpacing = "0px";
+                pctx.font = "4px mono";
+                pctx.fillText(`DELUXE Rate: ${playScore.toFixed(4)}%`, 0, top + 10, w - 4);
+
+                const columnWidth = Math.min(w / 6, 24);
+                for (let column = 0; column < 6; column++) {
+                    const index = 10 - column * 2;
+                    const x = (column - 2.5) * columnWidth;
+                    pctx.textAlign = "center";
+                    pctx.textBaseline = "top";
+                    pctx.font = "4px mono";
+                    pctx.fillText(this._auxTextList[index + 1], x, bottom, columnWidth - 1);
+
+                    this.drawAuxiliaryCount(this._auxTextList[index], x, bottom + 10, columnWidth - 1, true, pctx);
+                }
+                this.drawAuxiliaryCredit(0, h / 2, "center", pctx);
+                return;
+            }
+
+            this.drawAuxiliaryCredit(scaleBase / -2 - 3, h / 2, "right", pctx);
+
+            pctx.textAlign = "left";
             const sp = 6;
             const lil = (this._auxTextList.length * sp - Math.floor(this._auxTextList.length / 2)) / 2 + sp;
-            pctx.font = "bold 5px mono";
+            // 分組批次繪製，減少每幀 12 次 ctx.font 切換重解析的開銷
+            pctx.font = "bold 4px mono";
             for (let i = 1; i < this._auxTextList.length; i += 2) {
                 pctx.fillText(this._auxTextList[i], scaleBase / 2 + 3, lil - i * sp);
             }
-            pctx.font = "4px mono";
+            const counterX = scaleBase / 2 + 3;
+            const availableWidth = Math.max(1, w / 2 - counterX);
             for (let i = 0; i < this._auxTextList.length; i += 2) {
-                pctx.fillText(this._auxTextList[i], scaleBase / 2 + 3, lil - i * sp - 1);
+                this.drawAuxiliaryCount(this._auxTextList[i], counterX, lil - i * sp - 2, availableWidth, false, pctx);
             }
             pctx.textBaseline = "top";
             pctx.textAlign = "right";
 
-            pctx.font = "bold 5px mono";
-            pctx.fillText('DELUXE Rate:', scaleBase / -2 - 3, 1);
+            pctx.font = "bold 4px mono";
+            pctx.fillText('DX Rate:', scaleBase / -2 - 3, 1);
             pctx.font = "7px mono";
             pctx.fillText(playScore.toFixed(4) + "%", scaleBase / -2 - 3, 8);
         };
 
         ctx.save();
+        ctx.beginPath();
+        ctx.rect(-w / 2, -h / 2, w, h);
+        ctx.clip();
         if (this._isRenderingVideo && 'textRendering' in ctx) {
             try { ctx.textRendering = 'geometricPrecision'; } catch (_) { }
         }
         ctx.fillStyle = "white";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "bottom";
-        ctx.font = "9px mono";
-        ctx.letterSpacing = "-1px";
-        ctx.fillText(this._lastAuxTimeStr, scaleBase / -2 - 5, -1);
+        ctx.font = "bold 9px mono";
+        if (vertical) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.letterSpacing = "0px";
+            ctx.fillText(this._lastAuxTimeStr, 0, top, w - 4);
+        } else {
+            ctx.textAlign = "right";
+            ctx.textBaseline = "bottom";
+            ctx.letterSpacing = "-1px";
+            ctx.fillText(this._lastAuxTimeStr, scaleBase / -2 - 5, -1);
+        }
 
         const wPx = this.canvas ? this.canvas.width : 0;
         const hPx = this.canvas ? this.canvas.height : 0;
@@ -2856,6 +2925,7 @@ export class SimaiRenderer {
             const ap = this._auxPanelParams;
             const panelDirty = !this._auxPanelCanvas || !ap ||
                 ap.w !== wPx || ap.h !== hPx || ap.scale !== this.scale ||
+                ap.vertical !== vertical || ap.layW !== w || ap.layH !== h ||
                 ap.playCombo !== playCombo || ap.allRes !== allRes ||
                 ap.tap !== noteQuantity.tap || ap.hold !== noteQuantity.hold ||
                 ap.slide !== noteQuantity.slide || ap.touch !== noteQuantity.touch ||
@@ -2884,6 +2954,7 @@ export class SimaiRenderer {
                 }
                 this._auxPanelParams = {
                     w: wPx, h: hPx, scale: this.scale,
+                    vertical, layW: w, layH: h,
                     playCombo, allRes,
                     tap: noteQuantity.tap, hold: noteQuantity.hold,
                     slide: noteQuantity.slide, touch: noteQuantity.touch, brk: noteQuantity.break,

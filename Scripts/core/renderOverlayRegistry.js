@@ -143,6 +143,7 @@ class RenderOverlayRegistry {
      * @returns {boolean}
      */
     hasOverlays(target, phase, isRenderingVideo = false) {
+        if (this.overlays.size === 0) return false;
         const bucket = this.buckets.get(this._getBucketKey(target, phase));
         if (!bucket || bucket.length === 0) return false;
         if (!isRenderingVideo) return true;
@@ -263,6 +264,7 @@ class RenderOverlayRegistry {
      * @param {Object} renderContext
      */
     run(target, phase, renderContext) {
+        if (this.overlays.size === 0) return;
         const bucket = this.buckets.get(this._getBucketKey(target, phase));
         if (!bucket || bucket.length === 0) return;
 

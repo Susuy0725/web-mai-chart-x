@@ -6,6 +6,7 @@ import {
     touchRefPos,
 } from './core/chartGeometry.js';
 import { renderOverlayRegistry } from './core/renderOverlayRegistry.js';
+import { parseCanvasAspectRatio } from './core/panelLayout.js';
 import { getSpectrogramChunkTiles } from './core/audioSpectrogram.js';
 import {
     imgNotExists,
@@ -48,6 +49,43 @@ const INV_TWO_PI = 1 / TWO_PI;
 
 const _customImgIds = new WeakMap();
 let _nextCustomImgId = 1;
+let _nextTrackCacheId = 1;
+const _fastSpriteCache = new WeakMap();
+
+/**
+ * 將已載入完成的瀏覽器 HTMLImageElement 預先解碼至同尺寸離屏 Canvas，
+ * 避免 Skia/Chrome 每幀對數百個箭頭與音符觸發 LazyPixelRef 重複檢查與同步解碼。
+ */
+function getFastSprite(img) {
+    if (!img || typeof HTMLImageElement === 'undefined' || !(img instanceof HTMLImageElement)) {
+        return img;
+    }
+    const cached = _fastSpriteCache.get(img);
+    if (cached) return cached;
+    if (!img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) {
+        return img;
+    }
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    let canvas = null;
+    if (typeof OffscreenCanvas !== 'undefined') {
+        canvas = new OffscreenCanvas(w, h);
+    } else if (typeof document !== 'undefined') {
+        canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+    }
+    if (!canvas) return img;
+    try {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return img;
+        ctx.drawImage(img, 0, 0, w, h);
+        _fastSpriteCache.set(img, canvas);
+        return canvas;
+    } catch (_) {
+        return img;
+    }
+}
 
 function resolveImageInput(images, imgKeyOrImg) {
     if (typeof imgKeyOrImg === 'string') {
@@ -399,11 +437,11 @@ export class SimaiRenderer {
     constructor(canvas, settings) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        this.settings = settings;
         if (this.ctx) {
             this.ctx.imageSmoothingEnabled = true;
-            this.ctx.imageSmoothingQuality = 'high';
+            this.ctx.imageSmoothingQuality = this.getSmoothingQuality();
         }
-        this.settings = settings;
         this.images = null;
         this.globalTime = 0;
         this._outlineImage = null;
@@ -412,6 +450,8 @@ export class SimaiRenderer {
 
         this._tintCache = new Map();
         this._brightnessCache = new Map();
+        this._slideTrackCache = new Map();
+        this._middleGlyphCache = new Map();
 
         // EX 顏色定義 (shared)
         this.exColor = exColor;
@@ -481,6 +521,11 @@ export class SimaiRenderer {
     }
 
 
+    getSmoothingQuality() {
+        if (this._isRenderingVideo) return 'high';
+        return this.settings?.lowRes ? 'low' : 'medium';
+    }
+
     getCanvasWH() {
         const w = this.canvas ? this.canvas.width : 0;
         const h = this.canvas ? this.canvas.height : 0;
@@ -529,6 +574,18 @@ export class SimaiRenderer {
         this._touchBorderCache = null;
         this._tintCache?.clear();
         this._brightnessCache?.clear();
+        this._slideTrackCache?.clear();
+        this._middleGlyphCache?.clear();
+
+        // 非同步預解碼 WiFi Break 等多片式貼圖，避免首次播放進入畫面時同步解碼卡頓
+        if (images) {
+            for (let i = 0; i <= 10; i++) {
+                const img = images[`wifi_break_${i}`];
+                if (img && typeof img.decode === 'function') {
+                    img.decode().catch(() => { });
+                }
+            }
+        }
     }
 
     /**
@@ -789,7 +846,7 @@ export class SimaiRenderer {
         }
 
         this.ctx.imageSmoothingEnabled = true;
-        this.ctx.imageSmoothingQuality = 'high';
+        this.ctx.imageSmoothingQuality = this.getSmoothingQuality();
 
         const minDim = Math.min(w, h);
         const p = (minDim > 0 && this.scale > 0) ? (minDim / scaleBase * this.scale) : 1;
@@ -807,6 +864,10 @@ export class SimaiRenderer {
         this._sensorTextCache = null;
         this._sensorCacheParams = null;
         this._middleDisplayCanvas = null;
+        this._auxPanelCanvas = null;
+        this._auxPanelParams = null;
+        this._slideTrackCache?.clear();
+        this._middleGlyphCache?.clear();
         this._canvasWH = null;
         this._cachedDomOutline = null;
     }
@@ -814,7 +875,7 @@ export class SimaiRenderer {
     // --- 核心工具函式 ---
 
     drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
-        return drawImgAtcenter(this.ctx, img, size, offsetX, offsetY, imgWidthMul, imgHeightMul);
+        return drawImgAtcenter(this.ctx, getFastSprite(img), size, offsetX, offsetY, imgWidthMul, imgHeightMul);
     }
 
     timeFunction(x) {
@@ -2284,7 +2345,14 @@ export class SimaiRenderer {
         }
         runOverlay('afterClear');
 
-        // 3. 繪製外框輪廓 (若啟用顯示判定線)
+        // 3. 煙火特效置於判定線 (Outline)、感應器與音符後方
+        if (this.shouldDrawHanabiEffects()) {
+            const touchBucket = buckets.touch;
+            for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
+            this.drawHanabiEffects();
+        }
+
+        // 4. 繪製外框輪廓 (若啟用顯示判定線)
         if (this.settings?.showOutline !== false) {
             this.drawOutline();
         }
@@ -2301,7 +2369,7 @@ export class SimaiRenderer {
         ft.active = true;
 
         try {
-            // 4. 繪製順序優化
+            // 5. 繪製順序優化
             const hasSensorHighlight = this.hasActiveSensorOverlay(activeSensors);
             if (showSensor || showSensorText || hasSensorHighlight) {
                 this.drawSensors(showSensor, showSensorText, activeSensors);
@@ -2311,12 +2379,6 @@ export class SimaiRenderer {
             // 分數與 Combo 建議改為「動態繪製」而非「快取繪製」，因為變動頻率太高
             this.drawMiddleDisplay();
             runOverlay('afterMiddleDisplay');
-
-            if (this.shouldDrawHanabiEffects()) {
-                const touchBucket = buckets.touch;
-                for (let i = 0; i < touchBucket.length; i++) this.getTouchHanabi(touchBucket[i]);
-                this.drawHanabiEffects();
-            }
 
             const slideBucket = buckets.slide;
 
@@ -2728,63 +2790,196 @@ export class SimaiRenderer {
         ctx.drawImage(this._uiCacheCanvas, startX, startY, uiWidth, uiHeight);
     }
 
+    drawAuxiliaryCredit(x, bottom, align, targetCtx = this.ctx) {
+        const ctx = targetCtx;
+        ctx.textAlign = align;
+        ctx.textBaseline = "bottom";
+        ctx.letterSpacing = "0px";
+        ctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
+        ctx.fillText('Created with', x, bottom - 7);
+        ctx.font = '700 4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
+        ctx.fillText('Web mai Chart X', x, bottom - 2);
+    }
+
+    drawAuxiliaryCount(count, x, baseline, maxWidth, centered = false, targetCtx = this.ctx) {
+        const ctx = targetCtx;
+        ctx.font = "5px mono";
+        const slash = count.indexOf('/');
+        const current = count.slice(0, slash);
+        const total = count.slice(slash);
+        const currentWidth = ctx.measureText(current).width;
+        ctx.font = "2.5px mono";
+        const totalWidth = ctx.measureText(total).width;
+        const fit = Math.min(1, maxWidth / (currentWidth + totalWidth));
+        const left = centered ? x - (currentWidth + totalWidth) * fit / 2 : x;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(total, left + currentWidth * fit, baseline, totalWidth * fit);
+        ctx.font = "5px mono";
+        ctx.fillText(current, left, baseline, currentWidth * fit);
+    }
+
     drawAuxiliaryText(dt, globalTime, noteQuantity, playScoreRes, playCombo, playScore) {
-        const { width: w, height: h } = this.getCanvasWH();
-        if (h >= w) return;
+        const { width, height } = this.getCanvasWH();
+        const canvasRatio = width / height;
+        const aspectRatio = this._isRenderingVideo
+            ? canvasRatio
+            : (parseCanvasAspectRatio(this.settings.canvasAspectRatio) ?? canvasRatio);
+        if (aspectRatio === 1) return;
+        const vertical = aspectRatio < 1;
+        // 以置中的固定比例版面定位資訊，由畫布裁去超出可視區的內容。
+        const w = vertical ? width : height * 16 / 9;
+        const h = vertical ? width * 16 / 9 : height;
         const { ctx } = this;
         const allRes = playScoreRes.tap + playScoreRes.hold + playScoreRes.slide + playScoreRes.touch + playScoreRes.break;
 
+        const timeKey = (globalTime < 0 ? -1 : 1) * (Math.round(Math.abs(globalTime) * 100) + 1);
+        if (this._lastAuxTimeKey !== timeKey || !this._lastAuxTimeStr) {
+            this._lastAuxTimeKey = timeKey;
+            this._lastAuxTimeStr = `${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`;
+        }
+
+        const radius = scaleBase / 2;
+        const top = vertical ? Math.max(-radius - 3 - 15, -h / 2 + 2) : 0;
+
+        const drawStaticPanelTo = (pctx) => {
+            pctx.fillStyle = "white";
+            this._auxTextList[0] = `${playCombo}/${allRes}`;
+            this._auxTextList[1] = "ALL";
+            this._auxTextList[2] = `${noteQuantity.break}/${playScoreRes.break}`;
+            this._auxTextList[3] = vertical ? "BRK" : "BREAK";
+            this._auxTextList[4] = `${noteQuantity.touch}/${playScoreRes.touch}`;
+            this._auxTextList[5] = vertical ? "TOH" : "TOUCH";
+            this._auxTextList[6] = `${noteQuantity.slide}/${playScoreRes.slide}`;
+            this._auxTextList[7] = vertical ? "SLD" : "SLIDE";
+            this._auxTextList[8] = `${noteQuantity.hold}/${playScoreRes.hold}`;
+            this._auxTextList[9] = vertical ? "HOD" : "HOLD";
+            this._auxTextList[10] = `${noteQuantity.tap}/${playScoreRes.tap}`;
+            this._auxTextList[11] = "TAP";
+
+            if (vertical) {
+                const bottom = Math.min(radius + 3, h / 2 - 23);
+                pctx.textAlign = "center";
+                pctx.textBaseline = "top";
+                pctx.letterSpacing = "0px";
+                pctx.font = "4px mono";
+                pctx.fillText(`DELUXE Rate: ${playScore.toFixed(4)}%`, 0, top + 10, w - 4);
+
+                const columnWidth = Math.min(w / 6, 24);
+                for (let column = 0; column < 6; column++) {
+                    const index = 10 - column * 2;
+                    const x = (column - 2.5) * columnWidth;
+                    pctx.textAlign = "center";
+                    pctx.textBaseline = "top";
+                    pctx.font = "4px mono";
+                    pctx.fillText(this._auxTextList[index + 1], x, bottom, columnWidth - 1);
+
+                    this.drawAuxiliaryCount(this._auxTextList[index], x, bottom + 10, columnWidth - 1, true, pctx);
+                }
+                this.drawAuxiliaryCredit(0, h / 2, "center", pctx);
+                return;
+            }
+
+            this.drawAuxiliaryCredit(scaleBase / -2 - 3, h / 2, "right", pctx);
+
+            pctx.textAlign = "left";
+            const sp = 6;
+            const lil = (this._auxTextList.length * sp - Math.floor(this._auxTextList.length / 2)) / 2 + sp;
+            // 分組批次繪製，減少每幀 12 次 ctx.font 切換重解析的開銷
+            pctx.font = "bold 4px mono";
+            for (let i = 1; i < this._auxTextList.length; i += 2) {
+                pctx.fillText(this._auxTextList[i], scaleBase / 2 + 3, lil - i * sp);
+            }
+            const counterX = scaleBase / 2 + 3;
+            const availableWidth = Math.max(1, w / 2 - counterX);
+            for (let i = 0; i < this._auxTextList.length; i += 2) {
+                this.drawAuxiliaryCount(this._auxTextList[i], counterX, lil - i * sp - 2, availableWidth, false, pctx);
+            }
+            pctx.textBaseline = "top";
+            pctx.textAlign = "right";
+
+            pctx.font = "bold 4px mono";
+            pctx.fillText('DX Rate:', scaleBase / -2 - 3, 1);
+            pctx.font = "7px mono";
+            pctx.fillText(playScore.toFixed(4) + "%", scaleBase / -2 - 3, 8);
+        };
+
         ctx.save();
-        if ('textRendering' in ctx) {
+        ctx.beginPath();
+        ctx.rect(-w / 2, -h / 2, w, h);
+        ctx.clip();
+        if (this._isRenderingVideo && 'textRendering' in ctx) {
             try { ctx.textRendering = 'geometricPrecision'; } catch (_) { }
         }
         ctx.fillStyle = "white";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "bottom";
-        ctx.font = "9px mono";
-        ctx.letterSpacing = "-1px";
-
-        ctx.fillText(`${globalTime < 0 ? '-' + Math.abs(Math.ceil(globalTime / 60)) : Math.floor(globalTime / 60)}:${Math.abs(globalTime % 60).toFixed(2).padStart(5, '0')}`,
-            scaleBase / -2 - 5, -1);
-
-        ctx.letterSpacing = "0px";
-        ctx.font = '4px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-        ctx.fillText('Powered by', scaleBase / -2 - 3, h / 2 - 5);
-        ctx.font = '2.5px "Plus Jakarta Sans", "Noto Sans TC", sans-serif';
-        ctx.fillText('susuy0725/web-mai-chart-x', scaleBase / -2 - 3, h / 2 - 2);
-
-        ctx.textAlign = "left";
-        this._auxTextList[0] = `${playCombo}/${allRes}`;
-        this._auxTextList[1] = `ALL:`;
-        this._auxTextList[2] = `${noteQuantity.break}/${playScoreRes.break}`;
-        this._auxTextList[3] = `BRK:`;
-        this._auxTextList[4] = `${noteQuantity.touch}/${playScoreRes.touch}`;
-        this._auxTextList[5] = `TOH:`;
-        this._auxTextList[6] = `${noteQuantity.slide}/${playScoreRes.slide}`;
-        this._auxTextList[7] = `SLD:`;
-        this._auxTextList[8] = `${noteQuantity.hold}/${playScoreRes.hold}`;
-        this._auxTextList[9] = `HOD:`;
-        this._auxTextList[10] = `${noteQuantity.tap}/${playScoreRes.tap}`;
-        this._auxTextList[11] = `TAP:`;
-
-        const sp = 6;
-        const lil = (this._auxTextList.length * sp - Math.floor(this._auxTextList.length / 2)) / 2 + sp;
-        // 分組批次繪製，減少每幀 12 次 ctx.font 切換重解析的開銷
-        ctx.font = "bold 5px mono";
-        for (let i = 1; i < this._auxTextList.length; i += 2) {
-            ctx.fillText(this._auxTextList[i], scaleBase / 2 + 3, lil - i * sp);
+        ctx.font = "bold 9px mono";
+        if (vertical) {
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.letterSpacing = "0px";
+            ctx.fillText(this._lastAuxTimeStr, 0, top, w - 4);
+        } else {
+            ctx.textAlign = "right";
+            ctx.textBaseline = "bottom";
+            ctx.letterSpacing = "-1px";
+            ctx.fillText(this._lastAuxTimeStr, scaleBase / -2 - 5, -1);
         }
-        ctx.font = "4px mono";
-        for (let i = 0; i < this._auxTextList.length; i += 2) {
-            ctx.fillText(this._auxTextList[i], scaleBase / 2 + 3, lil - i * sp - 1);
-        }
-        ctx.textBaseline = "top";
-        ctx.textAlign = "right";
 
-        ctx.font = "bold 5px mono";
-        ctx.fillText('DELUXE Rate:', scaleBase / -2 - 3, 1);
-        ctx.font = "7px mono";
-        ctx.fillText(playScore.toFixed(4) + "%", scaleBase / -2 - 3, 8);
+        const wPx = this.canvas ? this.canvas.width : 0;
+        const hPx = this.canvas ? this.canvas.height : 0;
+        const scoreInt = Math.round((playScore ?? 0) * 10000);
+        const canUsePanelCache = !this._isRenderingVideo && wPx > 0 && hPx > 0 && typeof document !== 'undefined';
+
+        if (canUsePanelCache) {
+            const p = Math.min(wPx, hPx) / scaleBase * this.scale;
+            const ap = this._auxPanelParams;
+            const panelDirty = !this._auxPanelCanvas || !ap ||
+                ap.w !== wPx || ap.h !== hPx || ap.scale !== this.scale ||
+                ap.vertical !== vertical || ap.layW !== w || ap.layH !== h ||
+                ap.playCombo !== playCombo || ap.allRes !== allRes ||
+                ap.tap !== noteQuantity.tap || ap.hold !== noteQuantity.hold ||
+                ap.slide !== noteQuantity.slide || ap.touch !== noteQuantity.touch ||
+                ap.brk !== noteQuantity.break || ap.scoreInt !== scoreInt ||
+                ap.rTap !== playScoreRes.tap || ap.rHold !== playScoreRes.hold ||
+                ap.rSlide !== playScoreRes.slide || ap.rTouch !== playScoreRes.touch ||
+                ap.rBrk !== playScoreRes.break;
+
+            if (panelDirty) {
+                if (!this._auxPanelCanvas) {
+                    this._auxPanelCanvas = document.createElement('canvas');
+                    this._auxPanelCtx = this._auxPanelCanvas.getContext('2d');
+                }
+                if (this._auxPanelCanvas.width !== wPx || this._auxPanelCanvas.height !== hPx) {
+                    this._auxPanelCanvas.width = wPx;
+                    this._auxPanelCanvas.height = hPx;
+                }
+                const pctx = this._auxPanelCtx;
+                if (pctx) {
+                    pctx.setTransform(1, 0, 0, 1, 0, 0);
+                    pctx.clearRect(0, 0, wPx, hPx);
+                    pctx.save();
+                    pctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
+                    drawStaticPanelTo(pctx);
+                    pctx.restore();
+                }
+                this._auxPanelParams = {
+                    w: wPx, h: hPx, scale: this.scale,
+                    vertical, layW: w, layH: h,
+                    playCombo, allRes,
+                    tap: noteQuantity.tap, hold: noteQuantity.hold,
+                    slide: noteQuantity.slide, touch: noteQuantity.touch, brk: noteQuantity.break,
+                    scoreInt,
+                    rTap: playScoreRes.tap, rHold: playScoreRes.hold,
+                    rSlide: playScoreRes.slide, rTouch: playScoreRes.touch, rBrk: playScoreRes.break,
+                };
+            }
+            if (this._auxPanelCanvas && this._auxPanelCanvas.width > 0 && this._auxPanelCanvas.height > 0) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.drawImage(this._auxPanelCanvas, 0, 0);
+            }
+        } else {
+            drawStaticPanelTo(ctx);
+        }
 
         ctx.restore();
     }
@@ -2810,7 +3005,7 @@ export class SimaiRenderer {
             cctx.setTransform(1, 0, 0, 1, 0, 0);
             cctx.clearRect(0, 0, wPx, hPx);
             cctx.imageSmoothingEnabled = true;
-            cctx.imageSmoothingQuality = 'high';
+            cctx.imageSmoothingQuality = this.getSmoothingQuality();
         }
         const p = Math.min(wPx, hPx) / scaleBase * scale;
         cctx.setTransform(p, 0, 0, p, wPx / 2, hPx / 2);
@@ -2834,7 +3029,7 @@ export class SimaiRenderer {
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        ctx.imageSmoothingQuality = this.getSmoothingQuality();
         ctx.drawImage(this._staticBackgroundCache, 0, 0);
         ctx.restore();
     }
@@ -2872,7 +3067,7 @@ export class SimaiRenderer {
         ctx.save();
         this.resetBaseTransform();
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        ctx.imageSmoothingQuality = this.getSmoothingQuality();
         const size = scaleBase * 0.905;
         ctx.drawImage(img, -size * 0.5, -size * 0.5, size, size);
         ctx.restore();
@@ -2901,10 +3096,13 @@ export class SimaiRenderer {
             : (this.playScore ?? 0);
         const scoreInt = Math.round(scoreValue * 10000);
 
+        const valueChanged = (mode === 1)
+            ? (this._lastMiddleCombo !== combo)
+            : (this._lastMiddleScoreInt !== scoreInt);
+
         const isDirty = !this._middleDisplayCanvas ||
             this._lastMiddleMode !== mode ||
-            this._lastMiddleCombo !== combo ||
-            this._lastMiddleScoreInt !== scoreInt ||
+            valueChanged ||
             this._lastMiddlePxW !== pxW ||
             this._lastMiddlePxH !== pxH;
 
@@ -2928,7 +3126,7 @@ export class SimaiRenderer {
             const mctx = this._middleDisplayCtx;
             if (mctx) {
                 mctx.imageSmoothingEnabled = true;
-                mctx.imageSmoothingQuality = 'high';
+                mctx.imageSmoothingQuality = this.getSmoothingQuality();
             }
             mctx.clearRect(0, 0, pxW, pxH);
             mctx.save();
@@ -2949,13 +3147,107 @@ export class SimaiRenderer {
         this.ctx.drawImage(this._middleDisplayCanvas, -hw, -hh, this._middleBoxWUnits || boxWUnits, this._middleBoxHUnits || boxHUnits);
     }
 
+    _getMiddleGlyph(text, fontSize, config, cellWidth, p) {
+        if (!this._middleGlyphCache) this._middleGlyphCache = new Map();
+        const fillStyle = config?.fillStyle || '#FFFFFF';
+        const strokeStyle = config?.strokeStyle || '#000000';
+        const fontWeight = config?.fontWeight || 'bold';
+        const fontFamily = config?.fontFamily || 'combo';
+        const fontLoaded = (typeof document !== 'undefined' && document.fonts && document.fonts.status === 'loaded') ? 1 : 0;
+        const pQuant = Math.round(p * 10);
+        const cwQuant = Math.round(cellWidth * 100);
+        const key = `${text}|${fontSize}|${fillStyle}|${strokeStyle}|${fontWeight}|${fontFamily}|${cwQuant}|${pQuant}|${fontLoaded}`;
+
+        let cached = this._middleGlyphCache.get(key);
+        if (cached) return cached;
+
+        const wUnits = text.length > 1
+            ? (text.length * cellWidth + fontSize * 1.2)
+            : Math.max(fontSize * 1.4, cellWidth + 2);
+        const hUnits = fontSize * 1.7;
+        const pxW = Math.max(1, Math.ceil(wUnits * p));
+        const pxH = Math.max(1, Math.ceil(hUnits * p));
+        const realWUnits = pxW / p;
+        const realHUnits = pxH / p;
+
+        let canvas = null;
+        if (typeof OffscreenCanvas !== 'undefined') {
+            canvas = new OffscreenCanvas(pxW, pxH);
+        } else if (typeof document !== 'undefined') {
+            canvas = document.createElement('canvas');
+            canvas.width = pxW;
+            canvas.height = pxH;
+        }
+        if (!canvas) return null;
+
+        const gctx = canvas.getContext('2d');
+        if (!gctx) return null;
+        gctx.setTransform(p, 0, 0, p, pxW / 2, pxH / 2);
+        outlineText(gctx, text, 0, 0, fontSize, 0.5, {
+            fillStyle,
+            strokeStyle,
+            fontWeight,
+            fontFamily,
+            textAlign: 'center',
+            textBaseline: 'middle',
+            letterSpacing: '0px',
+            cellWidth,
+        });
+
+        if (this._middleGlyphCache.size >= 128) {
+            const oldestKey = this._middleGlyphCache.keys().next().value;
+            this._middleGlyphCache.delete(oldestKey);
+        }
+        cached = { canvas, wUnits: realWUnits, hUnits: realHUnits };
+        this._middleGlyphCache.set(key, cached);
+        return cached;
+    }
+
+    _drawMiddleStringWithSprites(ctx, text, x, y, fontSize, config, p) {
+        if (!text) return false;
+        const ls = config?.letterSpacing ?? '0px';
+        let cellWidth = fontSize * 0.8 + (ls ? fontSize * parseFloat(ls) : 0);
+        cellWidth = Math.max(cellWidth, 0);
+
+        if (text === 'COMBO') {
+            const sprite = this._getMiddleGlyph('COMBO', fontSize, config, cellWidth, p);
+            if (!sprite) return false;
+            ctx.drawImage(sprite.canvas, x - sprite.wUnits * 0.5, y - sprite.hUnits * 0.5, sprite.wUnits, sprite.hUnits);
+            return true;
+        }
+
+        const textAlign = config?.textAlign || 'center';
+        let calX = x;
+        if (textAlign === 'center') {
+            calX = x - ((text.length * cellWidth) / 2);
+        } else if (textAlign === 'right') {
+            calX = x - (text.length * cellWidth);
+        }
+
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            const sprite = this._getMiddleGlyph(ch, fontSize, config, cellWidth, p);
+            if (!sprite) return false;
+            const centerX = calX + (i + 0.5) * cellWidth;
+            ctx.drawImage(sprite.canvas, centerX - sprite.wUnits * 0.5, y - sprite.hUnits * 0.5, sprite.wUnits, sprite.hUnits);
+        }
+        return true;
+    }
+
     renderMiddleDisplayToContext(ctx) {
+        const useSprites = !this._isRenderingVideo && this._p > 0 && (typeof document !== 'undefined' || typeof OffscreenCanvas !== 'undefined');
+        const p = this._p;
         ctx.save();
         switch (this.settings.middleDisplay) {
             case 1:
                 if (this.playCombo != 0) {
-                    outlineText(ctx, "COMBO", 0, -7, 4.4, 0.5, this._middleDisplayConfig1);
-                    outlineText(ctx, `${this.playCombo}`, 0, 0, 7.4, 0.5, this._middleDisplayConfig2);
+                    const comboStr = `${this.playCombo}`;
+                    if (!useSprites || !this._drawMiddleStringWithSprites(ctx, 'COMBO', 0, -7, 4.4, this._middleDisplayConfig1, p)) {
+                        outlineText(ctx, 'COMBO', 0, -7, 4.4, 0.5, this._middleDisplayConfig1);
+                    }
+                    if (!useSprites || !this._drawMiddleStringWithSprites(ctx, comboStr, 0, 0, 7.4, this._middleDisplayConfig2, p)) {
+                        outlineText(ctx, comboStr, 0, 0, 7.4, 0.5, this._middleDisplayConfig2);
+                    }
                 }
                 break;
             case 2: // 分數 (101%+)
@@ -2964,26 +3256,34 @@ export class SimaiRenderer {
                     ? (this.playScoreMinus !== undefined ? this.playScoreMinus : 101)
                     : (this.playScore ?? 0);
                 const trueScore = Math.max(scoreValue, 0).toFixed(4);
-                const dotIdx = trueScore.indexOf(".");
+                const dotIdx = trueScore.indexOf('.');
                 const part0 = dotIdx === -1 ? trueScore : trueScore.substring(0, dotIdx);
-                const part1 = dotIdx === -1 ? "" : trueScore.substring(dotIdx + 1);
+                const part1 = dotIdx === -1 ? '' : trueScore.substring(dotIdx + 1);
 
-                let scoreColor = "#4061A8";
+                let scoreColor = '#4061A8';
                 if (trueScore > 80) {
-                    scoreColor = "#9E3D2E";
+                    scoreColor = '#9E3D2E';
                 }
                 if (trueScore > 100) {
-                    scoreColor = "#99853A";
+                    scoreColor = '#99853A';
                 }
                 this._middleDisplayConfigScore.fillStyle = scoreColor;
                 this._middleDisplayConfigDot.fillStyle = scoreColor;
                 this._middleDisplayConfigFrac.fillStyle = scoreColor;
                 this._middleDisplayConfigPercent.fillStyle = scoreColor;
 
-                outlineText(ctx, part0, -1.8, 0, 7.4, 0.5, this._middleDisplayConfigScore);
-                outlineText(ctx, ".", -2.3, 0.6, 5, 0.5, this._middleDisplayConfigDot);
-                outlineText(ctx, part1, 0, 0.5, 5, 0.5, this._middleDisplayConfigFrac);
-                outlineText(ctx, "%", 14.4, 1.2, 3, 0.5, this._middleDisplayConfigPercent);
+                if (!useSprites || !this._drawMiddleStringWithSprites(ctx, part0, -1.8, 0, 7.4, this._middleDisplayConfigScore, p)) {
+                    outlineText(ctx, part0, -1.8, 0, 7.4, 0.5, this._middleDisplayConfigScore);
+                }
+                if (!useSprites || !this._drawMiddleStringWithSprites(ctx, '.', -2.3, 0.6, 5, this._middleDisplayConfigDot, p)) {
+                    outlineText(ctx, '.', -2.3, 0.6, 5, 0.5, this._middleDisplayConfigDot);
+                }
+                if (!useSprites || !this._drawMiddleStringWithSprites(ctx, part1, 0, 0.5, 5, this._middleDisplayConfigFrac, p)) {
+                    outlineText(ctx, part1, 0, 0.5, 5, 0.5, this._middleDisplayConfigFrac);
+                }
+                if (!useSprites || !this._drawMiddleStringWithSprites(ctx, '%', 14.4, 1.2, 3, this._middleDisplayConfigPercent, p)) {
+                    outlineText(ctx, '%', 14.4, 1.2, 3, 0.5, this._middleDisplayConfigPercent);
+                }
                 break;
             default:
                 break;
@@ -3020,7 +3320,7 @@ export class SimaiRenderer {
                 sctx.setTransform(1, 0, 0, 1, 0, 0);
                 sctx.clearRect(0, 0, dimPx, dimPx);
                 sctx.imageSmoothingEnabled = true;
-                sctx.imageSmoothingQuality = 'high';
+                sctx.imageSmoothingQuality = this.getSmoothingQuality();
             }
             sctx.setTransform(p, 0, 0, p, dimPx / 2, dimPx / 2);
             sctx.save();
@@ -3057,7 +3357,7 @@ export class SimaiRenderer {
                 tctx.setTransform(1, 0, 0, 1, 0, 0);
                 tctx.clearRect(0, 0, dimPx, dimPx);
                 tctx.imageSmoothingEnabled = true;
-                tctx.imageSmoothingQuality = 'high';
+                tctx.imageSmoothingQuality = this.getSmoothingQuality();
                 if ('textRendering' in tctx) {
                     try { tctx.textRendering = 'geometricPrecision'; } catch (_) { }
                 }
@@ -3806,8 +4106,8 @@ export class SimaiRenderer {
     }
 
     _resolveSensorIdAtPoint(x, y, ignoreD = false, outerPrefix = 'A') {
-        const ix = (x * 10) | 0;
-        const iy = (y * 10) | 0;
+        const ix = Math.round(x * 2);
+        const iy = Math.round(y * 2);
         const isK = outerPrefix === 'K';
         const cacheKey = ((ix + 4096) * 32768) + ((iy + 4096) * 4) + (ignoreD ? 2 : 0) + (isK ? 1 : 0);
         if (!this._sensorPointCache) this._sensorPointCache = new Map();
@@ -3825,7 +4125,7 @@ export class SimaiRenderer {
             const keyNum = Math.floor(normAngle / (Math.PI / 4)) + 1;
             if (keyNum >= 1 && keyNum <= 8) {
                 const outerKeyId = outerPrefix + keyNum;
-                if (this._sensorPointCache.size > 1000) this._sensorPointCache.clear();
+                if (this._sensorPointCache.size > 4096) this._sensorPointCache.clear();
                 this._sensorPointCache.set(cacheKey, outerKeyId);
                 return outerKeyId;
             }
@@ -3841,23 +4141,26 @@ export class SimaiRenderer {
         let insideId = null;
         let strokeId = null;
 
+        // Pass 1: 優先檢查 isPointInPath，命中即跳出，徹底略過昂貴的 isPointInStroke
         for (let j = 0; j < touchPaths.length; j++) {
             const shape = touchPaths[j];
             if (ignoreD && shape.id.startsWith('D')) continue;
-
-            const isA = shape.id.startsWith('A');
-            this._dummyCtx.lineWidth = isA ? 15 : 3;
-
-            const isInside = this._dummyCtx.isPointInPath(shape.path, x, y);
-            if (isInside && !insideId) {
+            if (this._dummyCtx.isPointInPath(shape.path, x, y)) {
                 insideId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
                 break;
             }
+        }
 
-            if (!strokeId) {
-                const isNearEdge = this._dummyCtx.isPointInStroke(shape.path, x, y);
-                if (isNearEdge) {
+        // Pass 2: 僅在所有內部皆未命中時，才檢查邊線命中
+        if (!insideId) {
+            for (let j = 0; j < touchPaths.length; j++) {
+                const shape = touchPaths[j];
+                if (ignoreD && shape.id.startsWith('D')) continue;
+                const isA = shape.id.startsWith('A');
+                this._dummyCtx.lineWidth = isA ? 15 : 3;
+                if (this._dummyCtx.isPointInStroke(shape.path, x, y)) {
                     strokeId = (shape.id === 'C1' || shape.id === 'C2') ? 'C' : shape.id;
+                    break;
                 }
             }
         }
@@ -3874,7 +4177,7 @@ export class SimaiRenderer {
             }
         }
 
-        if (this._sensorPointCache.size > 1000) {
+        if (this._sensorPointCache.size > 4096) {
             this._sensorPointCache.clear();
         }
         this._sensorPointCache.set(cacheKey, resultId);
@@ -3981,22 +4284,38 @@ export class SimaiRenderer {
         let currentStarSensorId = null;
 
         if (starProgress > 0 && hideBySensor) {
-            const pt = recorder.getPointAt(starProgress);
-            currentStarSensorId = this.getTouchSensorIdAtPoint(pt.x, pt.y, true);
+            let bestDiff = Infinity;
+            let bestSensorId = null;
+            for (let i = 0; i < arrows.length; i++) {
+                const arr = arrows[i];
+                if (arr.sensorId == null) continue;
+                const d = Math.abs(arr.dist - starDist);
+                if (d < bestDiff) {
+                    bestDiff = d;
+                    bestSensorId = arr.sensorId;
+                }
+            }
+            if (bestSensorId !== null && bestDiff <= 8) {
+                currentStarSensorId = bestSensorId;
+            } else {
+                const pt = recorder.getPointAt(starProgress);
+                currentStarSensorId = this.getTouchSensorIdAtPoint(pt.x, pt.y, true);
+            }
         }
 
         const opacity = isIllegal ? 1 : br;
         const colorCode = isIllegal ? "#ff3838" : "#fff8a6";
         const isTinted = isIllegal;
 
+        let baseSingleImg = null;
         let singleImg = null;
         if (!typew) {
             if (isTinted) {
                 this._tempColorConfig.colorCode = colorCode;
                 singleImg = this.getMemoizedTintedImage(prefixOrKey, opacity, this._tempColorConfig);
             } else {
-                singleImg = this.images[prefixOrKey];
-                if (br > 0) singleImg = getBrightenedImage(singleImg, 1 + br);
+                baseSingleImg = this.images[prefixOrKey];
+                singleImg = baseSingleImg;
             }
             if (!singleImg) return;
         }
@@ -4010,11 +4329,123 @@ export class SimaiRenderer {
             a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
         }
 
+        const ctx = this.ctx;
+
+        // 靜態完整軌道快取（starProgress <= 0，含 Break 閃爍期間）：先繪製基礎烘焙軌道，再以 lighter 疊加亮度
+        const canBakeStatic = starProgress <= 0 && !isIllegal && !this._isRenderingVideo
+            && arrows.length >= 4 && (typeof document !== 'undefined' || typeof OffscreenCanvas !== 'undefined');
+        if (canBakeStatic) {
+            const bakeP = this._p > 0 ? this._p : Math.hypot(a, b);
+            if (bakeP > 0 && Number.isFinite(bakeP)) {
+                if (!recorder._trackCacheId) recorder._trackCacheId = _nextTrackCacheId++;
+                if (!this._slideTrackCache) this._slideTrackCache = new Map();
+                const bakeKey = `${recorder._trackCacheId}|${prefixOrKey}|${typew ? 1 : 0}|${Math.round(size * 100)}|${Math.round(spacing * 100)}|${Math.round(bakeP * 10)}`;
+                let baked = this._slideTrackCache.get(bakeKey);
+                if (baked) {
+                    this._slideTrackCache.delete(bakeKey);
+                    this._slideTrackCache.set(bakeKey, baked);
+                    ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                    if (br > 0) {
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'lighter';
+                        ctx.globalAlpha *= Math.min(1, br);
+                        ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                        ctx.restore();
+                    }
+                    return;
+                }
+
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                for (let i = 0; i < arrows.length; i++) {
+                    const arr = arrows[i];
+                    const r = Math.hypot(arr.dw * size, arr.dh * size) * 0.5 + 1;
+                    if (arr.x - r < minX) minX = arr.x - r;
+                    if (arr.x + r > maxX) maxX = arr.x + r;
+                    if (arr.y - r < minY) minY = arr.y - r;
+                    if (arr.y + r > maxY) maxY = arr.y + r;
+                }
+                const pxW = Math.ceil((maxX - minX) * bakeP);
+                const pxH = Math.ceil((maxY - minY) * bakeP);
+                if (pxW > 0 && pxH > 0 && pxW <= 2048 && pxH <= 2048) {
+                    const allImgsReady = typew
+                        ? arrows.every(arr => {
+                            const raw = this.images[prefixOrKey + arr.imgIndex];
+                            return raw && typeof raw !== 'string' && raw.complete !== false && raw.naturalWidth !== 0;
+                        })
+                        : (baseSingleImg && typeof baseSingleImg !== 'string' && baseSingleImg.complete !== false && baseSingleImg.naturalWidth !== 0);
+
+                    if (allImgsReady) {
+                        const bakeCanvas = typeof OffscreenCanvas !== 'undefined'
+                            ? new OffscreenCanvas(pxW, pxH)
+                            : document.createElement('canvas');
+                        if (bakeCanvas.width !== pxW || bakeCanvas.height !== pxH) {
+                            bakeCanvas.width = pxW;
+                            bakeCanvas.height = pxH;
+                        }
+                        const bctx = bakeCanvas.getContext('2d');
+                        if (bctx) {
+                            bctx.imageSmoothingEnabled = true;
+                            bctx.imageSmoothingQuality = this.getSmoothingQuality();
+                            const cachedSingle = !typew ? getFastSprite(baseSingleImg) : null;
+                            for (let i = 0; i < arrows.length; i++) {
+                                const arr = arrows[i];
+                                const img = typew ? getFastSprite(this.images[prefixOrKey + arr.imgIndex]) : cachedSingle;
+                                if (!img || typeof img === 'string') continue;
+                                const cos = arr.cos;
+                                const sin = arr.sin;
+                                const dw = arr.dw * size;
+                                const dh = arr.dh * size;
+                                bctx.setTransform(
+                                    bakeP * cos,
+                                    bakeP * sin,
+                                    -bakeP * sin,
+                                    bakeP * cos,
+                                    (arr.x - minX) * bakeP,
+                                    (arr.y - minY) * bakeP
+                                );
+                                try {
+                                    bctx.drawImage(img, -dw * 0.5, -dh * 0.5, dw, dh);
+                                } catch (_) { }
+                            }
+                            if (this._slideTrackCache.size >= 48) {
+                                const oldestKey = this._slideTrackCache.keys().next().value;
+                                this._slideTrackCache.delete(oldestKey);
+                            }
+                            baked = { canvas: bakeCanvas, minX, minY, w: pxW / bakeP, h: pxH / bakeP };
+                            this._slideTrackCache.set(bakeKey, baked);
+                            ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                            if (br > 0) {
+                                ctx.save();
+                                ctx.globalCompositeOperation = 'lighter';
+                                ctx.globalAlpha *= Math.min(1, br);
+                                ctx.drawImage(baked.canvas, baked.minX, baked.minY, baked.w, baked.h);
+                                ctx.restore();
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        const quantBri = br > 0 ? Math.round((1 + br) * 20) / 20 : 1;
+        if (!typew && singleImg) {
+            singleImg = getFastSprite(singleImg);
+            if (!isTinted && br > 0) {
+                singleImg = getBrightenedImage(singleImg, quantBri);
+            }
+        }
+
+        let drewAny = false;
         for (let i = 0; i < arrows.length; i++) {
             const arr = arrows[i];
 
             if (starProgress > 0) {
-                if (arr.dist <= starDist) continue;
+                if (arr.dist <= starDist) {
+                    // 非 WiFi 箭頭採嚴格距離降序排列，遇到已越過起點即可提前結束
+                    if (!typew) break;
+                    continue;
+                }
                 if (currentStarSensorId && (arr.dist - starDist <= 35) && arr.sensorId && arr.sensorId === currentStarSensorId) {
                     continue;
                 }
@@ -4027,19 +4458,34 @@ export class SimaiRenderer {
                     this._tempColorConfig.colorCode = colorCode;
                     img = this.getMemoizedTintedImage(imgKey, opacity, this._tempColorConfig);
                 } else {
-                    img = this.images[imgKey];
-                    if (br > 0) img = getBrightenedImage(img, 1 + br);
+                    img = getFastSprite(this.images[imgKey]);
+                    if (br > 0) img = getBrightenedImage(img, quantBri);
                 }
             } else {
                 img = singleImg;
             }
 
-            if (!img) continue;
+            if (!img || typeof img === 'string') continue;
 
-            this.ctx.translate(arr.x, arr.y);
-            this.ctx.rotate(arr.rad);
-            this.drawImgAtcenter(img, 1, 0, 0, arr.dw * size, arr.dh * size);
-            this.ctx.setTransform(a, b, c, d, e, f);
+            const cos = arr.cos;
+            const sin = arr.sin;
+            const dw = arr.dw * size;
+            const dh = arr.dh * size;
+            ctx.setTransform(
+                a * cos + c * sin,
+                b * cos + d * sin,
+                c * cos - a * sin,
+                d * cos - b * sin,
+                a * arr.x + c * arr.y + e,
+                b * arr.x + d * arr.y + f
+            );
+            try {
+                ctx.drawImage(img, -dw * 0.5, -dh * 0.5, dw, dh);
+            } catch (_) { }
+            drewAny = true;
+        }
+        if (drewAny) {
+            ctx.setTransform(a, b, c, d, e, f);
         }
     }
 
@@ -4157,6 +4603,8 @@ export class SimaiVisualEditor {
 
         this._tintCache = new Map();
         this._brightnessCache = new Map();
+        this._slideTrackCache = new Map();
+        this._middleGlyphCache = new Map();
         this._tempColorConfig = { colorCode: '' };
 
         // Callbacks & Snapping for editing
@@ -4387,7 +4835,7 @@ export class SimaiVisualEditor {
     }
 
     drawImgAtcenter(img, size, offsetX = 0, offsetY = 0, imgWidthMul = 1, imgHeightMul = 1) {
-        return drawImgAtcenter(this.ctx, img, size, offsetX, offsetY, imgWidthMul, imgHeightMul);
+        return drawImgAtcenter(this.ctx, getFastSprite(img), size, offsetX, offsetY, imgWidthMul, imgHeightMul);
     }
 
     drawTap(s) {
@@ -6166,6 +6614,12 @@ export class SimaiPreviewRenderer {
         this.tb1 = 4;
         this.tb2 = 4;
         this.selectionRange = null;
+
+        this._slideDash = [0, 0];
+        this._slideBatch = [[], [], [], []];
+        this._tapBatch = [[], [], [], []];
+        this._starBatch = [[], [], [], []];
+        this._holdBatch = [[], [], [], []];
     }
 
     setZoom(zoom) {
@@ -6253,8 +6707,11 @@ export class SimaiPreviewRenderer {
             : clamp(this.settings?.previewTagOpacity ?? 1, 0, 1);
         if (opacity <= 0) return;
 
-        ctx.save();
-        ctx.globalAlpha *= opacity;
+        const useAlpha = opacity < 0.999;
+        if (useAlpha) {
+            ctx.save();
+            ctx.globalAlpha *= opacity;
+        }
 
         if (tag.type === 'bpm') {
             const parts = (this.tb1 * this.tb2) / 4;
@@ -6308,7 +6765,9 @@ export class SimaiPreviewRenderer {
             }
         }
 
-        ctx.restore();
+        if (useAlpha) {
+            ctx.restore();
+        }
     }
 
     drawTap(s) {
@@ -6489,22 +6948,109 @@ export class SimaiPreviewRenderer {
 
         const zoom = this.zoom || 200;
         const gt = this.globalTime + offset;
-        const waveMaxHeight = h * (this.settings.audioWaveformHeightRatio || 0.4);
+        const heightRatio = this.settings.audioWaveformHeightRatio || 0.4;
+        const waveMaxHeight = h * heightRatio;
         const audioAmp = this.settings.audioAmp || 1.0;
+        const strokeColor = this.settings?.previewWaveformColor || '#888888';
 
         const leftTime = gt - (hw / zoom);
         const rightTime = gt + (hw / zoom);
         if (rightTime < 0 || leftTime > duration) return;
 
-        ctx.save();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = this.settings?.previewWaveformColor || '#888888';
-        ctx.globalAlpha *= 0.32;
-        ctx.beginPath();
-
         const stepX = 2;
         const timePerStep = stepX / zoom;
         const bucketsPerStep = timePerStep * bucketRate;
+
+        const canUseTiles = typeof document !== 'undefined' || typeof OffscreenCanvas !== 'undefined';
+        if (canUseTiles) {
+            const chunkSec = zoom * 4 <= 2048 ? 4 : Math.max(0.5, Math.floor((2048 / zoom) * 4) / 4);
+            const tileParams = this._waveformTileParams;
+            const cacheInvalid = !this._waveformTiles || !tileParams ||
+                tileParams.audioBuffer !== audioBuffer ||
+                tileParams.zoom !== zoom ||
+                tileParams.h !== h ||
+                tileParams.heightRatio !== heightRatio ||
+                tileParams.audioAmp !== audioAmp ||
+                tileParams.strokeColor !== strokeColor ||
+                tileParams.chunkSec !== chunkSec;
+
+            if (cacheInvalid) {
+                this._waveformTiles = new Map();
+                this._waveformTileParams = { audioBuffer, zoom, h, heightRatio, audioAmp, strokeColor, chunkSec };
+            }
+
+            const startChunk = Math.max(0, Math.floor(Math.max(0, leftTime) / chunkSec));
+            const endChunk = Math.min(Math.floor(duration / chunkSec), Math.floor(Math.min(duration, rightTime) / chunkSec));
+
+            ctx.save();
+            ctx.globalAlpha *= 0.32;
+            for (let cIdx = startChunk; cIdx <= endChunk; cIdx++) {
+                const chunkStart = cIdx * chunkSec;
+                let tile = this._waveformTiles.get(cIdx);
+                if (tile !== undefined) {
+                    // LRU refresh
+                    this._waveformTiles.delete(cIdx);
+                    this._waveformTiles.set(cIdx, tile);
+                } else {
+                    const chunkEnd = Math.min(duration, chunkStart + chunkSec);
+                    const rawTileW = Math.max(stepX, Math.ceil((chunkEnd - chunkStart) * zoom));
+                    const tileCanvas = typeof document !== 'undefined'
+                        ? document.createElement('canvas')
+                        : new OffscreenCanvas(rawTileW, h);
+                    if (tileCanvas.width !== rawTileW || tileCanvas.height !== h) {
+                        tileCanvas.width = rawTileW;
+                        tileCanvas.height = h;
+                    }
+                    const tctx = tileCanvas.getContext('2d');
+                    if (tctx) {
+                        tctx.lineWidth = 2;
+                        tctx.strokeStyle = strokeColor;
+                        tctx.beginPath();
+                        for (let x = 0; x <= rawTileW; x += stepX) {
+                            const t = chunkStart + (x / zoom);
+                            if (t < 0 || t > duration) continue;
+                            const bStart = Math.floor(t * bucketRate);
+                            let peak = 0;
+                            if (bucketsPerStep <= 1) {
+                                if (bStart >= 0 && bStart < totalBuckets) {
+                                    peak = peaks[bStart];
+                                }
+                            } else {
+                                const bEnd = Math.min(totalBuckets, Math.floor((t + timePerStep) * bucketRate) + 1);
+                                for (let b = Math.max(0, bStart); b < bEnd; b++) {
+                                    const v = peaks[b];
+                                    if (v > peak) peak = v;
+                                }
+                            }
+                            if (peak <= 0.002) continue;
+                            const amp = Math.min(1, peak * audioAmp);
+                            const pxH = amp * waveMaxHeight;
+                            if (pxH < 0.5) continue;
+                            tctx.moveTo(x, hh - pxH);
+                            tctx.lineTo(x, hh + pxH);
+                        }
+                        tctx.stroke();
+                    }
+                    tile = tileCanvas;
+                    if (this._waveformTiles.size >= 24) {
+                        const oldestKey = this._waveformTiles.keys().next().value;
+                        this._waveformTiles.delete(oldestKey);
+                    }
+                    this._waveformTiles.set(cIdx, tile);
+                }
+                if (tile && tile.width > 0 && tile.height > 0) {
+                    ctx.drawImage(tile, (chunkStart - leftTime) * zoom, 0);
+                }
+            }
+            ctx.restore();
+            return;
+        }
+
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = strokeColor;
+        ctx.globalAlpha *= 0.32;
+        ctx.beginPath();
 
         for (let x = 0; x <= w; x += stepX) {
             const t = leftTime + (x / zoom);
@@ -6693,6 +7239,173 @@ export class SimaiPreviewRenderer {
         ctx.restore();
     }
 
+    drawSlidesBatched(slides) {
+        if (!slides || slides.length === 0) return;
+        const ctx = this.ctx;
+        const size = this.noteBaseSize * this.h;
+        const zoom = this.zoom;
+        const hw = this.hw;
+        const h = this.h;
+        const gt = this.globalTime;
+
+        const batches = this._slideBatch;
+        for (let b = 0; b < 4; b++) batches[b].length = 0;
+
+        for (let i = 0; i < slides.length; i++) {
+            const s = slides[i];
+            if (s.slideDuration * zoom < 1e-4) continue;
+            const bucketIdx = s.isMine ? 0 : (s.isBreak ? 1 : (s.isDouble ? 2 : 3));
+            batches[bucketIdx].push(s);
+        }
+
+        const colors = [this.color.mine, this.color.break, this.color.double, this.color.slide];
+        let didSave = false;
+        for (let b = 0; b < 4; b++) {
+            const list = batches[b];
+            if (list.length === 0) continue;
+            if (!didSave) {
+                ctx.save();
+                ctx.lineWidth = size;
+                this._slideDash[0] = size * 0.4;
+                this._slideDash[1] = size * 0.3;
+                ctx.setLineDash(this._slideDash);
+                didSave = true;
+            }
+            ctx.strokeStyle = colors[b];
+            ctx.beginPath();
+            for (let i = 0; i < list.length; i++) {
+                const s = list[i];
+                const x1 = hw + (s.time + s.slideDelay - gt) * zoom;
+                const y = (s.pos - 0.5) / 8 * h;
+                ctx.moveTo(x1, y);
+                ctx.lineTo(x1 + s.slideDuration * zoom, y);
+            }
+            ctx.stroke();
+            list.length = 0;
+        }
+        if (didSave) {
+            ctx.restore();
+        }
+    }
+
+    drawTapHoldBatched(notes) {
+        if (!notes || notes.length === 0) return;
+        const ctx = this.ctx;
+        const h = this.h;
+        const hw = this.hw;
+        const gt = this.globalTime;
+        const zoom = this.zoom;
+
+        const tapBatches = this._tapBatch;
+        const starBatches = this._starBatch;
+        const holdBatches = this._holdBatch;
+        for (let b = 0; b < 4; b++) {
+            tapBatches[b].length = 0;
+            starBatches[b].length = 0;
+            holdBatches[b].length = 0;
+        }
+
+        for (let i = 0; i < notes.length; i++) {
+            const n = notes[i];
+            const bucketIdx = n.isMine ? 0 : (n.isBreak ? 1 : (n.isDouble ? 2 : 3));
+            if (n.type === 'hold') {
+                holdBatches[bucketIdx].push(n);
+            } else if (n.isStar) {
+                starBatches[bucketIdx].push(n);
+            } else {
+                tapBatches[bucketIdx].push(n);
+            }
+        }
+
+        // 1. Batched Holds
+        const holdSize = this.settings.noteBaseSize * h * 0.01;
+        const holdR = holdSize * 0.5;
+        const holdColors = [this.color.mine, this.color.break, this.color.double, this.color.tap];
+        let hasHold = false;
+        for (let b = 0; b < 4; b++) {
+            const list = holdBatches[b];
+            if (list.length === 0) continue;
+            if (!hasHold) {
+                ctx.lineWidth = holdSize * 0.35;
+                hasHold = true;
+            }
+            ctx.strokeStyle = holdColors[b];
+            ctx.beginPath();
+            for (let i = 0; i < list.length; i++) {
+                const n = list[i];
+                const y = (n.pos - 0.5) / 8 * h;
+                const cx = hw + (n.time - gt) * zoom;
+                const holdWidth = n.holdDuration * zoom;
+                for (let j = 0; j < 6; j++) {
+                    const geom = HEXAGON_GEOMETRY[j];
+                    const of = geom.isRightSide ? holdWidth : 0;
+                    const px = cx + geom.cos * holdR + of;
+                    const py = y + geom.sin * holdR;
+                    if (j === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+            }
+            ctx.stroke();
+            list.length = 0;
+        }
+
+        // 2. Batched Stars
+        const starSize = this.noteBaseSize * h * 0.9;
+        const starColors = [this.color.mine, this.color.break, this.color.double, this.color.star];
+        let hasStar = false;
+        for (let b = 0; b < 4; b++) {
+            const list = starBatches[b];
+            if (list.length === 0) continue;
+            if (!hasStar) {
+                ctx.lineWidth = starSize * 0.35;
+                hasStar = true;
+            }
+            ctx.strokeStyle = starColors[b];
+            ctx.beginPath();
+            for (let i = 0; i < list.length; i++) {
+                const n = list[i];
+                const y = (n.pos - 0.5) / 8 * h;
+                const cx = hw + (n.time - gt) * zoom;
+                for (let j = 0; j < 10; j++) {
+                    const geom = STAR_GEOMETRY[j];
+                    const px = cx + geom.cos * starSize;
+                    const py = y + geom.sin * starSize;
+                    if (j === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+            }
+            ctx.stroke();
+            list.length = 0;
+        }
+
+        // 3. Batched Taps
+        const tapSize = this.noteBaseSize * h;
+        const tapR = tapSize * 0.5;
+        const tapColors = [this.color.mine, this.color.break, this.color.double, this.color.tap];
+        let hasTap = false;
+        for (let b = 0; b < 4; b++) {
+            const list = tapBatches[b];
+            if (list.length === 0) continue;
+            if (!hasTap) {
+                ctx.lineWidth = tapSize * 0.35;
+                hasTap = true;
+            }
+            ctx.strokeStyle = tapColors[b];
+            ctx.beginPath();
+            for (let i = 0; i < list.length; i++) {
+                const n = list[i];
+                const y = (n.pos - 0.5) / 8 * h;
+                const cx = hw + (n.time - gt) * zoom;
+                ctx.moveTo(cx + tapR, y);
+                ctx.arc(cx, y, tapR, 0, Math.PI * 2);
+            }
+            ctx.stroke();
+            list.length = 0;
+        }
+    }
+
     drawFrame(state) {
         const { width: w, height: h, halfWidth: hw, halfHeight: hh } = this.getCanvasWH();
         this.w = w;
@@ -6739,13 +7452,12 @@ export class SimaiPreviewRenderer {
             if (tags[i].type !== 'split') this.drawTag(tags[i]);
         }
         runPreviewOverlay('beforeNotes');
-        visualBuckets.slide.forEach(n => this.drawSlide(n));
-        visualBuckets.tapnhold.forEach(n => {
-            if (n.type === "hold") this.drawHold(n);
-            else if (n.isStar) this.drawStar(n);
-            else this.drawTap(n);
-        });
-        visualBuckets.touch.forEach(n => this.drawTouch(n));
+        this.drawSlidesBatched(visualBuckets.slide);
+        this.drawTapHoldBatched(visualBuckets.tapnhold);
+        const touchList = visualBuckets.touch;
+        for (let i = 0; i < touchList.length; i++) {
+            this.drawTouch(touchList[i]);
+        }
         runPreviewOverlay('afterNoteObjects');
         const ct = hw + (cursorIndexTime - globalTime) * this.zoom;
         this.drawTriangle(

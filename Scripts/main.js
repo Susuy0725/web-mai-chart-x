@@ -1358,8 +1358,18 @@ function applyMovieBrightness(val) {
     const raw = (val !== undefined && val !== null) ? val : settings.moviebrightness;
     const num = parseFloat(raw);
     const b = Math.max(0, 1 + 0.1875 * (isNaN(num) ? -3 : num));
-    if (editorBackgroundImage) editorBackgroundImage.style.filter = `brightness(${b})`;
-    if (editorBackgroundVideo) editorBackgroundVideo.style.filter = `brightness(${b})`;
+    const applyDim = (el) => {
+        if (!el) return;
+        if (b <= 1) {
+            el.style.filter = 'none';
+            el.style.opacity = String(b);
+        } else {
+            el.style.opacity = '1';
+            el.style.filter = `brightness(${b})`;
+        }
+    };
+    applyDim(editorBackgroundImage);
+    applyDim(editorBackgroundVideo);
     if (secondCtx && externalWindow && typeof syncSecondWindowBackground === 'function') {
         syncSecondWindowBackground();
     }
@@ -1381,6 +1391,7 @@ let cachedTimelineWidth = 300;
 let lastSliderRatio = -1;
 let lastSliderValue = -1;
 let lastSliderUpdateTime = 0;
+let lastTimelineStopRatio = -1;
 
 const updateCachedTimelineWidth = () => {
     if (timeline && timeline.style.display !== 'none') {
@@ -1393,6 +1404,7 @@ const setEndtime = (e) => {
     endTime = Math.max(e + 1, audioManager.getBGMDuration() + 1);
     cachedTimelineMax = endTime + musicDelay;
     timeline.max = cachedTimelineMax;
+    lastTimelineStopRatio = -1;
     updateCachedTimelineWidth();
     updateSlider(realTime, true);
 };
@@ -1407,7 +1419,8 @@ let lastTimeCapsuleUpdateTime = 0;
 const updateTimeCapsule = (time, force = false) => {
     if (!timeDisplayCapsule || settings.timeDisplayCapsule === false) return;
     const now = performance.now();
-    if (!force && now - lastTimeCapsuleUpdateTime < 33) return;
+    const minInterval = (playbackEngine?.isPlaying && !isTimelineDragging) ? 100 : 33;
+    if (!force && now - lastTimeCapsuleUpdateTime < minInterval) return;
     lastTimeCapsuleUpdateTime = now;
     const clampedCurrent = Math.max(cachedTimelineMin, Math.min(cachedTimelineMax, Number(time) || 0));
     const text = `${formatCapsuleTime(clampedCurrent)} / ${formatCapsuleTime(cachedTimelineMax)}`;
@@ -1436,15 +1449,19 @@ const updateSpeedCapsule = (speed) => {
 
 let isTimelineDragging = false;
 
-const syncTimelineProgress = (time) => {
-    if (!timeline) return;
-    const min = Number(timeline.min) || 0;
-    const max = Number(timeline.max) || cachedTimelineMax;
-    const ratio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
-    const thumbWidth = 16;
-    const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
-    timeline.style.setProperty('--timeline-progress', stopPos);
-    return ratio;
+const syncTimelineProgress = (time, force = false) => {
+    if (!timeline) return 0;
+    const min = cachedTimelineMin;
+    const max = cachedTimelineMax;
+    const rawRatio = Math.max(0, Math.min(1, max > min ? (time - min) / (max - min) : 0));
+    const ratio = Math.round(rawRatio * 500) / 500;
+    if (force || ratio !== lastTimelineStopRatio) {
+        lastTimelineStopRatio = ratio;
+        const thumbWidth = 16;
+        const stopPos = `calc(${thumbWidth * 0.5}px + ${ratio} * (100% - ${thumbWidth}px))`;
+        timeline.style.setProperty('--timeline-progress', stopPos);
+    }
+    return rawRatio;
 };
 
 const updateSlider = (time, force = false) => {
@@ -1453,8 +1470,8 @@ const updateSlider = (time, force = false) => {
         return;
     }
     const now = performance.now();
-    if (!force) {
-        if (now - lastSliderUpdateTime < 33) {
+    if (!force && !isTimelineDragging) {
+        if (now - lastSliderUpdateTime < 66) {
             return;
         }
         if (Math.abs(time - lastSliderValue) < 0.02) {
@@ -1474,7 +1491,7 @@ const updateSlider = (time, force = false) => {
         if (!isTimelineDragging) {
             timeline.value = time;
         }
-        syncTimelineProgress(isTimelineDragging ? parseFloat(timeline.value) : time);
+        syncTimelineProgress(isTimelineDragging ? parseFloat(timeline.value) : time, force);
     }
 };
 
@@ -2177,7 +2194,12 @@ function animateEditorContainer(visible) {
 
 
 function getDPR(win = window) {
-    return settings?.lowRes ? 1 : (win.devicePixelRatio || 1);
+    if (settings?.lowRes) return 1;
+    const raw = win.devicePixelRatio || 1;
+    const isCoarseMobile = typeof win.matchMedia === 'function'
+        && win.matchMedia('(pointer: coarse)').matches
+        && Math.min(win.innerWidth || 0, win.innerHeight || 0) <= 900;
+    return Math.min(raw, isCoarseMobile ? 1.5 : 2);
 }
 
 function ensureVisualEditorContext() {
@@ -2227,10 +2249,21 @@ function setPlaybackSpeed(speed) {
 // renderVisualEditor 已移至 renderer.js 的 renderVisualEditorFromRenderer
 
 let _highlightSyncPending = false;
+let _lastProgrammaticScrollTop = null;
 function syncHighlightLayerScroll() {
+    if (
+        _lastProgrammaticScrollTop !== null &&
+        Math.abs(editorInput.scrollTop - _lastProgrammaticScrollTop) < 0.5 &&
+        highlightLayer.scrollTop === editorInput.scrollTop
+    ) {
+        _lastProgrammaticScrollTop = null;
+        return;
+    }
+    _lastProgrammaticScrollTop = null;
     if (_highlightSyncPending) return;
     _highlightSyncPending = true;
     requestAnimationFrame(() => {
+        _cachedEditorScrollTop = editorInput.scrollTop;
         highlightLayer.scrollTop = editorInput.scrollTop;
         highlightLayer.scrollLeft = editorInput.scrollLeft;
         editorHighlightOverlay.render();
@@ -4001,6 +4034,9 @@ let _lastHighlightedEnabled = null;
 let _lastAutoScrollEnabled = null;
 let _editorAutoScrollRafId = null;
 let _editorAutoScrollTarget = null;
+let _cachedEditorClientHeight = 0;
+let _cachedEditorScrollTop = null;
+let _lastAutoScrollStepMs = 0;
 let _lastUnfocusedSelKey = '';
 
 function cancelEditorAutoScroll() {
@@ -4009,34 +4045,73 @@ function cancelEditorAutoScroll() {
         _editorAutoScrollRafId = null;
     }
     _editorAutoScrollTarget = null;
+    _lastProgrammaticScrollTop = null;
+    _cachedEditorScrollTop = null;
+    _lastAutoScrollStepMs = 0;
+}
+
+function stepEditorAutoScroll(nowMs = performance.now()) {
+    if (_editorAutoScrollTarget === null) return false;
+    const isPlaying = Boolean(playbackEngine?.isPlaying);
+    let dtMs = 16.67;
+    if (isPlaying && _lastAutoScrollStepMs > 0) {
+        dtMs = nowMs - _lastAutoScrollStepMs;
+        if (dtMs < 32) {
+            return true;
+        }
+    }
+    _lastAutoScrollStepMs = nowMs;
+
+    const cur = _cachedEditorScrollTop !== null ? _cachedEditorScrollTop : editorInput.scrollTop;
+    const diff = _editorAutoScrollTarget - cur;
+    if (Math.abs(diff) <= 1.2) {
+        editorInput.scrollTop = _editorAutoScrollTarget;
+        highlightLayer.scrollTop = _editorAutoScrollTarget;
+        _lastProgrammaticScrollTop = _editorAutoScrollTarget;
+        _cachedEditorScrollTop = _editorAutoScrollTarget;
+        editorHighlightOverlay.render();
+        _editorAutoScrollTarget = null;
+        return false;
+    }
+    const viewH = _cachedEditorClientHeight > 0 ? _cachedEditorClientHeight : editorInput.clientHeight;
+    if (viewH > 0) _cachedEditorClientHeight = viewH;
+    const baseFactor = Math.abs(diff) > viewH ? 0.35 : 0.22;
+    const frames = isPlaying ? Math.max(1, Math.min(4, dtMs / 16.67)) : 1;
+    const factor = frames === 1 ? baseFactor : (1 - Math.pow(1 - baseFactor, frames));
+    const nextTop = cur + diff * factor;
+    editorInput.scrollTop = nextTop;
+    highlightLayer.scrollTop = nextTop;
+    _lastProgrammaticScrollTop = nextTop;
+    _cachedEditorScrollTop = nextTop;
+    editorHighlightOverlay.render();
+    return true;
 }
 
 function smoothScrollEditorTo(targetTop) {
     const viewH = editorInput.clientHeight;
+    if (viewH > 0) _cachedEditorClientHeight = viewH;
+    const curTop = editorInput.scrollTop;
+    _cachedEditorScrollTop = curTop;
     const maxScroll = Math.max(0, editorInput.scrollHeight - viewH);
     const clamped = Math.max(0, Math.min(maxScroll, targetTop));
-    if (Math.abs(clamped - editorInput.scrollTop) < 1) return;
+    if (Math.abs(clamped - curTop) < 1) return;
 
     _editorAutoScrollTarget = clamped;
+    // 播放期間合併至主渲染迴圈 draw() 同步推進，避免額外 rAF 競爭主執行緒
+    if (playbackEngine?.isPlaying) {
+        if (_editorAutoScrollRafId !== null) {
+            cancelAnimationFrame(_editorAutoScrollRafId);
+            _editorAutoScrollRafId = null;
+        }
+        return;
+    }
     if (_editorAutoScrollRafId !== null) return;
 
-    const step = () => {
+    const step = (ts) => {
         _editorAutoScrollRafId = null;
-        if (_editorAutoScrollTarget === null) return;
-        const cur = editorInput.scrollTop;
-        const diff = _editorAutoScrollTarget - cur;
-        if (Math.abs(diff) <= 1.2) {
-            editorInput.scrollTop = _editorAutoScrollTarget;
-            highlightLayer.scrollTop = editorInput.scrollTop;
-            editorHighlightOverlay.render();
-            _editorAutoScrollTarget = null;
-            return;
+        if (stepEditorAutoScroll(ts)) {
+            _editorAutoScrollRafId = requestAnimationFrame(step);
         }
-        const factor = Math.abs(diff) > editorInput.clientHeight ? 0.35 : 0.22;
-        editorInput.scrollTop = cur + diff * factor;
-        highlightLayer.scrollTop = editorInput.scrollTop;
-        editorHighlightOverlay.render();
-        _editorAutoScrollRafId = requestAnimationFrame(step);
     };
     _editorAutoScrollRafId = requestAnimationFrame(step);
 }
@@ -4738,6 +4813,9 @@ function update(timestamp) {
 
 function resize(force = false) {
     applyCanvasContainerAspectRatio();
+    if (editorInput && editorInput.clientHeight > 0) {
+        _cachedEditorClientHeight = editorInput.clientHeight;
+    }
     const dpr = getDPR();
 
     if (secondCtx) {
@@ -5028,6 +5106,9 @@ function draw(dt = 0) {
 
     nowIndex = nowIndexRender;
     updateCurrentNoteHighlight();
+    if (playing && _editorAutoScrollTarget !== null) {
+        stepEditorAutoScroll();
+    }
 
     // 渲染和更新
     frameProfiler.start('2. rendererDraw');

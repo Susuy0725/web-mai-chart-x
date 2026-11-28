@@ -515,6 +515,8 @@
       "simplayPerfect": "모의 입력에 정확한 판정 타이밍 적용",
       "simplayUseButton": "모의 입력에 외곽 버튼 사용",
       "randomOffset": "모의 입력의 최대 시간 편차(초)",
+      "adjustTiming": "오디오 지연 (판정 조정 A, 프레임)",
+      "judgeTiming": "판정 지연 (판정 조정 B, 프레임)",
       "fatFinger": "터치 판정 영역 확대",
       "fatFingerRadius": "터치 판정 반경",
       "slideIllegalRed": "유효하지 않은 슬라이드 경로를 빨간색으로 표시",

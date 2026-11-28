@@ -175,6 +175,7 @@ body {
     left: 0;
     user-select: none;
     -webkit-user-select: none;
+    contain: layout style;
 }
 
 body.panels-swapped #canvasContainer {
@@ -231,7 +232,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     height: 100%;
     top: 0;
     left: 0;
-    background: #111;
+    background: #000;
 }
 
 #canvasContainer #backgroundImage {
@@ -256,7 +257,9 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     left: 0;
     object-fit: contain;
     scale: 0.98;
-    background: black;
+    background: transparent;
+    will-change: transform;
+    transform: translateZ(0);
     pointer-events: none;
     -webkit-touch-callout: none;
 }
@@ -832,6 +835,7 @@ body.layout-vertical.panels-swapped.editor-hidden #canvasContainer {
     background: var(--editor-background);
     /* 背景深色 */
     overflow: hidden;
+    contain: layout style paint;
 }
 
 body.panels-swapped #editorContainer {
@@ -1202,7 +1206,8 @@ body.layout-vertical #panelSplitter.snapped.dragging::after {
     color: var(--hl-note, #d4d4d4);
     /* 預設文字顏色 */
     z-index: 1;
-    contain: layout style;
+    contain: strict;
+    will-change: scroll-position;
 }
 
 #highlight-layer .hl-comment {

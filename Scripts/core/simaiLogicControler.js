@@ -90,6 +90,12 @@ export function cullSlideBucket(slideBucket, maxSlideCount) {
 const SLOW_HISPEED_THRESHOLD = 0.25;
 const TIME_FUNC_VIS_X_LIMIT = 4.3;
 
+function calcPiecewiseSpeed(x) {
+    if (x >= 1) return x * 0.8833 + 0.8167;
+    if (x <= -1) return x * 0.8833 - 0.8167;
+    return x * 1.7;
+}
+
 function calcNoteMaxVisT(noteType, speedCoeff, touchSpeedCoeff) {
     const effCoeff = noteType === 'touch' ? Math.abs(touchSpeedCoeff) : Math.abs(speedCoeff);
     return effCoeff > 1e-4 ? (TIME_FUNC_VIS_X_LIMIT / effCoeff + 0.2) : Infinity;
@@ -131,6 +137,28 @@ export class SimaiLogicControler {
         this._maxRetain = 10;
         this._minAbsHispeed = 1;
         this._slowFutureNotes = [];
+        this._noteSkipT = new Float32Array(0);
+        this._noteRenderSkipT = new Float32Array(0);
+        this._winCtx = {
+            renderer: null,
+            globalTime: 0,
+            playing: false,
+            timeControlSliding: false,
+            settings: null,
+            audioManager: null,
+            skipAudioQueue: false,
+            V: 0,
+            effectDecayTime: 0,
+            hanabiEffectDecayTime: 0,
+            middleDistance: 0,
+            baseSpeed: 1,
+            baseTouchSpeed: 1,
+            baseSpeedCoeff: 1,
+            baseTouchSpeedCoeff: 1,
+            baseMaxVisNormal: 0,
+            baseMaxVisSlide: 0,
+            baseMaxVisTouch: 0,
+        };
     }
 
     prepare(notes, playScoreRes) {
@@ -141,10 +169,14 @@ export class SimaiLogicControler {
             this._canOptimize = false;
             this._minAbsHispeed = 1;
             this._slowFutureNotes = [];
+            this._noteSkipT = new Float32Array(0);
+            this._noteRenderSkipT = new Float32Array(0);
             return;
         }
 
         const noteTimes = new Float64Array(len);
+        const noteSkipT = new Float32Array(len);
+        const noteRenderSkipT = new Float32Array(len);
         let maxRetain = 0;
         let isSorted = true;
         let minAbsHispeed = 1;
@@ -157,6 +189,8 @@ export class SimaiLogicControler {
 
             const skipT = (n.holdDuration ?? 0) + (n.slideDuration ?? 0) + (n.slideDelay ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0);
             const renderSkipT = n.type === 'slide' ? ((n.slideDelay ?? 0) + (n.slideDuration ?? 0) + (n.isMine ? (n.cullSkipExtend ?? 0) : 0)) : skipT;
+            noteSkipT[i] = skipT;
+            noteRenderSkipT[i] = renderSkipT;
             if (renderSkipT > maxRetain) maxRetain = renderSkipT;
 
             const hs = Math.abs(n.hispeed ?? 1);
@@ -169,6 +203,8 @@ export class SimaiLogicControler {
 
         this._isSorted = isSorted;
         this._noteTimes = noteTimes;
+        this._noteSkipT = noteSkipT;
+        this._noteRenderSkipT = noteRenderSkipT;
         this._maxRetain = maxRetain + 3.0; // 包含 decay 緩衝
         this._minAbsHispeed = minAbsHispeed;
         this._slowFutureNotes = slowFutureNotes;
@@ -388,11 +424,6 @@ export class SimaiLogicControler {
 
         const baseSpeed = settings.speed || 1;
         const baseTouchSpeed = settings.touchSpeed || 1;
-        const calcPiecewiseSpeed = (x) => {
-            if (x >= 1) return x * 0.8833 + 0.8167;
-            if (x <= -1) return x * 0.8833 - 0.8167;
-            return x * 1.7;
-        };
         const baseSpeedCoeff = calcPiecewiseSpeed(baseSpeed);
         const baseTouchSpeedCoeff = calcPiecewiseSpeed(baseTouchSpeed);
         const minBaseSpeedCoeff = Math.min(Math.abs(baseSpeedCoeff), Math.abs(baseTouchSpeedCoeff));
@@ -406,140 +437,40 @@ export class SimaiLogicControler {
         const lo = binarySearchLowerBound(this._noteTimes, searchLo);
         const hi = binarySearchUpperBound(this._noteTimes, searchHi);
 
+        const wctx = this._winCtx;
+        wctx.renderer = renderer;
+        wctx.globalTime = globalTime;
+        wctx.playing = playing;
+        wctx.timeControlSliding = timeControlSliding;
+        wctx.settings = settings;
+        wctx.audioManager = audioManager;
+        wctx.skipAudioQueue = skipAudioQueue;
+        wctx.V = V;
+        wctx.effectDecayTime = effectDecayTime;
+        wctx.hanabiEffectDecayTime = hanabiEffectDecayTime;
+        wctx.middleDistance = middleDistance;
+        wctx.baseSpeed = baseSpeed;
+        wctx.baseTouchSpeed = baseTouchSpeed;
+        wctx.baseSpeedCoeff = baseSpeedCoeff;
+        wctx.baseTouchSpeedCoeff = baseTouchSpeedCoeff;
+        wctx.baseMaxVisNormal = calcNoteMaxVisT('tap', baseSpeedCoeff, baseTouchSpeedCoeff);
+        wctx.baseMaxVisSlide = wctx.baseMaxVisNormal;
+        wctx.baseMaxVisTouch = calcNoteMaxVisT('touch', baseSpeedCoeff, baseTouchSpeedCoeff);
+
         const buckets = this._buckets;
         const visualBuckets = this._visualBuckets;
 
-        const processWindowNote = (note) => {
-            const noteT = note.time - globalTime;
-            const noteType = note.type;
-            const skipT = (note.holdDuration ?? 0) + (note.slideDuration ?? 0) + (note.slideDelay ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0);
-
-            const noteHispeed = note.hispeed ?? 1;
-            const speedCoeff = noteHispeed === 1 ? baseSpeedCoeff : calcPiecewiseSpeed(baseSpeed * noteHispeed);
-            const touchSpeedCoeff = noteHispeed === 1 ? baseTouchSpeedCoeff : calcPiecewiseSpeed(baseTouchSpeed * noteHispeed);
-
-            // 音效和狀態管理
-            if (!skipAudioQueue) {
-                const lookAhead = 0.1;
-                const startTargetT = note.time + (note.slideDelay ?? 0);
-                const startNoteT = startTargetT - globalTime;
-                const endTargetT = note.time + skipT;
-                const endNoteT = endTargetT - globalTime;
-
-                if (playing && !timeControlSliding) {
-                    if (noteType === "touch" && note.holdDuration > 0) {
-                        const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
-                        const noteId = `riser_${note.pos}_${note.time}`;
-                        if (isInsideHold && !note._riserActive) {
-                            audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
-                            note._riserActive = true;
-                        } else if (!isInsideHold && note._riserActive) {
-                            audioManager.stopLongSound(noteId);
-                            note._riserActive = false;
-                        }
-                    }
-
-                    if (startNoteT > lookAhead) {
-                        note._startEffectPlayed = false;
-                    } else if (startNoteT >= -0.05) {
-                        if (!note._startEffectPlayed) {
-                            if (!(noteType === "slide" && !note.firstSlide)) {
-                                audioManager.queueSound(note, startTargetT);
-                            }
-                            note._startEffectPlayed = true;
-                        }
-                    } else {
-                        note._startEffectPlayed = true;
-                    }
-
-                    if (endNoteT > lookAhead) {
-                        note._endEffectPlayed = false;
-                    } else if (endNoteT >= -0.05) {
-                        if (!note._endEffectPlayed) {
-                            const shouldPlayEndSound =
-                                (noteType === "slide" && note.lastSlide && note.isBreak) ||
-                                note.isHanabi ||
-                                (note.holdDuration !== undefined && noteType !== "tap" && settings.playHoldEnd !== false);
-                            if (shouldPlayEndSound) {
-                                audioManager.queueSound(note, endTargetT);
-                            }
-                            note._endEffectPlayed = true;
-                        }
-                    } else {
-                        note._endEffectPlayed = true;
-                    }
-                } else {
-                    if (startNoteT > lookAhead) {
-                        note._startEffectPlayed = false;
-                    } else {
-                        note._startEffectPlayed = true;
-                    }
-                    if (endNoteT > lookAhead) {
-                        note._endEffectPlayed = false;
-                    } else {
-                        note._endEffectPlayed = true;
-                    }
-                    if (note.time - globalTime > 0) {
-                        if (note._riserActive) {
-                            audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
-                            note._riserActive = false;
-                        }
-                    }
-                }
-            }
-
-            // 繪製可見性判斷（依各音符實際 speedCoeff / touchSpeedCoeff 推算出現視窗，避免慢速 hi-speed 突然閃現）
-            const renderSkipT = noteType === 'slide' ? ((note.slideDelay ?? 0) + (note.slideDuration ?? 0) + (note.isMine ? (note.cullSkipExtend ?? 0) : 0)) : skipT;
-            const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
-            const maxVisNoteT = calcNoteMaxVisT(noteType, speedCoeff, touchSpeedCoeff);
-
-            let isVisible = false;
-            if (-noteT <= renderSkipT + decay && noteT < maxVisNoteT) {
-                const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
-                const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
-
-                isVisible =
-                    (noteType === "slide" ? t >= middleDistance :
-                        noteType === "touch" ? touchT >= -1 :
-                            t >= -1);
-            }
-
-            const isVisualVisible = noteT >= 0
-                ? Math.abs(noteT) <= V
-                : -noteT <= V + skipT;
-
-            if (isVisible) {
-                if (noteType === 'slide') {
-                    buckets.slide.push(note);
-                } else if (noteType === 'hold' || noteType === 'tap') {
-                    buckets.tapnhold.push(note);
-                } else if (noteType === 'touch') {
-                    buckets.touch.push(note);
-                }
-            }
-
-            if (isVisualVisible) {
-                if (noteType === 'slide') {
-                    visualBuckets.slide.push(note);
-                } else if (noteType === 'hold' || noteType === 'tap') {
-                    visualBuckets.tapnhold.push(note);
-                } else if (noteType === 'touch') {
-                    visualBuckets.touch.push(note);
-                }
-            }
-        };
-
         // 先走訪超過 searchHi 的極慢速 hi-speed 音符 (保持嚴格由後往前的渲染順序)
         const slowFutureNotes = this._slowFutureNotes;
-        for (let k = slowFutureNotes.length - 1; k >= 0; k--) {
-            const idx = slowFutureNotes[k];
+        for (let s = slowFutureNotes.length - 1; s >= 0; s--) {
+            const idx = slowFutureNotes[s];
             if (idx < hi) break;
-            processWindowNote(notes[idx]);
+            this._processWindowNote(notes[idx], idx);
         }
 
         // 僅走訪視窗內音符 (從後往前，維持完全相同的桶子順序)
         for (let i = hi - 1; i >= lo; i--) {
-            processWindowNote(notes[i]);
+            this._processWindowNote(notes[i], i);
         }
 
         cullSlideBucket(buckets.slide, maxSlideCount);
@@ -550,6 +481,146 @@ export class SimaiLogicControler {
         this._result.playScore = playScore;
         this._result.nowIndex = curNowIndex;
         return this._result;
+    }
+
+    _processWindowNote(note, noteIdx) {
+        const wctx = this._winCtx;
+        const {
+            renderer,
+            globalTime,
+            playing,
+            timeControlSliding,
+            settings,
+            audioManager,
+            skipAudioQueue,
+            V,
+            effectDecayTime,
+            hanabiEffectDecayTime,
+            middleDistance,
+            baseSpeed,
+            baseTouchSpeed,
+            baseSpeedCoeff,
+            baseTouchSpeedCoeff,
+            baseMaxVisNormal,
+            baseMaxVisTouch,
+        } = wctx;
+        const noteT = note.time - globalTime;
+        const noteType = note.type;
+        const skipT = this._noteSkipT[noteIdx];
+
+        const noteHispeed = note.hispeed ?? 1;
+        const speedCoeff = noteHispeed === 1 ? baseSpeedCoeff : calcPiecewiseSpeed(baseSpeed * noteHispeed);
+        const touchSpeedCoeff = noteHispeed === 1 ? baseTouchSpeedCoeff : calcPiecewiseSpeed(baseTouchSpeed * noteHispeed);
+
+        // 音效和狀態管理
+        if (!skipAudioQueue) {
+            const lookAhead = 0.1;
+            const startTargetT = note.time + (note.slideDelay ?? 0);
+            const startNoteT = startTargetT - globalTime;
+            const endTargetT = note.time + skipT;
+            const endNoteT = endTargetT - globalTime;
+
+            if (playing && !timeControlSliding) {
+                if (noteType === "touch" && note.holdDuration > 0) {
+                    const isInsideHold = noteT <= 0 && -noteT < note.holdDuration;
+                    const noteId = `riser_${note.pos}_${note.time}`;
+                    if (isInsideHold && !note._riserActive) {
+                        audioManager.startLongSound(noteId, 'touchHold_riser', -noteT);
+                        note._riserActive = true;
+                    } else if (!isInsideHold && note._riserActive) {
+                        audioManager.stopLongSound(noteId);
+                        note._riserActive = false;
+                    }
+                }
+
+                if (startNoteT > lookAhead) {
+                    note._startEffectPlayed = false;
+                } else if (startNoteT >= -0.05) {
+                    if (!note._startEffectPlayed) {
+                        if (!(noteType === "slide" && !note.firstSlide)) {
+                            audioManager.queueSound(note, startTargetT);
+                        }
+                        note._startEffectPlayed = true;
+                    }
+                } else {
+                    note._startEffectPlayed = true;
+                }
+
+                if (endNoteT > lookAhead) {
+                    note._endEffectPlayed = false;
+                } else if (endNoteT >= -0.05) {
+                    if (!note._endEffectPlayed) {
+                        const shouldPlayEndSound =
+                            (noteType === "slide" && note.lastSlide && note.isBreak) ||
+                            note.isHanabi ||
+                            (note.holdDuration !== undefined && noteType !== "tap" && settings.playHoldEnd !== false);
+                        if (shouldPlayEndSound) {
+                            audioManager.queueSound(note, endTargetT);
+                        }
+                        note._endEffectPlayed = true;
+                    }
+                } else {
+                    note._endEffectPlayed = true;
+                }
+            } else {
+                if (startNoteT > lookAhead) {
+                    note._startEffectPlayed = false;
+                } else {
+                    note._startEffectPlayed = true;
+                }
+                if (endNoteT > lookAhead) {
+                    note._endEffectPlayed = false;
+                } else {
+                    note._endEffectPlayed = true;
+                }
+                if (note.time - globalTime > 0 && note._riserActive) {
+                    audioManager.stopLongSound(`riser_${note.pos}_${note.time}`);
+                    note._riserActive = false;
+                }
+            }
+        }
+
+        // 繪製可見性判斷（依各音符實際 speedCoeff / touchSpeedCoeff 推算出現視窗，避免慢速 hi-speed 突然閃現）
+        const renderSkipT = this._noteRenderSkipT[noteIdx];
+        const decay = note.isHanabi ? hanabiEffectDecayTime : (noteType === 'slide' ? (note.lastSlide ? effectDecayTime : 0.05) : effectDecayTime);
+        const maxVisNoteT = noteHispeed === 1
+            ? (noteType === 'touch' ? baseMaxVisTouch : baseMaxVisNormal)
+            : calcNoteMaxVisT(noteType, speedCoeff, touchSpeedCoeff);
+
+        let isVisible = false;
+        if (-noteT <= renderSkipT + decay && noteT < maxVisNoteT) {
+            if (noteType === 'touch') {
+                const touchT = 1 - renderer.timeFunction(noteT * Math.abs(touchSpeedCoeff));
+                isVisible = touchT >= -1;
+            } else {
+                const t = 1 - renderer.timeFunction(noteT * Math.abs(speedCoeff));
+                isVisible = (noteType === 'slide') ? (t >= middleDistance) : (t >= -1);
+            }
+        }
+
+        const isVisualVisible = noteT >= 0
+            ? Math.abs(noteT) <= V
+            : -noteT <= V + skipT;
+
+        if (isVisible) {
+            if (noteType === 'slide') {
+                this._buckets.slide.push(note);
+            } else if (noteType === 'hold' || noteType === 'tap') {
+                this._buckets.tapnhold.push(note);
+            } else if (noteType === 'touch') {
+                this._buckets.touch.push(note);
+            }
+        }
+
+        if (isVisualVisible) {
+            if (noteType === 'slide') {
+                this._visualBuckets.slide.push(note);
+            } else if (noteType === 'hold' || noteType === 'tap') {
+                this._visualBuckets.tapnhold.push(note);
+            } else if (noteType === 'touch') {
+                this._visualBuckets.touch.push(note);
+            }
+        }
     }
 
     getLegacy({

@@ -202,6 +202,7 @@ body {
     left: 0;
     user-select: none;
     -webkit-user-select: none;
+    contain: layout style;
 }
 
 #canvasContainer.aspect-ratio-constrained {
@@ -211,7 +212,7 @@ body {
 #canvasContainer .backgroundContainer {
     z-index: -1;
     position: absolute;
-    background: #111;
+    background: #000;
 }
 
 #canvasContainer #backgroundImage {
@@ -223,6 +224,8 @@ body {
     left: 0;
     object-fit: contain;
     scale: 0.98;
+    will-change: transform;
+    transform: translateZ(0);
 }
 
 #canvasContainer #backgroundVideo {
@@ -234,7 +237,9 @@ body {
     left: 0;
     object-fit: contain;
     scale: 0.98;
-    background: black;
+    background: transparent;
+    will-change: transform;
+    transform: translateZ(0);
     pointer-events: none;
     -webkit-touch-callout: none;
 }
@@ -255,6 +260,7 @@ body {
     z-index: 10;
     padding-bottom: env(safe-area-inset-bottom);
     box-sizing: border-box;
+    contain: layout style;
 }
 
 .material-symbols-outlined {

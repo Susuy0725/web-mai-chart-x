@@ -208,13 +208,14 @@ export class PlaybackEngine {
             if (isPlaying) {
                 const hasVideo = !!(bgVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 1);
                 const hasImage = !!(bgImg && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
-                editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
                 if (hasVideo) {
+                    editorBackgroundImage.style.display = 'none';
                     editorBackgroundVideo.style.display = 'block';
                     try { editorBackgroundVideo.currentTime = this.realTime; } catch (_) { }
                     editorBackgroundVideo.play().catch(() => { });
                 } else {
                     editorBackgroundVideo.style.display = 'none';
+                    editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
                 }
             } else {
                 this.updatePauseBackgroundDisplay();
@@ -274,15 +275,33 @@ export class PlaybackEngine {
         const editorBackgroundImage = this.opts.editorBackgroundImage;
         const editorBackgroundVideo = this.opts.editorBackgroundVideo;
 
+        const hasImage = !!(editorBackgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
+        const showVideo = !videoDisabled && !!(editorBackgroundVideo && editorBackgroundVideo.src && editorBackgroundVideo.readyState >= 2);
+
         if (editorBackgroundImage) {
-            const hasImage = !!(editorBackgroundImage.complete && editorBackgroundImage.naturalWidth !== 0);
-            editorBackgroundImage.style.display = hasImage ? 'block' : 'none';
+            editorBackgroundImage.style.display = (!showVideo && hasImage) ? 'block' : 'none';
         }
 
         if (editorBackgroundVideo) {
+            if (this._onVideoLoadedData && typeof editorBackgroundVideo.removeEventListener === 'function') {
+                editorBackgroundVideo.removeEventListener('loadeddata', this._onVideoLoadedData);
+                this._onVideoLoadedData = null;
+            }
             if (!videoDisabled) {
-                editorBackgroundVideo.style.display = (editorBackgroundVideo.readyState === 4) ? 'block' : 'none';
-                editorBackgroundVideo.currentTime = this.realTime;
+                editorBackgroundVideo.style.display = showVideo ? 'block' : 'none';
+                if (!showVideo && editorBackgroundVideo.src && typeof editorBackgroundVideo.addEventListener === 'function') {
+                    this._onVideoLoadedData = () => {
+                        this._onVideoLoadedData = null;
+                        if (this._isPlaying && this.opts.getSettings().enableVideo !== false) {
+                            editorBackgroundVideo.style.display = 'block';
+                            if (editorBackgroundImage) editorBackgroundImage.style.display = 'none';
+                        }
+                    };
+                    editorBackgroundVideo.addEventListener('loadeddata', this._onVideoLoadedData, { once: true });
+                }
+                if (editorBackgroundVideo.readyState >= 1) {
+                    editorBackgroundVideo.currentTime = this.realTime;
+                }
                 if (editorBackgroundVideo.paused && editorBackgroundVideo.readyState >= 1) {
                     editorBackgroundVideo.play().catch(() => { });
                 }
@@ -652,24 +671,31 @@ export class PlaybackEngine {
             this.notifyTime();
 
             // 游標跟隨邏輯
-            const nowIndex = this.opts.getNowIndex?.() || 0;
             const editorInput = this.opts.editorInput;
-            const rawData = this.opts.getRawData?.() || [];
-            const dataIndexToTime = this.opts.getDataIndexToTime?.() || [];
-
-            const hasSelection = editorInput ? editorInput.selectionStart !== editorInput.selectionEnd : false;
-            if (settings.cursorFollow && !hasSelection && nowIndex !== this.lastCursorIndex && editorInput) {
-                this.lastCursorIndex = nowIndex;
-                this.cursorLastIndexTime = dataIndexToTime[nowIndex] || 0;
-                const point = this.opts.getCharOffsetAtIndex
-                    ? this.opts.getCharOffsetAtIndex(nowIndex)
-                    : rawData.slice(0, nowIndex + 1).join(',').length;
-                if (editorInput.selectionStart !== point || editorInput.selectionEnd !== point) {
-                    if (typeof editorInput.setSelectionRange === 'function') {
-                        editorInput.setSelectionRange(point, point);
-                    } else {
-                        editorInput.selectionStart = point;
-                        editorInput.selectionEnd = point;
+            if (settings.cursorFollow && editorInput) {
+                const nowIndex = this.opts.getNowIndex?.() || 0;
+                if (nowIndex !== this.lastCursorIndex) {
+                    const nowMs = performance.now();
+                    if (nowMs - (this._lastCursorFollowMs || 0) >= 100) {
+                        const hasSelection = editorInput.selectionStart !== editorInput.selectionEnd;
+                        if (!hasSelection) {
+                            this.lastCursorIndex = nowIndex;
+                            this._lastCursorFollowMs = nowMs;
+                            const rawData = this.opts.getRawData?.() || [];
+                            const dataIndexToTime = this.opts.getDataIndexToTime?.() || [];
+                            this.cursorLastIndexTime = dataIndexToTime[nowIndex] || 0;
+                            const point = this.opts.getCharOffsetAtIndex
+                                ? this.opts.getCharOffsetAtIndex(nowIndex)
+                                : rawData.slice(0, nowIndex + 1).join(',').length;
+                            if (editorInput.selectionStart !== point || editorInput.selectionEnd !== point) {
+                                if (typeof editorInput.setSelectionRange === 'function') {
+                                    editorInput.setSelectionRange(point, point);
+                                } else {
+                                    editorInput.selectionStart = point;
+                                    editorInput.selectionEnd = point;
+                                }
+                            }
+                        }
                     }
                 }
             }

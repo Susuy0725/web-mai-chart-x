@@ -244,8 +244,10 @@ export async function openRecordVideoModal({
         { value: '1440x1440', label: '2K 1:1' },
         { value: '1920x1080', label: '1080P 16:9' },
         { value: '1080x1080', label: '1080P 1:1' },
+        { value: '1080x1920', label: '1080P 9:16' },
         { value: '1280x720', label: '720P 16:9' },
         { value: '720x720', label: '720P 1:1' },
+        { value: '720x1280', label: '720P 9:16' },
         { value: '854x480', label: '480P 16:9' },
         { value: '640x360', label: '360P 16:9' },
         { value: 'custom', label: t('popup.recordVideo.custom') }
@@ -510,9 +512,6 @@ export async function openRecordVideoModal({
 
     const renderPreviewFrame = () => {
         const [targetW, targetH] = getTargetResolution();
-
-        // 動態設定預覽視窗比例
-        previewViewport.style.aspectRatio = `${targetW} / ${targetH}`;
 
         const maxDim = 640;
         let pWidth, pHeight;
